@@ -52,6 +52,12 @@ public class CuttingFactoryTile extends MekCkMachineTile implements IMekCkPorted
      * 速度倍率要<b>平方</b>。这看着像笔误，其实是刻意的：速度升级同时缩短耗时（÷speed）
      * 与放大单 tick 并行量（×speed），两次相乘才抵消，单 tick 基础能耗自然要 ×speed²。
      * 这里原样保留，不要「顺手优化」成一次方——那会让速度升级的实际收益翻倍。</p>
+     *
+     * <p><b>当前公式在这三项之后还要再乘一个档位能效乘数</b>
+     * （{@link CuttingMachineFactoryTier#energyEfficiency}，经
+     * {@code MekckConfig.getTierEnergyEfficiency} 可配），完整算式见
+     * {@link #baseEnergyPerTick(double, double, double)}。
+     * 本常量仍然与档位无关——分档的是乘数，不是这个 20。</p>
      */
     public static final int ENERGY_PER_PROCESS = 20;
 
@@ -129,6 +135,12 @@ public class CuttingFactoryTile extends MekCkMachineTile implements IMekCkPorted
      * <p>旧式子里 {@code activeSlots > 0 && !hasCreative} 那个 {@code !hasCreative}
      * 不在本方法里：随机化卡的「免耗电」由基类的 {@link #randomizeGrantsFreeEnergy()}
      * 在闸门上把扣减额整体置 0，本方法因此保持「无卡时的原公式」。</p>
+     *
+     * <p><b>相对旧式子唯一的增项</b>是 {@link #baseEnergyPerTick(double, double, double)}
+     * 里多乘的<b>档位能效乘数</b>（{@code MekckConfig.getTierEnergyEfficiency(tier)}）。
+     * 旧式子里 {@code ENERGY_PER_PROCESS} 与档位无关，12 个档位的<b>单位产出能耗完全相同</b>，
+     * 高阶只是并行多；加上乘数之后才形成「贵一档、省一截电」的曲线。
+     * 别的行一个字没动。</p>
      */
     @Override
     protected int energyPerWorkTick() {
@@ -143,8 +155,39 @@ public class CuttingFactoryTile extends MekCkMachineTile implements IMekCkPorted
         }
         double speedMult = effectiveSpeedMultiplier();
         double consumptionMult = effectiveEnergyConsumptionMultiplier();
-        int baseEnergyPerTick = (int) Math.ceil(ENERGY_PER_PROCESS * speedMult * speedMult * consumptionMult);
+        int baseEnergyPerTick = baseEnergyPerTick(speedMult, consumptionMult,
+                MekckConfig.getTierEnergyEfficiency(tier));
         return CountMath.mulClamp(Integer.MAX_VALUE, baseEnergyPerTick, active, stackMultiplier());
+    }
+
+    /**
+     * 单 tick 基准能耗 —— {@link #energyPerWorkTick} 公式里那一段乘法，抽出来只为能单测。
+     *
+     * <p><b>能效乘数为什么乘在 {@code ceil} 之前</b>：乘在之后，{@code 20 × 0.32 = 6.4}
+     * 这种非整数必须再截断一次才能喂给整数乘法，而 Java 的 {@code (int)} 是<b>向零截断</b>，
+     * 于是 {@code SUPREME} 会被少收：1 并行时收 6 而不是 7，即少收 1/7 ≈ 14.3%；
+     * 并行与堆叠放大后按同样的比例少收。
+     * 乘在之前则整条式子仍是「取整一次」，{@code ceil} 的结果就是<b>整数</b>，
+     * 表里写多少就收多少。实测 12 档里只有 {@code SUPREME}（0.32）会出现 20×eff 非整数，
+     * 其余各档两种写法完全一致——也就是说这不只是风格问题，是<b>唯一</b>一个会被少收的档。
+     * 顺带的另一个好处：免能耗档（乘数 0）在同一处自然得到 0，不需要额外分支。</p>
+     *
+     * <p><b>与 {@code active} / {@code stackMult} 的先后</b>：那两项是「并行越多、
+     * 总耗电越多」，是<b>总量</b>的乘数；本函数算的是<b>单位</b>产出。两者相乘之后，
+     * 「总吞吐 ÷ 总耗电」才等于单位产出效率——这正是能效曲线想要表达的东西。
+     * 这一点在 {@code activeWorkSlots()} 上尤其明显：并行多会同时抬高总耗电与总产出，
+     * 所以并行倍率不会污染能效曲线。</p>
+     *
+     * <p>抽成静态纯函数是因为 {@code MekckConfig} 在裸 JVM 里加载即抛
+     * （见 {@code TestCuttingRecipeInvariants} 的类注释），真 tile 也造不出来；
+     * 提成静态后本公式的三件事——取整时机、乘数位置、溢出夹紧——都能直接单测。</p>
+     */
+    static int baseEnergyPerTick(double speedMult, double consumptionMult, double energyEfficiency) {
+        double raw = ENERGY_PER_PROCESS * speedMult * speedMult * consumptionMult * energyEfficiency;
+        // (int) 对超出 int 范围的 double 是饱和转换（JLS 5.1.3），不会翻负；
+        // 这里仍显式夹一道，是为了让「配置被调成天文数字也不翻负」不依赖语言细节。
+        // 负数（例如配置被手改成负的乘数）在同一处被夹到 0，与 clamp 到下限一致。
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(0.0, Math.ceil(raw)));
     }
 
     // ── 随机化卡的三个机械分支（阶段 2 Task 4.7）──────────────────────

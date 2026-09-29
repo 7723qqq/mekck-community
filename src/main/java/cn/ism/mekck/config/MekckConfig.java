@@ -114,6 +114,9 @@ public final class MekckConfig {
     // Factory per-tier values
     private static final Map<CuttingMachineFactoryTier, ForgeConfigSpec.IntValue> FACTORY_STACK_MAX  = new EnumMap<>(CuttingMachineFactoryTier.class);
 
+    /** 各档的能效乘数（每单位产出的能耗系数）。见 {@link #getTierEnergyEfficiency}。 */
+    private static final Map<CuttingMachineFactoryTier, ForgeConfigSpec.DoubleValue> TIER_ENERGY_EFFICIENCY = new EnumMap<>(CuttingMachineFactoryTier.class);
+
     /**
      * 堆叠升级级数的硬上限：每级使并行倍率翻倍，故 6 级 = ×64。
      *
@@ -202,6 +205,27 @@ public final class MekckConfig {
         FACTORY_SLOT_LIMIT = BUILDER
                 .comment("单个输入/输出槽的物品数量上限（默认：2147483647 = 不限，与旧实现同值）")
                 .defineInRange("slot_limit", Integer.MAX_VALUE, 1, Integer.MAX_VALUE);
+        BUILDER.pop();
+
+        // ─── Per-tier energy efficiency ─────────
+        BUILDER.comment("各档工厂的「能效乘数」——每单位产出的能耗系数（默认 1.0 = 不打折）。",
+                "设计意图：**高阶更省电，因为贵**。玩家一次性付升级材料，换来长期更高的单位产出效率；",
+                "于是星云塑造/奇点创世的免能耗不再是从 ∞ 直接掉到 0 的断崖，而是这条曲线的终点。",
+                "  · 单位产出能耗 = 4000 × 速度倍率 × 能量卡倍率 × 本值 ÷ 基础并行数 FE/件",
+                "    （4000 = 20 FE × 一个批次 200 tick；速度倍率的两个方次里有一个被「批次耗时 ÷速度」抵消）。",
+                "    所以本值直接决定「一件产物要多少 FE」，调低 = 该档更省电。",
+                "  · 0 = 该档免能耗（扣减额直接算成 0），不必改任何代码。",
+                "  · 允许大于 1：可以把高阶做成更费电的难度调节节点。",
+                "  · 注意：**免能耗档（星云/奇点）改这里没有效果**——它们在算式之前就被",
+                "    energyPerTick == 0 短路掉了。")
+                .push("energy_efficiency");
+
+        for (CuttingMachineFactoryTier tier : CuttingMachineFactoryTier.values()) {
+            TIER_ENERGY_EFFICIENCY.put(tier, BUILDER
+                    .comment(tierCnName(tier) + " 能效乘数（默认：" + tier.energyEfficiency + "）")
+                    .defineInRange(tier.name + "_energy_efficiency", tier.energyEfficiency, 0.0, 10.0));
+        }
+
         BUILDER.pop();
 
         // ─── Network auto-pull (AE2) ──────────────
@@ -579,6 +603,35 @@ public final class MekckConfig {
             return Integer.MAX_VALUE;
         }
         return Math.max(1, val.get());
+    }
+
+    /**
+     * 本档的<b>能效乘数</b>：每单位产出的能耗系数，默认取
+     * {@link CuttingMachineFactoryTier#energyEfficiency}。
+     *
+     * <p><b>为什么必须是可配的平衡参数</b>：单位产出能耗正比于它
+     * （{@code 4000 × 速度倍率 × 能量卡倍率 × 本值 ÷ 基础并行数} FE/件，
+     * 4000 = {@code ENERGY_PER_PROCESS} 20 × 一个批次 200 tick），
+     * 也就是说这一个数直接决定「一件产物要多少 FE」。整合包作者要改经济曲线、
+     * 玩家要改自己存档的难度，靠改代码都做不到。</p>
+     *
+     * <p><b>与 {@link CuttingMachineFactoryTier#energyPerTick} 无关</b>：后者是给 Mek 的
+     * 声明值（GUI 显示 + {@code AttributeEnergy.getUsage()}），在本体系里只当
+     * 「是否免能耗档」的布尔量用（{@code == 0}），不参与任何扣电算式。
+     * 见
+     * {@code .superpowers/sdd/2026-09-29-mekck-phase1-upgrade-system/
+     * energy-extract-and-efficiency-report.md} 的「energyPerTick 脱节」一节。</p>
+     *
+     * <p><b>免能耗档读本方法也没有实际作用</b>：{@code energyPerWorkTick()} 在
+     * {@code tier.energyPerTick == 0} 时就短路返回 0，算不到乘数。
+     * 这一点已写进配置项的注释，避免整合包作者白调。</p>
+     */
+    public static double getTierEnergyEfficiency(CuttingMachineFactoryTier tier) {
+        if (tier == null) {
+            return 1.0;
+        }
+        ForgeConfigSpec.DoubleValue val = TIER_ENERGY_EFFICIENCY.get(tier);
+        return val != null ? val.get() : tier.energyEfficiency;
     }
 
     // ── Upgrade limit accessors ────────────────────────────────────────
