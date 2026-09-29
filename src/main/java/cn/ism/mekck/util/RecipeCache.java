@@ -5,12 +5,17 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.WeakHashMap;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeManager;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
+import net.minecraftforge.items.ItemStackHandler;
+import net.minecraftforge.items.wrapper.RecipeWrapper;
+import org.jetbrains.annotations.NotNull;
 
 /**
  * 配方表缓存：把 {@code RecipeManager.getAllRecipesFor(type)} 的结果按「配方管理器实例」缓存。
@@ -118,6 +123,81 @@ public final class RecipeCache {
         if (idx <= 0) return List.of();
         return all(level, typeId.substring(0, idx), typeId.substring(idx + 1));
     }
+
+    /**
+     * 单槽配方查找：把一颗物品当成 1 格容器去 {@code getRecipeFor}（阶段 3 引入）。
+     *
+     * <p><b>为什么不在调用方造包装器</b>：单槽查询出现在每 tick × 每输入槽的热路径上
+     * （奇点档 81 槽），而 {@code RecipeManager.getRecipeFor} 要的是一个
+     * {@code Inventory} 实现。旧种植切配工厂每次调用都 {@code new} 一对匿名
+     * {@code ItemStackHandler} + {@code RecipeWrapper}；这里复用一对静态包装器。
+     *
+     * <p><b>不是线程安全的</b>：包装器只有一个可变槽位，两个线程同时调会互相串味。
+     * 配方查找只在服务端 tick 线程发生，所以现状安全——但若将来有并行世界 tick，
+     * 必须改成 {@link ThreadLocal}。
+     *
+    /**
+     * @param level 发起查询的世界，null 时返回空
+     * @param type  配方类型，null 时返回空
+     * @param stack 单颗待匹配物品
+     * @param <T>   配方类型参数。边界写 {@code Recipe<RecipeWrapper>} 而不是
+     *              {@code Recipe<?>}：本方法固定用 {@link #SINGLE_WRAPPER} 当容器，
+     *              而 {@code RecipeManager.getRecipeFor} 的两个类型参数是
+     *              {@code <C extends Container, T extends Recipe<C>>} 一起推断的——
+     *              边界松到 {@code Recipe<?>} 会让推断失败，边界写成
+     *              {@code Recipe<Container>} 则因泛型不变而不匹配
+     *              （{@code Recipe<RecipeWrapper>} 不是 {@code Recipe<Container>}）。
+     */
+    public static <T extends Recipe<RecipeWrapper>> Optional<T> singleSlotQuery(
+            Level level, RecipeType<T> type, ItemStack stack) {
+        if (level == null || type == null || stack == null || stack.isEmpty()) {
+            return Optional.empty();
+        }
+        SINGLE[0] = stack;
+        try {
+            return level.getRecipeManager().getRecipeFor(type, SINGLE_WRAPPER, level);
+        } finally {
+            SINGLE[0] = ItemStack.EMPTY;
+        }
+    }
+
+    private static final ItemStack[] SINGLE = {ItemStack.EMPTY};
+
+    /** 复用型单槽容器。只被 {@link #singleSlotQuery} 使用，不对外暴露。 */
+    private static final RecipeWrapper SINGLE_WRAPPER = new RecipeWrapper(new ItemStackHandler(1) {
+        @Override
+        public int getSlots() {
+            return 1;
+        }
+
+        @NotNull
+        @Override
+        public ItemStack getStackInSlot(int slot) {
+            return SINGLE[0];
+        }
+
+        @Override
+        public void setStackInSlot(int slot, @NotNull ItemStack stack) {
+            SINGLE[0] = stack;
+        }
+
+        @NotNull
+        @Override
+        public ItemStack insertItem(int slot, @NotNull ItemStack stack, boolean simulate) {
+            return stack;
+        }
+
+        @NotNull
+        @Override
+        public ItemStack extractItem(int slot, int amount, boolean simulate) {
+            return ItemStack.EMPTY;
+        }
+
+        @Override
+        public int getSlotLimit(int slot) {
+            return SINGLE[0].isEmpty() ? 64 : SINGLE[0].getMaxStackSize();
+        }
+    });
 
     /** 当前缓存的管理器数量（诊断用）。 */
     public static int cachedManagers() {

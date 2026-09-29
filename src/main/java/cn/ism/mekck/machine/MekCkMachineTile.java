@@ -297,7 +297,30 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         energySlot = EnergyInventorySlot.fillOrConvert(energyContainer, this::getLevel, listener,
                 ENERGY_SLOT_X, ENERGY_SLOT_Y);
         builder.addSlot(energySlot);
+        appendExtraSlots(builder, listener);
         return builder.build();
+    }
+
+    /**
+     * 在输入/输出方阵与能量槽<b>之后</b>追加家族特有槽位（阶段 3 PlantCutting 引入）。
+     *
+     * <h3>为什么是追加而不是整体覆写 {@code getInitialInventory}</h3>
+     * 7 个工厂家族里有两类形态：① 并行方阵（切菜 / 研磨 / 种植切配 / 烧烤 / 制冰）
+     * ② 固定输入 + 存储缓冲（穿串 / 烹饪）。类的形态只有真正做到第二个家族时才会暴露，
+     * 而一旦要改基类，已迁的家族都要回归一遍。种植切配只需要在方阵尾巴上挂
+     * 「营养液容器槽 + 生长方块槽」两格，方阵本身不动——**用追加而不是整体覆写，
+     * 就是为了让已迁的切菜与研磨一行都不用改。**
+     *
+     * <p>要换整体形态（存储缓冲型）的家族，覆写 {@code getInitialInventory} 即可，
+     * 本钩子此时不调。
+     *
+     * <p>默认实现什么都不加。子类追加的槽若要参与侧配，需自行
+     * {@code builder.addSlot} 并在 {@link #presetVariables} 里登记对应的 config 项。
+     *
+     * @param builder 已含输入方阵、输出方阵、能量槽的构建器
+     * @param listener 内容变更监听器
+     */
+    protected void appendExtraSlots(InventorySlotHelper builder, IContentsListener listener) {
     }
 
     /**
