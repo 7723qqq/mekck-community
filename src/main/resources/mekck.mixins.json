@@ -9,7 +9,9 @@
     "MixinCuttingBoardBlockEntity",
     "MixinExtremeSmithingMenu",
     "MixinItemStack",
-    "MixinUpgrade"
+    "MixinTileComponentUpgradePersistence",
+    "MixinUpgrade",
+    "MixinUpgradeUtilsGetStack"
   ],
   "injectors": {
     "defaultRequire": 1
