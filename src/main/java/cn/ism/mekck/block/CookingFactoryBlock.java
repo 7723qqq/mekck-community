@@ -1,179 +1,229 @@
 package cn.ism.mekck.block;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
-import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
+import cn.ism.mekck.machine.cooking.CookingFactoryTile;
+import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.util.FluidContainerInteract;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.Containers;
+import mekanism.api.math.FloatingLong;
+import mekanism.api.text.ILangEntry;
+import mekanism.common.block.attribute.AttributeEnergy;
+import mekanism.common.block.attribute.AttributeStateFacing;
+import mekanism.common.block.attribute.Attributes;
+import mekanism.common.block.prefab.BlockTile;
+import mekanism.common.content.blocktype.BlockTypeTile;
+import mekanism.common.inventory.container.MekanismContainer;
+import mekanism.common.registries.MekanismSounds;
+import mekanism.common.registration.impl.ContainerTypeRegistryObject;
+import mekanism.common.registration.impl.TileEntityTypeRegistryObject;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.context.BlockPlaceContext;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.BaseEntityBlock;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Mirror;
-import net.minecraft.world.level.block.RenderShape;
-import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.block.SoundType;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityTicker;
-import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
-import net.minecraft.world.level.block.state.properties.DirectionProperty;
-import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraftforge.network.NetworkHooks;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
+import java.util.Set;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
-public final class CookingFactoryBlock extends BaseEntityBlock {
-    public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    public static final BooleanProperty ACTIVE = BooleanProperty.create("active");
+/**
+ * 烹饪工厂方块（Mek 体系版）—— 阶段 3 Task 7 把它从自研 {@code BaseEntityBlock}
+ * 换成 Mek 的 {@link BlockTile}。
+ *
+ * <h3>与切菜 / 烧烤 / 穿串方块逐行同构的部分</h3>
+ * 四个属性（GUI / 能量 / 升级 / 朝向）、4 种可装升级、按等级拼的译名 entry，
+ * 全部照 {@code SkeweringFactoryBlock} 原样。换体系省下的是：
+ * {@code createBlockStateDefinition} / {@code getStateForPlacement} / {@code rotate} /
+ * {@code mirror} / {@code newBlockEntity} / {@code getTicker} / {@code onRemove}
+ * + 手动掉物品 —— 这八段全部交给 {@link AttributeStateFacing} /
+ * {@code AttributeGui} / {@code BlockMekanism.onRemove} + loot table。
+ *
+ * <h3>本类<b>保留</b>的 {@code use} 覆写：手持流体容器灌罐</h3>
+ * 这不是「旧体系的债」，是本机独有能力：玩家手持水桶/水瓶右键机器把流体灌进三个罐，
+ * 空桶回手上。管道走 {@code ForgeCapabilities.FLUID_HANDLER}，而那条路玩家用不到。
+ * Mek 的 {@link BlockTile#use} 只管开界面，所以这里覆写并<b>先试灌罐、失败再交回
+ * {@code super.use}</b>——后者才会触发 {@code AttributeGui} 开界面。
+ *
+ * <p>能直接灌是因为 Mek 的 {@code IExtendedFluidTank} 继承 Forge 的
+ * {@code IFluidTank}，而 {@code IFluidTank extends IFluidHandler}——
+ * 旧的 {@code FluidContainerInteract.tryFillMachine(IFluidHandler, ItemStack)}
+ * 因此原样可用，不需要改。</p>
+ */
+public final class CookingFactoryBlock extends BlockTile<CookingFactoryTile, BlockTypeTile<CookingFactoryTile>> {
+
     private final CuttingMachineFactoryTier tier;
 
-    public CookingFactoryBlock(CuttingMachineFactoryTier tier) {
-        super(BlockBehaviour.Properties.of().strength(3.5F).sound(SoundType.METAL).requiresCorrectToolForDrops());
+    public CookingFactoryBlock(BlockTypeTile<CookingFactoryTile> type,
+                               CuttingMachineFactoryTier tier,
+                               UnaryOperator<BlockBehaviour.Properties> propertyModifier) {
+        super(type, propertyModifier);
         this.tier = tier;
-        this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(ACTIVE, false));
     }
 
-    @Override
-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING, ACTIVE);
-    }
-
-    @Nullable
-    @Override
-    public BlockState getStateForPlacement(BlockPlaceContext context) {
-        return this.defaultBlockState().setValue(FACING, context.getHorizontalDirection());
-    }
-
-    @Override
-    public BlockState rotate(BlockState state, Rotation rotation) {
-        return state.setValue(FACING, rotation.rotate(state.getValue(FACING)));
-    }
-
-    @Override
-    public BlockState mirror(BlockState state, Mirror mirror) {
-        return state.rotate(mirror.getRotation(state.getValue(FACING)));
-    }
-
+    /**
+     * 本方块的等级。
+     *
+     * <p>{@link CookingFactoryTile} 在构造期就靠它反查档位（基类注释的
+     * 「构造期顺序陷阱」），所以必须由构造参数带进来。</p>
+     */
     public CuttingMachineFactoryTier getTier() {
         return tier;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>覆写只为「手持流体容器灌罐」。开界面仍由 {@code super.use} 经
+     * {@code AttributeGui} 完成——本类<b>不</b>自己 {@code NetworkHooks.openScreen}，
+     * 那条路已随旧 BE 一起删掉。</p>
+     */
     @Override
-    public RenderShape getRenderShape(BlockState state) {
-        return RenderShape.MODEL;
-    }
-
-    @Override
-    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (!level.isClientSide && player instanceof ServerPlayer serverPlayer
-                && level.getBlockEntity(pos) instanceof CookingFactoryBlockEntity machine) {
+    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player,
+                                 InteractionHand hand, BlockHitResult hit) {
+        if (!level.isClientSide && !player.isShiftKeyDown()
+                && level.getBlockEntity(pos) instanceof CookingFactoryTile machine) {
             ItemStack held = player.getItemInHand(hand);
-            // 手持流体容器右键 → 注入流体
-            if (!held.isEmpty() && !player.isShiftKeyDown()) {
+            if (!held.isEmpty()) {
                 FluidContainerInteract.ContainerFluidInfo info = FluidContainerInteract.getFluidInfo(held);
-                if (info != null && info.isValid()
-                        && FluidContainerInteract.tryFillMachine(machine.getFluidTank(), held)) {
-                    held.shrink(1);
-                    if (!held.isEmpty()) {
-                        player.setItemInHand(hand, held);
-                    }
-                    ItemStack emptyContainer = info.emptyContainer();
-                    if (!player.getInventory().add(emptyContainer)) {
-                        player.drop(emptyContainer, false);
-                    }
-                    machine.setChanged();
-                    return InteractionResult.sidedSuccess(false);
+                if (info != null && info.isValid() && tryFillMachine(machine, held)) {
+                    return fillAndReturnContainer(player, hand, held, info);
                 }
             }
-            if (player.isShiftKeyDown()) {
-                if (!held.isEmpty() && cn.ism.mekck.util.UpgradeHelper.isUpgrade(held)) {
-                    String upgradeName = held.getHoverName().getString();
-                    int added = machine.addUpgradesFromHand(held);
-                    if (added > 0) {
-                        held.shrink(added);
-                        player.setItemInHand(hand, held);
-                        player.displayClientMessage(net.minecraft.network.chat.Component.literal("§a已安装升级：§f" + upgradeName), true);
-                        return InteractionResult.sidedSuccess(false);
-                    }
-                    player.displayClientMessage(net.minecraft.network.chat.Component.literal("§c无法安装升级：对应槽位已满或本机器不支持该升级"), true);
-                    return InteractionResult.sidedSuccess(false);
-                }
-            }
-            NetworkHooks.openScreen(serverPlayer, machine, pos);
         }
-        return InteractionResult.sidedSuccess(level.isClientSide);
+        return super.use(state, level, pos, player, hand, hit);
     }
 
-    @Override
-    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
-        if (stack.hasCustomHoverName() && level.getBlockEntity(pos) instanceof CookingFactoryBlockEntity machine) {
-            machine.setCustomName(stack.getHoverName());
+    /**
+     * 灌进机器的流体罐。
+     *
+     * <p>刻意走 {@link net.minecraftforge.common.capabilities.ForgeCapabilities#FLUID_HANDLER}
+     * 而不是直接调 tile 的罐：<b>这一行同时验证了「Mek 的流体能力确实挂上了」</b>。
+     * {@code TileEntityMekanism} 的 {@code canHandleFluid()} 就是
+     * {@code holder != null}，而 {@code getInitialFluidTanks} 的默认实现是
+     * {@code aconst_null; areturn}——返回 null 的后果不是报错，而是
+     * <b>静默没有任何流体能力</b>，于是这里会安静地什么都不做、机器灌不进水。
+     * 走能力 API 时那条路径变成「返回 false」，配合上面的 {@code info.isValid()}
+     * 会让玩家拿桶右键却开不出界面——这个症状比静默更难查。
+     *
+     * <p>顺带说明为什么不能直接传 {@code IExtendedFluidTank}：
+     * 它继承 Forge 的 {@code IFluidTank}，但本仓库这版 Forge 的
+     * {@code IFluidTank} <b>不</b>继承 {@code IFluidHandler}，
+     * 而 {@code FluidContainerInteract.tryFillMachine} 的入参是后者。
+     * Mek 侧对上的类型是 {@code ISidedFluidHandler}（{@code IExtendedFluidHandler}
+     * 的子接口），不是 Forge 那个。</p>
+     */
+    private static boolean tryFillMachine(CookingFactoryTile machine, ItemStack held) {
+        // 能力要从**方块实体**取（BlockEntity#getCapability(cap, side)），
+        // Level 上没有对应重载。side 传 null = 不限面，与本机暴露流体能力的方式一致。
+        return machine.getCapability(
+                        net.minecraftforge.common.capabilities.ForgeCapabilities.FLUID_HANDLER, null)
+                .map(handler -> FluidContainerInteract.tryFillMachine(handler, held))
+                .orElse(false);
+    }
+
+    /** 灌满后：容器少一个、空容器进背包（满则掉在地上）。客户端不发包。 */
+    private InteractionResult fillAndReturnContainer(Player player, InteractionHand hand, ItemStack held,
+                                                    FluidContainerInteract.ContainerFluidInfo info) {
+        held.shrink(1);
+        if (!held.isEmpty()) {
+            player.setItemInHand(hand, held);
         }
-    }
-
-    @Override
-    public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof CookingFactoryBlockEntity machine) {
-            // Save block entity data (including inventory) to the item stack and drop it
-            ItemStack stack = new ItemStack(this);
-            machine.saveToItem(stack);
-            Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
-            level.updateNeighbourForOutputSignal(pos, this);
+        ItemStack emptyContainer = info.emptyContainer();
+        if (!player.getInventory().add(emptyContainer)) {
+            player.drop(emptyContainer, false);
         }
-        super.onRemove(state, level, pos, newState, movedByPiston);
+        return InteractionResult.sidedSuccess(false);
     }
 
-    @Override
-    public List<ItemStack> getDrops(BlockState state, LootParams.Builder builder) {
-        // Prevent the default block drop; inventory is handled by onRemove
-        return List.of();
+    // ── 方块类型描述 ────────────────────────────────────────────────────
+
+    /**
+     * 构造本等级烹饪工厂的方块类型描述。
+     *
+     * <p>四个属性一个都不能少，<b>各自的缺失症状</b>：
+     * <ul>
+     *   <li>{@code withGui} → 缺了右键不开界面；</li>
+     *   <li>{@code withEnergyConfig} → {@code MachineEnergyContainer.input} 在构造时读它，
+     *       缺了容量/能耗无处声明；</li>
+     *   <li>{@code withSupportedUpgrades} → 缺了 {@code supportsUpgrades()} 为 false，
+     *       升级槽与升级 tab 都不会出现；</li>
+     *   <li>{@link AttributeStateFacing} → 缺了 blockstate 的 {@code facing=} 变体全部匹配失败，
+     *       方块直接隐形。</li>
+     * </ul>
+     */
+    public static BlockTypeTile<CookingFactoryTile> blockTypeFor(
+            CuttingMachineFactoryTier tier,
+            Supplier<ContainerTypeRegistryObject<? extends MekanismContainer>> containerRef,
+            Supplier<TileEntityTypeRegistryObject<CookingFactoryTile>> tileRef) {
+
+        BlockTypeTile.BlockTileBuilder<BlockTypeTile<CookingFactoryTile>, CookingFactoryTile, ?> builder =
+                BlockTypeTile.BlockTileBuilder.createBlock(tileRef, new CookingFactoryLangEntry(tier));
+
+        builder.withGui(containerRef);
+
+        // AttributeEnergy 的参数是 (usage, storage)（先用后容）。用 lambda 延迟取值，
+        // 使 /reload 改 MekckConfig 后立即生效，也避免类初始化期就碰配置。
+        builder.withEnergyConfig(
+                () -> FloatingLong.create(tier.energyPerTick),
+                () -> FloatingLong.create(tier.energyCapacity));
+
+        builder.withSupportedUpgrades(supportedUpgrades());
+        builder.withSound(MekanismSounds.ROTARY_CONDENSENTRATOR);
+
+        builder.with(new AttributeStateFacing());
+        builder.with(Attributes.ACTIVE);
+        builder.with(Attributes.REDSTONE);
+        builder.with(Attributes.SECURITY);
+        builder.with(Attributes.INVENTORY);
+
+        return builder.build();
     }
 
-    @Nullable
-    @Override
-    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new CookingFactoryBlockEntity(tier, pos, state);
+    /**
+     * 本模组允许装进烹饪工厂的升级类型。
+     *
+     * <p>与 {@code MekCkMachineTile#getSupportedUpgrade()} 是<b>两道不同的闸门</b>：
+     * 这里决定方块属性 {@code AttributeUpgradeSupport}（进而决定升级槽与升级 tab
+     * 是否出现），那个方法决定 {@code TileComponentUpgrade} 收哪几种卡。
+     * 缺任何一道都会表现为「升级槽能看见但什么都装不进去」或反之。</p>
+     *
+     * <p>刻意只列这 4 种，绝不能写 {@code Upgrade.values()}——那会把其它注入者
+     * （Mek Extras 等）的几十种升级一并开放，而本机一个都用不上。</p>
+     *
+     * <p><b>写成方法而不是 {@code static final} 常量</b>：常量会在本类
+     * {@code <clinit>} 求值，而 {@link MekCkUpgradeRefs#storage()} 读的是
+     * {@code MixinUpgrade} 在 {@code Upgrade.<clinit>} 的 TAIL 才赋值的字段。
+     * 放进方法里，异常至少会带着「正在建升级清单」的调用栈出现。</p>
+     */
+    private static Set<mekanism.api.Upgrade> supportedUpgrades() {
+        return Set.of(
+                mekanism.api.Upgrade.SPEED,
+                mekanism.api.Upgrade.ENERGY,
+                MekCkUpgradeRefs.storage(),
+                MekCkUpgradeRefs.randomize());
     }
 
-    @Nullable
-    @Override
-    @SuppressWarnings("unchecked")
-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
-        BlockEntityType<?> expectedType = getExpectedTileType();
-        if (expectedType == null) return null;
-        if (type != expectedType) return null;
-        if (level.isClientSide) {
-            BlockEntityTicker<CookingFactoryBlockEntity> ticker = CookingFactoryBlockEntity::clientTick;
-            return (BlockEntityTicker<T>) (BlockEntityTicker<?>) ticker;
+    /**
+     * 逐等级的方块译名。
+     *
+     * <p>本模组的 lang key 是 {@code block.mekck.<tier>_cooking_factory}（每等级一条，
+     * 实测 {@code en_us.json} 的 {@code block.mekck.basic_cooking_factory} 等 12 条），
+     * 而 {@code MekCkFactoryType.COOKING} 的译名 key 不带等级，对不上，
+     * 所以这里自带一个按等级拼的 lang entry。</p>
+     */
+    private static final class CookingFactoryLangEntry implements ILangEntry {
+        private final CuttingMachineFactoryTier tier;
+
+        CookingFactoryLangEntry(CuttingMachineFactoryTier tier) {
+            this.tier = tier;
         }
-        BlockEntityTicker<CookingFactoryBlockEntity> ticker = CookingFactoryBlockEntity::serverTick;
-        return (BlockEntityTicker<T>) (BlockEntityTicker<?>) ticker;
-    }
 
-    private BlockEntityType<?> getExpectedTileType() {
-        // 直接查注册表，不再逐个 case 列等级。
-        // 原先的 switch 只列了 11 个等级、**漏了 BLAZE** ⇒ 烈焰等级工厂的 ticker
-        // 取不到类型，同样会在放置时抛 IllegalArgumentException（2026-09-16 修复）。
-        return cn.ism.mekck.UniversalCuttingMachine.COOKING_FACTORY_BLOCK_ENTITIES.get(tier).get();
-    }
-
-    @Override
-    public int getLightEmission(BlockState state, BlockGetter level, BlockPos pos) {
-        return 0;
+        @Override
+        public String getTranslationKey() {
+            return "block.mekck." + tier.getCookingBlockId();
+        }
     }
 }

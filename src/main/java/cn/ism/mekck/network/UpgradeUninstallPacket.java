@@ -61,8 +61,6 @@ public final class UpgradeUninstallPacket {
                 machine.uninstallUpgrade(mode, slot);
             } else if (be instanceof ChocolateCannonBlockEntity machine) {
                 machine.uninstallUpgrade(mode, slot);
-            } else if (be instanceof cn.ism.mekck.blockentity.CookingFactoryBlockEntity machine) {
-                machine.uninstallUpgrade(mode, slot);
             } else if (be instanceof cn.ism.mekck.blockentity.IceFactoryBlockEntity machine) {
                 machine.uninstallUpgrade(mode, slot);
             }

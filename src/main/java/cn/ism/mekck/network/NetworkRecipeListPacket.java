@@ -57,13 +57,9 @@ public class NetworkRecipeListPacket {
     public static void handle(NetworkRecipeListPacket packet, Supplier<NetworkEvent.Context> context) {
         context.get().enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
-            // 烹饪 / 穿串工厂：沿用各自屏幕内已验收的 ME 段
-            if (mc.screen instanceof CookingFactoryScreen screen
-                    && screen.getMenu().getBlockPos().equals(packet.pos)) {
-                screen.setNetworkOrderData(packet.recipeIds, packet.maxCraftable);
-            } else if (mc.screen instanceof cn.ism.mekck.client.NetworkOrderHost host) {
+            if (mc.screen instanceof cn.ism.mekck.client.NetworkOrderHost host) {
                 // 其余屏幕（智能穿串机 / 智能厨锅 / 中央厨房下单窗…）：共用面板。
-                // 烧烤与穿串工厂在阶段 3 Task 3/5 换 Mek 体系界面后不再实现
+                // 烧烤 / 穿串 / 烹饪工厂在阶段 3 Task 3/5/7 换 Mek 体系界面后不再实现
                 // NetworkOrderHost（订单面板等 GuiConfigurableTile 的 tab 布局定稿再统一接），
                 // 所以本分支打不到它们——ME 侧改走 IMekCkPorted 自动化。
                 cn.ism.mekck.client.NetworkOrderPanel panel = host.networkOrderPanel();

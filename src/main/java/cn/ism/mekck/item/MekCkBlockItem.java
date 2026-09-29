@@ -397,6 +397,15 @@ public class MekCkBlockItem extends BlockItem {
      * NBT结构: BlockEntityTag -> Items(Compound) -> Items(List) -> [{Slot, Count}]
      * 切菜工厂槽位: 2 * processes + 2
      * 烹饪工厂槽位: 6 + 81 + 4 = 91 (固定，storageSlots始终为81)
+     *
+     * <p><b>这套读法只对「旧版本存的物品」有效</b>，而且只值 0 或 1（那一格是
+     * 一张卡）。阶段 3 把旧 BE 删掉之后，新放置的机器由 Mek 的
+     * {@code TileComponentUpgrade} 持卡，写进 {@code BlockEntityTag} 的是 Mek 那套
+     * 格式而不是本方法读的 {@code Items.Items[].Slot}——所以新物品这里恒返 0。
+     * 保留读法是为了让<b>旧存档里已经存在的那种物品</b>的 tooltip 仍然正确，
+     * 槽位下标因此以本文件内的常量写死（原先引的是已删 BE 的公开常量）。
+     * 真正的运行时卡数由 {@code tile.getComponent().getUpgrades(...)} 给，
+     * tooltip 从方块实体拿不到，这里本来也就是个近似显示。</p>
      */
     private int readStackUpgradeCount(ItemStack stack) {
         if (tier == null || tier.processes < 11) return 0;
@@ -405,9 +414,8 @@ public class MekCkBlockItem extends BlockItem {
         CompoundTag itemsCompound = blockEntityTag.getCompound("Items");
         if (!itemsCompound.contains("Items", Tag.TAG_LIST)) return 0;
         ListTag items = itemsCompound.getList("Items", Tag.TAG_COMPOUND);
-        // 烹饪工厂堆叠升级槽位 = 6(input) + 144(storage) + 9(output) + 3(return) + 2
-        int slotIndex = isCooking ? cn.ism.mekck.blockentity.CookingFactoryBlockEntity.STACK_UPGRADE_SLOT
-                : 2 * tier.processes + 2;
+        // 烹饪工厂旧版布局：6(input) + 144(storage) + 9(output) + 3(return) + 2
+        int slotIndex = isCooking ? LEGACY_COOKING_STACK_UPGRADE_SLOT : 2 * tier.processes + 2;
         for (int i = 0; i < items.size(); i++) {
             CompoundTag itemTag = items.getCompound(i);
             if (itemTag.getInt("Slot") == slotIndex) {
@@ -416,4 +424,11 @@ public class MekCkBlockItem extends BlockItem {
         }
         return 0;
     }
+
+    /**
+     * 旧 {@code CookingFactoryBlockEntity.STACK_UPGRADE_SLOT} 的值。
+     *
+     * <p>只用于读旧存档写出的物品 NBT，见 {@link #readStackUpgradeCount} 的注释。</p>
+     */
+    private static final int LEGACY_COOKING_STACK_UPGRADE_SLOT = 6 + 144 + 9 + 3 + 2;
 }

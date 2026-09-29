@@ -2,7 +2,6 @@ package cn.ism.mekck.util;
 
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
-import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
 import cn.ism.mekck.blockentity.GrillBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
@@ -119,8 +118,6 @@ public final class UpgradeInstallHandler {
         } else if (be instanceof ElectricGrindingMachineBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof SmartCookingPotBlockEntity m) {
-            added = m.addUpgradesFromHand(held);
-        } else if (be instanceof CookingFactoryBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof SkeweringMachineBlockEntity m) {
             added = m.addUpgradesFromHand(held);

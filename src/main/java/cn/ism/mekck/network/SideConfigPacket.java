@@ -2,7 +2,6 @@ package cn.ism.mekck.network;
 
 import cn.ism.mekck.SideMode;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
-import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
 import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
 import cn.ism.mekck.blockentity.SimpleMachineBlockEntity;
@@ -103,8 +102,6 @@ public final class SideConfigPacket {
             if (be instanceof UniversalCuttingMachineBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof SmartCookingPotBlockEntity machine) {
-                machine.setSideMode(dir, mode);
-            } else if (be instanceof CookingFactoryBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof SkeweringMachineBlockEntity machine) {
                 machine.setSideMode(dir, mode);

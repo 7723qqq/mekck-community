@@ -25,7 +25,7 @@ import appeng.api.stacks.KeyCounter;
 import appeng.api.storage.MEStorage;
 import appeng.api.util.AECableType;
 import appeng.capabilities.Capabilities;
-import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
+import cn.ism.mekck.machine.cooking.CookingFactoryExecutor;
 import cn.ism.mekck.machine.MekCkFactoryType;
 import cn.ism.mekck.machine.MekCkMachineTile;
 import cn.ism.mekck.machine.ports.IMekCkPorted;
@@ -186,28 +186,12 @@ public final class MekckAe2 {
     public static Map<String, Integer> getNetworkCraftableMap(BlockEntity be) {
         Map<String, Integer> out = new LinkedHashMap<>();
         if (be == null) return out;
-        if (be instanceof CookingFactoryBlockEntity cook) {
-            Map<AEKey, Long> avail = getNetworkAvail(cook);
-            if (avail == null) return out;
-            // 同一产物只保留一个可下单选项（FD/森罗厨房/终焉烹饪可能出现同款食物）
-            Set<String> resultSeen = new HashSet<>();
-            for (Recipe<?> recipe : allCookingRecipes(cook)) {
-                try {
-                    List<InputSpec> specs = cookingInputs(recipe);
-                    if (specs.isEmpty()) continue;
-                    if (resolveInputs(specs, avail) == null) continue;
-                    ItemStack result = recipe.getResultItem(cook.getLevel().registryAccess());
-                    ResourceLocation itemId = result.isEmpty() ? null : ForgeRegistries.ITEMS.getKey(result.getItem());
-                    String key = itemId == null ? recipe.getId().toString()
-                            : itemId.toString() + (result.getTag() == null ? "" : "#" + result.getTag());
-                    if (resultSeen.add(key)) {
-                        out.put(recipe.getId().toString(), maxCraftable(specs, avail));
-                    }
-                } catch (Throwable ignored) {
-                }
-            }
-            return out;
-        }
+        // 阶段 3 Task 7 起：这里原本还有一条 instanceof CookingFactoryBlockEntity 的
+        // 专用分支（自己遍历 allCookingRecipes + cookingInputs 并按产物去重），
+        // 现整条删除，烹饪工厂与切菜 / 研磨 / 种植切配 / 烧烤 / 穿串同款走通用分支
+        // （读 refreshPatterns 里 COOKING 分支注册的那批样板）。
+        // 配方表与去重规则本身没变——buildCookingPatterns 现在调
+        // CookingFactoryExecutor.availableRecipes(level, tier)，同一份来源、同样的两级去重。
         // 通用分支：与 ME 终端同一批样板（穿串工厂 / 烧烤工厂 / 智能厨锅 / 智能穿串机 / 中央厨房 / 联动机器…）
         Map<AEKey, Long> avail = getNetworkAvail(be);
         if (avail == null) return out;
@@ -371,9 +355,11 @@ public final class MekckAe2 {
      */
     public static boolean pullNetworkIngredients(BlockEntity be, String recipeId, int quantity, String seasoningId) {
         if (quantity <= 0) return false;
-        if (be instanceof CookingFactoryBlockEntity cook) {
-            return pullCookingIngredients(cook, recipeId, quantity);
-        }
+        // 阶段 3 Task 7 起：这里原本还有一条 instanceof CookingFactoryBlockEntity 的
+        // 专用分支（pullCookingIngredients），现整条删除，理由与下面穿串那条逐字相同
+        // ——新 tile 不实现 INetworkPullable，面板 ME 下单这条路的落点没有了。
+        // 【行为变化，如实记在这里】烹饪工厂的面板 ME 下单不再可用；
+        // 自动化改由 ME 终端那条路承担（pushPattern → insertIntoPortWindow → startOrder）。
         // 阶段 3 Task 5 起：这里原本还有一条 instanceof SkeweringFactoryBlockEntity 的
         // 专用分支（pullSkeweringIngredients），现整条删除。理由与切菜 / 研磨 /
         // 种植切配 / 烧烤一致——那四个家族各自迁到 Mek 原生 tile 时都删掉了同款分支。
@@ -453,35 +439,11 @@ public final class MekckAe2 {
         }
     }
 
-    private static boolean pullCookingIngredients(CookingFactoryBlockEntity cook, String recipeId, int quantity) {
-        FactoryGridHost host = HOSTS.get(cook);
-        if (host == null || host.mainNode == null || !host.mainNode.isActive()) return false;
-        IGrid grid = host.mainNode.getGrid();
-        if (grid == null) return false;
-        MEStorage storage = grid.getStorageService().getInventory();
-        if (storage == null) return false;
-        Recipe<?> recipe = findCookingRecipe(cook, recipeId);
-        if (recipe == null) return false;
-        List<InputSpec> specs = cookingInputs(recipe);
-        if (specs.isEmpty()) return false;
-        ItemStack result = recipe.getResultItem(cook.getLevel().registryAccess());
-        if (result.isEmpty()) return false;
-
-        IActionSource src = IActionSource.ofMachine(host);
-        List<GenericStack> extracted = extractAll(storage, specs, quantity, src);
-        if (extracted == null) return false;
-        host.insertIntoMachine(extracted);
-        long total = (long) result.getCount() * quantity;
-        host.job = new AeJob(new PatternEntry(null, recipe.getId(),
-                new GenericStack[]{new GenericStack(AEItemKey.of(result), total)}));
-        cook.setOrder(recipe.getId(), quantity);
-        return true;
-    }
-
-    // 阶段 3 Task 5：pullSkeweringIngredients 随旧 SkeweringFactoryBlockEntity 一起删除。
-    // 它是「面板 ME 下单」对穿串工厂的专用实现（抽料 → 插机器 → 建 AeJob → setOrder），
-    // 而新 tile 不实现 INetworkPullable、不再有 ItemStackHandler 存储区，
-    // 这条路已经没有落点；与切菜 / 研磨 / 种植切配 / 烧烤的处理一致。
+    // 阶段 3 Task 7：pullCookingIngredients / findCookingRecipe 随旧
+    // CookingFactoryBlockEntity 一起删除。它们是「面板 ME 下单」对烹饪工厂的
+    // 专用实现（抽料 → 插机器 → 建 AeJob → setOrder），而新 tile 不实现
+    // INetworkPullable、不再有 ItemStackHandler 存储区，这条路没有落点；
+    // 与切菜 / 研磨 / 种植切配 / 烧烤 / 穿串的处理逐字一致。
 
     // ==================================================================
     //  通用"网络拉料"（INetworkPullable 机器）
@@ -758,14 +720,6 @@ public final class MekckAe2 {
         return avail;
     }
 
-    private static Recipe<?> findCookingRecipe(CookingFactoryBlockEntity cook, String recipeId) {
-        ResourceLocation id = ResourceLocation.tryParse(recipeId);
-        if (id == null) return null;
-        for (Recipe<?> recipe : allCookingRecipes(cook)) {
-            if (recipe.getId().equals(id)) return recipe;
-        }
-        return null;
-    }
 
     private static long countAvailable(Ingredient ing, Map<AEKey, Long> avail) {
         long total = 0;
@@ -969,13 +923,16 @@ public final class MekckAe2 {
         }
         MekCkFactoryType type = tile.getFactoryType();
         // 已接线的家族：切菜（阶段 2 Task 4.6）、研磨（阶段 3 Task 1）、
-        // 种植切配与烧烤（阶段 3 Task 2 / Task 3）、穿串（阶段 3 Task 5）。
-        // 其余两个（烹饪 / 制冰）仍返回 null：它们还是旧方块实体，分支正在迁移中。
+        // 种植切配与烧烤（阶段 3 Task 2 / Task 3）、穿串（阶段 3 Task 5）、
+        // 烹饪（阶段 3 Task 7）。
+        // 只剩制冰仍返回 null：它还是旧方块实体，且整个家族被 ICE_FACTORY_ENABLED
+        // 这个开关关着（方块/BE/菜单全不注册），迁移排在攻击系统那条线之后。
         return (type == MekCkFactoryType.CUTTING
                 || type == MekCkFactoryType.GRINDING
                 || type == MekCkFactoryType.PLANTING_CUTTING
                 || type == MekCkFactoryType.GRILLING
-                || type == MekCkFactoryType.SKEWERING) ? type : null;
+                || type == MekCkFactoryType.SKEWERING
+                || type == MekCkFactoryType.COOKING) ? type : null;
     }
 
     /**
@@ -1593,8 +1550,11 @@ public final class MekckAe2 {
                 return;
             }
             List<PatternEntry> entries;
-            if (owner instanceof CookingFactoryBlockEntity cook) {
-                entries = buildCookingPatterns(cook, avail);
+            if (owner instanceof MekCkMachineTile portedCooking
+                    && portedFamily(owner) == MekCkFactoryType.COOKING) {
+                // 烹饪工厂（阶段 3 Task 7 起是端口声明型）：构建器与迁移前完全同一个
+                // buildCookingPatterns，配方来源一字未改，只是判机器的方式换了。
+                entries = buildCookingPatterns(portedCooking, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) {
                 entries = buildSimpleMachinePatterns(sm, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity) {
@@ -1792,7 +1752,9 @@ public final class MekckAe2 {
         }
 
         private void startOrder(PatternEntry entry) {
-            if (owner instanceof CookingFactoryBlockEntity c) {
+            if (owner instanceof cn.ism.mekck.machine.cooking.CookingFactoryTile c) {
+                // 阶段 3 Task 7：类型换成新 tile，setOrder 仍是两参。
+                // 必须显式设订单：烹饪工厂无订单不加工。
                 c.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.machine.skewering.SkeweringFactoryTile s) {
                 // 阶段 3 Task 5：类型从旧 SkeweringFactoryBlockEntity 换成新 tile，
@@ -1828,7 +1790,6 @@ public final class MekckAe2 {
         }
 
         private ItemStackHandler getItems() {
-            if (owner instanceof CookingFactoryBlockEntity c) return c.items;
             // 阶段 3 Task 5：删掉穿串工厂那行（return s.items）。Mek 原生 tile 没有
             // ItemStackHandler，槽位由 portWindow() / MekPortWindow 提供——与切菜、研磨、
             // 种植切配、烧烤迁完时的处理完全一致（那四家当年也是各删一行）。
@@ -1847,13 +1808,6 @@ public final class MekckAe2 {
         }
 
         private int[] getOutputSlots() {
-            if (owner instanceof CookingFactoryBlockEntity) {
-                int[] slots = new int[CookingFactoryBlockEntity.OUTPUT_SLOTS];
-                for (int i = 0; i < CookingFactoryBlockEntity.OUTPUT_SLOTS; i++) {
-                    slots[i] = CookingFactoryBlockEntity.OUTPUT_SLOT_START + i;
-                }
-                return slots;
-            }
             if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) {
                 return new int[]{sm.OUTPUT_SLOT};
             }
@@ -1895,13 +1849,6 @@ public final class MekckAe2 {
         }
 
         private int[] getReturnSlots() {
-            if (owner instanceof CookingFactoryBlockEntity) {
-                int[] slots = new int[CookingFactoryBlockEntity.RETURN_SLOTS];
-                for (int i = 0; i < CookingFactoryBlockEntity.RETURN_SLOTS; i++) {
-                    slots[i] = CookingFactoryBlockEntity.RETURN_SLOT_START + i;
-                }
-                return slots;
-            }
             // 阶段 3 Task 5：删掉穿串工厂那条 {s.getReturnSlot()}。
             // 【行为变化，尚未补回】旧行为：一单做完、产物回网之后，返还槽里的签子
             // 会被 exportReturnSlots 一并塞回 ME 网络；新行为：新 tile 不是
@@ -1917,7 +1864,6 @@ public final class MekckAe2 {
 
         private int getStorageStart() {
             // 烹饪工厂：水瓶/奶瓶等必须进存储槽（6+），才能被 convertStoredFluidContainers 转为流体。
-            if (owner instanceof CookingFactoryBlockEntity) return CookingFactoryBlockEntity.INPUT_SLOTS;
             if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity) return 0;
             if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity) {
                 return cn.ism.mekck.blockentity.CentralKitchenBlockEntity.STORAGE_START;
@@ -1934,7 +1880,6 @@ public final class MekckAe2 {
         }
 
         private int getStorageEnd() {
-            if (owner instanceof CookingFactoryBlockEntity) return CookingFactoryBlockEntity.OUTPUT_SLOT_START;
             // 阶段 3 Task 5：删掉穿串工厂那条 getStorageSlotStart() + getStorageSlots()——
             // 新 tile 的 81 格存储没有 ItemStackHandler 下标，insertIntoMachine 对端口声明型
             // 机器走 insertIntoPortWindow（按 MekPortWindow 的输入段插），压根不问这两个值。
@@ -2132,10 +2077,12 @@ public final class MekckAe2 {
     //  动态配方构建（按网络库存筛选材料齐全的配方）
     // ==================================================================
 
-    private static List<PatternEntry> buildCookingPatterns(CookingFactoryBlockEntity cook, Map<AEKey, Long> avail) {
-        Level level = cook.getLevel();
+    private static List<PatternEntry> buildCookingPatterns(MekCkMachineTile ownerTile, Map<AEKey, Long> avail) {
+        Level level = ownerTile.getLevel();
         List<PatternEntry> out = new ArrayList<>();
-        for (Recipe<?> recipe : allCookingRecipes(cook)) {
+        // 阶段 3 Task 7：配方表改读新执行器的 availableRecipes(level, tier)——
+        // 四个来源（FD / farm_and_charm / 终焉仅奇点档 / 森罗）与两级去重逐字同款。
+        for (Recipe<?> recipe : CookingFactoryExecutor.availableRecipes(level, ownerTile.getTier())) {
             try {
                 List<InputSpec> specs = cookingInputs(recipe);
                 if (specs.isEmpty()) continue;
@@ -2403,43 +2350,25 @@ public final class MekckAe2 {
         return out;
     }
 
-    private static List<Recipe<?>> allCookingRecipes(CookingFactoryBlockEntity cook) {
-        Level level = cook.getLevel();
-        List<Recipe<?>> list = new ArrayList<>();
-        for (CookingPotRecipe r : (java.util.List<CookingPotRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, ModRecipeTypes.COOKING.get())) {
-            list.add(r);
-        }
-        // 终焉烹饪（无尽乐事 extreme_cooking）仅奇点创世等级支持
-        if (cook.getTier() == cn.ism.mekck.CuttingMachineFactoryTier.SINGULARITY) {
-            RecipeType<?> shaped = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("avaritia_delight", "extreme_cooking_shaped"));
-            if (shaped != null) {
-                list.addAll(cn.ism.mekck.util.RecipeCache.all(level, shaped));
-            }
-            RecipeType<?> shapeless = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("avaritia_delight", "extreme_cooking_shapeless"));
-            if (shapeless != null) {
-                list.addAll(cn.ism.mekck.util.RecipeCache.all(level, shapeless));
-            }
-        }
-        if (KaleidoscopeCompat.isLoaded()) {
-            list.addAll(KaleidoscopeCompat.getAllKaleidoscopeRecipes(level));
-        }
-        Set<ResourceLocation> seen = new HashSet<>();
-        list.removeIf(r -> !seen.add(r.getId()));
-        return list;
-    }
-
+    // 阶段 3 Task 7：allCookingRecipes 随旧 CookingFactoryBlockEntity 一起删除，
+    // 配方来源与两级去重（先按配方 id、再按产物物品 id + NBT）搬到了
+    // CookingFactoryExecutor.availableRecipes(level, tier)——机器与 AE2 侧现在
+    // 读同一份表，不会再出现「机器能做、终端里看不到」这种漂移。
     private static List<InputSpec> cookingInputs(Recipe<?> recipe) {
         List<InputSpec> specs = new ArrayList<>();
-        for (Ingredient ing : CookingFactoryBlockEntity.getSolidIngredients(recipe)) {
+        // 阶段 3 Task 7：四个读取口改调新执行器的同名 public static 方法。
+        // 注意 fluidBottleIngredients 之所以要列进 AE2 投入清单：机器的流体罐
+        // 只能靠「存储区里的水瓶自动转罐」填上，AE2 插不进罐子。
+        for (Ingredient ing : CookingFactoryExecutor.solidIngredients(recipe)) {
             specs.add(new InputSpec(ing, 1));
         }
-        for (Ingredient ing : CookingFactoryBlockEntity.getFluidBottleIngredients(recipe)) {
+        for (Ingredient ing : CookingFactoryExecutor.fluidBottleIngredients(recipe)) {
             specs.add(new InputSpec(ing, 1));
         }
-        for (Ingredient ing : CookingFactoryBlockEntity.getExtraConsumables(recipe)) {
+        for (Ingredient ing : CookingFactoryExecutor.extraConsumables(recipe)) {
             specs.add(new InputSpec(ing, 1));
         }
-        ItemStack container = CookingFactoryBlockEntity.getConsumedContainer(recipe);
+        ItemStack container = CookingFactoryExecutor.consumedContainer(recipe);
         if (!container.isEmpty()) {
             specs.add(new InputSpec(Ingredient.of(container.getItem()), 1));
         }
