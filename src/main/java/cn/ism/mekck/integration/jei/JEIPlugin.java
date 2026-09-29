@@ -550,6 +550,16 @@ public class JEIPlugin implements IModPlugin {
             registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), mekckSkewering);
         }
 
+        // mekck:grilling（烧烤工厂自有配方类型）——无条件注册，该类型恒存在。
+        // 语义：单一输入 → 烤制产物。
+        RecipeType<?> mekckGrilling = RecipeType.create(
+                "mekck", "grilling", (Class) Recipe.class);
+        registration.addRecipeCatalyst(
+                new ItemStack(UniversalCuttingMachine.GRILL_BLOCK.get()), mekckGrilling);
+        for (var entry : UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.entrySet()) {
+            registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), mekckGrilling);
+        }
+
         // 原版烟熏炉 / 篝火烹饪（熟肉 ×7、烤马铃薯、干燥海带）——全档位烧烤工厂均可处理，
         // 不受档位与配置门禁约束。此处显示范围必须与机器实际行为一致。
         for (var entry : UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.entrySet()) {

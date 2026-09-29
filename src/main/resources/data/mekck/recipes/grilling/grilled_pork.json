@@ -1,0 +1,11 @@
+{
+  "type": "mekck:grilling",
+  "ingredient": {
+    "item": "minecraft:porkchop"
+  },
+  "result": {
+    "item": "mekck:grilled_pork",
+    "count": 1
+  },
+  "processingTime": 100
+}

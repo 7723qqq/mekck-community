@@ -222,6 +222,12 @@ public final class UniversalCuttingMachine {
     public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.MekCkSkeweringRecipe>> SKEWERING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("skewering",
             cn.ism.mekck.recipe.MekCkSkeweringRecipe.Serializer::new);
 
+    // Grilling recipe (烧烤工厂自有：单输入 → 烤制产物，产物为独立的"烤"变体而非复用熟肉)
+    public static final RegistryObject<RecipeType<cn.ism.mekck.recipe.MekCkGrillingRecipe>> GRILLING_RECIPE_TYPE = RECIPE_TYPES.register("grilling",
+            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "grilling")));
+    public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.MekCkGrillingRecipe>> GRILLING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("grilling",
+            cn.ism.mekck.recipe.MekCkGrillingRecipe.Serializer::new);
+
     // 状态效果（制冰攻击体系）：冰冻（原生冰封）/ 失温 / 永冻
     public static final DeferredRegister<MobEffect> MOB_EFFECTS = DeferredRegister.create(ForgeRegistries.MOB_EFFECTS, MOD_ID);
     public static final RegistryObject<cn.ism.mekck.effect.FrozenEffect> FROZEN_EFFECT = MOB_EFFECTS.register(
@@ -506,6 +512,17 @@ public final class UniversalCuttingMachine {
     public static final RegistryObject<Item> VEGETABLE_SKEWER_ITEM = ITEMS.register("vegetable_skewer", () -> new Item(new Item.Properties()));
     public static final RegistryObject<Item> MUSHROOM_SKEWER_ITEM = ITEMS.register("mushroom_skewer", () -> new Item(new Item.Properties()));
     public static final RegistryObject<Item> SWEETBERRY_SKEWER_ITEM = ITEMS.register("sweetberry_skewer", () -> new Item(new Item.Properties()));
+
+    // ── 烤制产物（mekck:grilling 的产物，与烟熏炉的"熟"区分开的"烤"线）──────
+    // 同样刻意不设 food 属性：营养值要与主料逐条对齐才算平衡，属内容设计。
+    public static final RegistryObject<Item> GRILLED_BEEF_ITEM = ITEMS.register("grilled_beef", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> GRILLED_PORK_ITEM = ITEMS.register("grilled_pork", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> GRILLED_CHICKEN_ITEM = ITEMS.register("grilled_chicken", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> GRILLED_MUTTON_ITEM = ITEMS.register("grilled_mutton", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> GRILLED_COD_ITEM = ITEMS.register("grilled_cod", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> GRILLED_SALMON_ITEM = ITEMS.register("grilled_salmon", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> GRILLED_CARROT_ITEM = ITEMS.register("grilled_carrot", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> GRILLED_MUSHROOM_ITEM = ITEMS.register("grilled_mushroom", () -> new Item(new Item.Properties()));
 
     /**
      * 费列罗**发射物**的渲染载体（隐藏物品：无配方、不进创造标签页）。

@@ -304,5 +304,13 @@
   "item.mekck.fish_skewer": "Fish Skewer",
   "item.mekck.vegetable_skewer": "Vegetable Skewer",
   "item.mekck.mushroom_skewer": "Mushroom Skewer",
-  "item.mekck.sweetberry_skewer": "Sweet Berry Skewer"
+  "item.mekck.sweetberry_skewer": "Sweet Berry Skewer",
+  "item.mekck.grilled_beef": "Grilled Beef",
+  "item.mekck.grilled_pork": "Grilled Pork",
+  "item.mekck.grilled_chicken": "Grilled Chicken",
+  "item.mekck.grilled_mutton": "Grilled Mutton",
+  "item.mekck.grilled_cod": "Grilled Cod",
+  "item.mekck.grilled_salmon": "Grilled Salmon",
+  "item.mekck.grilled_carrot": "Grilled Carrot",
+  "item.mekck.grilled_mushroom": "Grilled Mushroom"
 }

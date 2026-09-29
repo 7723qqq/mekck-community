@@ -1,0 +1,11 @@
+{
+  "type": "mekck:grilling",
+  "ingredient": {
+    "item": "minecraft:chicken"
+  },
+  "result": {
+    "item": "mekck:grilled_chicken",
+    "count": 1
+  },
+  "processingTime": 100
+}

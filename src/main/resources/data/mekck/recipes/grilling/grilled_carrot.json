@@ -1,0 +1,11 @@
+{
+  "type": "mekck:grilling",
+  "ingredient": {
+    "item": "minecraft:carrot"
+  },
+  "result": {
+    "item": "mekck:grilled_carrot",
+    "count": 1
+  },
+  "processingTime": 100
+}

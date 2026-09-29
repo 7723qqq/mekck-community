@@ -3,6 +3,7 @@ package cn.ism.mekck.blockentity;
 import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.RedstoneControl;
 import cn.ism.mekck.SideMode;
+import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.block.GrillFactoryBlock;
 import cn.ism.mekck.menu.GrillFactoryMenu;
@@ -754,12 +755,33 @@ public final class GrillFactoryBlockEntity extends BlockEntity implements MenuPr
         return findRecipeUncached(inputSlot, stack);
     }
 
-    private Optional<Recipe<?>> findRecipeUncached(int inputSlot, ItemStack stack) {
-        ResourceLocation grillingTypeId = new ResourceLocation("barbequesdelight", "grilling");
-        RecipeType<?> grillingType = cn.ism.mekck.util.RecipeCache.type(grillingTypeId);
-        if (grillingType == null) return Optional.empty();
+    /**
+     * 烤制配方来源，按优先级排列：<b>mekck 自有类型优先</b>，外部 barbequesdelight 回落。
+     * <p>
+     * 自有类型恒存在；外部那一条在该 mod 未安装时为 null，由
+     * {@link #collectGrillingRecipes} 跳过。自有配方缺席时行为与补齐前完全一致。
+     * </p>
+     */
+    private List<RecipeType<?>> getGrillingRecipeTypes() {
+        List<RecipeType<?>> types = new ArrayList<>(2);
+        types.add(UniversalCuttingMachine.GRILLING_RECIPE_TYPE.get());
+        types.add(cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("barbequesdelight", "grilling")));
+        return types;
+    }
 
-        for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, grillingType)) {
+    /** 按来源优先级汇总烤制配方，自有在前、外部在后。 */
+    private List<Recipe<?>> collectGrillingRecipes() {
+        List<Recipe<?>> all = new ArrayList<>();
+        for (RecipeType<?> type : getGrillingRecipeTypes()) {
+            if (type != null) {
+                all.addAll(cn.ism.mekck.util.RecipeCache.all(level, type));
+            }
+        }
+        return all;
+    }
+
+    private Optional<Recipe<?>> findRecipeUncached(int inputSlot, ItemStack stack) {
+        for (Recipe<?> recipe : collectGrillingRecipes()) {
             if (matchesInput(recipe, stack)) {
                 return Optional.of(recipe);
             }
@@ -1062,12 +1084,8 @@ public final class GrillFactoryBlockEntity extends BlockEntity implements MenuPr
     @Nullable
     private Recipe<?> findOrderRecipe() {
         if (orderRecipeId == null) return null;
-        ResourceLocation grillingTypeId = new ResourceLocation("barbequesdelight", "grilling");
-        RecipeType<?> grillingType = cn.ism.mekck.util.RecipeCache.type(grillingTypeId);
-        if (grillingType != null) {
-            for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, grillingType)) {
-                if (recipe.getId().equals(orderRecipeId)) return recipe;
-            }
+        for (Recipe<?> recipe : collectGrillingRecipes()) {
+            if (recipe.getId().equals(orderRecipeId)) return recipe;
         }
         for (KaleidoscopeGrillingCompat.VirtualRecipe vr : KaleidoscopeGrillingCompat.getGrillingVirtualRecipes()) {
             if (vr.getId().equals(orderRecipeId)) return vr;
@@ -1394,10 +1412,8 @@ public final class GrillFactoryBlockEntity extends BlockEntity implements MenuPr
     public List<Recipe<?>> getAvailableRecipes() {
         List<Recipe<?>> available = new ArrayList<>();
         Set<ResourceLocation> seen = new HashSet<>();
-
-        ResourceLocation grillingTypeId = new ResourceLocation("barbequesdelight", "grilling");
-        RecipeType<?> grillingType = cn.ism.mekck.util.RecipeCache.type(grillingTypeId);
-        if (grillingType == null) return available;
+        List<Recipe<?>> grillingRecipes = collectGrillingRecipes();
+        if (grillingRecipes.isEmpty()) return available;
 
         // 输入槽 + 存储槽（下单模式材料存放在存储区）
         int[] scanSlots = new int[inputSlots + STORAGE_SLOTS];
@@ -1406,7 +1422,7 @@ public final class GrillFactoryBlockEntity extends BlockEntity implements MenuPr
         for (int recipeIndex : scanSlots) {
             ItemStack stack = items.getStackInSlot(recipeIndex);
             if (stack.isEmpty()) continue;
-            for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, grillingType)) {
+            for (Recipe<?> recipe : grillingRecipes) {
                 if (seen.add(recipe.getId()) && matchesInput(recipe, stack)) {
                     available.add(recipe);
                 }

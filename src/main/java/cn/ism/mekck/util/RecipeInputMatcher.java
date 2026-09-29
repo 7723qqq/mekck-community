@@ -104,9 +104,12 @@ public final class RecipeInputMatcher {
                 || matchesAnyIngredient(level, cn.ism.mekck.util.RecipeCache.type(EXTREME_COOKING_SHAPELESS_ID), stack);
     }
 
-    /** 烧烤（电力烧烤架 / 烧烤工厂）：barbequesdelight:grilling。 */
+    /** 烧烤（电力烧烤架 / 烧烤工厂）：mekck:grilling 优先，回落 barbequesdelight:grilling。 */
     public static boolean matchesGrilling(Level level, ItemStack stack) {
         if (level == null) return true;
+        if (matchesAnyIngredient(level, UniversalCuttingMachine.GRILLING_RECIPE_TYPE.get(), stack)) {
+            return true;
+        }
         return matchesAnyIngredient(level, cn.ism.mekck.util.RecipeCache.type(GRILLING_TYPE_ID), stack);
     }
 

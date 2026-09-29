@@ -489,6 +489,37 @@ SKEWERING 与 GRILLING 同病（读 `barbequesdelight:skewering`，mekck 侧 0 �
 > 依赖不再是 `barbequesdelight`，**这 12 个方块变成无条件可注册**。
 > 只剩 GRILLING 一组（24 个方块中的 12 个）仍受该规则约束。
 
+#### 6.5.1.1a `mekck:grilling` 自有类型（2026-09-29，已实现，接续上一节）
+
+烟熏炉上位只是权宜之计，本节补上自有类型，**GRILLING 的外部依赖就此解除**。
+
+**为什么产物是新的"烤"变体**（`grilled_beef` 等 8 个），而不是复用 `cooked_beef`：
+原版 `SMOKING` 的 9 条已经产出 `cooked_*`；若本类型产出同一种物品，它与烟熏炉
+完全重复，等于什么都没加。烤制变体是刻意与"水煮/烟熏"区分开的第二条产物线。
+
+**⚠ 字段可见性是硬约束**：`GrillFactoryBlockEntity.matchesInput` 用的是
+`recipe.getClass().getField("ingredient")`——**`getField` 只找 public 字段**。
+私有字段会抛 `NoSuchFieldException`，落到 `getIngredients().get(0)` 兜底分支，
+而那条兜底是靠抛异常走的，位于每 tick 每槽的热路径上。
+所以 `MekCkGrillingRecipe.ingredient` 必须是 `public final`。
+
+> 这与 §6.5.1.2 的串烧形成对照：串烧走 `Reflect.field`（`getDeclaredField` +
+> `setAccessible`，能拿私有字段），所以串烧的五个字段可以私有。
+> **两处反射机制不同，可见性要求也不同，改前务必确认走的是哪一条。**
+
+**不自带调味**：调味是 `BarbequesDelightCompat` 的 NBT 体系
+（`isSeasonable(result)` → `applySeasoning`），另造一套没有依据。
+`currentSeasoningFor` 对本类型产物因 `isSeasonable` 为 false 返回 null，行为安全。
+
+改动 6 处，与 §6.5.1.2 同构：`MekCkGrillingRecipe` + 注册类型/序列化器 +
+8 个烤制物品 + `GrillFactoryBlockEntity.collectGrillingRecipes()` 自有优先 +
+`RecipeInputMatcher.matchesGrilling` 先查自有 + JEI 催化剂。
+资产由 `tools/gen_grilling_assets.py` 生成（8 配方 / 8 纹理 / 双语 lang）。
+
+> 收尾时踩到一次 `if (grillingType != null) {` 的残留：改写 `findOrderRecipe`
+> 后留下一个多余右花括号，编译报「非法的类型开始」。批量替换带 `if` 包裹的
+> 代码块时，务必连同包裹一起删。
+
 #### 6.5.2 自有 RecipeType 全清单
 
 全部注册在 `UniversalCuttingMachine.java`（`RECIPE_TYPES.register(name, …)`，
@@ -499,6 +530,8 @@ SKEWERING 与 GRILLING 同病（读 `barbequesdelight:skewering`，mekck 侧 0 �
 | `mekck:plantcut` | `PlantingCuttingRecipe` | A 组（PLANTING_CUTTING） |
 | `mekck:ice_make` | `IceMakeRecipe` | A 组（ICE） |
 | `mekck:grinding` | `GrindingRecipe` | A 组（GRINDING） |
+| `mekck:grilling` | `MekCkGrillingRecipe` | A 组（GRILLING，§6.5.1.1a） |
+| `mekck:skewering` | `MekCkSkeweringRecipe` | A 组（SKEWERING，§6.5.1.2） |
 | `mekck:beverage_assembly` | `BeverageAssemblyRecipe` | **B/C 组**（不是 COOKING 工厂） |
 | `mekck:packaging` | `PackagingRecipe` | B/C 组 |
 | `mekck:grape_pressing` | `GrapePressingRecipe` | B/C 组 |
@@ -879,7 +912,7 @@ COOKING 有 144 格材料库（`§6.4`），与另外 6 个工艺的 `processes 
 
 | 工艺 | 依赖 mod | 缺席时的方块 |
 |---|---|---|
-| GRILLING | `barbequesdelight` | 12 档**全部不注册** |
+| GRILLING | ~~`barbequesdelight`~~ → **已无外部依赖**（§6.5.1.1a 已建自有 `mekck:grilling`） | 恒注册 |
 | SKEWERING | ~~`barbequesdelight`~~ → **已无外部依赖**（§6.5.1.2 已建自有 `mekck:skewering`） | 恒注册 |
 | COOKING | `farmersdelight`（+可选 `avaritia_delight` / `kaleidoscope_cookery`） | 由 `farmersdelight` 决定；它是 `mods.toml` 强制依赖，**恒注册** |
 | CUTTING | `mekanism`（`sawing`） | 恒注册 |
@@ -887,15 +920,14 @@ COOKING 有 144 格材料库（`§6.4`），与另外 6 个工艺的 `processes 
 | GRINDING | 无（`mekck:grinding` 自有） | 恒注册 |
 | ICE | 无（`mekck:ice_make` 自有） | 恒注册 |
 
-**结论：最严格方案实际只影响 GRILLING 一组，共 12 个方块**（原为 GRILLING + SKEWERING 共 24 个，
-SKEWERING 补了自有配方后已解除）。其余 72 个方块的依赖是 `mekanism` / `farmersdelight`
-这类强制依赖或自有配方，不存在缺席问题。
+**结论：7 个工艺现已全部无外部可选依赖，最严格方案对本批方块不再排除任何方块。**
 
-> ⚠ 这与 §6.5.1 结论 2 联动：`barbequesdelight` 既不在 `mods.toml`，
-> mekck 侧也**一个配方都没有**。按本节严格注册后，**默认实例下这 12 个方块不会出现**。
-> 这是规则的正确结果，但也意味着：
-> **若希望 GRILLING 工厂默认可用，必须给它补自有 `mekck:grilling` 配方。**
-> 这是内容缺口，不是架构缺口——见 §6.5.1.1（烟熏炉上位只是权宜之计）。
+> 原先的顾虑是「按规则跑完，GRILLING / SKEWERING 共 24 个方块在默认实例下不会出现」。
+> 补完 §6.5.1.1a 与 §6.5.1.2 的自有配方后，该顾虑已消除——
+> 这也说明「条件化方块注册」与「补自有配方」应当配套：先补内容，规则才不会误伤。
+>
+> §14 的实现因此**可以暂缓**：目前没有需要被条件化排除的方块。
+> 若将来引入新的外部配方源，再按本节判据补门控。
 
 ### 14.3 实现位置与形态
 

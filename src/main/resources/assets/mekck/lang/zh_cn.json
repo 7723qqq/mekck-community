@@ -325,5 +325,13 @@
   "item.mekck.fish_skewer": "海鲜串",
   "item.mekck.vegetable_skewer": "时蔬串",
   "item.mekck.mushroom_skewer": "菌菇串",
-  "item.mekck.sweetberry_skewer": "甜莓串"
+  "item.mekck.sweetberry_skewer": "甜莓串",
+  "item.mekck.grilled_beef": "烤牛肉",
+  "item.mekck.grilled_pork": "烤猪肉",
+  "item.mekck.grilled_chicken": "烤鸡肉",
+  "item.mekck.grilled_mutton": "烤羊肉",
+  "item.mekck.grilled_cod": "烤鳕鱼",
+  "item.mekck.grilled_salmon": "烤鲑鱼",
+  "item.mekck.grilled_carrot": "烤胡萝卜",
+  "item.mekck.grilled_mushroom": "烤蘑菇"
 }
