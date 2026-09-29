@@ -216,6 +216,12 @@ public final class UniversalCuttingMachine {
     public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.GrapePressingRecipe>> GRAPE_PRESSING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("grape_pressing",
             cn.ism.mekck.recipe.GrapePressingRecipe.Serializer::new);
 
+    // Skewering recipe (串烧工厂：主料 + 辅料 + 签子 → 串烧物，签子不消耗)
+    public static final RegistryObject<RecipeType<cn.ism.mekck.recipe.MekCkSkeweringRecipe>> SKEWERING_RECIPE_TYPE = RECIPE_TYPES.register("skewering",
+            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "skewering")));
+    public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.MekCkSkeweringRecipe>> SKEWERING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("skewering",
+            cn.ism.mekck.recipe.MekCkSkeweringRecipe.Serializer::new);
+
     // 状态效果（制冰攻击体系）：冰冻（原生冰封）/ 失温 / 永冻
     public static final DeferredRegister<MobEffect> MOB_EFFECTS = DeferredRegister.create(ForgeRegistries.MOB_EFFECTS, MOD_ID);
     public static final RegistryObject<cn.ism.mekck.effect.FrozenEffect> FROZEN_EFFECT = MOB_EFFECTS.register(
@@ -488,6 +494,18 @@ public final class UniversalCuttingMachine {
 
     // 榛子粉（§F19 D 半：炒榛子研磨产物，纯中间品、不作食物、无其它用途）
     public static final RegistryObject<Item> HAZELNUT_POWDER_ITEM = ITEMS.register("hazelnut_powder", () -> new Item(new Item.Properties()));
+
+    // ── 串烧物（mekck:skewering 的产物，签子已随主料烤入）─────────────────
+    // 刻意<b>不</b>设 food 属性：营养值需要与主料/辅料逐条对齐才算平衡，
+    // 那是内容设计的活，不在机制落地里编。串烧工厂的价值是并行处理 + 签子返还。
+    public static final RegistryObject<Item> BEEF_SKEWER_ITEM = ITEMS.register("beef_skewer", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> PORK_SKEWER_ITEM = ITEMS.register("pork_skewer", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> CHICKEN_SKEWER_ITEM = ITEMS.register("chicken_skewer", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> MUTTON_SKEWER_ITEM = ITEMS.register("mutton_skewer", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> FISH_SKEWER_ITEM = ITEMS.register("fish_skewer", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> VEGETABLE_SKEWER_ITEM = ITEMS.register("vegetable_skewer", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> MUSHROOM_SKEWER_ITEM = ITEMS.register("mushroom_skewer", () -> new Item(new Item.Properties()));
+    public static final RegistryObject<Item> SWEETBERRY_SKEWER_ITEM = ITEMS.register("sweetberry_skewer", () -> new Item(new Item.Properties()));
 
     /**
      * 费列罗**发射物**的渲染载体（隐藏物品：无配方、不进创造标签页）。

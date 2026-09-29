@@ -1,0 +1,15 @@
+{
+  "type": "mekck:skewering",
+  "ingredient": {
+    "item": "minecraft:cooked_chicken"
+  },
+  "side": {
+    "tag": "mekck:skewering_vegetables"
+  },
+  "sideCount": 1,
+  "result": {
+    "item": "mekck:chicken_skewer",
+    "count": 1
+  },
+  "processingTime": 100
+}

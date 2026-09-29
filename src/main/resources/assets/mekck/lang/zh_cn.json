@@ -317,5 +317,13 @@
   "tooltip.mekck.creative_upgrade.per_world.1": "本存档所需的 49 种食物已固定，重启服务器不会改变",
   "tooltip.mekck.creative_upgrade.per_world.2": "在 JEI 中搜索本物品即可查看本存档需要收集哪些食物",
   "tooltip.mekck.creative_upgrade.per_restart.1": "本局所需的 49 种食物每次重启服务器都会重新随机",
-  "tooltip.mekck.creative_upgrade.per_restart.2": "在 JEI 中搜索本物品即可查看本局需要收集哪些食物"
+  "tooltip.mekck.creative_upgrade.per_restart.2": "在 JEI 中搜索本物品即可查看本局需要收集哪些食物",
+  "item.mekck.beef_skewer": "牛肉串",
+  "item.mekck.pork_skewer": "猪肉串",
+  "item.mekck.chicken_skewer": "鸡肉串",
+  "item.mekck.mutton_skewer": "羊肉串",
+  "item.mekck.fish_skewer": "海鲜串",
+  "item.mekck.vegetable_skewer": "时蔬串",
+  "item.mekck.mushroom_skewer": "菌菇串",
+  "item.mekck.sweetberry_skewer": "甜莓串"
 }

@@ -1,0 +1,15 @@
+{
+  "type": "mekck:skewering",
+  "ingredient": {
+    "tag": "minecraft:fishes"
+  },
+  "side": {
+    "tag": "mekck:skewering_vegetables"
+  },
+  "sideCount": 1,
+  "result": {
+    "item": "mekck:fish_skewer",
+    "count": 1
+  },
+  "processingTime": 100
+}

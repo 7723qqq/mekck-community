@@ -296,5 +296,13 @@
   "tooltip.mekck.creative_upgrade.per_world.1": "The 49 foods required for this upgrade are locked for this world (restarting will not change them).",
   "tooltip.mekck.creative_upgrade.per_world.2": "Search this item in JEI to see which foods this world needs.",
   "tooltip.mekck.creative_upgrade.per_restart.1": "The 49 foods required for this upgrade are re-rolled on every server restart.",
-  "tooltip.mekck.creative_upgrade.per_restart.2": "Search this item in JEI to see which foods this run needs."
+  "tooltip.mekck.creative_upgrade.per_restart.2": "Search this item in JEI to see which foods this run needs.",
+  "item.mekck.beef_skewer": "Beef Skewer",
+  "item.mekck.pork_skewer": "Pork Skewer",
+  "item.mekck.chicken_skewer": "Chicken Skewer",
+  "item.mekck.mutton_skewer": "Mutton Skewer",
+  "item.mekck.fish_skewer": "Fish Skewer",
+  "item.mekck.vegetable_skewer": "Vegetable Skewer",
+  "item.mekck.mushroom_skewer": "Mushroom Skewer",
+  "item.mekck.sweetberry_skewer": "Sweet Berry Skewer"
 }

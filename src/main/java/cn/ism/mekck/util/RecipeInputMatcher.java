@@ -174,9 +174,12 @@ public final class RecipeInputMatcher {
         return type != null && matchesAnyIngredient(level, type, stack);
     }
 
-    /** 穿串（智能穿串机 / 穿串工厂）：barbequesdelight:skewering。 */
+    /** 穿串（智能穿串机 / 穿串工厂）：mekck:skewering 优先，回落 barbequesdelight:skewering。 */
     public static boolean matchesSkewering(Level level, ItemStack stack) {
         if (level == null) return true;
+        if (matchesAnyIngredient(level, UniversalCuttingMachine.SKEWERING_RECIPE_TYPE.get(), stack)) {
+            return true;
+        }
         return matchesAnyIngredient(level, cn.ism.mekck.util.RecipeCache.type(SKEWERING_TYPE_ID), stack);
     }
 

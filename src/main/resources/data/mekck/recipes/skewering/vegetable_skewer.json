@@ -1,0 +1,15 @@
+{
+  "type": "mekck:skewering",
+  "ingredient": {
+    "tag": "mekck:skewering_vegetables"
+  },
+  "side": {
+    "item": "minecraft:baked_potato"
+  },
+  "sideCount": 1,
+  "result": {
+    "item": "mekck:vegetable_skewer",
+    "count": 1
+  },
+  "processingTime": 100
+}

@@ -1,0 +1,15 @@
+{
+  "type": "mekck:skewering",
+  "ingredient": {
+    "tag": "mekck:skewering_sweet"
+  },
+  "side": {
+    "tag": "mekck:skewering_vegetables"
+  },
+  "sideCount": 1,
+  "result": {
+    "item": "mekck:sweetberry_skewer",
+    "count": 1
+  },
+  "processingTime": 100
+}

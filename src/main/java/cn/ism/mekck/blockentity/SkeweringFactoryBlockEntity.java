@@ -3,6 +3,7 @@ package cn.ism.mekck.blockentity;
 import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.RedstoneControl;
 import cn.ism.mekck.SideMode;
+import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.block.SkeweringFactoryBlock;
 import cn.ism.mekck.menu.SkeweringFactoryMenu;
@@ -555,9 +556,31 @@ public final class SkeweringFactoryBlockEntity extends BlockEntity implements Me
         }
     }
 
-    private RecipeType<?> getSkeweringRecipeType() {
-        ResourceLocation id = new ResourceLocation("barbequesdelight", "skewering");
-        return cn.ism.mekck.util.RecipeCache.type(id);
+    /**
+     * 串烧配方来源，按优先级排列：<b>mekck 自有类型优先</b>，外部 barbequesdelight 回落。
+     * <p>
+     * 自有类型缺席时列表只剩外部那一条，行为与迁移前完全一致；
+     * 外部 mod 未安装时该条为 null，由 {@link #collectSkeweringRecipes} 跳过。
+     * </p>
+     */
+    private List<RecipeType<?>> getSkeweringRecipeTypes() {
+        List<RecipeType<?>> types = new ArrayList<>(2);
+        types.add(UniversalCuttingMachine.SKEWERING_RECIPE_TYPE.get());
+        types.add(cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("barbequesdelight", "skewering")));
+        return types;
+    }
+
+    /**
+     * 按来源优先级汇总串烧配方。自有类型在前，外部在后。
+     */
+    private List<Recipe<?>> collectSkeweringRecipes() {
+        List<Recipe<?>> all = new ArrayList<>();
+        for (RecipeType<?> type : getSkeweringRecipeTypes()) {
+            if (type != null) {
+                all.addAll(cn.ism.mekck.util.RecipeCache.all(level, type));
+            }
+        }
+        return all;
     }
 
     /**
@@ -568,8 +591,8 @@ public final class SkeweringFactoryBlockEntity extends BlockEntity implements Me
      */
     @SuppressWarnings("unchecked")
     private Optional<Recipe<?>> findRecipe() {
-        RecipeType<?> recipeType = getSkeweringRecipeType();
-        if (recipeType == null) return Optional.empty();
+        List<RecipeType<?>> recipeTypes = getSkeweringRecipeTypes();
+        if (recipeTypes.isEmpty()) return Optional.empty();
 
         // Get items from input slots, supplemented by storage if empty.
         // Each empty input slot gets a DIFFERENT storage item (track used slots).
@@ -593,7 +616,7 @@ public final class SkeweringFactoryBlockEntity extends BlockEntity implements Me
 
         // If an order is active, only check the ordered recipe
         if (orderRecipeId != null) {
-            for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, recipeType)) {
+            for (Recipe<?> recipe : collectSkeweringRecipes()) {
                 if (recipe.getId().equals(orderRecipeId) && matchesSkewering(recipe, inputStacks)) {
                     return Optional.of(recipe);
                 }
@@ -746,8 +769,16 @@ public final class SkeweringFactoryBlockEntity extends BlockEntity implements Me
                         toolAvailable += stack.getCount();
                     }
                 }
-                if (toolAvailable < toolCount) return 0;
-                minCount = Math.min(minCount, toolAvailable / toolCount);
+                // 至少要有一根签子才能开工
+                if (toolAvailable <= 0) return 0;
+                if (toolCount > 0) {
+                    if (toolAvailable < toolCount) return 0;
+                    minCount = Math.min(minCount, toolAvailable / toolCount);
+                }
+                // toolCount == 0：签子不消耗（mekck:skewering 的签子），
+                // 只要求「存在」，不参与批量上限计算——否则下面会除零，
+                // 而 ArithmeticException 会被本方法的 catch 吞掉并恒返回 0，
+                // 表现为「配方列表恒空、订单设不了、机器完全惰性且无任何日志」。
             }
 
             if (ingredient != null && !ingredient.isEmpty()) {
@@ -900,10 +931,7 @@ public final class SkeweringFactoryBlockEntity extends BlockEntity implements Me
     @SuppressWarnings("unchecked")
     public List<Recipe<?>> getAvailableRecipes() {
         List<Recipe<?>> available = new ArrayList<>();
-        RecipeType<?> recipeType = getSkeweringRecipeType();
-        if (recipeType == null) return available;
-
-        for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, recipeType)) {
+        for (Recipe<?> recipe : collectSkeweringRecipes()) {
             if (getMaxConsumableCount(recipe) > 0) {
                 available.add(recipe);
             }

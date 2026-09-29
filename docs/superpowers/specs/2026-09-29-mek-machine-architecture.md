@@ -448,6 +448,47 @@ if (t == null) return Optional.empty();     // 源 mod 缺席 → 安静不可�
 后续应建 `mekck:grilling` 自有类型补内容，届时工厂优先读自有类型、
 再回落到原版烟熏炉族。
 
+#### 6.5.1.2 串烧自有配方类型（2026-09-29 用户决策，已实现）
+
+SKEWERING 与 GRILLING 同病（读 `barbequesdelight:skewering`，mekck 侧 0 条），
+但用户给出了明确设计：**输入1 + 输入2 + 签子**。
+
+**关键发现**：查代码发现原作者早就是这么设计的——
+`SkeweringFactoryBlockEntity` 用反射按字段名取配方：
+`getIngredientField(recipe, "tool"/"ingredient"/"side")` +
+`getCountField(recipe, "ingredientCount"/"sideCount")`，
+且 javadoc 明写 `slot 0 -> tool, slot 1 -> ingredient, slot 2 -> side`。
+`completeRecipe` 还从输入槽 0 把 tool 取回放进 `returnSlot`——签子不消耗。
+
+所以**新配方类严格对齐这套反射契约**（`tool`/`ingredient`/`side`/`ingredientCount`/`sideCount`），
+零改动复用 `matchesSkewering` / `getMaxConsumableCount` / `consumeIngredients` 全套逻辑。
+
+> ⚠ 命名陷阱（已写进类注释）：`consumeIngredients` 把 `ingredientCount` 读作
+> **签子的消耗数**，主料则硬编码为 1。本类固定 `ingredientCount = 0`，
+> 签子才不会被扣掉。改字段名前先读那段代码。
+
+改动 6 处：
+
+| 文件 | 改动 | 漏了会怎样 |
+|---|---|---|
+| `recipe/MekCkSkeweringRecipe.java` | 新增（字段名对齐反射契约） | — |
+| `UniversalCuttingMachine` | 注册 `mekck:skewering` 类型 + 序列化器 | 类型不存在 |
+| `UniversalCuttingMachine.ITEMS` | 注册 8 个串烧物品 | 产物不存在 |
+| `SkeweringFactoryBlockEntity` | `getSkeweringRecipeTypes()` 自有优先 + 回落外部 | 找不到自有配方 |
+| `RecipeInputMatcher.matchesSkewering` | 先查自有类型 | **输入槽放不进任何东西**，机器完全惰性且无报错 |
+| `JEIPlugin` | 自有类型催化剂对穿串机 + 12 档工厂注册 | JEI 看不到配方 |
+
+**串烧物品刻意不设 `food` 属性**：营养值要与主料/辅料逐条对齐才算平衡，
+属内容设计，不在机制落地里编。串烧工厂的价值是并行处理 + 签子返还。
+
+已生成 8 条配方（`data/mekck/recipes/skewering/`）+ 4 个食材标签
+（`skewering_proteins` / `skewering_vegetables` / `skewering_mushrooms` / `skewering_sweet`），
+资产由 `tools/gen_skewer_assets.py` 生成（纹理是程序画的占位图，可读但不是美术）。
+
+> 顺带：§14.2 的条件化方块注册判据要跟着改——SKEWERING 有了自有配方后，
+> 依赖不再是 `barbequesdelight`，**这 12 个方块变成无条件可注册**。
+> 只剩 GRILLING 一组（24 个方块中的 12 个）仍受该规则约束。
+
 #### 6.5.2 自有 RecipeType 全清单
 
 全部注册在 `UniversalCuttingMachine.java`（`RECIPE_TYPES.register(name, …)`，
@@ -839,22 +880,22 @@ COOKING 有 144 格材料库（`§6.4`），与另外 6 个工艺的 `processes 
 | 工艺 | 依赖 mod | 缺席时的方块 |
 |---|---|---|
 | GRILLING | `barbequesdelight` | 12 档**全部不注册** |
-| SKEWERING | `barbequesdelight` | 12 档**全部不注册** |
+| SKEWERING | ~~`barbequesdelight`~~ → **已无外部依赖**（§6.5.1.2 已建自有 `mekck:skewering`） | 恒注册 |
 | COOKING | `farmersdelight`（+可选 `avaritia_delight` / `kaleidoscope_cookery`） | 由 `farmersdelight` 决定；它是 `mods.toml` 强制依赖，**恒注册** |
 | CUTTING | `mekanism`（`sawing`） | 恒注册 |
 | PLANTING_CUTTING | `mekanism`（`combining`） | 恒注册 |
 | GRINDING | 无（`mekck:grinding` 自有） | 恒注册 |
 | ICE | 无（`mekck:ice_make` 自有） | 恒注册 |
 
-**结论：最严格方案实际只影响 GRILLING 与 SKEWERING 两组，共 24 个方块。**
-其余 60 个方块的依赖是 `mekanism` / `farmersdelight` 这类强制依赖，不存在缺席问题。
+**结论：最严格方案实际只影响 GRILLING 一组，共 12 个方块**（原为 GRILLING + SKEWERING 共 24 个，
+SKEWERING 补了自有配方后已解除）。其余 72 个方块的依赖是 `mekanism` / `farmersdelight`
+这类强制依赖或自有配方，不存在缺席问题。
 
 > ⚠ 这与 §6.5.1 结论 2 联动：`barbequesdelight` 既不在 `mods.toml`，
-> mekck 侧也**一个配方都没有**。按本节严格注册后，**默认实例下 24 个方块不会出现**。
+> mekck 侧也**一个配方都没有**。按本节严格注册后，**默认实例下这 12 个方块不会出现**。
 > 这是规则的正确结果，但也意味着：
-> **若希望 GRILLING / SKEWERING 工厂默认可用，必须先给它们补自有配方**
-> （改用 `mekck:grilling` / `mekck:skewering` 自有类型，或补 barbequesdelight 配方数据）。
-> 这是内容缺口，不是架构缺口——见 §6.5.1。
+> **若希望 GRILLING 工厂默认可用，必须给它补自有 `mekck:grilling` 配方。**
+> 这是内容缺口，不是架构缺口——见 §6.5.1.1（烟熏炉上位只是权宜之计）。
 
 ### 14.3 实现位置与形态
 

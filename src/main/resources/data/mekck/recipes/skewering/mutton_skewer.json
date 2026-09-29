@@ -1,0 +1,15 @@
+{
+  "type": "mekck:skewering",
+  "ingredient": {
+    "item": "minecraft:cooked_mutton"
+  },
+  "side": {
+    "tag": "mekck:skewering_vegetables"
+  },
+  "sideCount": 1,
+  "result": {
+    "item": "mekck:mutton_skewer",
+    "count": 1
+  },
+  "processingTime": 100
+}

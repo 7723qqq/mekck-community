@@ -540,6 +540,16 @@ public class JEIPlugin implements IModPlugin {
             registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), GRILLING_TYPE);
         }
 
+        // mekck:skewering（串烧工厂自有配方类型）——无条件注册，该类型恒存在。
+        // 语义：签子(载体，不消耗) + 主料 + 辅料 → 串烧物。
+        RecipeType<?> mekckSkewering = RecipeType.create(
+                "mekck", "skewering", (Class) Recipe.class);
+        registration.addRecipeCatalyst(
+                new ItemStack(UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK.get()), mekckSkewering);
+        for (var entry : UniversalCuttingMachine.SKEWERING_FACTORY_BLOCKS.entrySet()) {
+            registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), mekckSkewering);
+        }
+
         // 原版烟熏炉 / 篝火烹饪（熟肉 ×7、烤马铃薯、干燥海带）——全档位烧烤工厂均可处理，
         // 不受档位与配置门禁约束。此处显示范围必须与机器实际行为一致。
         for (var entry : UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.entrySet()) {
