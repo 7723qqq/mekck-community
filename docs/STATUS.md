@@ -84,10 +84,36 @@
 ## 三、待办（按性质分）
 
 ### 内容缺口（需要你定设计）
-- `crafting_shaped/frost_cold_brew_upgrade.json` 用了 `minecraft:powder_snow`——
-  它在 1.20.1 **不是物品**（客户端 jar 只有 `models/block/powder_snow.json`，无 `models/item/`），
-  该配方在**任何**环境都失败。可选 `minecraft:powder_snow_bucket`，但这是平衡决策。
 - 16 个新物品（8 串烧 + 8 烤制）**刻意没设 `food` 属性**——营养值得与主料逐条对齐才算平衡。
+
+### 已关闭
+- ~~`frost_cold_brew_upgrade` 的 `minecraft:powder_snow`~~ → **已修为 `powder_snow_bucket`**（`c234e71`）。
+  该 id 在 1.20.1 不是物品（`Items` 里只有 `POWDER_SNOW_BUCKET`），配方在任何环境都失败，
+  且卡死冷萃攻击链后面两环（链式安装）。选桶而非蓝冰是为保住这条链
+  「越往后越贵越冷」的递增感：packed ice → blue ice → 细雪桶 → 暮色森林女王奖杯。
+
+---
+
+## 四、配方层现状：残留错误归零
+
+`tools/predict_residual_recipe_errors.py`（按实例已装 mod 集合模拟 Forge 条件判定）：
+
+```
+clean (will load)   : 137
+skipped by condition: 425
+residual failures   : 0
+```
+
+**462 个失败配方已全部清零。** 其中：
+- 422 个在本仓库（`5a36aa4` 条件化）
+- 1 个 `frost_cold_brew_upgrade`（`c234e71` 改材料）
+- 1 个 `creative_upgrade_from_49_foods.json`（另一 AI 的 `541f017` 补了
+  `forge:mod_loaded: avaritia` 条件门控——注意它的 `type` 仍是不存在的
+  Avaritia 序列化器，条件不通过时整条配方被跳过，不报错）
+- 40 个来自用户世界存档的数据包 `mekck_planting`，属世界本地内容，**未改**
+
+> 工具预测有已知局限：`forge:item_exists` 只按 modid 判断，无法离线确认具体物品
+> 是否注册。真正的确认要启动客户端看 `logs/latest.log`。
 
 ### 跨 agent 交接
 - `creative_upgrade_from_49_foods.json`（阶段 1 Task 8）的 `type` 是
@@ -101,7 +127,7 @@
 
 ---
 
-## 四、环境注意事项（会浪费时间的坑）
+## 五、环境注意事项（会浪费时间的坑）
 
 1. **构建输出编码**：Gradle 走 GBK 控制台，中文错误信息在 bash 里是乱码。
    用 `pwsh -NoProfile -Command '[Console]::OutputEncoding=[Text.Encoding]::UTF8; ...'` 一步解决。
@@ -115,7 +141,7 @@
 
 ---
 
-## 五、本轮踩过的坑（方法论，避免重蹈）
+## 六、本轮踩过的坑（方法论，避免重蹈）
 
 - **三次「查证后判定不是缺口」，避免了无效改动**：COOKING 不需要自有配方类型
   （FD 是强制依赖 + 28 条配方，硬造会脱离 FD/森罗/avaritia 生态丢集成）；
@@ -128,7 +154,7 @@
 
 ---
 
-## 六、本轮提交归属（日志里两个 AI 的提交是交错的）
+## 七、本轮提交归属（日志里两个 AI 的提交是交错的）
 
 **我（架构把关 / 审查 / 缺陷修复）**：
 `5a36aa4` 配方条件化 · `8e08d6e` 更正 conditional 字段名 · `0ce2e76` 架构 v4 ·
@@ -147,7 +173,7 @@
 
 ---
 
-## 七、文档索引
+## 八、文档索引
 
 | 文档 | 内容 |
 |---|---|
