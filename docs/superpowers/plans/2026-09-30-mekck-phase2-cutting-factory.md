@@ -478,6 +478,78 @@ MSYS_NO_PATHCONV=1 git commit -m "切菜工厂：旧存档 NBT 迁移"
 
 ---
 
+## Task 4.9: 槽位上限改为可配（`MekCkSlot`）
+
+**已独立核实的依据**：
+
+```
+常量池 #27 = Integer 64   →  BasicInventorySlot.DEFAULT_LIMIT = 64
+
+public int getLimit(ItemStack stack) {
+    if (this.obeyStackLimit && !stack.isEmpty())
+        return Math.min(this.limit, stack.getMaxStackSize());
+    return this.limit;
+}
+```
+
+所以单槽实际上限是 `min(64, 物品自身堆叠上限)`。而
+`CuttingFactoryExecutor` 用 `Integer.MAX_VALUE` 判容量——**两者不一致**，
+高倍合成倍率下余料会掉地上。BASIC 档 3 槽 × 64 = 192 件总容量。
+
+⚠️ 顺带纠正两个流传的错误说法：
+- `InputInventorySlot.at(...)` 传给 `BasicInventorySlot` 的尾部两个 `int` 是 **x/y 坐标**
+  （`iload 4` / `iload 5`），**不是 maxStack**
+- `mekanism.api.DataHandlerUtils` 在 **`mekanism.api`** 包，不在 `mekanism.common.util`
+
+**修法不需要 Mixin**——`BasicInventorySlot` 有一个 `protected` 构造接受任意 limit：
+
+```java
+protected BasicInventorySlot(int limit,                       // ← 第一个参数就是 limit
+                             BiPredicate canExtract, BiPredicate canInsert,
+                             Predicate validator, IContentsListener listener,
+                             int x, int y)
+```
+
+- [ ] **Step 1: 写 `MekCkSlot`**
+
+`src/main/java/cn/ism/mekck/machine/MekCkSlot.java` —— 继承 `BasicInventorySlot`，
+用上述 7 参构造传入可配 limit。
+
+保留 `InputInventorySlot` 的两个行为：
+- `ContainerSlotType.INPUT` / `OUTPUT` —— 7 参构造默认设 `NORMAL`，
+  **构造后调 `setSlotType(...)` 改回**（`setSlotType` 是 public）
+- `notExternal` 插入判定 —— 作为 `canInsert` 参数显式传入
+
+- [ ] **Step 2: `MekCkMachineTile.getInitialInventory()` 换用 `MekCkSlot`**
+
+替换 `InputInventorySlot.at(...)` / `OutputInventorySlot.at(...)`。
+**上限值从哪来要有明确决定**：建议按档位取 `tier.processes` 相关的值，
+或复用 `MekckConfig` 里已有的容量配置——**不要凭空定一个数**。
+若 `MekckConfig` 里没有对应项，说明该加一个，并在报告里说明默认值与理由。
+
+- [ ] **Step 3: 让 `CuttingFactoryExecutor` 的容量判定与槽位一致**
+
+执行器现在用 `Integer.MAX_VALUE`（Task 3 的刻意选择，理由是「用 Mek 的
+`getLimit` 会被截到 64 导致静默降速」——那个理由在 `MekCkSlot` 落地后**不再成立**）。
+改成读实际槽位的 `getLimit(stack)`，两者口径统一。
+
+⚠️ 这个改动**会改行为**：之前"永远装得下"变成"装到槽位上限为止"。
+这是**修正**不是回归——但要在报告里写明，并确认 Task 3 那个
+`veryHighParallelTiers...` 之类的测试断言不需要跟着改。
+
+- [ ] **Step 4: 测试 + 提交**
+
+```bash
+cd /d/mc/mod/mekck && ./gradlew test --console=plain
+MSYS_NO_PATHCONV=1 git add src/main/java/cn/ism/mekck/machine/ src/test/
+MSYS_NO_PATHCONV=1 git commit -m "槽位上限改为可配：新增 MekCkSlot，统一执行器与槽位的容量口径"
+```
+
+**顺带**：把 §4.8 修好的那个测试与本文档里"槽位单槽 64"的记述一并更新，
+别让后人以为上限还是 64。
+
+---
+
 ## Task 4.8: 基类自存 int 下标槽位数据（修 SINGULARITY 丢槽）
 
 **前提已独立确认**（`javap -c mekanism.api.DataHandlerUtils`，注意包名是 `mekanism.api` 不是
