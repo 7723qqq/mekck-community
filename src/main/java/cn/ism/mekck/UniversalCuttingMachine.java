@@ -15,7 +15,6 @@ import cn.ism.mekck.block.ElectricGrindingMachineBlock;
 import cn.ism.mekck.block.GrindingFactoryBlock;
 import cn.ism.mekck.block.UniversalCuttingMachineBlock;
 import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
-import cn.ism.mekck.blockentity.CuttingMachineFactoryBlockEntity;
 import cn.ism.mekck.blockentity.GrillBlockEntity;
 import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity;
@@ -754,60 +753,51 @@ public final class UniversalCuttingMachine {
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Block>> FACTORY_BLOCKS = new LinkedHashMap<>();
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Item>> FACTORY_ITEMS = new LinkedHashMap<>();
 
-    /**
-     * 旧切菜 tile 类型的注册表。<b>阶段 2 Task 4 起不再填充</b>：
-     * {@code mekck:<tier>_cutting_factory} 这个注册名现在属于 {@link cn.ism.mekck.machine.cutting.CuttingFactoryTile}，
-     * 一个注册名不能同时挂两个 {@code BlockEntityType}。
-     *
-     * <p>之所以还留着这个空 map 而不删：{@code blockentity/CuttingMachineFactoryBlockEntity}
-     * （Task 5 整体删除）仍在静态引用它，删掉会让编译断。Task 5 删掉那个类时，
-     * 本字段与它下面那 11 个 {@code *_FACTORY_BLOCK_ENTITY} 一并删除。</p>
-     */
-    public static final Map<CuttingMachineFactoryTier, RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>>> FACTORY_BLOCK_ENTITIES = new LinkedHashMap<>();
+    // 切菜工厂原先的 11 个 *_FACTORY_BLOCK_ENTITY 字段与 FACTORY_BLOCK_ENTITIES 集合，
+    // 已随 blockentity/CuttingMachineFactoryBlockEntity 于阶段 2 Task 5 一并删除：
+    // 它们恒为 null（同一个注册名 mekck:<tier>_cutting_factory 只能挂一个 BlockEntityType，
+    // 旧的早已被 CuttingFactoryTile 顶替），留着等于永久静默的 null。活的 tile 句柄在下面的
+    // CUTTING_FACTORY_TILES。
+    //
+    // 「11 个」不是笔误：档位枚举有 12 个值，但 BLAZE 从来就没有对应的 *_FACTORY_BLOCK_ENTITY
+    // 字段（删除前实测如此），Task 5 不新增也不补齐。
+    //
+    // ⚠️ 不要按名字相似去删其余家族的 *_FACTORY_BLOCK_ENTITY：本类现存 55 个这类字段，
+    //    全部仍被其余 6 个家族的旧 BlockEntity 真实使用（各 XxxFactoryBlock.getTileType
+    //    与 XxxFactoryBlockEntity 构造都按名读它们），删任何一个都会编译断。
 
     public static final RegistryObject<Block> BASIC_FACTORY_BLOCK;
     public static final RegistryObject<Item> BASIC_FACTORY_ITEM;
-    public static final RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> BASIC_FACTORY_BLOCK_ENTITY;
 
     public static final RegistryObject<Block> ADVANCED_FACTORY_BLOCK;
     public static final RegistryObject<Item> ADVANCED_FACTORY_ITEM;
-    public static final RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> ADVANCED_FACTORY_BLOCK_ENTITY;
 
     public static final RegistryObject<Block> ELITE_FACTORY_BLOCK;
     public static final RegistryObject<Item> ELITE_FACTORY_ITEM;
-    public static final RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> ELITE_FACTORY_BLOCK_ENTITY;
 
     public static final RegistryObject<Block> ULTIMATE_FACTORY_BLOCK;
     public static final RegistryObject<Item> ULTIMATE_FACTORY_ITEM;
-    public static final RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> ULTIMATE_FACTORY_BLOCK_ENTITY;
 
     public static final RegistryObject<Block> ABSOLUTE_FACTORY_BLOCK;
     public static final RegistryObject<Item> ABSOLUTE_FACTORY_ITEM;
-    public static final RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> ABSOLUTE_FACTORY_BLOCK_ENTITY;
 
     public static final RegistryObject<Block> SUPREME_FACTORY_BLOCK;
     public static final RegistryObject<Item> SUPREME_FACTORY_ITEM;
-    public static final RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> SUPREME_FACTORY_BLOCK_ENTITY;
 
     public static final RegistryObject<Block> COSMIC_FACTORY_BLOCK;
     public static final RegistryObject<Item> COSMIC_FACTORY_ITEM;
-    public static final RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> COSMIC_FACTORY_BLOCK_ENTITY;
 
     public static final RegistryObject<Block> INFINITE_FACTORY_BLOCK;
     public static final RegistryObject<Item> INFINITE_FACTORY_ITEM;
-    public static final RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> INFINITE_FACTORY_BLOCK_ENTITY;
 
     public static final RegistryObject<Block> CRYSTAL_MATRIX_FACTORY_BLOCK;
     public static final RegistryObject<Item> CRYSTAL_MATRIX_FACTORY_ITEM;
-    public static final RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> CRYSTAL_MATRIX_FACTORY_BLOCK_ENTITY;
 
     public static final RegistryObject<Block> NEBULA_FACTORY_BLOCK;
     public static final RegistryObject<Item> NEBULA_FACTORY_ITEM;
-    public static final RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> NEBULA_FACTORY_BLOCK_ENTITY;
 
     public static final RegistryObject<Block> SINGULARITY_FACTORY_BLOCK;
     public static final RegistryObject<Item> SINGULARITY_FACTORY_ITEM;
-    public static final RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> SINGULARITY_FACTORY_BLOCK_ENTITY;
 
     public static final RegistryObject<MenuType<CuttingMachineFactoryMenu>> FACTORY_MENU;
 
@@ -923,53 +913,40 @@ public final class UniversalCuttingMachine {
         // Assign specific references
         BASIC_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.BASIC);
         BASIC_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.BASIC);
-        BASIC_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.BASIC);
 
         ADVANCED_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.ADVANCED);
         ADVANCED_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.ADVANCED);
-        ADVANCED_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ADVANCED);
 
         ELITE_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.ELITE);
         ELITE_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.ELITE);
-        ELITE_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ELITE);
 
         ULTIMATE_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.ULTIMATE);
         ULTIMATE_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.ULTIMATE);
-        ULTIMATE_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ULTIMATE);
 
         ABSOLUTE_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.ABSOLUTE);
         ABSOLUTE_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.ABSOLUTE);
-        ABSOLUTE_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ABSOLUTE);
 
         SUPREME_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.SUPREME);
         SUPREME_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.SUPREME);
-        SUPREME_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.SUPREME);
 
         COSMIC_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.COSMIC);
         COSMIC_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.COSMIC);
-        COSMIC_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.COSMIC);
 
         INFINITE_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.INFINITE);
         INFINITE_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.INFINITE);
-        INFINITE_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.INFINITE);
 
         CRYSTAL_MATRIX_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.CRYSTAL_MATRIX);
         CRYSTAL_MATRIX_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.CRYSTAL_MATRIX);
-        CRYSTAL_MATRIX_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.CRYSTAL_MATRIX);
 
         NEBULA_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.NEBULA);
         NEBULA_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.NEBULA);
-        NEBULA_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.NEBULA);
 
         SINGULARITY_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.SINGULARITY);
         SINGULARITY_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.SINGULARITY);
-        SINGULARITY_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.SINGULARITY);
 
-        // 11 个 *_FACTORY_BLOCK_ENTITY 现在恒为 null：旧的 BlockEntityType 已被 CuttingFactoryTile 顶替，
-        // 而同一个注册名不能挂两个类型。实测这三个字段在本仓库内除本类之外**无任何读取点**
-        // （唯一的历史读取点是 blockentity/CuttingMachineFactoryBlockEntity.getTileType，
-        //  Task 5 随该类整体删除），所以置 null 不会让任何运行期路径踩空。
-        // 活的 tile 类型句柄在 CUTTING_FACTORY_TILES。
+        // 切菜各档的 tile 句柄在 CUTTING_FACTORY_TILES（见上面的注册循环）。
+        // 原先这里还有 11 行 BASIC_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(...)，
+        // 因目标 map 恒空而恒为 null，已随阶段 2 Task 5 一并删除。
 
         // Register all cooking factory blocks
         for (CuttingMachineFactoryTier tier : CuttingMachineFactoryTier.values()) {

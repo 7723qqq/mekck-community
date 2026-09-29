@@ -50,9 +50,9 @@ import static org.junit.Assert.assertTrue;
  * <p>{@link ItemStack} 需要注册表，用 {@link #boot()} 那两步把它拉起来。</p>
  *
  * <h3>旧格式样本是<b>字面量</b>，不是从旧类里读的</h3>
- * 旧 {@code CuttingMachineFactoryBlockEntity} 要到 Task 5 才删，但现在就去 import
- * 它的 {@code save} 写出来的结构，等于让测试跟着待删代码一起走。这里全部按
- * {@code blockentity/CuttingMachineFactoryBlockEntity.java:1125-1207} 的形状手写：
+ * 旧的 {@code CuttingMachineFactoryBlockEntity} 已在阶段 2 Task 5 删除，
+ * 所以这里既不 import 它也不读它的源码——否则测试会跟着待删/已删代码一起走。
+ * 下面的形状是按它当年 {@code save} 写出的结构手写的：
  * <pre>
  *   Items  : CompoundTag { Size:int, Items:ListTag&lt;{Slot:int, id, Count, McCount?}&gt; }
  *   Energy : int

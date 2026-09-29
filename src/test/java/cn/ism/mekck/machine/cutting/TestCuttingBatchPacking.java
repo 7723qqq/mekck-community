@@ -41,8 +41,9 @@ import static org.junit.Assert.assertTrue;
  * <h3>本测试直接调用生产代码，不是复刻</h3>
  * 被测的 {@code canFitAll} / {@code insertOutput} / {@code stackMultiplier} 是
  * {@link CuttingFactoryExecutor} 上的包级 {@code static} 方法。构造一台真的机器需要
- * {@code BlockEntityType} 注册表（{@code UniversalCuttingMachine.FACTORY_BLOCK_ENTITIES
- * .get(tier).get()} 在裸 JVM 里是 {@code NullPointerException: Registry Object not present}），
+ * {@code BlockEntityType} 注册表（切菜档的 tile 句柄在
+ * {@code UniversalCuttingMachine.CUTTING_FACTORY_TILES}，裸 JVM 里取它会得到
+ * {@code NullPointerException: Registry Object not present}），
  * 所以把纯逻辑做成静态入口，而不是在测试里抄一遍。
  *
  * <h3>产出槽上限是夹具给的（阶段 2 Task 4.9）</h3>

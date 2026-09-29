@@ -69,33 +69,22 @@ import static org.junit.Assert.fail;
  * </ol>
  *
  * <h3>测试怎么跟着代码走</h3>
- * 迁移前配方逻辑在 {@code blockentity/CuttingMachineFactoryBlockEntity.java}，
- * 迁移后在 {@code machine/cutting/CuttingFactoryExecutor.java}（旧文件到 Task 5 才删）。
- * {@link #logicSource()} 按「先新后旧」解析，所以同一份断言在迁移前后都成立，
- * 不需要为了改测试路径而重写。
+ * 配方逻辑现在只在 {@code machine/cutting/CuttingFactoryExecutor.java} 一处。
+ * 迁移前它住在 {@code blockentity/CuttingMachineFactoryBlockEntity.java}，
+ * 那个文件已随阶段 2 Task 5 删除，所以这里曾有的「新旧二选一」回落分支也一并去掉了——
+ * 留着只会指向一个永远不存在的路径，给人「旧实现还在」的错觉。
  */
 public class TestCuttingRecipeInvariants {
 
-    /** 迁移后的执行器。 */
+    /** 配方逻辑的唯一落点（迁移前是旧的 CuttingMachineFactoryBlockEntity，已于 Task 5 删除）。 */
     private static final Path EXECUTOR = Path.of("src", "main", "java", "cn", "ism", "mekck",
             "machine", "cutting", "CuttingFactoryExecutor.java");
-    /** 迁移前的旧方块实体（Task 5 才删除）。 */
-    private static final Path LEGACY_BE = Path.of("src", "main", "java", "cn", "ism", "mekck",
-            "blockentity", "CuttingMachineFactoryBlockEntity.java");
-
-    private static Path logicSource() {
-        if (Files.exists(EXECUTOR)) {
-            return EXECUTOR;
-        }
-        return LEGACY_BE;
-    }
 
     private static String readLogic() throws IOException {
-        Path file = logicSource();
-        if (!Files.exists(file)) {
-            fail("找不到切菜配方逻辑的源文件（测试需在项目根目录运行）：" + file.toAbsolutePath());
+        if (!Files.exists(EXECUTOR)) {
+            fail("找不到切菜配方逻辑的源文件（测试需在项目根目录运行）：" + EXECUTOR.toAbsolutePath());
         }
-        return stripComments(Files.readString(file, StandardCharsets.UTF_8));
+        return stripComments(Files.readString(EXECUTOR, StandardCharsets.UTF_8));
     }
 
     /**
@@ -135,7 +124,7 @@ public class TestCuttingRecipeInvariants {
     private static String methodBody(String source, Pattern signature) {
         Matcher m = signature.matcher(source);
         if (!m.find()) {
-            fail("在 " + logicSource().getFileName() + " 里找不到方法签名 " + signature.pattern());
+            fail("在 " + EXECUTOR.getFileName() + " 里找不到方法签名 " + signature.pattern());
         }
         int open = source.indexOf('{', m.end());
         if (open < 0) {

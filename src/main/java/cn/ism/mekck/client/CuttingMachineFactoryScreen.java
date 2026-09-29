@@ -32,15 +32,19 @@ import net.minecraft.world.entity.player.Inventory;
  * 旧菜单的槽是原版 {@code Slot}，不是 {@code InventoryContainerSlot}，
  * 自动通路根本认不出来。</p>
  *
- * <h3>随 Task 4 一并消失的功能（不是本类的取舍，是 tile 换人的必然结果）</h3>
+ * <h3>本界面没有的两个面板（不是取舍，是 tile 换人的必然结果）</h3>
  * <ul>
- *   <li><b>自动分配</b>（{@code AutoDistributePacket} → {@code toggleAutoDistribute}）
- *       与 <b>ME 自动处理面板</b>（{@code AutoProcessTogglePacket} →
- *       {@code getAutoSelectedItems}）依赖旧 tile 上的两个字段。新 tile 没有这些状态，
- *       包到达后 {@code be instanceof CuttingMachineFactoryBlockEntity} 判否、静默跳过，
- *       不会崩但也不会生效。</li>
- *   <li><b>ME 下单面板</b>与 <b>AE2 网络拉料按钮</b>同理，锚在旧 tile 的
- *       {@code INetworkPullable} 上。</li>
+ *   <li><b>自动分配</b>（{@code AutoDistributePacket}）。服务端处理器只认
+ *       {@code GrillFactoryBlockEntity} 与 {@code PlantingCuttingFactoryBlockEntity}，
+ *       切菜这一档被刻意排除（AE2 自动化的正主是 AE2 自己的网格，机器侧只提供
+ *       {@code eject / side / config} 三个导出设置；该处理器的注释里写了这条取舍）。
+ *       所以本界面不建这个开关。</li>
+ *   <li><b>ME 自动处理面板</b>（{@code AutoProcessTogglePacket}）同理：本界面不建。
+ *       但服务端这一侧的通道是通的——包处理器按 {@link CuttingFactoryTile} 实现的
+ *       {@code IMekCkPorted} 判定，再转交 {@code AE2Compat}（阶段 2 Task 4.6 接的）。</li>
+ *   <li><b>ME 下单面板</b>与 <b>AE2 网络拉料按钮</b>锚在旧 tile 的
+ *       {@code INetworkPullable} 上；新 tile 走的是 {@code IMekCkPorted} 端口声明，
+ *       本界面同样不建。</li>
  * </ul>
  * 它们的正主是阶段 2 后续的 AE2 自动化层——{@code IMekCkPorted}（Task 2）
  * 声明的就是那一层要消费的端口契约，切菜这一档已经按契约把
