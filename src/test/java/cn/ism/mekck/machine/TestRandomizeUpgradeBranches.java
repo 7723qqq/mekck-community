@@ -183,10 +183,14 @@ public class TestRandomizeUpgradeBranches {
      * 夹具（该重载的参数名由它自己那两句 requireNonNull 文案坐实：
      * 「Extraction validity check」/「Insertion validity check」），把这条跑成断言。
      *
-     * <p><b>为什么这条必须留在这里</b>：{@link MekCkMachineTile#workCycle} 里
-     * {@code extract(..., AutomationType.EXTERNAL)} 会被 canExtract 拒掉 ⇒
-     * 机器实际从不扣能量（阶段 2 Task 4 交付的既有问题，见报告「疑虑 1」，
-     * 本任务不改）。顺带说明「自动补满」这条分支不受影响：它走 insert，畅通。</p>
+     * <p><b>为什么这条必须留在这里</b>：它钉的是<b>容器语义</b>，而容器语义决定了
+     * {@link MekCkMachineTile#workCycle} 的扣电只能走
+     * {@code AutomationType.MANUAL}（2026-09-29 起；此前那处写死 EXTERNAL，
+     * 于是机器实际从不扣能量——阶段 2 Task 4 交付的既有问题，报告见
+     * {@code .superpowers/sdd/2026-09-29-mekck-phase1-upgrade-system/
+     * energy-extract-and-efficiency-report.md}）。
+     * 「扣得动」那一半断言在 {@code TestEnergyCostAutomation} 里。
+     * 顺带说明「自动补满」这条分支不受影响：它走 insert，畅通。</p>
      */
     @Test
     public void machineInputContainerAcceptsInsertsButRejectsExternalExtract() {

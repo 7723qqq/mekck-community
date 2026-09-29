@@ -11,6 +11,7 @@ import mekanism.api.Action;
 import mekanism.api.AutomationType;
 import mekanism.api.IContentsListener;
 import mekanism.api.Upgrade;
+import mekanism.api.energy.IEnergyContainer;
 import mekanism.api.inventory.IInventorySlot;
 import mekanism.api.math.FloatingLong;
 import mekanism.api.providers.IBlockProvider;
@@ -623,6 +624,33 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
     }
 
     /**
+     * 从能量容器里扣掉本 tick 的耗电 —— {@link #workCycle} 的扣减<b>唯一</b>入口。
+     *
+     * <p><b>为什么必须用 {@link AutomationType#MANUAL} 而不是 EXTERNAL</b>：
+     * 本机能量容器由 {@code MachineEnergyContainer.input(tile, listener)} 建成，
+     * 而该工厂方法把 {@code notExternal} 传给了 <b>canExtract</b>、{@code alwaysTrue}
+     * 传给了 <b>canInsert</b>（判据见 {@link #refillEnergyBuffer} 的注释）。
+     * {@code BasicEnergyContainer.extract} 的开头是
+     * 「{@code if (!canExtract.test(type)) return ZERO;}」（实测偏移 14~30），
+     * 而 {@code notExternal} 就是 {@code type != EXTERNAL}（静态块偏移 33 绑定的
+     * {@code lambda$static$2}），所以传 EXTERNAL 会被<b>整条拒掉、一 FE 都不扣</b>
+     * ——机器照常加工、照常有进度条，能量条却永远不掉。各家族的能耗设计就是这样集体落空的。</p>
+     *
+     * <p>语义上也对得上：机械自己烧自己的电属于内部行为，不是「外部自动化在抽电」。
+     * 顺带记一条边界：{@code notExternal} 只排除 EXTERNAL，{@link AutomationType#INTERNAL}
+     * 同样放行；选 MANUAL 而非 INTERNAL 是为了与 {@link #refillEnergyBuffer} 保持一致，
+     * 两者都是「机器自己动自己的能量容器」。</p>
+     *
+     * <p>做成静态方法是为了让这条行为<b>能在裸 JVM 里跑成断言</b>（真 tile 造不出来，
+     * 见 {@code TestRandomizeUpgradeBranches} 的类注释），与本文件里
+     * {@link #gatedEnergyCost} / {@link #gatedTicksPerCycle} / {@link #energyToRefill}
+     * 是同一个理由。调用点只剩 {@link #workCycle} 一处。</p>
+     */
+    static void deductEnergy(IEnergyContainer container, int cost) {
+        container.extract(FloatingLong.create(cost), Action.EXECUTE, AutomationType.MANUAL);
+    }
+
+    /**
      * 「1 tick 批次」闸门：把进度门槛整个换掉，<b>不碰速度倍率</b>。
      *
      * <p>旧第 387 行是 {@code hasCreative ? 1 : max(1, PROCESS_TIME / speedMult)}——
@@ -658,17 +686,18 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
      *
      * <p>「已经满了就别插」的理由在 {@link #energyToRefill} 的注释里，此处不复述。
      *
-     * <p><b>{@link AutomationType#MANUAL} 在这里是随意的，不是必需</b>：本机能量容器由
-     * {@code MachineEnergyContainer.input(tile, listener)} 建成，而它的 canInsert 是
-     * {@code alwaysTrue}，任何 AutomationType 都灌得进去。选 MANUAL 只是因为
-     * 「卡把能量补满」这件事确实不是外部自动化干的。
-     * 顺带记一条<b>已实测</b>的同源事实，方向与直觉相反：
-     * 那个工厂方法把 {@code notExternal} 传给了 <b>canExtract</b>、{@code alwaysTrue} 传给了
-     * <b>canInsert</b>（判据是 {@code BasicEnergyContainer} 构造器字节码偏移 19~26：
-     * 第二个参数 {@code -> canExtract}、第三个 {@code -> canInsert}，以及 4 参
-     * {@code create} 工厂里那两句 {@code requireNonNull} 的文案
-     * 「Extraction validity check」/「Insertion validity check」）。
-     * 它对 {@link #workCycle} 里那处 extract 的影响见那里的注释。</p>
+     * <p><b>这里的 {@link AutomationType#MANUAL} 确实是随意的</b>——本机能量容器由
+     * {@code MachineEnergyContainer.input(tile, listener)} 建成，而它的<b>插入</b>侧谓词是
+     * {@code alwaysTrue}，任何 AutomationType 都灌得进去，所以「卡把能量补满」这一行
+     * 即使写成 EXTERNAL 也不会被拒。<b>但同样的理由不能套到抽取侧</b>，那里的谓词是
+     * {@code notExternal}，见 {@link #deductEnergy} 的注释。
+     * 顺带把这条实测的判据记全（方向与直觉相反）：{@code MachineEnergyContainer.input}
+     * 把 {@code notExternal} 传给了 <b>canExtract</b>、{@code alwaysTrue} 传给了
+     * <b>canInsert</b>；{@code BasicEnergyContainer} 的 4 参构造器里
+     * {@code canExtract = 第 3 个形参}、{@code canInsert = 第 4 个形参}
+     * （字节码偏移 19~21 与 24~26），两个形参的名字由 4 参 {@code create} 工厂里那两句
+     * {@code requireNonNull} 的文案坐实：「Extraction validity check」/
+     * 「Insertion validity check」。</p>
      */
     private void refillEnergyBuffer() {
         FloatingLong need = energyToRefill(energyContainer.getMaxEnergy(), energyContainer.getEnergy());
@@ -735,11 +764,10 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         boolean allowed = allowsWork() && hasWorkToDo() && hasEnergyFor(cost);
         if (allowed) {
             if (cost > 0) {
-                // ⚠️ 本行传 EXTERNAL 时能量其实扣不下来（本机容器的 canExtract 是
-                // notExternal），本注释原先写的正好相反，故按实测更正。详见
-                // .superpowers/sdd/2026-09-29-mekck-phase1-upgrade-system/phase2-task-4.7-report.md
-                // 的「疑虑 1」：属阶段 2 Task 4 交付的既有问题，不在本任务范围内改。
-                energyContainer.extract(FloatingLong.create(cost), Action.EXECUTE, AutomationType.EXTERNAL);
+                // AutomationType 的选择与理由都收在 deductEnergy 里，别在这里另传一个：
+                // 本行原先写死 EXTERNAL，被容器的 canExtract=notExternal 整条拒掉，
+                // 于是机器加工了一整个阶段却一 FE 都没扣（阶段 2 Task 4 交付的既有问题）。
+                deductEnergy(energyContainer, cost);
             }
             if (++workProgress >= cycle) {
                 workProgress = 0;
