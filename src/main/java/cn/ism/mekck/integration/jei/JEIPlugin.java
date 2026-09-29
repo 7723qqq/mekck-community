@@ -540,39 +540,36 @@ public class JEIPlugin implements IModPlugin {
             registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), GRILLING_TYPE);
         }
 
-        // 晶钛矩阵以上烧烤工厂 → 原版熔炉 / 烟熏炉 / 高炉配方催化剂（配置文件开关，默认开）
+        // 原版烟熏炉 / 篝火烹饪（熟肉 ×7、烤马铃薯、干燥海带）——全档位烧烤工厂均可处理，
+        // 不受档位与配置门禁约束。此处显示范围必须与机器实际行为一致。
+        for (var entry : UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.entrySet()) {
+            ItemStack grillFactory = new ItemStack(entry.getValue().get());
+            registration.addRecipeCatalyst(grillFactory, mezz.jei.api.constants.RecipeTypes.SMOKING);
+            registration.addRecipeCatalyst(grillFactory, mezz.jei.api.constants.RecipeTypes.CAMPFIRE_COOKING);
+        }
+
+        // 晶钛矩阵以上烧烤工厂 → 原版熔炉 / 高炉配方催化剂（配置文件开关，默认开）
+        // 烟熏炉 / 篝火已上移为全档位能力，不在本开关管辖范围内。
         // 注意：JEI 内置熔炉类型的 path 是 "furnace"（不是 "smelting"），直接复用官方常量最稳妥
         if (cn.ism.mekck.config.MekckConfig.isGrillFurnaceJeiCatalystEnabled()) {
             mezz.jei.api.recipe.RecipeType<?>[] furnaceTypes = {
                     mezz.jei.api.constants.RecipeTypes.SMELTING,
-                    mezz.jei.api.constants.RecipeTypes.SMOKING,
                     mezz.jei.api.constants.RecipeTypes.BLASTING
             };
             if (cn.ism.mekck.config.MekckConfig.isCrystalMatrixGrillFurnaceEnabled()) {
-                registration.addRecipeCatalyst(
-                        new ItemStack(UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.CRYSTAL_MATRIX).get()),
-                        furnaceTypes[0]);
-                registration.addRecipeCatalyst(
-                        new ItemStack(UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.CRYSTAL_MATRIX).get()),
-                        furnaceTypes[1]);
-                registration.addRecipeCatalyst(
-                        new ItemStack(UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.CRYSTAL_MATRIX).get()),
-                        furnaceTypes[2]);
-                registration.addRecipeCatalyst(
-                        new ItemStack(UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.NEBULA).get()),
-                        furnaceTypes[0]);
-                registration.addRecipeCatalyst(
-                        new ItemStack(UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.NEBULA).get()),
-                        furnaceTypes[1]);
-                registration.addRecipeCatalyst(
-                        new ItemStack(UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.NEBULA).get()),
-                        furnaceTypes[2]);
+                for (CuttingMachineFactoryTier highTier : new CuttingMachineFactoryTier[]{
+                        CuttingMachineFactoryTier.CRYSTAL_MATRIX, CuttingMachineFactoryTier.NEBULA}) {
+                    ItemStack block = new ItemStack(UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.get(highTier).get());
+                    for (mezz.jei.api.recipe.RecipeType<?> ft : furnaceTypes) {
+                        registration.addRecipeCatalyst(block, ft);
+                    }
+                }
             }
             if (cn.ism.mekck.config.MekckConfig.isSingularityGrillFurnaceEnabled()) {
+                ItemStack block = new ItemStack(
+                        UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.SINGULARITY).get());
                 for (mezz.jei.api.recipe.RecipeType<?> ft : furnaceTypes) {
-                    registration.addRecipeCatalyst(
-                            new ItemStack(UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.SINGULARITY).get()),
-                            ft);
+                    registration.addRecipeCatalyst(block, ft);
                 }
             }
         }

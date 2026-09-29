@@ -110,12 +110,32 @@ public final class RecipeInputMatcher {
         return matchesAnyIngredient(level, cn.ism.mekck.util.RecipeCache.type(GRILLING_TYPE_ID), stack);
     }
 
-    /** 原版三类熔炼配方（熔炉 / 烟熏炉 / 高炉）——晶钛矩阵以上烧烤工厂额外可处理。 */
-    private static final RecipeType<?>[] FURNACE_FAMILY_TYPES = {
-            RecipeType.SMELTING, RecipeType.SMOKING, RecipeType.BLASTING
+    /** 原版食物类烹饪配方（烟熏炉 / 篝火）——烧烤工厂全档位可处理。 */
+    private static final RecipeType<?>[] FOOD_COOKING_TYPES = {
+            RecipeType.SMOKING, RecipeType.CAMPFIRE_COOKING
     };
 
-    /** 熔炉 / 烟熏炉 / 高炉 三类原版熔炼配方是否可处理该物品。 */
+    /** 原版熔炼类配方（熔炉 / 高炉）——仅晶钛矩阵以上烧烤工厂额外可处理。 */
+    private static final RecipeType<?>[] FURNACE_FAMILY_TYPES = {
+            RecipeType.SMELTING, RecipeType.BLASTING
+    };
+
+    /** 烟熏炉 / 篝火烹饪配方是否可处理该物品。全档位有效，不受档位或配置门禁约束。 */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static boolean matchesFoodCooking(Level level, ItemStack stack) {
+        if (level == null) return true;
+        for (RecipeType<?> type : FOOD_COOKING_TYPES) {
+            for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+                List<Ingredient> ingredients = recipe.getIngredients();
+                if (!ingredients.isEmpty() && ingredients.get(0).test(stack)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** 熔炉 / 高炉 两类原版熔炼配方是否可处理该物品（不含烟熏炉 / 篝火）。 */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static boolean matchesFurnaceFamily(Level level, ItemStack stack) {
         if (level == null) return true;

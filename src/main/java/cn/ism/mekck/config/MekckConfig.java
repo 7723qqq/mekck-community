@@ -288,17 +288,19 @@ public final class MekckConfig {
         BUILDER.pop();
 
         // ─── Grill factory furnace recipes ─────────
-        BUILDER.comment("烧烤工厂可处理原版熔炉 / 烟熏炉 / 高炉配方的设置（默认全部开启）。",
-                "晶钛矩阵~星云塑造为一组配置，奇点创世为另一组；JEI 催化剂显示开关独立。")
+        BUILDER.comment("烧烤工厂可处理原版熔炉 / 高炉配方的设置（默认全部开启）。",
+                "晶钛矩阵~星云塑造为一组配置，奇点创世为另一组；JEI 催化剂显示开关独立。",
+                "原版烟熏炉 / 篝火烹饪（熟肉、烤马铃薯、干燥海带）是全档位基础能力，不受本节开关约束。")
                 .push("grill_furnace");
         CRYSTAL_MATRIX_GRILL_FURNACE = BUILDER
-                .comment("晶钛矩阵~星云塑造烧烤工厂可处理熔炉 / 烟熏炉 / 高炉配方（默认：开）")
+                .comment("晶钛矩阵~星云塑造烧烤工厂可处理熔炉 / 高炉配方（默认：开）")
                 .define("crystal_matrix_grill_furnace_recipes", true);
         SINGULARITY_GRILL_FURNACE = BUILDER
-                .comment("奇点创世烧烤工厂可处理熔炉 / 烟熏炉 / 高炉配方（默认：开）")
+                .comment("奇点创世烧烤工厂可处理熔炉 / 高炉配方（默认：开）")
                 .define("singularity_grill_furnace_recipes", true);
         GRILL_FURNACE_JEI_CATALYST = BUILDER
-                .comment("JEI 中显示晶钛矩阵以上烧烤工厂为熔炉 / 烟熏炉 / 高炉配方催化剂（默认：开）")
+                .comment("JEI 中显示晶钛矩阵以上烧烤工厂为熔炉 / 高炉配方催化剂（默认：开）。",
+                        "烟熏炉 / 篝火催化剂对全档位显示，不受本开关约束。")
                 .define("grill_furnace_jei_catalyst", true);
         BUILDER.pop();
 

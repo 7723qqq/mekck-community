@@ -101,9 +101,20 @@ public final class GrillFactoryBlockEntity extends BlockEntity implements MenuPr
     /** 机身温度（单位 0.01 ℃）。 */
     public static final int DATA_TEMPERATURE = 16;
     public static final int DATA_SIZE = 17;
-    /** 原版三类熔炼配方类型（熔炉 / 烟熏炉 / 高炉）——晶钛矩阵以上等级额外可处理。 */
+    /**
+     * 原版食物类烹饪配方（烟熏炉 / 篝火）——全部档位可处理。
+     * 二者在 1.20.1 内容完全相同（同 9 条：熟肉 ×7、烤马铃薯、干燥海带），语义上就是"烧烤"。
+     */
+    private static final RecipeType<?>[] FOOD_COOKING_TYPES = {
+            RecipeType.SMOKING, RecipeType.CAMPFIRE_COOKING
+    };
+    /**
+     * 原版熔炼类配方（熔炉 / 高炉）——仅晶钛矩阵以上等级额外可处理。
+     * 这两族共 94 条里绝大多数是矿石与建材，与 Mek 富集腔功能重叠，
+     * 因此不提升为全档位，只作为高阶档位的额外能力。
+     */
     private static final RecipeType<?>[] FURNACE_FAMILY_TYPES = {
-            RecipeType.SMELTING, RecipeType.SMOKING, RecipeType.BLASTING
+            RecipeType.SMELTING, RecipeType.BLASTING
     };
     /** 调味料存储槽数量（追加在能源槽之后）。 */
     public static final int SEASONING_SLOTS = 3;
@@ -292,8 +303,10 @@ public final class GrillFactoryBlockEntity extends BlockEntity implements MenuPr
             public boolean isItemValid(int slot, @NotNull ItemStack stack) {
                 if (slot < inputSlots) {
                     // 输入槽只接受普通食材，不允许放入任何升级物品；
-                    // 晶钛矩阵以上等级（按配置）额外接受可熔炼（熔炉 / 烟熏炉 / 高炉）的食材
+                    // 原版烟熏炉 / 篝火烹饪（熟肉、烤马铃薯、干燥海带）全档位可处理；
+                    // 晶钛矩阵以上等级（按配置）额外接受可熔炼（熔炉 / 高炉）的食材
                     return !isAnyUpgradeItem(stack) && (RecipeInputMatcher.matchesGrilling(level, stack)
+                            || RecipeInputMatcher.matchesFoodCooking(level, stack)
                             || (furnaceFamilyEnabled() && RecipeInputMatcher.matchesFurnaceFamily(level, stack)));
                 }
                 int outputStart = inputSlots;
@@ -756,7 +769,15 @@ public final class GrillFactoryBlockEntity extends BlockEntity implements MenuPr
                 return Optional.of(vr);
             }
         }
-        // 晶钛矩阵~奇点创世等级（按配置）额外处理原版熔炉 / 烟熏炉 / 高炉配方
+        // 原版烟熏炉 / 篝火烹饪配方——全部档位可处理，是低阶档位的主要配方来源
+        for (RecipeType<?> type : FOOD_COOKING_TYPES) {
+            for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+                if (matchesInput(recipe, stack)) {
+                    return Optional.of(recipe);
+                }
+            }
+        }
+        // 晶钛矩阵~奇点创世等级（按配置）额外处理原版熔炉 / 高炉配方
         if (furnaceFamilyEnabled()) {
             for (RecipeType<?> type : FURNACE_FAMILY_TYPES) {
                 for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
@@ -769,7 +790,10 @@ public final class GrillFactoryBlockEntity extends BlockEntity implements MenuPr
         return Optional.empty();
     }
 
-    /** 该等级是否启用原版熔炉 / 烟熏炉 / 高炉配方（晶钛矩阵~星云与奇点创世分开配置）。 */
+    /**
+     * 该等级是否启用原版熔炉 / 高炉配方（晶钛矩阵~星云与奇点创世分开配置）。
+     * 烟熏炉 / 篝火烹饪不受此门禁约束——那是全档位的基础能力。
+     */
     private boolean furnaceFamilyEnabled() {
         if (tier == CuttingMachineFactoryTier.CRYSTAL_MATRIX || tier == CuttingMachineFactoryTier.NEBULA) {
             return MekckConfig.isCrystalMatrixGrillFurnaceEnabled();

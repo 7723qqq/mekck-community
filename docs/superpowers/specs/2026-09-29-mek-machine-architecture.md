@@ -407,6 +407,47 @@ if (t == null) return Optional.empty();     // 源 mod 缺席 → 安静不可�
 迁移到 `IRecipeLookupHandler` 时**不要改成硬依赖**。
 `mods.toml` 也不应把 `barbequesdelight` 声明为强制依赖。
 
+#### 6.5.1.1 烟熏炉上位（2026-09-29 用户决策，已实现）
+
+原设计把原版三族（`SMELTING` / `SMOKING` / `BLASTING`）统一放在
+「晶钛矩阵以上 + 配置开关」的门禁后。查 1.20.1 原版数据后确认这不合理：
+
+| 类型 | 条数 | 实际内容 |
+|---|---|---|
+| `SMOKING` | 9 | 熟肉 ×7、烤马铃薯、干燥海带 |
+| `CAMPFIRE_COOKING` | 9 | **与 smoking 完全相同**（同输入同产出） |
+| `SMELTING` | 70 | 其中 47 条是**矿石与建材**，与 Mek 富集腔功能重叠 |
+| `BLASTING` | 24 | **全是矿石** |
+
+「烧烤工厂」能烧矿石既不合语义，又与 Mek 富集腔重复；而该 mod 未安装时，
+低档 9 个档位完全空转（`barbequesdelight` 未声明依赖，mekck 侧引用数 0）。
+
+**决策：拆开两个门禁。**
+
+| 配方族 | 档位 | 配置 |
+|---|---|---|
+| `SMOKING` + `CAMPFIRE_COOKING` | **全部 12 档** | **不受配置约束** |
+| `SMELTING` + `BLASTING` | 晶钛矩阵 / 星云 / 奇点创世 | 受 `crystal_matrix_grill_furnace_recipes` / `singularity_grill_furnace_recipes` 约束（默认开） |
+
+已改动 6 处，**缺一不可**：
+
+| 文件 | 改动 | 漏了会怎样 |
+|---|---|---|
+| `GrillFactoryBlockEntity.FOOD_COOKING_TYPES` | 拆出食物族常量 | — |
+| `GrillFactoryBlockEntity.findRecipeUncached` | 食物族在门禁外遍历 | 配方找不到 |
+| `GrillFactoryBlockEntity.isItemValid` | 输入槽校验加 `matchesFoodCooking` | **物品根本放不进输入槽** |
+| `RecipeInputMatcher.matchesFoodCooking` | 新增公开判定 | 同上 |
+| `JEIPlugin` | 食物族催化剂对 12 档注册 | JEI 显示与实际行为不符 |
+| `MekckConfig` | 注释订正 | 配置说明与实际不符 |
+
+> `isItemValid` 那一处最隐蔽：只改配方查找而不改槽位校验，玩家仍然无法投料，
+> 表现为「机器启动不了但日志无报错」。
+
+**这是权宜之计，不是修复。** 9 条配方配奇点创世 81 路并行仍然远远不够，
+「低档烧烤配方的原始内容」缺口依然存在——见 §6.5.1 结论 2。
+后续应建 `mekck:grilling` 自有类型补内容，届时工厂优先读自有类型、
+再回落到原版烟熏炉族。
+
 #### 6.5.2 自有 RecipeType 全清单
 
 全部注册在 `UniversalCuttingMachine.java`（`RECIPE_TYPES.register(name, …)`，
