@@ -27,6 +27,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkHooks;
 
 import javax.annotation.Nullable;
+import cn.ism.mekck.util.FreezeAiReaper;
 
 /**
  * 费列罗巧克力实体：巧克力大炮的攻击弹药。
@@ -44,6 +45,16 @@ import javax.annotation.Nullable;
  * </p>
  */
 public class FerreroEntity extends ThrowableItemProjectile {
+
+    /**
+     * 免 AI 的恢复刻键 —— <b>与冰块的刻意分开</b>，理由与兜底回收器见
+     * {@link cn.ism.mekck.util.FreezeAiReaper}。
+     *
+     * <p>原先这里与 {@code IceCubeEntity} 共用 {@code "mekck:ai_restore_tick"}，
+     * 于是「谁后命中谁说了算」：短窗口的费列罗会覆盖掉长窗口的冰块写的恢复刻。</p>
+     */
+    private static final String FERRERO_AI_RESTORE_KEY = FreezeAiReaper.FERRERO_AI_RESTORE_KEY;
+
 
     public static final byte FLAG_CRISPY = 1;
     public static final byte FLAG_GRAVITY = 1 << 1;
@@ -249,13 +260,19 @@ public class FerreroEntity extends ThrowableItemProjectile {
         mob.setNoAi(true);
         if (level instanceof ServerLevel serverLevel) {
             // 重复命中时刷新恢复时间：以持久化数据记录最晚恢复刻，避免旧的定时任务提前恢复 AI。
+            //
+            // ⚠️ 键名与冰块的**刻意不同**（原先两者都写 "mekck:ai_restore_tick"）：
+            // 两个来源的窗口一改一改就不同，而共键意味着「谁后命中谁说了算」——
+            // 短窗口的费列罗会把长窗口的冰块的恢复刻覆盖掉，反之亦然。
+            // 各自独立之后，FreezeAiReaper 也能分别判断该由谁恢复。
             long restoreTick = serverLevel.getServer().getTickCount() + 40L;
-            mob.getPersistentData().putLong("mekck:ai_restore_tick", restoreTick);
+            mob.getPersistentData().putLong(FERRERO_AI_RESTORE_KEY, restoreTick);
             final long scheduled = restoreTick;
             serverLevel.getServer().tell(new net.minecraft.server.TickTask((int) scheduled, () -> {
                 if (mob.isAlive()
-                        && mob.getPersistentData().getLong("mekck:ai_restore_tick") <= serverLevel.getServer().getTickCount()) {
+                        && mob.getPersistentData().getLong(FERRERO_AI_RESTORE_KEY) <= serverLevel.getServer().getTickCount()) {
                     mob.setNoAi(false);
+                    mob.getPersistentData().remove(FERRERO_AI_RESTORE_KEY);
                 }
             }));
         }

@@ -264,7 +264,31 @@ public final class KitchenRecipeMatcher {
         if (info.milkMb > 0) fluidTank.drainOf(false, info.milkMb);
     }
 
-    /** 产物写入输出区（超大堆叠，按类型归并）。返回未能放入的产物。 */
+    /**
+     * 产物写入输出区（超大堆叠，按类型归并）。返回未能放入的产物。
+     *
+     * <h3>⚠️ 归并必须逐格夹紧（本轮修掉的静默销毁整堆物品）</h3>
+     * 原实现是
+     * <pre>{@code long total = (long) out.getCount() * Math.max(1, multiplier);
+     * stack.setCount((int) Math.min(Integer.MAX_VALUE - 1, total));   // 夹了
+     * ...
+     * existing.grow(stack.getCount());                                  // 没夹 ← 就是这里}</pre>
+     * {@code ItemStack.grow(n)} 就是 {@code setCount(getCount() + n)}，而 1.20.1 的
+     * {@code ItemStack.setCount} <b>不做任何夹紧</b>。本模组的槽位上限默认就是
+     * {@code Integer.MAX_VALUE}（{@code MekckConfig.factorySlotLimit}），
+     * 所以 {@code existing.getCount()} 可达 2.1e9，加上 {@code stack.getCount()}
+     * （最高 {@code MAX_VALUE - 1}）⇒ <b>必然溢出为负</b>。
+     *
+     * <p>后果链：{@code count <= 0} ⇒ {@code ItemStack.isEmpty()} 变 true ⇒ 该格被当成空格；
+     * 落盘前被读到时 {@code BigStackItemHandler.readStack} 走
+     * {@code if (count <= 0) return ItemStack.EMPTY;} ⇒ <b>整堆永久消失</b>。
+     * 且 {@code grow()} 不触发 {@code onContentsChanged()}，方块实体可能连
+     * {@code setChanged()} 都不会被调到。</p>
+     *
+     * <p>修法照抄同仓 {@code util/StorageMerger.merge}（那份是本轮复核确认<b>彻底正确</b>的
+     * 参照实现）：逐格算剩余空间、只搬得动的量、搬完把剩余量留在参数里交给下一段处理，
+     * <b>任何一步都不允许「造出一个新物品」或「吃掉一个已存在的物品」</b>。</p>
+     */
     public static List<ItemStack> insertOutputs(ItemStackHandler items, int outputStart, int outputEnd,
                                                 List<ItemStack> outputs, int multiplier) {
         List<ItemStack> leftover = new ArrayList<>();
@@ -272,22 +296,32 @@ public final class KitchenRecipeMatcher {
             long total = (long) out.getCount() * Math.max(1, multiplier);
             ItemStack stack = out.copy();
             stack.setCount((int) Math.min(Integer.MAX_VALUE - 1, total));
-            // 归并到同类
-            boolean placed = false;
-            for (int slot = outputStart; slot < outputEnd && !placed; slot++) {
+
+            // 第一段：归并到同类槽。**只搬得动的量**，剩余量留在 stack 里。
+            for (int slot = outputStart; slot < outputEnd && !stack.isEmpty(); slot++) {
                 ItemStack existing = items.getStackInSlot(slot);
-                if (!existing.isEmpty() && ItemStack.isSameItemSameTags(existing, stack)) {
-                    existing.grow(stack.getCount());
-                    placed = true;
+                if (existing.isEmpty() || !ItemStack.isSameItemSameTags(existing, stack)) {
+                    continue;
                 }
+                int space = Math.min(items.getSlotLimit(slot), Integer.MAX_VALUE) - existing.getCount();
+                if (space <= 0) {
+                    continue;
+                }
+                int moved = Math.min(space, stack.getCount());
+                existing.grow(moved);
+                items.setStackInSlot(slot, existing);
+                stack.shrink(moved);
             }
-            for (int slot = outputStart; slot < outputEnd && !placed; slot++) {
+            // 第二段：剩余量找空格。仍放不下就进 leftover 交还调用方（本方法不吞）。
+            for (int slot = outputStart; slot < outputEnd && !stack.isEmpty(); slot++) {
                 if (items.getStackInSlot(slot).isEmpty()) {
                     items.setStackInSlot(slot, stack);
-                    placed = true;
+                    stack = ItemStack.EMPTY;
                 }
             }
-            if (!placed) leftover.add(stack);
+            if (!stack.isEmpty()) {
+                leftover.add(stack);
+            }
         }
         return leftover;
     }

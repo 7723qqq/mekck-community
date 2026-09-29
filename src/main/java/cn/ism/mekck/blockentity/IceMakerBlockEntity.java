@@ -51,6 +51,7 @@ import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.wrapper.RecipeWrapper;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import cn.ism.mekck.util.IceTargetSearch;
 
 public final class IceMakerBlockEntity extends BlockEntity implements MenuProvider, IRedstoneControllable, mekanism.api.heat.IMekanismHeatHandler, cn.ism.mekck.ae2.INetworkPullable {
     // ==================== IMekanismHeatHandler ====================
@@ -631,13 +632,15 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     }
 
     public void adjustRadius(int delta) {
-        // 仅保留下限 4，上限不限（用 long 运算避免 MAX_VALUE 处 +1 溢出）
-        this.radius = (int) Math.max(4L, Math.min((long) Integer.MAX_VALUE, (long) this.radius + delta));
+        // 上下限都过 IceTargetSearch.clampAttackRadius：半径来自网络包且原本无上限，
+        // 大到一定程度会退化成「每 tick 遍历全服实体」（见 IceTargetSearch 的类级说明）。
+        // delta 走 long 再收窄，避免 radius + delta 在 MAX_VALUE 处回绕成负。
+        this.radius = IceTargetSearch.clampAttackRadius((int) Math.min((long) IceTargetSearch.MAX_ATTACK_RADIUS, (long) this.radius + delta));
         setChanged();
     }
 
     public void setRadius(int r) {
-        this.radius = Math.max(4, r);
+        this.radius = IceTargetSearch.clampAttackRadius(r);
         setChanged();
     }
 

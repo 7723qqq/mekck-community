@@ -29,8 +29,53 @@ import java.util.function.Predicate;
  */
 public final class IceTargetSearch {
 
-    /** 半径超过该值时不再构造 AABB 查询（该阈值下任意世界坐标的 section key 都不会溢出）。 */
-    private static final double AABB_SCAN_MAX_RADIUS = 512.0;
+    /**
+     * 攻击半径的<b>硬上限</b> —— 4 台机器的 {@code setRadius} / {@code adjustRadius} 共用这一道闸。
+     *
+     * <h3>为什么必须封顶（第三轮审查实测的 TPS 杀手）</h3>
+     * 四个 BE 的 {@code setRadius} 原本<b>只有下限没有上限</b>（{@code Math.max(4, r)}），
+     * {@code adjustRadius} 更是直白地 {@code Math.min(…, Integer.MAX_VALUE)}。
+     * 而半径来自网络包：{@code IceAttackConfigPacket} 的 {@code value} 是裸 {@code readInt}，
+     * 走到 {@code case 2 -> machine.setRadius(value)}，包头注释自己写着
+     * 「服务端钳制到 ≥4，<b>上限不限</b>」。{@code PacketGuard.INTERACT_RANGE_SQR = 64}
+     * 意味着任何玩家站到机器 8 格内就能发这个包。
+     *
+     * <p>配合 {@code IceTargetSearch} 的大半径分支（遍历 {@code serverLevel.getEntities().getAll()}）
+     * 与「创造升级让 {@code attackTimer = 1}」，就是：<b>一台机器 + 一个包 = 永久的每 tick
+     * 全服实体遍历 + 距离判定 + 排序</b>。多台即直接吃掉 TPS。</p>
+     *
+     * <p>512 这个数还有个附带问题：它同时是 {@link #AABB_SCAN_MAX_RADIUS} 的旧值，
+     * 而 AABB 快速路径的成本是「与 AABB 相交的每一个 section」，半径 512 ⇒ 约
+     * {@code 65³ ≈ 27 万} 次 section 查找<b>每次攻击一次</b> —— 比它自己那条
+     * 「遍历全实体」的兜底路径<b>更贵</b>。见 {@link #AABB_SCAN_MAX_RADIUS}。</p>
+     */
+    public static final int MAX_ATTACK_RADIUS = 256;
+
+    /** 攻击半径的下限（GUI 与包的共同下界）。 */
+    public static final int MIN_ATTACK_RADIUS = 4;
+
+    /**
+     * 半径把攻击半径夹到 {@code [MIN_ATTACK_RADIUS, MAX_ATTACK_RADIUS]}。
+     *
+     * <p>四个 BE 的两个半径 setter 共用这一个入口，<b>不要</b>在各 BE 里各写一份
+     * {@code Math.max}/{@code Math.min} 组合 —— 那正是本条缺陷的成因。</p>
+     */
+    public static int clampAttackRadius(int radius) {
+        return Math.max(MIN_ATTACK_RADIUS, Math.min(MAX_ATTACK_RADIUS, radius));
+    }
+
+    /**
+     * 半径超过该值时不再构造 AABB 查询。
+     *
+     * <p><b>由 512 降到 64</b>。原值 512 是按「AABB 坐标不会溢出」定的，<b>没有算成本</b>：
+     * {@code Level.getEntitiesOfClass} 会遍历与 AABB 相交的每一个实体 section，
+     * 半径 512 意味着 section 范围 ±32 ⇒ 最多 {@code 65³ ≈ 27 万} 次 section 查找，
+     * <b>每次攻击一次</b>。而半径超过几十之后，兜底那条「遍历 {@code getAll()}」
+     * 反而<b>更便宜</b>——它是一次线性扫描，没有 section 查找的常数放大。
+     * 两者相交点远低于 512，64 是个保守取值：覆盖绝大多数实际用法（AABB 快速路径
+     * 仍是绝大多数机器的常态），同时把最坏情况从 27 万次降到 {@code 9³ = 729} 次。</p>
+     */
+    private static final double AABB_SCAN_MAX_RADIUS = 64.0;
 
     private IceTargetSearch() {
     }
