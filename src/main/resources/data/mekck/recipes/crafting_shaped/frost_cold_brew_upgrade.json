@@ -9,7 +9,7 @@
       "tag": "mekanism:alloys/atomic"
     },
     "#": {
-      "item": "minecraft:powder_snow"
+      "item": "minecraft:powder_snow_bucket"
     }
   },
   "pattern": [
