@@ -216,15 +216,22 @@ public class MultiFluidHandler implements IFluidHandler {
     public FluidStack drain(FluidStack resource, FluidAction action) {
         if (resource.isEmpty()) return FluidStack.EMPTY;
         FluidStack drained = FluidStack.EMPTY;
+        // 逐罐递减剩余请求量：若每个匹配罐都按完整 resource 抽取，3 罐各 1000 mB 时
+        // 请求 500 mB 会抽出 1500 mB ——凭空多出 1000 mB（流体复制）。
+        int remaining = resource.getAmount();
         for (FluidTank t : tanks) {
+            if (remaining <= 0) break;
             if (t.getFluid().isEmpty() || !t.getFluid().isFluidEqual(resource)) continue;
-            FluidStack d = t.drain(resource.copy(), action);
+            FluidStack want = resource.copy();
+            want.setAmount(Math.min(remaining, t.getFluid().getAmount()));
+            FluidStack d = t.drain(want, action);
             if (d.isEmpty()) continue;
             if (drained.isEmpty()) {
                 drained = d.copy();
             } else {
                 drained.grow(d.getAmount());
             }
+            remaining -= d.getAmount();
         }
         return drained;
     }
@@ -235,17 +242,17 @@ public class MultiFluidHandler implements IFluidHandler {
         FluidStack drained = FluidStack.EMPTY;
         for (FluidTank t : tanks) {
             if (t.getFluid().isEmpty()) continue;
-            int want = maxDrain - (drained.isEmpty() ? 0 : drained.getAmount());
+            int want = maxDrain - drained.getAmount();
             if (want <= 0) break;
+            // 必须在 drain 之前比对流体类型：原先是先抽后判，遇到异种流体再 break，
+            // 那一步已经把流体从罐里扣掉且不退还 —— 水 + 岩浆双罐时请求 2000 会吞掉 1000 岩浆。
+            if (!drained.isEmpty() && !t.getFluid().isFluidEqual(drained)) break;
             FluidStack d = t.drain(want, action);
             if (d.isEmpty()) continue;
             if (drained.isEmpty()) {
                 drained = d.copy();
-            } else if (drained.isFluidEqual(d)) {
-                drained.grow(d.getAmount());
             } else {
-                // 不同类型的第二槽：不再累加，仅返回第一种已抽取的流体
-                break;
+                drained.grow(d.getAmount());
             }
         }
         return drained;
