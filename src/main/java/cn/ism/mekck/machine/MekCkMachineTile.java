@@ -1,6 +1,7 @@
 package cn.ism.mekck.machine;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
+import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.factory.MekCkFactoryBlock;
 import cn.ism.mekck.factory.MekCkFactoryTier;
 import cn.ism.mekck.factory.MekCkFactoryType;
@@ -19,8 +20,6 @@ import mekanism.common.capabilities.holder.energy.IEnergyContainerHolder;
 import mekanism.common.capabilities.holder.slot.IInventorySlotHolder;
 import mekanism.common.capabilities.holder.slot.InventorySlotHelper;
 import mekanism.common.inventory.slot.EnergyInventorySlot;
-import mekanism.common.inventory.slot.InputInventorySlot;
-import mekanism.common.inventory.slot.OutputInventorySlot;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.component.TileComponentConfig;
 import mekanism.common.tile.component.TileComponentEjector;
@@ -293,25 +292,47 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         InventorySlotHelper builder = InventorySlotHelper.forSideWithConfig(this::getDirection, this::getConfig);
         int count = tier.processes;
         int columns = (int) Math.ceil(Math.sqrt(count));
+        int slotLimit = slotLimitPerSlot(tier);
         // 输入方阵在左、输出方阵右移「输入方阵宽度 + 间隔」，与旧实现一致。
-        addSlotGrid(builder, listener, INPUT_START_X, count, columns, true);
-        addSlotGrid(builder, listener, INPUT_START_X + columns * SLOT_STEP + GRID_GAP, count, columns, false);
+        addSlotGrid(builder, listener, INPUT_START_X, count, columns, slotLimit, true);
+        addSlotGrid(builder, listener, INPUT_START_X + columns * SLOT_STEP + GRID_GAP, count, columns,
+                slotLimit, false);
         energySlot = EnergyInventorySlot.fillOrConvert(energyContainer, this::getLevel, listener,
                 ENERGY_SLOT_X, ENERGY_SLOT_Y);
         builder.addSlot(energySlot);
         return builder.build();
     }
 
-    /** 排一列方阵。`count` 由调用方从已校验非空的等级读出后传入，本方法不再回查等级。 */
+    /**
+     * 本机单个输入/输出槽的物品数量上限（阶段 2 Task 4.9）。
+     *
+     * <p>取值与理由见 {@link MekckConfig#getFactorySlotLimit}。之所以在这里开一个
+     * {@code protected} 钩子而不是在 {@link #getInitialInventory} 里直接调配置：将来
+     * 烹饪 / 穿串这两个「非多线程」家族接上本基类时，它们的单批产出量基数与切菜不同，
+     * 覆写本方法换算口径即可，不必再动 {@code getInitialInventory}。</p>
+     *
+     * <p>默认实现对所有家族取同一个全局配置值——它不按档位分档，见该配置项的注释。</p>
+     */
+    protected int slotLimitPerSlot(CuttingMachineFactoryTier tier) {
+        return MekckConfig.getFactorySlotLimit(tier);
+    }
+
+    /**
+     * 排一列方阵。`count` 由调用方从已校验非空的等级读出后传入，本方法不再回查等级。
+     *
+     * <p>槽位用 {@link MekCkSlot} 而不是 {@code InputInventorySlot} / {@code OutputInventorySlot}：
+     * 后两者的单槽容量硬编码成 {@code 64} 且会再被物品自身堆叠上限截一次，
+     * 详见 {@link MekCkSlot} 的类注释。</p>
+     */
     private void addSlotGrid(InventorySlotHelper builder, IContentsListener listener,
-                             int startX, int count, int columns, boolean input) {
+                             int startX, int count, int columns, int slotLimit, boolean input) {
         List<IInventorySlot> target = input ? inputSlots : outputSlots;
         for (int i = 0; i < count; i++) {
             int x = startX + (i % columns) * SLOT_STEP;
             int y = GRID_START_Y + (i / columns) * SLOT_STEP;
             IInventorySlot slot = input
-                    ? InputInventorySlot.at(listener, x, y)
-                    : OutputInventorySlot.at(listener, x, y);
+                    ? MekCkSlot.input(slotLimit, listener, x, y)
+                    : MekCkSlot.output(slotLimit, listener, x, y);
             target.add(slot);
             builder.addSlot(slot);
         }

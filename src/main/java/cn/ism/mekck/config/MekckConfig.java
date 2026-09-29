@@ -69,6 +69,9 @@ public final class MekckConfig {
     /** 见 auto_pull 段：每种物品的 ME 自动补料上限。 */
     private static final ForgeConfigSpec.IntValue AUTO_PULL_STACK_LIMIT;
 
+    /** 见 slot_limits 段：单个输入/输出槽的物品数量上限。 */
+    private static final ForgeConfigSpec.IntValue FACTORY_SLOT_LIMIT;
+
     // ──────────────────────────────────────────────
     // Ice Maker (急冻制冰机 / 制冰工厂) settings
     // ──────────────────────────────────────────────
@@ -183,6 +186,22 @@ public final class MekckConfig {
                     .defineInRange(name + "_stack_max", stackDefault, 0, STACK_UPGRADE_MAX));
         }
 
+        BUILDER.pop();
+
+        // ─── Machine slot capacity ───────────────
+        BUILDER.comment("工厂机器单个输入/输出槽能装多少个物品。",
+                "slot_limit：单个槽的物品数量上限，**不按物品自身堆叠上限再截一次**。",
+                "  · 默认 2147483647：这是 MekCK 旧方块实体（BigStackItemHandler）对输入/输出槽的既有行为，",
+                "    保持默认值即保持旧机器的手感不变（阶段 2 的 Mek 原生化不应该顺带改掉已上线的容量）。",
+                "  · 想让产物/补料更早堆满、逼自己定期清槽的服务器可以调小；例如 4096。",
+                "  · 该值同时是执行器判定「产物装不装得下」的依据（执行器读槽自己的 getLimit），",
+                "    所以调小后不会出现「执行器说装得下、槽却截断」这种静默降速。",
+                "  · 1.20.1 的原版 ItemStack 把数量按 byte 写进 NBT，超过 64 的数量由 Mek 自己的",
+                "    SizeOverride 键补写（BasicInventorySlot.serializeNBT 实测），所以调大不会损坏存档。")
+                .push("slot_limits");
+        FACTORY_SLOT_LIMIT = BUILDER
+                .comment("单个输入/输出槽的物品数量上限（默认：2147483647 = 不限，与旧实现同值）")
+                .defineInRange("slot_limit", Integer.MAX_VALUE, 1, Integer.MAX_VALUE);
         BUILDER.pop();
 
         // ─── Network auto-pull (AE2) ──────────────
@@ -535,6 +554,31 @@ public final class MekckConfig {
     public static int getAutoPullStackLimit() {
         ForgeConfigSpec.IntValue val = AUTO_PULL_STACK_LIMIT;
         return val != null ? val.get() : 64;
+    }
+
+    /**
+     * 工厂机器单个输入/输出槽的物品数量上限（阶段 2 Task 4.9）。
+     *
+     * <p><b>为什么默认取 {@link Integer#MAX_VALUE}</b>：这不是随手挑的数，而是旧方块实体
+     * {@code CuttingMachineFactoryBlockEntity} 自己的 {@code getSlotLimit} 对「下标 &lt; 2×并行数」
+     * 的那批槽返回的值（源码注释 {@code // Input and output slots: unlimited}），并且它还覆写了
+     * {@code getStackLimit(slot, stack)} 使这些槽<b>不</b>按物品自身堆叠上限再截一次。
+     * 默认值对齐它 ⇒ 阶段 2 把机器搬到 Mek 原生槽位之后，<b>容量手感零漂移</b>。</p>
+     *
+     * <p><b>为什么不用 {@code auto_pull_stack_limit} 代替</b>：那一项是「ME 自动补料时每种
+     * 已勾选物品往输入槽塞多少」的<b>补料策略</b>，与槽位本身装得下多少是两回事——
+     * 拿它当槽容量，调大它会顺带改掉补料节奏，调小它则会让补料量永远达不到槽容量。
+     * 两者唯一的共同点是默认值都是 64，那只是巧合。</p>
+     *
+     * <p>入参 {@code tier} 目前不参与计算：上限是全局的，不按档位分档。保留入参是为了让
+     * 调用点把「这是本档机器的槽容量」这件事写在代码里、将来真要分档时不必改签名。</p>
+     */
+    public static int getFactorySlotLimit(CuttingMachineFactoryTier tier) {
+        ForgeConfigSpec.IntValue val = FACTORY_SLOT_LIMIT;
+        if (val == null) {
+            return Integer.MAX_VALUE;
+        }
+        return Math.max(1, val.get());
     }
 
     // ── Upgrade limit accessors ────────────────────────────────────────

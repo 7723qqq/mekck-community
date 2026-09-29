@@ -44,9 +44,20 @@ import static org.junit.Assert.assertTrue;
  * {@code BlockEntityType} 注册表（{@code UniversalCuttingMachine.FACTORY_BLOCK_ENTITIES
  * .get(tier).get()} 在裸 JVM 里是 {@code NullPointerException: Registry Object not present}），
  * 所以把纯逻辑做成静态入口，而不是在测试里抄一遍。
- * 本类与被测类同包，正是为了让 {@code OUTPUT_SLOT_CAPACITY} 这个包级常量可见。
+ *
+ * <h3>产出槽上限是夹具给的（阶段 2 Task 4.9）</h3>
+ * 执行器不再自带「单槽容量」常量，而是每次问槽的 {@code getLimit(stack)}——
+ * 真机上那就是 {@code MekCkSlot} 从 {@code MekckConfig.slot_limit} 递进去的可配值。
+ * 所以这里的 {@link TestSlot} 必须把 limit 做成可配的夹具参数，否则本测试等于什么都没验：
+ * 上限从「执行器写死」挪到「夹具给定」是一次真实的行为变更，测试得能看见它。
  */
 public class TestCuttingBatchPacking {
+
+    /**
+     * 「不限」的夹具上限 —— 与 {@code MekckConfig} 的 {@code slot_limit} 默认值同值
+     * （默认 2147483647，即旧方块实体对输入/输出槽的既有容量）。
+     */
+    private static final int UNBOUNDED = Integer.MAX_VALUE;
 
     @BeforeClass
     public static void boot() {
@@ -61,16 +72,18 @@ public class TestCuttingBatchPacking {
     /**
      * 最小可用的 {@link IInventorySlot}。
      *
-     * <p>{@code getLimit} 返回什么不影响被测逻辑：产出容量在本执行器里由
-     * {@link CuttingFactoryExecutor#OUTPUT_SLOT_CAPACITY} 统一决定，
-     * 不问槽自己的上限（原因见该常量的注释）。</p>
+     * <p>{@link #getLimit} 直接返回夹具给的 limit：这就是被测行为的一部分，
+     * 「判定用的上限」与「槽真实的上限」必须是同一个数（阶段 2 Task 4.9 修的正是这两者
+     * 各写各的：执行器写死 {@code Integer.MAX_VALUE}、槽却是 Mek 的 64）。</p>
      */
     private static final class TestSlot implements IInventorySlot {
 
+        private final int limit;
         private ItemStack stack;
 
-        TestSlot(ItemStack stack) {
+        TestSlot(ItemStack stack, int limit) {
             this.stack = stack;
+            this.limit = limit;
         }
 
         @Override
@@ -85,7 +98,7 @@ public class TestCuttingBatchPacking {
 
         @Override
         public int getLimit(ItemStack stack) {
-            return CuttingFactoryExecutor.OUTPUT_SLOT_CAPACITY;
+            return limit;
         }
 
         @Override
@@ -112,10 +125,16 @@ public class TestCuttingBatchPacking {
         }
     }
 
+    /** 默认口径：槽不限量，与 {@code slot_limit} 的默认值一致。 */
     private static List<IInventorySlot> outputs(int count) {
+        return outputs(count, UNBOUNDED);
+    }
+
+    /** 指定单槽上限的产出区。 */
+    private static List<IInventorySlot> outputs(int count, int limit) {
         List<IInventorySlot> list = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            list.add(new TestSlot(ItemStack.EMPTY));
+            list.add(new TestSlot(ItemStack.EMPTY, limit));
         }
         return list;
     }
@@ -133,14 +152,41 @@ public class TestCuttingBatchPacking {
     }
 
     /**
-     * 单个产出槽能吃下远超 64 的量 —— 这正是 {@code OUTPUT_SLOT_CAPACITY}
-     * 存在的原因：改用 Mek 的 {@code getLimit(stack)} 会截到
-     * {@code min(limit, getMaxStackSize())}，81 并行工厂会静默变成「装不下」而降速。
+     * 槽不限量时，一个产出槽能吃下远超 64 的量。
+     *
+     * <p>这就是 {@code slot_limit} 的默认口径（{@link #UNBOUNDED}）。旧实现里
+     * 之所以能吃下，是因为执行器与旧 {@code BigStackItemHandler} 都答「不限」；
+     * 现在答案从槽的 {@code getLimit} 来，默认值把它接住了。</p>
      */
     @Test
-    public void oneOutputSlotAbsorbsFarMoreThanAStackLimit() {
-        assertTrue("单槽必须能吃下 1000 个（远超 64）",
-                CuttingFactoryExecutor.canFitAll(outputs(1), results(new ItemStack(Items.BREAD, 1)), 1000));
+    public void unboundedSlotAbsorbsFarMoreThanAStackLimit() {
+        assertTrue("不限量的单槽必须能吃下 1000 个（远超 64）",
+                CuttingFactoryExecutor.canFitAll(outputs(1, UNBOUNDED),
+                        results(new ItemStack(Items.BREAD, 1)), 1000));
+    }
+
+    /**
+     * 把 {@code slot_limit} 调小之后，判定必须跟着变小 —— 这是本任务的行为变更。
+     *
+     * <p>修复前执行器写死 {@code Integer.MAX_VALUE}，无论槽上限是多少都判「装得下」；
+     * 修复后两者必须一致，否则会出现「预演说装得下、落槽时只塞进一部分、余下凭空消失」。</p>
+     */
+    @Test
+    public void boundedSlotRefusesMoreThanItsOwnLimit() {
+        List<ItemStack> batch = results(new ItemStack(Items.BREAD, 1));
+        assertFalse("单槽上限 512 时，1000 个装不下",
+                CuttingFactoryExecutor.canFitAll(outputs(1, 512), batch, 1000));
+        assertTrue("两个各 512 的槽装得下 1000 个",
+                CuttingFactoryExecutor.canFitAll(outputs(2, 512), batch, 1000));
+    }
+
+    /** 上限恰好等于批量时判装得下（边界不多算一格也不少算一格）。 */
+    @Test
+    public void exactlyAtTheLimitIsAccepted() {
+        assertTrue("批量恰好等于单槽上限",
+                CuttingFactoryExecutor.canFitAll(outputs(1, 1000), results(new ItemStack(Items.BREAD, 1)), 1000));
+        assertFalse("批量比单槽上限多 1 个",
+                CuttingFactoryExecutor.canFitAll(outputs(1, 999), results(new ItemStack(Items.BREAD, 1)), 1000));
     }
 
     /**
@@ -266,6 +312,41 @@ public class TestCuttingBatchPacking {
         ItemStack payload = new ItemStack(Items.BREAD, 5);
         CuttingFactoryExecutor.insertOutput(outputs(0), payload);
         assertEquals(5, payload.getCount());
+    }
+
+    /**
+     * 落槽也必须守单槽上限，且剩下的部分要留给下一个槽（阶段 2 Task 4.9）。
+     *
+     * <p>「剩下的部分」是关键：落槽路径若照旧用常量上限，就会在
+     * {@code canFitAll} 已改小判定之后把超量部分塞进一个装不下的槽，
+     * 或者直接把它吞掉——两者都是静默的物品丢失。</p>
+     */
+    @Test
+    public void insertOutputStopsAtTheSlotLimitAndCarriesTheRest() {
+        List<IInventorySlot> out = outputs(2, 10);
+        out.get(0).setStack(new ItemStack(Items.BREAD, 6));
+        ItemStack payload = new ItemStack(Items.BREAD, 12);
+
+        CuttingFactoryExecutor.insertOutput(out, payload);
+
+        assertEquals("第一个槽填到上限为止", 10, out.get(0).getStack().getCount());
+        assertEquals("剩下的进第二个槽", 8, out.get(1).getStack().getCount());
+        assertTrue("传入的栈必须被消耗干净", payload.isEmpty());
+    }
+
+    /** 空槽也按上限截断：上限小于整批时，一批要分摊到多个槽。 */
+    @Test
+    public void insertOutputSplitsAcrossEmptySlotsWhenTheLimitIsSmall() {
+        List<IInventorySlot> out = outputs(3, 4);
+        ItemStack payload = new ItemStack(Items.BREAD, 10);
+
+        CuttingFactoryExecutor.insertOutput(out, payload);
+
+        assertEquals(4, out.get(0).getStack().getCount());
+        assertEquals(4, out.get(1).getStack().getCount());
+        assertEquals(2, out.get(2).getStack().getCount());
+        assertTrue("三个槽都用上了", !out.get(0).getStack().isEmpty());
+        assertTrue(payload.isEmpty());
     }
 
     // ── stackMultiplier ─────────────────────────────────────────────────

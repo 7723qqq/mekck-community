@@ -51,26 +51,27 @@ import java.util.Optional;
 public final class CuttingFactoryExecutor implements MekCkRecipeExecutor {
 
     /**
-     * 单个产出槽的容量上限。
+     * 单个产出槽能装多少 —— <b>现在问槽自己</b>，不再由本类写死（阶段 2 Task 4.9）。
      *
-     * <p><b>为什么是 {@link Integer#MAX_VALUE} 而不是 {@code slot.getLimit(stack)}</b>：
-     * 旧实现走的是自研 {@code BigStackItemHandler}，它对「下标 &lt; 2×并行数」的槽
-     * 覆写 {@code getSlotLimit} 返回 {@code Integer.MAX_VALUE}（源码注释：Input and
-     * output slots: unlimited），而 {@code canFitAll} / {@code insertOutput} 每次判定
-     * 都要问一次这个上限。改用 Mek 的 {@code IInventorySlot.getLimit(ItemStack)} 会
-     * 变成 {@code min(limit, stack.getMaxStackSize())}——实测
-     * {@code BasicInventorySlot.getLimit} 字节码就是
-     * {@code obeyStackLimit && !stack.isEmpty() ? min(limit, getMaxStackSize()) : limit}，
-     * 于是产出被截到 64，81 并行工厂会静默地「装不下」而不再继续，
-     * 表现为机器莫名降速/停摆且没有任何日志。这里保留旧口径。
+     * <p><b>⚠️ 这是行为变更</b>：在 {@link cn.ism.mekck.machine.MekCkSlot} 落地前，
+     * 本类用常量 {@code OUTPUT_SLOT_CAPACITY = Integer.MAX_VALUE} 判容量，理由是
+     * 「用 Mek 的 {@code IInventorySlot.getLimit(ItemStack)} 会被截到
+     * {@code min(64, 物品自身堆叠上限)}，导致 81 并行工厂静默降速」。那个理由只在
+     * 「上限硬编码成 64」时成立；上限一旦可配（{@code MekCkSlot} 直接继承
+     * {@code BasicInventorySlot} 并把配置值递进 7 参构造），两者就能统一：
+     * 判定用的上限与玩家实际能存进去的上限来自<b>同一个</b> {@code getLimit}。</p>
+     *
+     * <p>默认配置下（{@code slot_limit = 2147483647}）行为与旧常量<b>完全一致</b>，
+     * 因为那正是旧方块实体对输入/输出槽的既有容量；把配置调小才会看到「装到上限为止」。</p>
      *
      * <p>顺带确认过：{@code BasicInventorySlot.setStack} 会 {@code stack.copy()} 并检查
      * {@code isItemValid}（不合法直接抛 {@code RuntimeException}），但<b>不</b>按上限截断；
-     * 且 {@code InputInventorySlot.at(listener,x,y)} 与
-     * {@code OutputInventorySlot.at(listener,x,y)} 的物品合法性谓词都是
+     * 且 {@code MekCkSlot} 传下去的物品合法性谓词是
      * {@code BasicInventorySlot.alwaysTrue}，所以这里 setStack 不会抛。</p>
      */
-    static final int OUTPUT_SLOT_CAPACITY = Integer.MAX_VALUE;
+    private static int slotCapacity(IInventorySlot slot, ItemStack stack) {
+        return slot.getLimit(stack);
+    }
 
     /** 配方匹配的输入栈，通过它把当前槽的栈喂给 {@link #singleSlotWrapper}。 */
     private final ItemStack[] singleSlotStack = new ItemStack[]{ItemStack.EMPTY};
@@ -301,6 +302,9 @@ public final class CuttingFactoryExecutor implements MekCkRecipeExecutor {
      * <p>本方法按槽调用，81 并行工厂原先每次都要把全部产出槽各 {@code copy()} 一份；
      * 现在只记录「槽内物品引用 + 判定过程中的累计数量」，语义与逐份拷贝完全等价。</p>
      *
+     * <p>每格的上限来自 {@link #slotCapacity}（= 槽自己的 {@code getLimit}），
+     * 所以「判定说装得下」与「槽真装得下」永远是同一句话，原因见该方法上方那段说明。</p>
+     *
      * <p>抽成 {@code static} 且只依赖 {@link IInventorySlot} 列表，是为了让它能被
      * 普通 JUnit 直接跑（见 {@code TestCuttingBatchPacking}）——构造一台真的机器
      * 需要 {@code BlockEntityType} 注册表，裸 JVM 里拿不到。</p>
@@ -326,13 +330,15 @@ public final class CuttingFactoryExecutor implements MekCkRecipeExecutor {
             int remaining = (int) totalCountLong;
             for (int slot = 0; slot < outputSlots && remaining > 0; slot++) {
                 ItemStack current = slotItem[slot];
+                // 上限按需问，不提前算：被跳过的槽（装着别的物品）用不到它，
+                // 而 81 并行时这一层循环每 tick 要跑上万次。
                 if (current == null) {
-                    int moved = Math.min(remaining, OUTPUT_SLOT_CAPACITY);
+                    int moved = Math.min(remaining, slotCapacity(outputs.get(slot), result));
                     slotItem[slot] = result; // 只记引用，不拷贝
                     slotCount[slot] = moved;
                     remaining -= moved;
                 } else if (ItemStack.isSameItemSameTags(current, result)) {
-                    int space = OUTPUT_SLOT_CAPACITY - slotCount[slot];
+                    int space = slotCapacity(outputs.get(slot), result) - slotCount[slot];
                     if (space > 0) {
                         int moved = Math.min(remaining, space);
                         slotCount[slot] += moved;
@@ -347,19 +353,26 @@ public final class CuttingFactoryExecutor implements MekCkRecipeExecutor {
         return true;
     }
 
-    /** 把一批产物按「先并入已有的同类槽、再往后找空槽」的顺序塞进产出区。 */
+    /**
+     * 把一批产物按「先并入已有的同类槽、再往后找空槽」的顺序塞进产出区。
+     *
+     * <p>上限同样取自槽自己的 {@code getLimit}，与 {@link #canFitAll} 同一口径——
+     * 两处一旦漂移，表现就是「预演说装得下、落槽时却只塞进去一部分，剩下凭空消失」，
+     * 而且不报错、不留日志。</p>
+     */
     static void insertOutput(List<IInventorySlot> outputs, ItemStack stack) {
         for (int slot = 0; slot < outputs.size() && !stack.isEmpty(); slot++) {
             IInventorySlot outputSlot = outputs.get(slot);
             ItemStack existing = outputSlot.getStack();
+            int capacity = slotCapacity(outputSlot, stack);
             if (existing.isEmpty()) {
-                int moved = Math.min(stack.getCount(), OUTPUT_SLOT_CAPACITY);
+                int moved = Math.min(stack.getCount(), capacity);
                 ItemStack inserted = stack.copy();
                 inserted.setCount(moved);
                 outputSlot.setStack(inserted);
                 stack.shrink(moved);
             } else if (ItemStack.isSameItemSameTags(existing, stack)) {
-                int space = OUTPUT_SLOT_CAPACITY - existing.getCount();
+                int space = capacity - existing.getCount();
                 if (space > 0) {
                     int moved = Math.min(stack.getCount(), space);
                     existing.grow(moved);
