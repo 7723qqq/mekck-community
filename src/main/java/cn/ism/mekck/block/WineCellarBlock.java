@@ -80,7 +80,7 @@ public final class WineCellarBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && level.getBlockEntity(pos) instanceof WineCellarBlockEntity cellar) {
+        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof WineCellarBlockEntity cellar) {
             ItemStack stack = new ItemStack(this);
             cellar.saveToItem(stack); // 把 Items/Energy/Speed 写进掉落物 BlockEntityTag
             Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);

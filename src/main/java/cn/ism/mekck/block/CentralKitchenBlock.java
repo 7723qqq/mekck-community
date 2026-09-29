@@ -99,7 +99,7 @@ public class CentralKitchenBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !level.isClientSide
+        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && !level.isClientSide
                 && level.getBlockEntity(pos) instanceof CentralKitchenBlockEntity kitchen) {
             // 内容物走大堆叠安全路径掉落（见 BigStackDrops），随后再把方块本体连
             // 能量/模块/侧配一起掉出：此时槽位已清空，不会与上面的实体重复。

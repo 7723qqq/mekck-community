@@ -107,7 +107,7 @@ public final class SandwichAssemblerBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !level.isClientSide
+        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && !level.isClientSide
                 && level.getBlockEntity(pos) instanceof SandwichAssemblerBlockEntity machine) {
             // 先掉内容物（大堆叠安全路径），再掉机器本体（含能量/模式/目标数量）。
             machine.dropContents();

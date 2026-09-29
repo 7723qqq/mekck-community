@@ -105,7 +105,7 @@ public final class NutRoasterBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && level.getBlockEntity(pos) instanceof NutRoasterBlockEntity machine) {
+        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof NutRoasterBlockEntity machine) {
             ItemStack stack = new ItemStack(this);
             machine.saveToItem(stack);
             Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
