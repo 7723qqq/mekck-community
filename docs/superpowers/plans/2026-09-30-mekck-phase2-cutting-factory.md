@@ -496,6 +496,18 @@ public int getLimit(ItemStack stack) {
 `CuttingFactoryExecutor` 用 `Integer.MAX_VALUE` 判容量——**两者不一致**，
 高倍合成倍率下余料会掉地上。BASIC 档 3 槽 × 64 = 192 件总容量。
 
+> **✅ 本任务已落地**（commit `e673845`）。新增 `MekCkSlot` +
+> `MekckConfig` 的 `slot_limits.slot_limit`（默认 `2147483647`，
+> 取自旧 BE `getSlotLimit` 的 "Input and output slots: unlimited"），
+> **默认配置下手感与旧实现零漂移**。
+>
+> 实施者补了两条本节初稿漏掉的关键事实：
+> 1. **`notExternal` 是输入槽的 `canExtract`，不是 `canInsert`**；
+>    输出槽的 `canInsert` 必须是 `internalOnly`（只有机器自己能写）。
+>    照初稿统一用 `notExternal` 会让玩家和外部自动化都能往产物槽塞东西。
+> 2. **7 参构造把 `obeyStackLimit` 钉成 `true`**，不显式置 `false` 的话
+>    `getLimit` 仍返回 `min(limit, 物品堆叠上限)`，配置项形同摆设。
+
 ⚠️ 顺带纠正两个流传的错误说法：
 - `InputInventorySlot.at(...)` 传给 `BasicInventorySlot` 的尾部两个 `int` 是 **x/y 坐标**
   （`iload 4` / `iload 5`），**不是 maxStack**
