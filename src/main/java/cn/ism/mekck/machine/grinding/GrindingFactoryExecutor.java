@@ -187,11 +187,13 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
     }
 
     /** 当前订单剩余份数（无订单时为 0）。 */
+    @Override
     public int getOrderQuantity() {
         return order.getQuantity();
     }
 
     /** 当前订单已完成份数（无订单时为 0）。 */
+    @Override
     public int getOrderCompleted() {
         return order.getCompleted();
     }

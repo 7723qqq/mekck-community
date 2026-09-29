@@ -25,6 +25,31 @@ public interface MekCkRecipeExecutor {
     /** 是否正在工作（决定 GUI 的进度条与 AE2 的忙碌态）。 */
     boolean isBusy();
 
+    // ── 展示态（第三轮审查补）───────────────────────────────────────────
+    //
+    // 这三个方法原先只在各执行器上以各自的名字存在（且部分家族缺失），
+    // 于是「订单进度要显示在 GUI 上」这件事<b>没有任何统一入口</b>：
+    // 菜单只能按具体类型强转，跨家族复用就断了，而新增家族极易漏掉某一个。
+    //
+    // 它们同时是容器同步的<b>数据来源</b>：MekCkMachineTile#addContainerTrackers
+    // 把它们按 SyncableInt 推给客户端（详见该处关于「此前无同步通道」的注释）。
+    // 默认实现是「无订单」，切菜那种无订单系统的执行器什么都不用写。
+
+    /** 是否有一张单在跑。 */
+    default boolean hasOrder() {
+        return false;
+    }
+
+    /** 订单总份数；无订单时为 0。 */
+    default int getOrderQuantity() {
+        return 0;
+    }
+
+    /** 订单已完成份数；无订单时为 0。 */
+    default int getOrderCompleted() {
+        return 0;
+    }
+
     /** 持久化订单进度等执行器自有状态。 */
     void save(CompoundTag tag);
 

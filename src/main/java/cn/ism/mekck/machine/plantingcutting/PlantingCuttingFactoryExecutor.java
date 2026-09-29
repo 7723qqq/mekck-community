@@ -170,10 +170,12 @@ public final class PlantingCuttingFactoryExecutor implements MekCkRecipeExecutor
         return order.getRecipeId();
     }
 
+    @Override
     public int getOrderQuantity() {
         return order.getQuantity();
     }
 
+    @Override
     public int getOrderCompleted() {
         return order.getCompleted();
     }

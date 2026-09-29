@@ -186,10 +186,12 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
         return orderRecipeId;
     }
 
+    @Override
     public int getOrderQuantity() {
         return orderRecipeId == null ? 0 : orderQuantity;
     }
 
+    @Override
     public int getOrderCompleted() {
         return orderCompleted;
     }
@@ -249,6 +251,26 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
 
     public boolean isSeasoningEnabled(int index) {
         return index >= 0 && index < SEASONING_SLOTS && seasoningEnabled[index];
+    }
+
+    /**
+     * 三个调味料启用位打包成一个 int（{@code bit0..bit2}）—— 供容器同步用。
+     *
+     * <p>为什么打包而不发 3 个 int：这三个位<b>一起变</b>（切换其中一个），
+     * 打包成一位图后只要一个 {@code SyncableInt} 就能覆盖整个三元素组，
+     * 少两条同步条目、少两次脏值判定。</p>
+     *
+     * <p>每次都重新打包（不缓存字段）：容器同步的脏值判定就是靠「两次读取结果不同」
+     * 判定的，缓存起来就永远读出同一个值 ⇒ 永不推送。</p>
+     */
+    public int seasoningEnabledBits() {
+        int bits = 0;
+        for (int i = 0; i < SEASONING_SLOTS && i < seasoningEnabled.length; i++) {
+            if (seasoningEnabled[i]) {
+                bits |= 1 << i;
+            }
+        }
+        return bits;
     }
 
     public void toggleSeasoningEnabled(int index) {

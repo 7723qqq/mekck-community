@@ -749,6 +749,98 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
         super.addContainerTrackers(container);
         container.track(mekanism.common.inventory.container.sync.SyncableInt.create(
                 this::getWorkProgress, value -> this.clientWorkProgress = value));
+        // 执行器的展示态（订单三件套 + 家族自定义位）。见 syncEx*() 的注释。
+        container.track(mekanism.common.inventory.container.sync.SyncableInt.create(
+                this::syncOrderActiveFlag, value -> this.clientOrderActive = value));
+        container.track(mekanism.common.inventory.container.sync.SyncableInt.create(
+                this::getOrderQuantityForSync, value -> this.clientOrderQuantity = value));
+        container.track(mekanism.common.inventory.container.sync.SyncableInt.create(
+                this::getOrderCompletedForSync, value -> this.clientOrderCompleted = value));
+        container.track(mekanism.common.inventory.container.sync.SyncableInt.create(
+                this::syncFamilyExtraBits, value -> this.clientFamilyExtraBits = value));
+    }
+
+    // ── 执行器展示态的双端镜像（订单 + 家族自定义位）────────────────────
+    //
+    // ⚠️ 此前这些数据**没有任何同步通道**。原来的注释断言
+    // 「saveAdditional 会被 getUpdateTag 复用、因而随方块更新包到达客户端」——
+    // **这条断言经 javap 复核不成立**，实测（扫 Forge 1.20.1-47.4.16 全部 class 的常量池）：
+    // ① machine/** 全包 grep `setChanged|sendBlockUpdated` = 0 命中，
+    //    GrillSeasoningTogglePacket.handle 只调 toggleSeasoningEnabled，不触发任何更新；
+    // ② LevelChunk#setBlockState / ServerLevel#sendBlockUpdated 只发 ClientboundBlockUpdatePacket
+    //    （只有方块状态，不含 BE 数据）；
+    // ③ 引用 ClientboundBlockEntityDataPacket 的类只有 19 个，服务端侧发送点仅
+    //    ServerPlayer#openCommandBlock（命令方块）加随区块下发。
+    // ⇒ 客户端 tile 上的执行器状态只是**区块（重新）加载时的快照**。
+    // 症状：点「开/关」后按钮颜色不变（每帧读到旧值），离开再进区块才刷新；
+    // 烹饪 / 穿串工厂的「当前订单 x/y」在订单推进过程中完全不更新。
+    //
+    // 现在走与 {@link #getWorkProgress} 同一套机制：Mek 的容器追踪 + 按端分流。
+    // 菜单侧一行都不用改（它们本来就经 getTileEntity() 调本类的方法）。
+
+    /** 客户端镜像：是否有一张单在跑（0/1）。 */
+    private int clientOrderActive;
+    /** 客户端镜像：订单总份数。 */
+    private int clientOrderQuantity;
+    /** 客户端镜像：订单已完成份数。 */
+    private int clientOrderCompleted;
+    /** 客户端镜像：家族自定义位（烧烤的 3 个调味料启用位等）。 */
+    private int clientFamilyExtraBits;
+
+    /** 执行器是否「有单」—— 服务端读权威值、客户端读镜像。 */
+    protected int syncOrderActiveFlag() {
+        MekCkRecipeExecutor exec = clientMirroring() ? null : executor();
+        return exec == null ? clientOrderActive : (exec.hasOrder() ? 1 : 0);
+    }
+
+    /** 订单总份数（按端分流）。 */
+    public int getOrderQuantityForSync() {
+        if (clientMirroring()) {
+            return clientOrderQuantity;
+        }
+        return executor().getOrderQuantity();
+    }
+
+    /** 订单已完成份数（按端分流）。 */
+    public int getOrderCompletedForSync() {
+        if (clientMirroring()) {
+            return clientOrderCompleted;
+        }
+        return executor().getOrderCompleted();
+    }
+
+    /**
+     * 家族自定义展示位 —— 默认 0。
+     *
+     * <p>烧烤用它装 3 个调味料启用位（{@code bit0..bit2}）。刻意做成钩子而不是
+     * 让基类认识每个家族的私有概念：基类只负责「把一个 int 同步过去」这一件事。</p>
+     */
+    protected int syncFamilyExtraBits() {
+        if (clientMirroring()) {
+            return clientFamilyExtraBits;
+        }
+        return 0;
+    }
+
+    /**
+     * 此刻是否应读客户端镜像。
+     *
+     * <p>与 {@link #getWorkProgress} 用的是同一条判据，但这里多考虑了
+     * {@code level == null}（GUI 构造期可能早于 BE 绑定）：拿不到世界就按客户端处理，
+     * 返回镜像值而不是去碰权威状态 —— 宁可显示 0 也不能在 GUI 构造期抛异常。</p>
+     */
+    private boolean clientMirroring() {
+        return level == null || level.isClientSide;
+    }
+
+    /** 客户端镜像值：订单是否激活。GUI 读数用。 */
+    public int getClientOrderActive() {
+        return clientMirroring() ? clientOrderActive : syncOrderActiveFlag();
+    }
+
+    /** 客户端镜像值：家族自定义位。 */
+    public int getClientFamilyExtraBits() {
+        return clientMirroring() ? clientFamilyExtraBits : syncFamilyExtraBits();
     }
 
     /**

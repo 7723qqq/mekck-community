@@ -204,6 +204,7 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
         }
     }
 
+    @Override
     public boolean hasOrder() {
         return order.isActive();
     }
@@ -212,10 +213,12 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
         return order.getRecipeId();
     }
 
+    @Override
     public int getOrderQuantity() {
         return order.getQuantity();
     }
 
+    @Override
     public int getOrderCompleted() {
         return order.getCompleted();
     }

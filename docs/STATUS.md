@@ -1,15 +1,100 @@
 # mekck 当前状态汇总
 
-- 最后更新：2026-09-30（第二轮全量审查）
-- 审查基线：HEAD `83830e0`（阶段 3 Task 7）
+- 最后更新：2026-09-30（**第三轮**全量审查）
+- 审查基线：HEAD `bb00171` 之后的工作区
 - 验收口径：`./gradlew build`（**联网**；理由见第五节第 6 条）→
-  **305 测试 / 0 失败 / 0 错误 / 0 跳过**，且产物内含 `mekck.refmap.json`
+  **359 测试 / 0 失败 / 0 错误 / 0 跳过**，且产物内含 `mekck.refmap.json`
 
 本文是**单一入口**。细节看各专项文档（见文末索引）。
 
 ---
 
-## 〇、第二轮全量审查（2026-09-30）—— 只读这一节也够
+## 〇-A、第三轮全量审查（2026-09-30）—— 最新
+
+4 个 agent 按**包边界**并行深审 + Lead 亲自复核每条 Critical 与产物级证据。
+详细报告见下方各分域文档（第四份 `client-recipe-mixin` 那一节）。
+
+### 已修（3 个提交）
+
+| 提交 | 内容 |
+|---|---|
+| `0659f30` | **收编上一轮 C1–C6 的修复成果**。此前 120 个已跟踪文件被改 + **479 个未跟踪文件**（含 `mekck.refmap.json` 本身、审查报告、9 个护栏测试）全部游离在工作区——一次 `git clean -fd` 就全没了，且没有任何东西会失败报警 |
+| `b6435bc` | 两个**服务器崩溃级**缺陷 + 订单契约统一 + 仓库卫生 |
+| `bb00171` | 存档损坏 / TPS 杀手 / 永久无 AI |
+
+### Critical 处置表
+
+| # | 位置 | 问题 | 状态 |
+|---|---|---|---|
+| **C-N1** | `network/NetworkRecipeListPacket`、`NetworkMissingPacket` | `handle` 里直接 `Minecraft.getInstance()`。两包在 `FMLCommonSetupEvent`（**双端都触发**）里注册 ⇒ 专用服务端一定链接它们 ⇒ server jar 上没有 `net.minecraft.client.*` ⇒ **启动崩** | **已修**：走 `util/ClientPacketBridge`（common，零客户端符号，反射加载）+ `client/ClientPacketBridgeImpl`（`@OnlyIn(CLIENT)`）。加 `TestNoClientSymbolsInCommonCode`，`network/` 零例外 |
+| **C1** | `util/FreezeEvents:59` | 靠「比较伤害数值」防递归，但 `LivingDamageEvent.getAmount()` 是**减免后**的值（`hurt` 顺序：护甲→魔抗→`onLivingDamage`），而 `minecraft:freeze` 只 `bypasses_armor` 不 `bypasses_resistance` ⇒ 抗性 1 即得 1717986917.6 < 2147483647 ⇒ 守卫恒假 ⇒ **无限递归 → StackOverflowError → 服务器崩** | **已修**：`ThreadLocal<LivingEntity>` 重入哨兵（存实体而非 boolean，反射伤害弹到另一只实体时不被误吞） |
+| **C3** | `kitchen/KitchenRecipeMatcher:280` | `existing.grow()` 无溢出防护。`ItemStack.setCount` 不夹紧，槽上限默认 `Integer.MAX_VALUE` ⇒ 两个大堆叠归并**必然溢出为负** ⇒ `isEmpty()` 变真 ⇒ 落盘时整堆永久消失、无日志 | **已修**：照抄同仓 `util/StorageMerger.merge`（复核确认正确的参照实现），逐格夹紧 + 剩余量继续找位 |
+| **C2** | `effect/EternalFreezeEffect:43`、`entity/IceCubeEntity:215`、`entity/FerreroEntity:248` | `NoAI` **会写进存档**（实测 `Mob.addAdditionalSaveData` 写 `NoAI`），而恢复只靠内存 `MinecraftServer.tellables` ⇒ 重启即丢；且恢复条件挂在 `!isNoAi()` 上 ⇒ 重启后**永远恢复不了**，玩家无任何游戏内手段解除 | **已修**：效果类改成「恢复刻已到」这个与 AI 状态无关的条件；两个实体新增 `util/FreezeAiReaper`（挂 `LevelEvent.Load`，按区块分片） |
+| **C-N2** | 4 个 BE 的 `setRadius`/`adjustRadius` | 只钳下限不钳上限，而半径来自 `IceAttackConfigPacket` 的裸 `readInt`（`PacketGuard` 只校验 8 格交互距离）⇒ **一台机器 + 一个包 = 永久的每 tick 全服实体遍历** | **已修**：`IceTargetSearch.clampAttackRadius` 作为唯一闸门；`AABB_SCAN_MAX_RADIUS` 由 512 降到 64（原值只按「AABB 不溢出」定、没算成本：512 ⇒ 65³≈27 万次 section 查找/次） |
+
+### Important（已修）
+
+| # | 位置 | 问题 |
+|---|---|---|
+| 订单契约漂移 | 6 个执行器 | **3 套 null 约定 + 2 套数量下界**。收进 `machine/MekCkOrderState` 后连带修掉两个真实缺陷：① `orderCompleted++`（int 自增，两处注释都声称「加法走 long」但 `++` 本身就是 int 加法）⇒ 份数配成 `Integer.MAX_VALUE` 时订单**永远完不成**、机器永远只认这一张配方、无任何日志；② 烹饪 `load` 用 `Math.max(0,…)` 读份数，`quantity=0` 让 `batch` 夹成 0 ⇒ **机器永久卡死且订单永不完成** |
+| I-4 | 烧烤调味料 / 烹饪·穿串「当前订单 x/y」 | **完全没有同步通道**。原注释断言「随方块更新包同步到客户端」——经 javap 复核**不成立**（`sendBlockUpdated` 只发方块状态；`machine/**` 里 `setChanged\|sendBlockUpdated` 零命中）⇒ 点「开/关」按钮颜色不变，离开并重进区块才刷新 | **已修**：`addContainerTrackers` 加 4 条 `SyncableInt`（订单三件套 + 家族位图），按端分流 |
+| C4 | `command/PlantingRecipeGenerator` | 每次开服整棵递归删 `world/datapacks/mekck_planting`（玩家可见的存档内容） | **已修**：只删本方法自己写的 4 个配方目录 |
+| I4 | 同上 | 遗留调试插桩：每次开服往世界存档根目录写 `planting_generator_test.txt` | **已修**（删除） |
+| I7 | `util/FreezeEvents` | `event.getDrops().clear()` + 查不到战利品表时 `LootTable.EMPTY` ⇒ 「这只生物什么都不掉」且无日志；且抹掉别的模组的掉落 | **已修**：查不到表就原样保留；改为追加而非替换 |
+| M7 | 同上 | 按参数签名反射定位战利品 raw 掷骰方法，但 `getRandomItems` 与 `processSelectedStacks` 擦除后签名完全一致，而 `getDeclaredMethods()` 顺序不由 JVM 规范保证 ⇒ 绑错就是「静默少掉整棵池子」 | **已修**：补返回类型判据 + 记录实际方法名 |
+| 错 tag 双读 | `CookingFactoryTile`、`PlantingCuttingFactoryTile` | 覆写 `load()` 再调一次 `readExtraSustainedData(tag)`，但那个 `tag` 是**未经迁移的原始 tag**（基类在旧存档路径上会换绑）⇒ 迁移器一旦碰 `FluidTanks`/`GasTank` 就会用旧值覆盖迁移结果 | **已修**：删除覆写，基类已用正确的 tag 调过 |
+| 恢复刻键冲突 | `FerreroEntity` | 与 `IceCubeEntity` 共用 `mekck:ai_restore_tick` ⇒「谁后命中谁说了算」，短窗口覆盖长窗口 | **已修**：拆成两个独立键 |
+| README | 两份语言 | 都宣称「7 系列 × 12 档 = 84 个工厂方块」并把制冰列为完整系列，而 `ICE_FACTORY_ENABLED = false` ⇒ 实际 6 系列 72 个。该常量的注释本身也错了两处（「禁用 11 级」实为 12 级；「改回 true 即恢复注册」实为还需补 12 张战利品表） | **已修** |
+
+### ⚠️ 本轮引入又修掉的一个回归
+
+手写 refmap 里是 **SRG 名**（打包产物跑 SRG），而 `runClient`/`runServer` 跑的是 **mojmap** jar。
+上一轮只验证了产物侧，**没验证 dev 侧** ⇒ `gradlew runClient` 会在 Bootstrap 阶段崩。
+`build.gradle` 现按 ForgeGradle 缓存实际布局**动态定位** `srg_to_official_1.20.1.tsrg`
+（该路径含 MCP 快照时间戳，写死就是 build.gradle 自己禁止的「本机 + 本次缓存布局的快照」），
+并给三个 run 任务传 `-Dmixin.env.remapRefMap=true`；找不到时**显式失败**而不是让 dev 跑出一个看不懂的崩溃。
+`TestMixinRefmapIntegrity` 补了对应断言。
+
+### 仍未修（需你定或需实机验证）
+
+| # | 问题 | 备注 |
+|---|---|---|
+| I-N3 | `CentralKitchenMenu.quickMoveStack` 少算 1 个机器槽 ⇒ 三明治样品被 shift-click 搬进存储区并清空 | 改法明确（`+1`），未动 |
+| I-N4 | 中央厨房的搜索/排序/滚动只在服务端算，**没有任何 S2C 包回传** ⇒ 存储浏览器整体是死的 | 需设计同步字段 |
+| I-N5 | `ContainerData` 通道是 **16 位有符号** ⇒ 13 台遗留机器能量显示为负；**并顺带关掉**种植切配站的创造升级 UI（`hasCreative` 恒假） | 前两轮都记为「缩放修不了、属架构改动」；本轮复核认为**框定过宽**——绝大多数 Screen 只用比值，正确低成本修法是同步缩放值或百分比槽。**这是三轮都挂在「未完成」栏的那条对账，现已做完**（逐菜单表见报告） |
+| I-1 | 制冰工厂 GUI 面板在高档位超出屏幕，玩家背包被推出可视区 | 制冰工厂未注册，实际不可达 |
+| I-2 | `MekCkRenderTypes.getIce()` 每帧新建 `RenderType` ⇒ 无界堆增长 + 缓冲缓存失效 | 4 张贴图本可做成 4 个 `static final` |
+| I-3 | 冰封贴图 `ResourceLocation` 缺命名空间（`textures/block/textures/block/...`）且 `frosted_ice_0..3` 在本仓与原版都不存在 | 应改用 `minecraft:textures/block/frosted_ice.png` |
+| I-5 | `ExtractingRecipe.FluidInput.matches()` 在流体 tag 不存在时 NPE，被 `catch (Throwable)` 吞掉 ⇒ 带 `#tag` 的配方**永远不匹配** | 类注释自称「保守不匹配」，实际没做到 |
+| I-6 | 种植切配站的模型硬依赖未声明的 `mekmm`（18 处引用 + 30 条配方） | 需决定：声明依赖 / 换自有模型 / 条件化 |
+| I-1(生成器) | 配方生成器在主线程跑 + 强制 `/reload`，大整合包首开服可能超 60 s 看门狗 | 需幂等短路 + 分摊到若干 tick |
+| I-8 | `CreativeUpgradeFoodRotator` 用**陈旧快照**覆盖 Forge 刚保存的 `mekck-common.toml` | 删掉手写回写即可 |
+| I-9 | `MekckConfig.ice_attack_radius` 上界无意义 | 已由 C-N2 的服务端闸门兜住，配置项本身仍应加上界 |
+| M-2 | `item.mekck.ferrero_projectile` 两份 lang 都缺 | 一行 |
+| — | 18 个方块把 `getDrops` 覆写成 `List.of()`、物品只在 `onRemove` 掉 ⇒ **TNT/爆炸摧毁时一件不掉** | 需确认是否有意 |
+| — | `MixinExtremeSmithingMenu.INFINITY_UPGRADE` 的求值时机存疑 | 需对 Avaritia 做 `javap -v`，该模组不在本地缓存 |
+
+### 新增护栏（337 → 359 测试）
+
+| 测试 | 守什么 |
+|---|---|
+| `TestTextEncodingIntegrity` | 源码与资源的文本完整性。实测抓到 3 处 U+FFFD（`GuiMekCkSideConfiguration:45`、`PlantingCuttingFactoryExecutor:205`，以及该测试自己第一版用字面量写出的那一处）。**第一轮审查只扫了资源文件因此漏掉 `.java`** |
+| `TestNoClientSymbolsInCommonCode` | common 侧不得引用客户端类。`KNOWN_VIOLATIONS` 是**可见的债清单**（6 个 BE 的 `clientTick` → `SoundHandler`、2 个 `Item` 的 `mekanism.client.key`），配一条「每条必须真的还在违规」的反向断言，防清单变成谎言。另有更精确的一条：`network/` 目录零例外 |
+| `TestMixinRefmapIntegrity`（新增 1 条） | dev 运行必须传 `mixin.env.remapRefMap`（见上面「本轮引入又修掉的回归」） |
+| `TestFactoryGuiSyncSurface` | 工厂 GUI 的同步面：每个 `SyncableInt` 的数据源、getter 与 setter 必须读写**同一批字段**（写错字段的症状与「完全没有同步」完全一样，排查毫无线索） |
+| `TestKitchenOutputMergeOverflow` | 产物归并的总量守恒 |
+| `TestAttackRadiusClamp` | 攻击半径上下界 + **4 台机器的两个 setter 都必须走共享闸门**（逐文件检查） |
+| `TestGrindingOrderEngine`（扩） | 订单推进溢出 + `quantity=0` 的旧档被抬到 1 |
+
+> **两条方法论教训**（都写进了相应测试的注释）：
+> ① 一次 `ItemStack.<clinit>` 失败会**毒化整个测试会话**——后续所有碰 `ItemStack` 的用例都变成
+> `NoClassDefFoundError: Could not initialize class`。bootstrap 必须逐字照抄
+> `TestCuttingBatchPacking#boot` 的配方（`SharedConstants` + 吞 Forge 钩子异常）且放在 `@BeforeClass`。
+> ② 第一轮审查的编码检查只扫了 `.json/.toml/.mcmeta/.cfg/.md`，**漏了 `.java`**，因此三轮都以为编码没问题。
+
+---
+
+## 〇、第二轮全量审查（2026-09-30）—— 已被上一节取代，保留作历史
 
 报告：`docs/audit/2026-09-30-full-code-review.md`（分域明细在 `.review/*.md`）。**6 个 Critical 全部已修**：
 

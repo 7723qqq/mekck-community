@@ -404,6 +404,7 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
 
     // ── 对外：订单读写 ──────────────────────────────────────────────────
 
+    @Override
     public boolean hasOrder() {
         return orderRecipeId != null || !orderCustomIngredients.isEmpty();
     }
@@ -412,10 +413,12 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
         return orderRecipeId;
     }
 
+    @Override
     public int getOrderQuantity() {
         return hasOrder() ? orderQuantity : 0;
     }
 
+    @Override
     public int getOrderCompleted() {
         return orderCompleted;
     }

@@ -161,18 +161,60 @@ public class GrillFactoryTile extends MekCkMachineTile implements IMekCkPorted {
     /**
      * 第 {@code index} 个调味料槽是否启用自动调味。
      *
-     * <p>客户端可读：{@code saveAdditional} 会被 {@code getUpdateTag} 复用，
-     * 执行器的位标志随方块更新包同步到客户端，界面因此不需要额外的
-     * {@code ContainerData} 同步整数。</p>
+     * <h3>⚠️ 同步通道（本轮修正）</h3>
+     * 旧注释断言这些位「客户端可读，理由是 {@code saveAdditional} 会被
+     * {@code getUpdateTag} 复用、因而随方块更新包到达客户端」——<b>该断言经 javap 复核不成立</b>。
+     * 实测：{@code LevelChunk#setBlockState} / {@code ServerLevel#sendBlockUpdated} 只发
+     * {@code ClientboundBlockUpdatePacket}（只有方块状态、不含 BE 数据）；引用
+     * {@code ClientboundBlockEntityDataPacket} 的类在 Forge 1.20.1-47.4.16 里只有 19 个，
+     * 服务端侧发送点仅命令方块加随区块下发。而 {@code machine/**} 全包
+     * {@code setChanged|sendBlockUpdated} <b>零命中</b>，{@code GrillSeasoningTogglePacket}
+     * 也不触发任何更新。
+     *
+     * <p>⇒ 客户端读到的只是<b>区块（重新）加载时的快照</b>：点「开/关」后按钮颜色不变，
+     * 离开并重新进入区块才刷新。</p>
+     *
+     * <p>现在改走 {@link #syncFamilyExtraBits()} —— 基类把它作为一个 int 用
+     * {@code SyncableInt} 推给客户端，3 个调味料位打包进 {@code bit0..bit2}。
+     * 同步方向与 {@code getWorkProgress} 一致：服务端读权威值、客户端读镜像。</p>
      */
     public boolean isSeasoningEnabled(int index) {
-        return executor() instanceof GrillFactoryExecutor grill && grill.isSeasoningEnabled(index);
+        if (index < 0 || index >= GrillFactoryExecutor.SEASONING_SLOTS) {
+            return false;
+        }
+        return (getSeasoningBits() & (1 << index)) != 0;
+    }
+
+    /**
+     * 本机调味料启用位（{@code bit0..bit2}），按端分流。
+     *
+     * <p>服务端打包执行器的权威状态；客户端读同步镜像。
+     * <b>不能</b>用 {@code level.isClientSide} 直接判断——GUI 构造期可能 {@code level == null}，
+     * 那种情况下应按客户端处理（读镜像）而不是去碰服务端状态。</p>
+     */
+    private int getSeasoningBits() {
+        if (level == null || level.isClientSide) {
+            return getClientFamilyExtraBits();
+        }
+        return executor() instanceof GrillFactoryExecutor grill ? grill.seasoningEnabledBits() : 0;
+    }
+
+    @Override
+    protected int syncFamilyExtraBits() {
+        if (level == null || level.isClientSide) {
+            return getClientFamilyExtraBits();
+        }
+        return executor() instanceof GrillFactoryExecutor grill ? grill.seasoningEnabledBits() : 0;
     }
 
     /** 切换第 {@code index} 个调味料槽的启用状态（只服务端调用，由网络包驱动）。 */
     public void toggleSeasoningEnabled(int index) {
         if (executor() instanceof GrillFactoryExecutor grill) {
             grill.toggleSeasoningEnabled(index);
+            // 关键：执行器状态改了，但方块状态没变 ⇒ Mek 的脏值判定需要一个能观察到变化的
+            // 读取点。syncFamilyExtraBits() 每次读都重新打包，值一变容器就会把新值推给客户端。
+            // 仍然显式 setChanged，让区块卸载时该状态被正确落盘。
+            setChanged();
         }
     }
 
