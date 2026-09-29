@@ -104,6 +104,28 @@ public class TestMenuQuickMoveSlotRanges {
     /** 玩家背包槽：{@code new Slot(inventory, ..)} / {@code new Slot(playerInventory, ..)}。 */
     private static final Pattern PLAYER_SLOT = Pattern.compile("new Slot\\(\\s*(?:inventory|playerInventory)\\s*,");
 
+    /**
+     * 去掉注释再交给结构性正则。
+     *
+     * <p><b>为什么必须有这一步</b>：本类用源码文本做结构断言，而<b>源码里的注释同样是文本</b>。
+     * 修 {@code CentralKitchenMenu} 那个 off-by-one 时，我在新加的 javadoc 里逐字引用了
+     * {@code addSlot(new Slot(new SampleContainer(machine), SANDWICH_SAMPLE_SLOT, ...))}，
+     * 于是 {@link #MACHINE_SLOT_CTOR} 匹配到了<b>注释里</b>那一行，给出
+     * 「机器槽起点 14283 > 玩家槽起点 5845」这种看似有理、实则莫名其妙的失败。</p>
+     *
+     * <p>危害不只是这一次测试红：<b>任何</b>后来在注释里讲解槽位布局的人都会踩到，
+     * 而且失败信息会把人引向完全错误的方向。断言应该看代码，不看散文。</p>
+     *
+     * <p>实现上按 Java 词法粗粒度处理：先剥块注释（{@code /*…*}，支持嵌套以外的
+     * 常规写法），再剥行注释（{@code //}）。字符串字面量里的 {@code //} 会被误剥，
+     * 但本类关心的模式（{@code new Slot(} / {@code static final int}）不会出现在
+     * 字符串里，所以这个精度对本用例足够——而它比"要求注释里别贴代码"这种约定可靠得多。</p>
+     */
+    private static String stripComments(String src) {
+        String noBlock = src.replaceAll("(?s)/\\*.*?\\*/", " ");
+        return noBlock.replaceAll("(?m)//.*$", " ");
+    }
+
     /** 机器类槽的构造器名（用于「机器槽必须排在玩家槽之前」这条结构断言）。 */
     private static final Pattern MACHINE_SLOT_CTOR = Pattern.compile(
             "new (?:InputSlot|OutputSlot|UpgradeSlot|PowerSlot|StorageSlot|StoreSlot|TankSlot|GrowthSlot"
@@ -170,6 +192,24 @@ public class TestMenuQuickMoveSlotRanges {
                 return left + right;
             }
         }
+        // 乘法。**这条是被真实缺口逼出来的**（第三轮）：
+        // CentralKitchenMenu 的 VISIBLE_STORAGE = STORAGE_ROWS * STORAGE_COLS，
+        // 而本方法原先只认 `+` —— 于是 `MACHINE_SLOT_COUNT` 一旦被提取成常量、
+        // A3 第一次真正开始校验这个菜单时，就报「分区边界表达式解析不出来」。
+        //
+        // 更值得记的是**为什么此前没报**：那时 MACHINE_SLOT_COUNT 还不存在，
+        // 边界是 quickMoveStack 里的局部量 `int machineSlots = ...`，
+        // `decl.find()` 落空 → `continue` → 整个菜单被**静默跳过**。
+        // 也就是说 A3 对 15 个菜单里至少这一个从未真正生效过，
+        // 而「解析不出来」与「不适用」在原实现里是同一个出口。
+        int star = e.indexOf('*');
+        if (star > 0) {
+            Integer left = resolve(e.substring(0, star), fileSrc);
+            Integer right = resolve(e.substring(star + 1), fileSrc);
+            if (left != null && right != null) {
+                return left * right;
+            }
+        }
         return null;
     }
 
@@ -219,7 +259,7 @@ public class TestMenuQuickMoveSlotRanges {
     @Test
     public void powerSlotTargetIsAMenuIndexNotAHandlerConstant() throws IOException {
         for (String file : POWER_SLOT_TARGET_MUST_BE_CAPTURED_FIELD) {
-            String src = read(MENU_DIR + file);
+            String src = stripComments(read(MENU_DIR + file));
             // 只看**目标表达式**，不看注释：修复说明里会提到 SLOT_POWER 这个名字。
             List<String> targets = singleSlotTargets(quickMoveBody(src));
             assertTrue(file + " 的 quickMoveStack 必须用构造期捕获的菜单下标字段 powerSlotIndex 作能源槽目标，"
@@ -272,10 +312,18 @@ public class TestMenuQuickMoveSlotRanges {
     private static final List<Menu> MENUS = List.of(
             new Menu("BioreactorMenu.java", 18, set(), map(),
                     "4x4 输入(16) + 能源 + 储罐"),
-            new Menu("CentralKitchenMenu.java", 83, set(), map(),
-                    "代码边界 = VISIBLE_MODULES(20)+VISIBLE_STORAGE(54)+VISIBLE_OUTPUT(9) = 83；"
-                            + "真实机器槽是 84（还有 1 个三明治样品槽在边界之外、被当成玩家槽）。"
-                            + "取代码边界 83 才是保守方向：self-range 的条件是 X >= 边界"),
+            new Menu("CentralKitchenMenu.java", 84, set(), map(),
+                    "真实机器槽 = VISIBLE_MODULES(20)+VISIBLE_STORAGE(54)+VISIBLE_OUTPUT(9)"
+                            + " + 三明治样品槽(1) = 84。"
+                            + "**本条在第三轮从 83 改成 84**：原代码边界是 83，漏算了构造器在输出区"
+                            + "之后加的第 84 个槽（三明治样品槽，SANDWICH_SAMPLE_SLOT）。"
+                            + "后果不是复制（该槽落在玩家分支、目标区间不含 83），而是"
+                            + "「shift-点击样品 → canInstallModule 为假 → 并进 300 格存储区 → "
+                            + "slot.set(EMPTY) 清空样品槽 → refreshDisplay 让它从视野消失」，"
+                            + "玩家再也拿不回来。"
+                            + "原注释说「取 83 是保守方向」—— 那只对 self-range 成立，"
+                            + "而本菜单的缺陷形态是**功能槽被清空**，不是自指区间，"
+                            + "所以正确修法是改代码而不是改表。"),
             new Menu("ChocolateCannonMenu.java", 14, set(),
                     map("target", "int target = ChocolateCannonBlockEntity.FERRERO_SLOT_BASE + tier.ordinal();"),
                     "输入/副输入/输出 + 速度/能量/创造 + 费列罗5 + 流体2 + 能源 = 3+3+5+2+1；"
@@ -348,7 +396,7 @@ public class TestMenuQuickMoveSlotRanges {
     @Test
     public void singleSlotTargetsStayInsideMachineRegion() throws IOException {
         for (Menu m : MENUS) {
-            String src = read(MENU_DIR + m.file());
+            String src = stripComments(read(MENU_DIR + m.file()));
             List<String> targets = singleSlotTargets(src);
             for (String target : targets) {
                 Integer value = resolve(target, src);
@@ -385,7 +433,7 @@ public class TestMenuQuickMoveSlotRanges {
             if (m.machineSlots() < 0) {
                 continue; // 布局随档位变化，没有静态边界常量可比
             }
-            String src = read(MENU_DIR + m.file());
+            String src = stripComments(read(MENU_DIR + m.file()));
             Matcher decl = Pattern.compile("static final int MACHINE_SLOT_COUNT\\s*=\\s*([^;]+);").matcher(src);
             if (!decl.find()) {
                 continue; // 用局部量算边界的菜单（SimpleMachineMenu 按机器类型分三档）
@@ -404,7 +452,7 @@ public class TestMenuQuickMoveSlotRanges {
     @Test
     public void machineSlotsAreAllocatedBeforePlayerInventory() throws IOException {
         for (Menu m : MENUS) {
-            String src = read(MENU_DIR + m.file());
+            String src = stripComments(read(MENU_DIR + m.file()));
             Matcher player = PLAYER_SLOT.matcher(src);
             assertTrue(m.file() + " 找不到玩家背包槽（new Slot(inventory/playerInventory, ..)）", player.find());
             int firstPlayerSlot = player.start();

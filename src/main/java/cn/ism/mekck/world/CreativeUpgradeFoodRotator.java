@@ -121,30 +121,85 @@ public final class CreativeUpgradeFoodRotator {
      * <p>旧键已从配置 spec 中移除（不会再被写回），所以这里直接读 toml 文本；
      * 只有当新键仍是默认 {@code per_world} 时才迁移，避免覆盖玩家自己改过的新值。迁移是幂等的：
      * 迁移后旧键行会被删掉，下次启动不会再触发。</p>
+     *
+     * <h3>⚠️ 关键：删旧键必须在 {@code SPEC.save()} <b>之后重新读一遍</b>（本轮修掉）</h3>
+     * {@code MekckConfig.setCreativeUpgradeRotationMode} 内部会调 {@code SPEC.save()}，
+     * 而它<b>重写并规范化整个 TOML</b>。原实现在调用它<b>之前</b>就把文件读成了
+     * {@code text}，随后用这个<b>陈旧快照</b>算出的 {@code cleaned} 覆盖回去 ——
+     * 于是把 Forge 刚写进去的一切（新增的键、规范化后的排版）<b>全部回滚</b>。
+     *
+     * <p>顺带两个细节：</p>
+     * <ul>
+     *   <li>{@code Files.writeString} 是<b>先截断再写</b>。这里抛 {@code IOException}
+     *       的话，用户的配置文件就变成<b>空文件</b>了。所以改成「写临时文件 + 原子 move」，
+     *       失败时原文件完好。</li>
+     *   <li>{@code replaceAll("\\n{3,}", "\\n\\n")} 在 <b>CRLF</b> 文件上是<b>空操作</b>
+     *       （{@code \r\n\r\n} 里没有 3 个连续的 {@code \n}）。原来的「压缩空行」在
+     *       Windows 上一直没生效。改用 {@code (?m)^\s*\R(\s*\R)+} 这类按行匹配的写法。</li>
+     * </ul>
      */
     private static void migrateLegacyRotationMode(MinecraftServer server) {
         try {
             Path toml = server.getServerDirectory().toPath().resolve("config/mekck/mekck-common.toml");
             if (!Files.isRegularFile(toml)) return;
-            String text = Files.readString(toml);
             java.util.regex.Matcher m = java.util.regex.Pattern
                     .compile("^\\s*rotate_foods_on_startup\\s*=\\s*(true|false)\\s*$",
                             java.util.regex.Pattern.MULTILINE)
-                    .matcher(text);
+                    .matcher(Files.readString(toml));
             if (!m.find()) return;
+            String legacyLine = m.group(0);
             boolean legacyRotate = Boolean.parseBoolean(m.group(1));
             String want = legacyRotate ? "per_restart" : "per_world";
             if (!"per_world".equals(cn.ism.mekck.config.MekckConfig.getCreativeUpgradeRotationMode())) {
                 LOGGER.info("[创造升级] 旧配置 rotate_foods_on_startup={} 已存在且新键已非默认值，跳过迁移。", legacyRotate);
                 return;
             }
+            // 这一步内部会 SPEC.save()，整个 toml 被重写并规范化。
             cn.ism.mekck.config.MekckConfig.setCreativeUpgradeRotationMode(want);
-            // 删掉旧键行，避免下次启动重复迁移
-            String cleaned = text.replace(m.group(0), "").replaceAll("\\n{3,}", "\\n\\n");
-            Files.writeString(toml, cleaned);
+
+            // ⚠️ 必须**重新读**：上面那次 save 已经把文件换了内容，
+            // 拿 save 之前的快照去改会把 Forge 的写入全部抹掉。
+            String fresh = Files.readString(toml);
+            if (!fresh.contains(legacyLine.trim())) {
+                // 旧键已不在（可能被 spec 重写顺带清掉，或本次刚被规范化掉）——视为迁移完成。
+                LOGGER.info("[创造升级] 旧配置迁移：rotate_foods_on_startup={} → food_rotation_mode={}", legacyRotate, want);
+                return;
+            }
+            String cleaned = fresh
+                    .replace(legacyLine, "")
+                    // 删掉整行（含其行尾），而不是只删那一行的内容
+                    .replaceAll("(?m)^[ \\t]*\\R", "")
+                    .replaceAll("(?m)([ \\t]*\\R)([ \\t]*\\R)+", "$1");
+            writeAtomically(toml, cleaned);
             LOGGER.info("[创造升级] 旧配置迁移：rotate_foods_on_startup={} → food_rotation_mode={}", legacyRotate, want);
         } catch (Throwable t) {
             LOGGER.warn("[创造升级] 旧配置迁移失败（不影响启动，按新配置默认值继续）", t);
+        }
+    }
+
+    /**
+     * 原子写：先写同目录下的临时文件，再 {@code ATOMIC_MOVE} 覆盖。
+     *
+     * <p>直接 {@code Files.writeString} 是<b>先截断再写</b>：一旦中途抛
+     * {@code IOException}（磁盘满、文件被占用、杀毒软件锁），目标文件就只剩空内容 ——
+     * 对玩家来说就是<b>整个配置文件没了</b>。临时文件 + 原子改名保证要么全写成功、
+     * 要么原封不动。</p>
+     */
+    private static void writeAtomically(Path target, String content) throws java.io.IOException {
+        Path dir = target.getParent();
+        Path tmp = Files.createTempFile(dir, target.getFileName().toString(), ".tmp");
+        try {
+            Files.writeString(tmp, content, java.nio.charset.StandardCharsets.UTF_8);
+            try {
+                Files.move(tmp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                // 跨卷 / 文件系统不支持原子改名：退化成普通替换（仍有临时文件做缓冲，
+                // 比直接截断目标安全）。
+                Files.move(tmp, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(tmp);
         }
     }
 

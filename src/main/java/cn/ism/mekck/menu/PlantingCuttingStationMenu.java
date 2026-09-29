@@ -165,6 +165,27 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
         return data.get(3);
     }
 
+    /**
+     * 已装的创造升级数量 —— 对应 {@code PlantingCuttingStationBlockEntity.DATA_CREATIVE_UPGRADE = 7}。
+     *
+     * <p><b>本菜单此前没有这个 getter</b>，而服务端那一格一直在同步（值是
+     * {@code hasCreativeUpgrade() ? 1 : 0}，即恒为 0 或 1）。于是屏幕只能去猜：
+     * {@code getEnergyCapacity() > ENERGY_CAPACITY}。</p>
+     *
+     * <p>那条猜法<b>必然失败</b>：{@code ContainerData} 经
+     * {@code ClientboundContainerSetDataPacket} 传输时对每个值用 {@code writeShort} ——
+     * <b>16 位有符号</b>，上限 32767。{@code getMaxEnergyStored()} 的常规值就是
+     * {@code 100_000}，到客户端会变成 {@code 100000 - 65536 = 34464}，
+     * 于是 {@code 34464 > 100000} 恒假。</p>
+     *
+     * <p>本 getter 读的那一格值域是 {@code {0, 1}}，<b>不可能溢出</b> ——
+     * 这才是「有没有装创造升级」的正确判据。与 {@code client/MekCkUpgradeType} 里
+     * {@code case CREATIVE -> menu.getCreativeUpgradeCount()} 的既有约定一致。</p>
+     */
+    public int getCreativeUpgradeCount() {
+        return data.get(PlantingCuttingStationBlockEntity.DATA_CREATIVE_UPGRADE);
+    }
+
     public int getEncodedSideConfig() {
         return data.get(4);
     }

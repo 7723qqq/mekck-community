@@ -17,26 +17,30 @@ import org.joml.Matrix4f;
  */
 public final class FrozenIceRender {
 
-    private static final ResourceLocation TEXTURE_0 = new ResourceLocation("textures/block/frosted_ice_0.png");
-    private static final ResourceLocation TEXTURE_1 = new ResourceLocation("textures/block/frosted_ice_1.png");
-    private static final ResourceLocation TEXTURE_2 = new ResourceLocation("textures/block/frosted_ice_2.png");
-    private static final ResourceLocation TEXTURE_3 = new ResourceLocation("textures/block/frosted_ice_3.png");
-
     private FrozenIceRender() {
     }
 
-    /** 按剩余冰冻 tick 选择贴图（越接近解除裂痕越多），与冰火一致。 */
-    private static ResourceLocation getIceTexture(int ticksFrozen) {
+    /**
+     * 按剩余冰冻 tick 选<b>贴图档位</b>（越接近解除裂痕越多），与冰火一致。
+     *
+     * <p>返回的是 <b>0..3 的下标</b>而不是 {@link ResourceLocation}：贴图本体
+     * 收在 {@link MekCkRenderTypes} 里，与它按档位缓存的 {@code RenderType} 一一对应。
+     * 这样调用方不再需要持有 {@code ResourceLocation}，也就无从再写出
+     * 「单参 {@code new ResourceLocation(String)} 被解析成
+     * {@code namespace="textures/block"} + {@code path="frosted_ice_0.png"}」
+     * 那种实际请求 {@code textures/block/textures/block/...} 的错（见该类注释）。</p>
+     */
+    private static int getIceLevel(int ticksFrozen) {
         if (ticksFrozen < 100) {
             if (ticksFrozen < 50) {
                 if (ticksFrozen < 20) {
-                    return TEXTURE_3;
+                    return 3;
                 }
-                return TEXTURE_2;
+                return 2;
             }
-            return TEXTURE_1;
+            return 1;
         }
-        return TEXTURE_0;
+        return 0;
     }
 
     public static void render(LivingEntity entity, PoseStack poseStack, MultiBufferSource buffer, int light, int frozenTicks) {
@@ -51,7 +55,7 @@ public final class FrozenIceRender {
     }
 
     private static void renderBox(AABB box, PoseStack poseStack, MultiBufferSource buffer, int light, int alpha, int frozenTicks) {
-        RenderType renderType = MekCkRenderTypes.getIce(getIceTexture(frozenTicks));
+        RenderType renderType = MekCkRenderTypes.getIce(getIceLevel(frozenTicks));
         VertexConsumer vertex = buffer.getBuffer(renderType);
         Matrix4f matrix = poseStack.last().pose();
 

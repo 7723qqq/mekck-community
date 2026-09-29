@@ -439,13 +439,37 @@ public class CentralKitchenMenu extends AbstractContainerMenu
         return data.get(3);
     }
 
+    /**
+     * 机器侧的槽位总数 —— <b>构造器实际添加的槽数</b>，不是「看起来该有多少」。
+     *
+     * <p><b>原先漏算了三明治样品槽</b>（本轮修掉）：{@link #VISIBLE_MODULES} +
+     * {@link #VISIBLE_STORAGE} + {@link #VISIBLE_OUTPUT} = 20 + 54 + 9 = 83，
+     * 而构造器在输出区<b>之后</b>还加了第 84 个槽 ——
+     * {@code addSlot(new Slot(new SampleContainer(machine), SANDWICH_SAMPLE_SLOT, 294, 78))}。
+     * 于是样品槽的下标 83 落进「玩家侧」分支：</p>
+     * <ul>
+     *   <li>{@code canInstallModule} 为假 ⇒ 走
+     *       {@code MekCkTransfer.moveItemStackTo(stack, slots, VISIBLE_MODULES, VISIBLE_MODULES+VISIBLE_STORAGE)}
+     *       把三明治<b>并进 300 格存储区</b>；</li>
+     *   <li>随后 {@code slot.set(ItemStack.EMPTY)} 把样品槽清空，
+     *       {@code refreshDisplay()} 让它从视野消失 —— 玩家再也拿不回来。</li>
+     * </ul>
+     * 不是复制（区间不含 83），但物品被未经同意搬走 + 功能槽被静默清空。
+     *
+     * <p><b>刻意写成对构造器的断言而不是又一份手算</b>：本类已有
+     * {@code TestMenuQuickMoveSlotRanges} 钉「机器槽在玩家背包之前分配」，
+     * 这里补的是「总数 = 实际 addSlot 数」这一条，两者合起来才关掉这一类 off-by-one。
+     * 以后再往机器侧加槽，这个数不会忘记跟着改。</p>
+     */
+    private static final int MACHINE_SLOT_COUNT = VISIBLE_MODULES + VISIBLE_STORAGE + VISIBLE_OUTPUT + 1;
+
     @Override
     public ItemStack quickMoveStack(Player player, int index) {
         Slot slot = slots.get(index);
         if (slot == null || !slot.hasItem()) return ItemStack.EMPTY;
         ItemStack stack = slot.getItem();
         ItemStack copy = stack.copy();
-        int machineSlots = VISIBLE_MODULES + VISIBLE_STORAGE + VISIBLE_OUTPUT;
+        int machineSlots = MACHINE_SLOT_COUNT;
         if (index < machineSlots) {
             if (!moveItemStackTo(stack, machineSlots, slots.size(), true)) return ItemStack.EMPTY;
         } else {

@@ -419,9 +419,23 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
         guiGraphics.drawString(font, "Gas", rightSlotX + 18 + 2, gasY + 4, 0xFFFFFFFF);
 
         // Creative upgrade slot (right column, middle)
+        // ⚠️ 原先这里是 `boolean hasCreative = menu.getEnergyCapacity() > ENERGY_CAPACITY;`
+        // 然后**再也没用过它**（死变量），而那条判据本身也是错的：ContainerData 经
+        // ClientboundContainerSetDataPacket 传输时对每个值用 writeShort（16 位有符号），
+        // 100_000 的容量到客户端会变成 34464，恒不成立。
+        //
+        // 现在改读专用的 DATA_CREATIVE_UPGRADE（值域 {0,1}，不可能溢出），与
+        // client/MekCkUpgradeType 里 `case CREATIVE -> menu.getCreativeUpgradeCount()`
+        // 的既有约定一致。
+        //
+        // 状态表现刻意用**文字着色**而不是换槽位贴图：javap 实测 Mek 的
+        // mekanism.client.gui.element.slot.SlotType 只有 NORMAL / DIGITAL / POWER /
+        // EXTRA / INPUT / INPUT_2 / OUTPUT / OUTPUT_2 / OUTPUT_WIDE / OUTPUT_LARGE /
+        // ORE / INNER_HOLDER_SLOT —— **没有 CREATIVE**，拿 POWER 顶替会给出误导性的图标。
+        boolean hasCreative = menu.getCreativeUpgradeCount() > 0;
         guiGraphics.blit(SlotType.INPUT.getTexture(), rightSlotX - 1, creativeY - 1, 0, 0, 18, 18, 18, 18);
-        boolean hasCreative = menu.getEnergyCapacity() > PlantingCuttingStationBlockEntity.ENERGY_CAPACITY;
-        guiGraphics.drawString(font, "Creative", rightSlotX + 18 + 2, creativeY + 4, 0xFFFFFFFF);
+        guiGraphics.drawString(font, "Creative", rightSlotX + 18 + 2, creativeY + 4,
+                hasCreative ? 0xFFFF55 : 0xFFFFFFFF);
 
         // Label at top
         guiGraphics.drawString(font, "Upgrades", x + 10, y + 10, 0xFFFFFFFF);

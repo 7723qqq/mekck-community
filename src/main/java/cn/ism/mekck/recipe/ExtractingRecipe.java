@@ -63,13 +63,31 @@ public class ExtractingRecipe implements Recipe<RecipeWrapper> {
             this.amount = amount;
         }
 
-        /** 给定流体是否满足本需求（tag 走 Forge 注册表 tags()，读不到 tag 时保守不匹配）。 */
+        /**
+         * 给定流体是否满足本需求（tag 走 Forge 注册表 tags()，读不到 tag 时保守不匹配）。
+         *
+         * <p><b>「读不到 tag」必须真的不匹配</b>，而这正是原实现没做到的：
+         * {@code ITagManager#getTag(TagKey)} 标注 {@code @Nullable}（{@code TagManager}
+         * 的实现就是 {@code return this.tags.get(key)}），而代码写的是
+         * {@code manager != null && manager.getTag(tagId).contains(fluid)} ——
+         * {@code manager} 恒非 null（{@code ForgeRegistries.FLUIDS.tags()} 从不返回 null），
+         * 所以那道判断<b>完全无效</b>，{@code .contains()} 直接 NPE。</p>
+         *
+         * <p>危害不是崩服：调用方 {@code SimpleMachineBlockEntity} 用
+         * {@code catch (Throwable ignored)} 兜着，于是退化成「带 {@code #tag} 流体输入的
+         * {@code mekck:extracting} 配方<b>永远不匹配</b>」—— 静默功能失效。
+         * 本类 javadoc 明确宣称支持 {@code #forge:milk} 这类写法，任何数据包一加就中招。</p>
+         */
         public boolean matches(@Nullable Fluid fluid) {
-            if (fluid == null) return false;
+            if (fluid == null) {
+                return false;
+            }
             if (idOrTag.startsWith("#")) {
                 TagKey<Fluid> tagId = TagKey.create(Registries.FLUID, new ResourceLocation(idOrTag.substring(1)));
-                var manager = ForgeRegistries.FLUIDS.tags();
-                return manager != null && manager.getTag(tagId).contains(fluid);
+                // tags() 恒非 null，但 getTag(...) 可能是 null —— tag 没被任何注册表绑定时
+                // 就是 null。按 javadoc 承诺的「保守不匹配」返回 false。
+                var holder = ForgeRegistries.FLUIDS.tags().getTag(tagId);
+                return holder != null && holder.contains(fluid);
             }
             ResourceLocation fid = new ResourceLocation(idOrTag);
             return fid.equals(ForgeRegistries.FLUIDS.getKey(fluid));

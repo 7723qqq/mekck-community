@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import cn.ism.mekck.util.IceTargetSearch;
 
 /**
  * Configuration for factory parallel processing.
@@ -244,15 +245,26 @@ public final class MekckConfig {
         // ─── Ice Maker settings ───────────────────
         BUILDER.comment("急冻制冰机与制冰工厂设置。",
                 "ice_cube_damage_mult：冰块命中实体时基础冰冻伤害的倍数（叠加冷萃升级后受此系数影响）。",
-                "ice_attack_radius：冷萃攻击默认索敌半径（方块，可在机器 GUI 内调整，下限 4、上限不限）。",
+                "ice_attack_radius：冷萃攻击默认索敌半径（方块，可在机器 GUI 内调整，范围 4 ~ 256）。"
+            + "上限与 IceTargetSearch.MAX_ATTACK_RADIUS 一致：更大的半径会让索敌退化成"
+            + "「每 tick 遍历全服已加载实体」，实测足以打穿 TPS。",
                 "ice_attack_interval：冷萃攻击间隔（游戏刻，默认 40 = 2 秒）。")
                 .push("ice_maker");
         ICE_CUBE_DAMAGE_MULT = BUILDER
                 .comment("冰块命中基础冰冻伤害倍数（默认：1.0）")
                 .defineInRange("ice_cube_damage_mult", 1.0, 0.0, 1000.0);
         ICE_ATTACK_RADIUS = BUILDER
-                .comment("冷萃攻击默认索敌半径（默认：16，下限 4、上限不限）")
-                .defineInRange("ice_attack_radius", 16, 4, Integer.MAX_VALUE);
+                // 上界与 IceTargetSearch.MAX_ATTACK_RADIUS 一致（第三轮修）：原先是
+                // Integer.MAX_VALUE、注释还写着「上限不限」，而半径会被网络包直接写入
+                // （IceAttackConfigPacket 的裸 readInt，PacketGuard 只校验 8 格交互距离）。
+                // 半径过大时 IceTargetSearch 会退化成「遍历全服已加载实体」，配合创造升级的
+                // 每 tick 攻击 = 一台机器 + 一个包即可把 TPS 打穿。
+                // 服务端另有 clampAttackRadius 兜底；这里加上界是为了让**配置本身**也表达这件事，
+                // 免得「配置写了个自己也到不了的数」。
+                .comment("冷萃攻击默认索敌半径（默认：16，范围 4 ~ " + IceTargetSearch.MAX_ATTACK_RADIUS
+                        + "。上限与 IceTargetSearch.MAX_ATTACK_RADIUS 一致：更大的半径会让索敌退化成"
+                        + "「每 tick 遍历全服已加载实体」，实测足以打穿 TPS）")
+                .defineInRange("ice_attack_radius", 16, 4, IceTargetSearch.MAX_ATTACK_RADIUS);
         ICE_ATTACK_INTERVAL = BUILDER
                 .comment("冷萃攻击间隔（游戏刻，默认 40）")
                 .defineInRange("ice_attack_interval", 40, 1, 1200);
