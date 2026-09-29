@@ -55,20 +55,33 @@ import java.util.Arrays;
  * {@link #mekck$add(String, String)} 先 {@code NEW} 出新常量，再把加长后的数组写回
  * {@code $VALUES}。这个顺序之所以安全，依据是一条已实测的事实：
  * {@code java.lang.Enum(String, int)} <b>只做两次字段赋值，不写共享常量数组</b>，
- * 枚举常量目录由 {@code java.lang.Class} 侧维护。两个 JDK 实测同形：
+ * 枚举常量目录由 {@code java.lang.Class} 侧维护。两个 JDK 分别实测（原文照抄，
+ * 常量池索引两边并不相同，这点本身也说明不能凭记忆复述）：
  * <pre>
- *   $ javap -c -p java.lang.Enum                    # Temurin 17.0.20+8
- *   $ /d/mc/neon_jdk8/bin/javap.exe -c -p java.lang.Enum   # Alibaba Dragonwell 1.8.0_292
+ *   $ javap -c -p java.lang.Enum    # Temurin 17.0.20+8
  *     protected java.lang.Enum(java.lang.String, int);
  *       Code:
  *          0: aload_0
- *          1: invokespecial  // Method java/lang/Object."&lt;init&gt;":()V
+ *          1: invokespecial #11   // Method java/lang/Object."&lt;init&gt;":()V
  *          4: aload_0
  *          5: aload_1
- *          6: putfield      // Field name:Ljava/lang/String;
+ *          6: putfield      #1    // Field name:Ljava/lang/String;
  *          9: aload_0
  *         10: iload_2
- *         11: putfield      // Field ordinal:I
+ *         11: putfield      #7    // Field ordinal:I
+ *         14: return
+ *
+ *   $ /d/mc/neon_jdk8/bin/javap.exe -c -p java.lang.Enum    # Alibaba Dragonwell 1.8.0_292
+ *     protected java.lang.Enum(java.lang.String, int);
+ *       Code:
+ *          0: aload_0
+ *          1: invokespecial #3    // Method java/lang/Object."&lt;init&gt;":()V
+ *          4: aload_0
+ *          5: aload_1
+ *          6: putfield      #1    // Field name:Ljava/lang/String;
+ *          9: aload_0
+ *         10: iload_2
+ *         11: putfield      #2    // Field ordinal:I
  *         14: return
  * </pre>
  * 两边都没有 {@code values[ordinal] = this}，所以新常量的 ordinal 即使超出当前数组长度也不会越界。
@@ -117,8 +130,12 @@ public abstract class MixinAPILang {
      * {@code private APILang(String, int, String)}——前两个参数是枚举编译器合成的
      * {@code name} 与 {@code ordinal}，源码签名里看不到，必须显式声明。
      *
-     * <p>必须 {@code static} 且返回 {@link APILang}，否则 Mixin 不会把它当成
-     * 构造器工厂（{@code OBJECT_FACTORY}）而按普通方法代理处理。
+     * <p>必须 {@code static} 且返回 {@link APILang}，否则是<b>启动即崩</b>而不是降级。
+     * {@code InvokerInfo.initType} 在 {@code targetName} 等于 {@code <init>} 时，
+     * 返回类型不匹配直接 {@code throw new InvalidAccessorException}，
+     * 非 {@code static} 同样 {@code throw}——<b>没有回退到普通方法代理的分支</b>。
+     * {@code METHOD_PROXY} 只在 {@code @Invoker} 不带值、且方法名不以
+     * {@code new}/{@code create} 开头时才可能走到。排查时不要去找「代理没生效」的方向。
      */
     @Invoker("<init>")
     public static APILang mekck$langInitInvoker(String internalName, int internalId, String key) {
