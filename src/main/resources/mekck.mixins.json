@@ -8,6 +8,7 @@
     "MixinAPILang",
     "MixinCuttingBoardBlockEntity",
     "MixinExtremeSmithingMenu",
+    "MixinItemStack",
     "MixinUpgrade"
   ],
   "injectors": {
