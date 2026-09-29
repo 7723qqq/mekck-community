@@ -1,0 +1,42 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "item": "mekck:planting_cutting_station"
+    },
+    "B": {
+      "item": "mekck:smart_cooking_pot"
+    },
+    "C": {
+      "item": "mekck:smart_skewering_machine"
+    },
+    "D": {
+      "item": "mekck:electric_grill"
+    },
+    "X": {
+      "item": "mekanism:pellet_antimatter"
+    },
+    "E": {
+      "item": "mekck:electric_grinding_machine"
+    },
+    "F": {
+      "item": "mekck:ice_maker"
+    },
+    "G": {
+      "item": "mekck:sushi_maker"
+    },
+    "H": {
+      "item": "mekck:steamer"
+    }
+  },
+  "pattern": [
+    "ABC",
+    "DXE",
+    "FGH"
+  ],
+  "result": {
+    "item": "mekck:central_kitchen"
+  },
+  "show_notification": true
+}

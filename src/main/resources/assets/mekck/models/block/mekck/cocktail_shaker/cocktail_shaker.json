@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/cocktail_shaker/right",
+    "front": "mekck:block/mekck/cocktail_shaker/front",
+    "west": "mekck:block/mekck/cocktail_shaker/right",
+    "east": "mekck:block/mekck/cocktail_shaker/left",
+    "south": "mekck:block/mekck/cocktail_shaker/back",
+    "up": "mekck:block/mekck/cocktail_shaker/top",
+    "down": "mekck:block/mekck/cocktail_shaker/bottom"
+  }
+}

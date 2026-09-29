@@ -1,0 +1,23 @@
+{
+  "conditions": [
+    {
+      "type": "forge:mod_loaded",
+      "modid": "roasted"
+    }
+  ],
+  "type": "mekanism:nucleosynthesizing",
+  "gasInput": {
+    "amount": 20,
+    "gas": "mekanism:antimatter"
+  },
+  "duration": 625,
+  "itemInput": {
+    "amount": 1,
+    "ingredient": {
+      "item": "roasted:marshmallow_on_a_stick"
+    }
+  },
+  "output": {
+    "item": "pasterdream:yinhul_cotton_candy"
+  }
+}

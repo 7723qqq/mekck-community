@@ -1,0 +1,10 @@
+{"type":"immersiveengineering:cloche","input":{
+
+"item":"pineapple_delight:pineapple_crop"
+},
+"render":{"type":"crop","block":"minecraft:potatoes"},
+"results":[{"count":1,"item":
+
+"pineapple_delight:pineapple"
+
+}],"soil":{"item":"minecraft:dirt"},"time":800}

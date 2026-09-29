@@ -1,0 +1,17 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "tag": "forge:strawberries"
+      },
+      {
+        "tag": "forge:grains/oats"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:milk\",Amount:500}",
+    "processingTime": 100,
+    "output": {
+      "item": "farm_and_charm:oatmeal_with_strawberries",
+      "count": 2
+    }
+  }

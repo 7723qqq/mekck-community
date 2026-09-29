@@ -1,0 +1,21 @@
+{
+  "type": "mekck:beverage_assembly",
+  "ingredients": [
+    {
+      "item": "minecraft:glass_bottle"
+    }
+  ],
+  "fluid": {
+    "fluid": "youkaishomecoming:wind_priestesses",
+    "amount": 250
+  },
+  "result": {
+    "item": "youkaishomecoming:wind_priestesses"
+  },
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "youkaishomecoming"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "type": "mekmm:planting",
+  "itemInput": {
+    "ingredient": {
+      "item": "trailandtales_delight:pitcher_taro"
+    }
+  },
+  "gasInput": {
+    "amount": 1,
+    "gas": "mekmm:nutrient_solution"
+  },
+  "mainOutput": {
+    "count": 1,
+    "item": "trailandtales_delight:pitcher_plant"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "forge:ingots/iron"
+    },
+    "B": {
+      "item": "vinery:apple_press"
+    },
+    "C": {
+      "tag": "forge:circuits/basic"
+    },
+    "S": {
+      "item": "mekanism:steel_casing"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "BSB",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:juicer"
+  },
+  "show_notification": true
+}

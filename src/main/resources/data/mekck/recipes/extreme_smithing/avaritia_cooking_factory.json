@@ -1,0 +1,23 @@
+{
+  "type": "avaritia:extreme_smithing",
+  "addition": [
+    {
+      "item": "avaritia_delight:extreme_cooking_pot"
+    },
+    {
+      "item": "avaritia:enhancement_core"
+    },
+    {
+      "item": "avaritia:infinity_upgrade"
+    }
+  ],
+  "base": {
+    "item": "mekck:nebula_cooking_factory"
+  },
+  "result": {
+    "item": "mekck:singularity_cooking_factory"
+  },
+  "template": {
+    "item": "avaritia:upgrade_smithing_template"
+  }
+}

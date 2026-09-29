@@ -1,0 +1,18 @@
+{
+  "type": "mekanism:combining",
+  "extraInput": {
+    "amount": 1,
+    "ingredient": {
+      "item": "kaleidoscope_cookery:millstone"
+    }
+  },
+  "mainInput": {
+    "ingredient": {
+      "item": "mekanism:crusher"
+    }
+  },
+  "output": {
+    "count": 1,
+    "item": "mekck:electric_grinding_machine"
+  }
+}

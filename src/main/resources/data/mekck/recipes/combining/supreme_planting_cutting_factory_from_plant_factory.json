@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":1,"ingredient":{"tag":"mekck:cutting_factories"}},"mainInput":{"ingredient":{
+    
+"item":"mekanism_extras:supreme_planting_factory"
+
+}},"output":{
+    
+"count":1,"item":"mekck:supreme_planting_cutting_factory"}}

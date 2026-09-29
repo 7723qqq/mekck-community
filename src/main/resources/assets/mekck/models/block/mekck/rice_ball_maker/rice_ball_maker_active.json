@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/rice_ball_maker/rice_ball_maker",
+  "textures": {
+    "front": "mekck:block/mekck/rice_ball_maker/front_active",
+    "west": "mekck:block/mekck/rice_ball_maker/right_active",
+    "east": "mekck:block/mekck/rice_ball_maker/left_active",
+    "south": "mekck:block/mekck/rice_ball_maker/back_active",
+    "up": "mekck:block/mekck/rice_ball_maker/top_active"
+  }
+}

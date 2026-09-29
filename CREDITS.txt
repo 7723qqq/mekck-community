@@ -1,0 +1,36 @@
+MekCK — Credits
+================================================================
+
+作者 / Author
+  doctor.s
+
+基于 / Built on
+  Minecraft Forge 47.4.16 (Minecraft 1.20.1)
+  采用 ForgeGradle 官方 MDK 骨架搭建，MDK 自带模板文件已清理。
+
+必需前置 / Required Dependencies
+  Mekanism              https://github.com/mekanism/Mekanism
+  Farmer's Delight      https://github.com/vectorwing/FarmersDelight
+
+可选联动 / Optional Integrations
+  Mekanism Extras       工厂安装器（绝对 ~ 悖论无限）
+  Barbeque's Delight    穿串 / 烧烤配方
+  Kaleidoscope Cookery  锅具 / 炒锅 / 研磨配方
+  Kaleidoscope Grilling 烤制 / 调味
+  Avaritia (Re-Avaritia) 高阶合成材料
+  Avaritia's Delight    刀具与厨锅
+  Applied Energistics 2 ME 网络拉料与终端下单
+  GuideME               游戏内图文指南
+  Industrial Foregoing  生物反应堆肉汤发电
+  Some Assembly Required 三明治组装
+  Simply Tea            茶饮
+  Twilight Forest / Ice and Fire 等  农业与联动配方
+
+第三方资源 / Third-Party Assets
+  本项目再分发了 Mekanism 与 Mekanism Extras 的部分纹理（均为 MIT 许可），
+  详见 THIRD-PARTY.md。
+
+感谢 / Thanks
+  感谢 Mekanism 团队打造的工厂体系与 API —— 本模组的整个设计语言都建立在其之上；
+  感谢 Farmer's Delight 及所有联动模组的作者；
+  感谢 Minecraft 模组社区。

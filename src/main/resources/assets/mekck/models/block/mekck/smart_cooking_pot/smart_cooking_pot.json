@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/smart_cooking_pot/right",
+    "front": "mekck:block/mekck/smart_cooking_pot/front",
+    "west": "mekck:block/mekck/smart_cooking_pot/right",
+    "east": "mekck:block/mekck/smart_cooking_pot/left",
+    "south": "mekck:block/mekck/smart_cooking_pot/back",
+    "up": "mekck:block/mekck/smart_cooking_pot/top",
+    "down": "mekck:block/mekck/smart_cooking_pot/bottom"
+  }
+}

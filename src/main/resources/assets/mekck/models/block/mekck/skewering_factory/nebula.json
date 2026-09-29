@@ -1,0 +1,15 @@
+{
+  "loader": "forge:composite",
+  "parent": "block/block",
+  "textures": {
+    "particle": "mekck:block/mekck/skewering_factory/front"
+  },
+  "children": {
+    "base": {
+      "parent": "mekck:block/mekck/skewering_factory/skewering_factory_base"
+    },
+    "front_led": {
+      "parent": "mekck:vendor/mekanism_extras/block/factory/front_led/nebula"
+    }
+  }
+}

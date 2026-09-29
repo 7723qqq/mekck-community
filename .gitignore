@@ -1,0 +1,46 @@
+# ── 构建产物 ──────────────────────────────────────────
+build/
+out/
+classes/
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# ── Gradle ───────────────────────────────────────────
+.gradle/
+gradle-app.setting
+.gradletasknamecache
+!gradle-wrapper.properties
+
+# ── 开发运行时（ForgeGradle 生成）─────────────────────
+run/
+run-data/
+logs/
+crash-reports/
+
+# ── 本地依赖 jar（第三方模组，不得再分发；补齐方式见 README「构建」）──
+libs/
+
+# ── IDE ──────────────────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+bin/
+.eclipse/
+
+# ── 操作系统 ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── 其它 ─────────────────────────────────────────────
+*.log
+*.tmp
+_mekckf_*/
+
+# ── 手动备份目录（重写前的临时快照，非源码）──────────
+.backup-*/

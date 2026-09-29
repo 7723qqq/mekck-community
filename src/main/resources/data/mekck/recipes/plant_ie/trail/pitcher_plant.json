@@ -1,0 +1,10 @@
+{"type":"immersiveengineering:cloche","input":{
+
+"item":"minecraft:pitcher_pod"
+},
+"render":{"type":"crop","block":"minecraft:potatoes"},
+"results":[{"count":1,"item":
+
+"trailandtales_delight:pitcher_plant"
+
+}],"soil":{"item":"minecraft:dirt"},"time":800}

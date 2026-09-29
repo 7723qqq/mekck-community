@@ -1,0 +1,37 @@
+{
+  "type": "mekck:packaging",
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "iceandfire"
+    }
+  ],
+  "ingredients": [
+    {
+      "tag": "forge:glass/colorless"
+    },
+    {
+      "tag": "forge:glass/colorless"
+    },
+    {
+      "tag": "forge:glass/colorless"
+    },
+    {
+      "tag": "forge:glass/colorless"
+    },
+    {
+      "tag": "forge:glass/colorless"
+    },
+    {
+      "tag": "forge:glass/colorless"
+    },
+    {
+      "tag": "minecraft:planks"
+    }
+  ],
+  "result": {
+    "item": "iceandfire:pixie_jar_empty",
+    "count": 1
+  },
+  "processingTime": 50
+}

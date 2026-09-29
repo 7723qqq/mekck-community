@@ -1,0 +1,8 @@
+{"type":"mekanism:sawing","input":{"ingredient":{
+
+"item":"twilightforest:naga_scale"
+
+}},"mainOutput":{"count":4,
+
+"item":"twilightdelight:naga_chip"
+}}

@@ -1,0 +1,13 @@
+{
+  "variants": {
+    "fluid_logged=empty": {
+      "model": "mekck:block/nothing"
+    },
+    "fluid_logged=water": {
+      "model": "mekck:block/nothing"
+    },
+    "fluid_logged=lava": {
+      "model": "mekck:block/nothing"
+    }
+  }
+}

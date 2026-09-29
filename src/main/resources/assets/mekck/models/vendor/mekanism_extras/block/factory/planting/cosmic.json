@@ -1,0 +1,57 @@
+{
+  "loader": "forge:composite",
+  "gui_light": "side",
+  "parent": "block/block",
+  "textures": {
+    "particle": "mekck:block/vendor/mekanism/block/factory/factory_front_back"
+  },
+  "children": {
+    "base": {
+      "parent": "mekck:block/mekck/planting_cutting_factory/planting_cutting_factory_base"
+    },
+    "led": {
+      "render_type": "cutout",
+      "textures": {
+        "led": "mekck:block/vendor/mekanism_extras/block/factory/cosmic_led"
+      },
+      "elements": [
+        {
+          "name": "front_panel_led",
+          "from": [
+            4.98,
+            29.99,
+            0.01
+          ],
+          "to": [
+            11.02,
+            30.99,
+            1.01
+          ],
+          "faces": {
+            "north": {
+              "uv": [
+                0,
+                2,
+                6,
+                3
+              ],
+              "texture": "#led",
+              "cullface": "north"
+            },
+            "up": {
+              "uv": [
+                0,
+                2,
+                6,
+                3
+              ],
+              "rotation": 180,
+              "texture": "#led",
+              "cullface": "up"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

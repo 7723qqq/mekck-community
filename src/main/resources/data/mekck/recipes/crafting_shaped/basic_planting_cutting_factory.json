@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "forge:ingots/iron"
+    },
+    "C": {
+      "tag": "forge:circuits/basic"
+    },
+    "I": {
+      "tag": "mekanism:alloys/basic"
+    },
+    "P": {
+      "item": "mekck:planting_cutting_station"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "IPI",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:basic_planting_cutting_factory"
+  },
+  "show_notification": true
+}

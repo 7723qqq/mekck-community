@@ -1,0 +1,18 @@
+{
+  "loader": "forge:composite",
+  "parent": "block/block",
+  "textures": {
+    "particle": "mekck:block/mekck/central_kitchen/front"
+  },
+  "children": {
+    "base": {
+      "parent": "mekck:block/mekck/central_kitchen/central_kitchen_base",
+      "textures": {
+        "front": "mekck:block/mekck/central_kitchen/front"
+      }
+    },
+    "front_led": {
+      "parent": "mekck:vendor/mekanism_extras/block/factory/front_led/infinite"
+    }
+  }
+}

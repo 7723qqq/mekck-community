@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/chocolate_cannon/right",
+    "front": "mekck:block/mekck/chocolate_cannon/front",
+    "west": "mekck:block/mekck/chocolate_cannon/right",
+    "east": "mekck:block/mekck/chocolate_cannon/left",
+    "south": "mekck:block/mekck/chocolate_cannon/back",
+    "up": "mekck:block/mekck/chocolate_cannon/top",
+    "down": "mekck:block/mekck/chocolate_cannon/bottom"
+  }
+}

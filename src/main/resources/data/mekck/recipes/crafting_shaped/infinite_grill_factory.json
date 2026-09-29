@@ -1,0 +1,30 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "mekanism_extras:alloys/spectrum"
+    },
+    "C": {
+      "tag": "forge:circuits/infinite"
+    },
+    "I": {
+      "tag": "forge:pellets/plutonium"
+    },
+    "J": {
+      "tag": "forge:pellets/polonium"
+    },
+    "P": {
+      "item": "mekck:cosmic_grill_factory"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "IPJ",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:infinite_grill_factory"
+  },
+  "show_notification": true
+}

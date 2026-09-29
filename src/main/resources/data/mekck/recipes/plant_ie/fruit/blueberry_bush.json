@@ -1,0 +1,10 @@
+{"type":"immersiveengineering:cloche","input":{
+
+"item":"fruitsdelight:blueberry_bush"
+},
+"render":{"type":"crop","block":"minecraft:potatoes"},
+"results":[{"count":2,"item":
+
+"fruitsdelight:blueberry"
+
+}],"soil":{"item":"minecraft:dirt"},"time":800}

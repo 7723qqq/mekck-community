@@ -1,0 +1,22 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "item": "minecraft:carrot"
+      },
+      {
+        "tag": "forge:crops/cabbage"
+      },
+      {
+        "item": "minecraft:carrot"
+      },
+      {
+        "tag": "forge:crops/tomato"
+      }
+    ],
+    "processingTime": 100,
+    "output": {
+      "item": "candlelight:fresh_garden_salad",
+      "count": 2
+    }
+  }

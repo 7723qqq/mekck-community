@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/stove/stove",
+  "textures": {
+    "front": "mekck:block/mekck/stove/front_active",
+    "west": "mekck:block/mekck/stove/right_active",
+    "east": "mekck:block/mekck/stove/left_active",
+    "south": "mekck:block/mekck/stove/back_active",
+    "up": "mekck:block/mekck/stove/top_active"
+  }
+}

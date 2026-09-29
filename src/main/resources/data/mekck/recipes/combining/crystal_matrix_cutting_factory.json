@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":1,"ingredient":{"item":"avaritia_delight:crystal_knife"}},"mainInput":{"ingredient":{
+    
+"item":"mekck:blaze_cutting_factory"
+
+}},"output":{
+    
+"count":1,"item":"mekck:crystal_matrix_cutting_factory"}}

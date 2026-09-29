@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":3,"ingredient":{"item":"minecraft:bowl"}},"mainInput":{"ingredient":{
+    
+"item":"twilightdelight:lily_chicken_block"
+
+}},"output":{
+    
+"count":4,"item":"twilightdelight:plate_of_lily_chicken"}}

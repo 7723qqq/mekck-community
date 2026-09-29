@@ -1,0 +1,18 @@
+{
+  "loader": "forge:composite",
+  "parent": "block/block",
+  "textures": {
+    "particle": "mekck:block/mekck/grinding_factory/front"
+  },
+  "children": {
+    "base": {
+      "parent": "mekck:block/mekck/grinding_factory/grinding_factory_base",
+      "textures": {
+        "front": "mekck:block/mekck/grinding_factory/front"
+      }
+    },
+    "front_led": {
+      "parent": "mekck:vendor/mekanism_extras/block/factory/front_led/blaze"
+    }
+  }
+}

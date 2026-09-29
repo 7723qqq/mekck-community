@@ -1,0 +1,22 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "tag": "forge:strawberries"
+      },
+      {
+        "tag": "forge:crops/tomato"
+      },
+      {
+        "tag": "forge:crops/onion"
+      },
+      {
+        "tag": "forge:crops/cabbage"
+      }
+    ],
+    "processingTime": 100,
+    "output": {
+      "item": "farm_and_charm:farmer_salad",
+      "count": 2
+    }
+  }

@@ -1,0 +1,37 @@
+{
+  "type": "mekck:packaging",
+  "conditions": [
+    {
+      "condition": "minecraft:all_of",
+      "terms": [
+        {
+          "condition": "forge:mod_loaded",
+          "modid": "create"
+        },
+        {
+          "condition": "forge:mod_loaded",
+          "modid": "createcafe"
+        }
+      ]
+    }
+  ],
+  "ingredients": [
+    {
+      "tag": "forge:glass"
+    },
+    {
+      "tag": "forge:glass"
+    },
+    {
+      "tag": "forge:glass"
+    },
+    {
+      "item": "create:polished_cut_limestone_slab"
+    }
+  ],
+  "result": {
+    "item": "createcafe:iced_coffee_cup",
+    "count": 1
+  },
+  "processingTime": 50
+}

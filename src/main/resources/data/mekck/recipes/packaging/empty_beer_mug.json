@@ -1,0 +1,22 @@
+{
+  "type": "mekck:packaging",
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "drinkbeer"
+    }
+  ],
+  "ingredients": [
+    {
+      "tag": "minecraft:logs"
+    },
+    {
+      "item": "minecraft:iron_ingot"
+    }
+  ],
+  "result": {
+    "item": "drinkbeer:empty_beer_mug",
+    "count": 8
+  },
+  "processingTime": 50
+}

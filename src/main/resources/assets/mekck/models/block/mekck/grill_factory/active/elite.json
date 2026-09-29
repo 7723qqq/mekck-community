@@ -1,0 +1,18 @@
+{
+  "loader": "forge:composite",
+  "parent": "block/block",
+  "textures": {
+    "particle": "mekck:block/mekck/grill_factory/front"
+  },
+  "children": {
+    "base": {
+      "parent": "mekck:block/mekck/grill_factory/grill_factory_base",
+      "textures": {
+        "front": "mekck:block/mekck/grill_factory/front"
+      }
+    },
+    "front_led": {
+      "parent": "mekck:vendor/mekanism/block/factory/front_led/elite"
+    }
+  }
+}

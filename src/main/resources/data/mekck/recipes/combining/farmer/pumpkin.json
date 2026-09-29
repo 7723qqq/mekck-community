@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":4,"ingredient":{"item":"minecraft:bowl"}},"mainInput":{"ingredient":{
+    
+"item":"farmersdelight:stuffed_pumpkin_block"
+
+}},"output":{
+    
+"count":4,"item":"farmersdelight:stuffed_pumpkin"}}

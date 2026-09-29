@@ -1,0 +1,32 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "tag": "forge:pasta/raw_pasta"
+      },
+      {
+        "item": "farmersdelight:onion"
+      },
+      {
+        "item": "minecraft:brown_mushroom"
+      },
+      {
+        "item": "minecraft:potato"
+      },
+      {
+        "tag": "forge:berries"
+      },
+      {
+        "tag": "forge:vegetables"
+      },
+      {
+        "item": "minecraft:pumpkin"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:water\",Amount:1000}",
+    "processingTime": 400,
+    "output": {
+      "item": "farmersdelight:stuffed_pumpkin_block",
+      "count": 1
+    }
+  }

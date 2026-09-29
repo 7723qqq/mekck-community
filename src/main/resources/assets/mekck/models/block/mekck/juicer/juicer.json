@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/juicer/right",
+    "front": "mekck:block/mekck/juicer/front",
+    "west": "mekck:block/mekck/juicer/right",
+    "east": "mekck:block/mekck/juicer/left",
+    "south": "mekck:block/mekck/juicer/back",
+    "up": "mekck:block/mekck/juicer/top",
+    "down": "mekck:block/mekck/juicer/bottom"
+  }
+}

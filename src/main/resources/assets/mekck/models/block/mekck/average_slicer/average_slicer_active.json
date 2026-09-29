@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/average_slicer/average_slicer",
+  "textures": {
+    "front": "mekck:block/mekck/average_slicer/front_active",
+    "west": "mekck:block/mekck/average_slicer/right_active",
+    "east": "mekck:block/mekck/average_slicer/left_active",
+    "south": "mekck:block/mekck/average_slicer/back_active",
+    "up": "mekck:block/mekck/average_slicer/top_active"
+  }
+}

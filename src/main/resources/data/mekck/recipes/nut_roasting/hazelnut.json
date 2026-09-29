@@ -1,0 +1,10 @@
+{
+  "type": "mekck:nut_roasting",
+  "ingredient": {
+    "item": "mekck:hazelnut"
+  },
+  "result": {
+    "item": "mekck:roasted_hazelnut",
+    "count": 1
+  }
+}

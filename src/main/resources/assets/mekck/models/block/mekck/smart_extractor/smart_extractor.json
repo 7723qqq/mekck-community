@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/smart_extractor/right",
+    "front": "mekck:block/mekck/smart_extractor/front",
+    "west": "mekck:block/mekck/smart_extractor/right",
+    "east": "mekck:block/mekck/smart_extractor/left",
+    "south": "mekck:block/mekck/smart_extractor/back",
+    "up": "mekck:block/mekck/smart_extractor/top",
+    "down": "mekck:block/mekck/smart_extractor/bottom"
+  }
+}

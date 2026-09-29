@@ -1,0 +1,15 @@
+{
+  "loader": "forge:composite",
+  "parent": "block/block",
+  "textures": {
+    "particle": "mekck:block/mekck/ice_factory/ice_factory_front"
+  },
+  "children": {
+    "base": {
+      "parent": "mekck:block/mekck/ice_factory/ice_factory_base"
+    },
+    "front_led": {
+      "parent": "mekck:vendor/mekanism_extras/block/factory/front_led/infinite"
+    }
+  }
+}

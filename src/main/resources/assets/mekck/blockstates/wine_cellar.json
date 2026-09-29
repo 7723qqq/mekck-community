@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "mekck:block/mekck/wine_cellar/wine_cellar"
+    },
+    "facing=south": {
+      "model": "mekck:block/mekck/wine_cellar/wine_cellar",
+      "y": 180
+    },
+    "facing=east": {
+      "model": "mekck:block/mekck/wine_cellar/wine_cellar",
+      "y": 90
+    },
+    "facing=west": {
+      "model": "mekck:block/mekck/wine_cellar/wine_cellar",
+      "y": -90
+    }
+  }
+}

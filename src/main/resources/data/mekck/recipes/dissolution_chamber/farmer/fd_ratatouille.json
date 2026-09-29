@@ -1,0 +1,26 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "item": "farmersdelight:tomato"
+      },
+      {
+        "item": "farmersdelight:onion"
+      },
+      {
+        "item": "minecraft:beetroot"
+      },
+      {
+        "tag": "forge:vegetables"
+      },
+      {
+        "item": "minecraft:bowl"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:water\",Amount:125}",
+    "processingTime": 100,
+    "output": {
+      "item": "farmersdelight:ratatouille",
+      "count": 1
+    }
+  }

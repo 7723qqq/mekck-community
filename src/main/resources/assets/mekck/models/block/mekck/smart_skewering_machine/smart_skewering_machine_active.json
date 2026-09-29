@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/smart_skewering_machine/smart_skewering_machine",
+  "textures": {
+    "front": "mekck:block/mekck/smart_skewering_machine/front_active",
+    "west": "mekck:block/mekck/smart_skewering_machine/right_active",
+    "east": "mekck:block/mekck/smart_skewering_machine/left_active",
+    "south": "mekck:block/mekck/smart_skewering_machine/back_active",
+    "up": "mekck:block/mekck/smart_skewering_machine/top_active"
+  }
+}

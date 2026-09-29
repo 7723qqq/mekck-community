@@ -1,0 +1,12 @@
+{
+  "variants": {
+    "facing=north,active=false": { "model": "mekck:block/mekck/bakery_oven/bakery_oven" },
+    "facing=north,active=true": { "model": "mekck:block/mekck/bakery_oven/bakery_oven_active" },
+    "facing=south,active=false": { "model": "mekck:block/mekck/bakery_oven/bakery_oven", "y": 180 },
+    "facing=south,active=true": { "model": "mekck:block/mekck/bakery_oven/bakery_oven_active", "y": 180 },
+    "facing=east,active=false": { "model": "mekck:block/mekck/bakery_oven/bakery_oven", "y": 90 },
+    "facing=east,active=true": { "model": "mekck:block/mekck/bakery_oven/bakery_oven_active", "y": 90 },
+    "facing=west,active=false": { "model": "mekck:block/mekck/bakery_oven/bakery_oven", "y": -90 },
+    "facing=west,active=true": { "model": "mekck:block/mekck/bakery_oven/bakery_oven_active", "y": -90 }
+  }
+}

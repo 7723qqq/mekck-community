@@ -1,0 +1,12 @@
+{
+  "type": "mekck:beverage_assembly",
+  "conditions": [
+    {"condition": "forge:mod_loaded", "modid": "createcafe"}
+  ],
+  "ingredients": [
+    {"item": "createcafe:empty_boba_cup"},
+    {"item": "createcafe:boba"}
+  ],
+  "fluid": { "fluid": "createcafe:raspberry_tea", "amount": 250 },
+  "result": { "item": "createcafe:raspberry_milk_tea", "count": 1 }
+}

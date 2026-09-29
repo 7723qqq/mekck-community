@@ -1,0 +1,22 @@
+{
+  "type": "mekck:packaging",
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "coffeecraft"
+    }
+  ],
+  "ingredients": [
+    {
+      "item": "coffeecraft:white_mug"
+    },
+    {
+      "item": "minecraft:pink_dye"
+    }
+  ],
+  "result": {
+    "item": "coffeecraft:pink_mug",
+    "count": 1
+  },
+  "processingTime": 50
+}

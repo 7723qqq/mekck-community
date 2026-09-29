@@ -1,0 +1,23 @@
+{
+  "type": "forge:conditional",
+  "recipes": [
+    {
+      "conditions": [
+        {
+          "type": "forge:mod_loaded",
+          "modid": "createcafe"
+        }
+      ],
+      "recipe": {
+        "type": "kaleidoscope_cookery:millstone",
+        "ingredient": {
+          "item": "createcafe:oreo"
+        },
+        "result": {
+          "item": "createcafe:oreo_crushed",
+          "count": 2
+        }
+      }
+    }
+  ]
+}

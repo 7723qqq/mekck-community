@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":3,"ingredient":{"item":"minecraft:bowl"}},"mainInput":{"ingredient":{
+    
+"item":"oceansdelight:guardian_soup"
+
+}},"output":{
+    
+"count":4,"item":"oceansdelight:bowl_of_guardian_soup"}}

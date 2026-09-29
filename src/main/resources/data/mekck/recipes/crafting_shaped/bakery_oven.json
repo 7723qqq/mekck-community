@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "forge:ingots/iron"
+    },
+    "B": {
+      "item": "bakery:baker_station"
+    },
+    "C": {
+      "tag": "forge:circuits/basic"
+    },
+    "S": {
+      "item": "mekanism:steel_casing"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "BSB",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:bakery_oven"
+  },
+  "show_notification": true
+}

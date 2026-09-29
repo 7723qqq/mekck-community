@@ -1,0 +1,19 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "tag": "farm_and_charm:raw_beef"
+      },
+      {
+        "tag": "farm_and_charm:cooked_beef"
+      },
+      {
+        "tag": "forge:bones"
+      }
+    ],
+    "processingTime": 100,
+    "output": {
+      "item": "farm_and_charm:dog_food",
+      "count": 4
+    }
+  }

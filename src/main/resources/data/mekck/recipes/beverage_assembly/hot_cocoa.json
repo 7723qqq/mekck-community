@@ -1,0 +1,30 @@
+{
+  "type": "mekck:beverage_assembly",
+  "ingredients": [
+    {
+      "item": "minecraft:glass_bottle"
+    }
+  ],
+  "fluid": {
+    "fluid": "farmersrespite:hot_cocoa",
+    "amount": 250
+  },
+  "result": {
+    "item": "farmersdelight:hot_cocoa"
+  },
+  "conditions": [
+    {
+      "condition": "minecraft:all_of",
+      "terms": [
+        {
+          "condition": "forge:mod_loaded",
+          "modid": "farmersdelight"
+        },
+        {
+          "condition": "forge:mod_loaded",
+          "modid": "farmersrespite"
+        }
+      ]
+    }
+  ]
+}

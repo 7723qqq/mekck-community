@@ -1,0 +1,5 @@
+{
+  "mezz.jei.api.IModPlugin": [
+    "cn.ism.mekck.integration.jei.JEIPlugin"
+  ]
+}

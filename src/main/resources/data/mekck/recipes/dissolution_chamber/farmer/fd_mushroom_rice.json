@@ -1,0 +1,29 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "item": "minecraft:mushroom_stew"
+      },
+      {
+        "item": "minecraft:mushroom_stew"
+      },
+      {
+        "tag": "forge:crops/rice"
+      },
+      {
+        "tag": "forge:crops/rice"
+      },
+      {
+        "tag": "forge:vegetables"
+      },
+      {
+        "tag": "forge:vegetables"
+      }
+    ],
+    "inputFluid": "{FluidName:\"pneumaticcraft:vegetable_oil\",Amount:50}",
+    "processingTime": 100,
+    "output": {
+      "item": "farmersdelight:mushroom_rice",
+      "count": 2
+    }
+  }

@@ -1,0 +1,35 @@
+  {
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "item": "farmersdelight:pumpkin_slice"
+      },
+      {
+        "item": "farmersdelight:pumpkin_slice"
+      },
+      {
+        "tag": "forge:raw_pork"
+      },
+      {
+        "tag": "forge:raw_pork"
+      },
+      {
+        "item": "farmersdelight:cabbage_leaf"
+      },
+      {
+        "item": "farmersdelight:cabbage_leaf"
+      },
+      {
+        "item": "minecraft:bowl"
+      },
+      {
+        "item": "minecraft:bowl"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:milk\",Amount:500}",
+    "processingTime": 100,
+    "output": {
+      "item": "farmersdelight:pumpkin_soup",
+      "count": 2
+    }
+  }

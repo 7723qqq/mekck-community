@@ -1,0 +1,10 @@
+{"type":"immersiveengineering:cloche","input":{
+
+"item":"alexscaves:curly_fern"
+},
+"render":{"type":"crop","block":"minecraft:potatoes"},
+"results":[{"count":3,"item":
+
+"alexscaves:fiddlehead"
+
+}],"soil":{"item":"minecraft:dirt"},"time":800}

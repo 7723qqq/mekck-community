@@ -1,0 +1,10 @@
+{"type":"immersiveengineering:cloche","input":{
+
+"item":"fruitsdelight:hamimelon_seeds"
+},
+"render":{"type":"crop","block":"minecraft:potatoes"},
+"results":[{"count":1,"item":
+
+"fruitsdelight:hamimelon"
+
+}],"soil":{"item":"minecraft:dirt"},"time":800}

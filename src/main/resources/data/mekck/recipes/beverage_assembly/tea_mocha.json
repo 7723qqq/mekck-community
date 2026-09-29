@@ -1,0 +1,21 @@
+{
+  "type": "mekck:beverage_assembly",
+  "ingredients": [
+    {
+      "item": "minecraft:glass_bottle"
+    }
+  ],
+  "fluid": {
+    "fluid": "youkaishomecoming:tea_mocha",
+    "amount": 250
+  },
+  "result": {
+    "item": "youkaishomecoming:tea_mocha"
+  },
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "youkaishomecoming"
+    }
+  ]
+}

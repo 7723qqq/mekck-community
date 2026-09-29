@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/wine_cellar/right",
+    "front": "mekck:block/mekck/wine_cellar/front",
+    "west": "mekck:block/mekck/wine_cellar/right",
+    "east": "mekck:block/mekck/wine_cellar/left",
+    "south": "mekck:block/mekck/wine_cellar/back",
+    "up": "mekck:block/mekck/wine_cellar/top",
+    "down": "mekck:block/mekck/wine_cellar/bottom"
+  }
+}

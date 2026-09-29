@@ -1,0 +1,16 @@
+{
+  "type": "mekmm:planting",
+  "itemInput": {
+    "ingredient": {
+      "item": "trailandtales_delight:lantern_fruit_seeds"
+    }
+  },
+  "gasInput": {
+    "amount": 1,
+    "gas": "mekmm:nutrient_solution"
+  },
+  "mainOutput": {
+    "count": 3,
+    "item": "trailandtales_delight:lantern_fruit"
+  }
+}

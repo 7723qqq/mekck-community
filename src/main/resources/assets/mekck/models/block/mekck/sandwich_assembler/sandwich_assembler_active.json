@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/sandwich_assembler/sandwich_assembler",
+  "textures": {
+    "front": "mekck:block/mekck/sandwich_assembler/front_active",
+    "west": "mekck:block/mekck/sandwich_assembler/right_active",
+    "east": "mekck:block/mekck/sandwich_assembler/left_active",
+    "south": "mekck:block/mekck/sandwich_assembler/back_active",
+    "up": "mekck:block/mekck/sandwich_assembler/top_active"
+  }
+}

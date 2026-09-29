@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/sushi_maker/right",
+    "front": "mekck:block/mekck/sushi_maker/front",
+    "west": "mekck:block/mekck/sushi_maker/right",
+    "east": "mekck:block/mekck/sushi_maker/left",
+    "south": "mekck:block/mekck/sushi_maker/back",
+    "up": "mekck:block/mekck/sushi_maker/top",
+    "down": "mekck:block/mekck/sushi_maker/bottom"
+  }
+}

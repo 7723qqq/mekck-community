@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "G": {
+      "tag": "forge:glass/silica"
+    },
+    "A": {
+      "tag": "mekanism:alloys/infused"
+    },
+    "#": {
+      "item": "minecraft:packed_ice"
+    }
+  },
+  "pattern": [
+    " G ",
+    "A#A",
+    " G "
+  ],
+  "result": {
+    "item": "mekck:cold_brew_upgrade"
+  },
+  "show_notification": true
+}

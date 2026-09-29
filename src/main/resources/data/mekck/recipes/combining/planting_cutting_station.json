@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":1,"ingredient":{"item":"mekck:universal_cutting_machine"}},"mainInput":{"ingredient":{
+    
+"item":"mekmm:planting_station"
+
+}},"output":{
+    
+"count":1,"item":"mekck:planting_cutting_station"}}

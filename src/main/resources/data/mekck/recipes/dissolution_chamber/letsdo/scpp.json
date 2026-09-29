@@ -1,0 +1,22 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "item": "minecraft:carrot"
+      },
+      {
+        "tag": "forge:crops/tomato"
+      },
+      {
+        "item": "minecraft:potato"
+      },
+      {
+        "item": "minecraft:bowl"
+      }
+    ],
+    "processingTime": 100,
+    "output": {
+      "item": "candlelight:harvest_plate",
+      "count": 3
+    }
+  }

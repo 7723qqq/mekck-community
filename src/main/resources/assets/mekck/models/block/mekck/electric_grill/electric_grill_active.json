@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/electric_grill/electric_grill",
+  "textures": {
+    "front": "mekck:block/mekck/electric_grill/front_active",
+    "west": "mekck:block/mekck/electric_grill/right_active",
+    "east": "mekck:block/mekck/electric_grill/left_active",
+    "south": "mekck:block/mekck/electric_grill/back_active",
+    "up": "mekck:block/mekck/electric_grill/top_active"
+  }
+}

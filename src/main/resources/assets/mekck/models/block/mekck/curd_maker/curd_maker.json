@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/curd_maker/right",
+    "front": "mekck:block/mekck/curd_maker/front",
+    "west": "mekck:block/mekck/curd_maker/right",
+    "east": "mekck:block/mekck/curd_maker/left",
+    "south": "mekck:block/mekck/curd_maker/back",
+    "up": "mekck:block/mekck/curd_maker/top",
+    "down": "mekck:block/mekck/curd_maker/bottom"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "cn.ism.mekck.mixin",
+  "plugin": "cn.ism.mekck.mixin.MekCkMixinConfigPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "MixinCuttingBoardBlockEntity",
+    "MixinExtremeSmithingMenu"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "parent": "mekck:vendor/mekanism/block/crusher",
+  "textures": {
+    "front": "mekck:block/vendor/mekanism/block/crusher/front_active",
+    "west": "mekck:block/vendor/mekanism/block/crusher/side_active",
+    "east": "mekck:block/vendor/mekanism/block/crusher/side_active"
+  }
+}

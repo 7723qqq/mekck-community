@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "level=0": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=1": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=2": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=3": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=4": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=5": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=6": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=7": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=8": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=9": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=10": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=11": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=12": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=13": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=14": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" },
+    "level=15": { "model": "mekck:block/fluid/hazelnut_cocoa_paste" }
+  }
+}

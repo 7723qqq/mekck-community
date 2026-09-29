@@ -1,0 +1,20 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "item": "minecraft:wheat"
+      },
+      {
+        "item": "minecraft:sugar"
+      },
+      {
+        "tag": "forge:eggs"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:milk\",Amount:1000}",
+    "processingTime": 100,
+    "output": {
+      "item": "bakery:cake_dough",
+      "count": 12
+    }
+  }

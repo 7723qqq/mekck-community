@@ -1,0 +1,35 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "item": "farmersdelight:minced_beef"
+      },
+      {
+        "item": "farmersdelight:minced_beef"
+      },
+      {
+        "item": "minecraft:carrot"
+      },
+      {
+        "item": "minecraft:carrot"
+      },
+      {
+        "item": "minecraft:potato"
+      },
+      {
+        "item": "minecraft:potato"
+      },
+      {
+        "item": "minecraft:bowl"
+      },
+      {
+        "item": "minecraft:bowl"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:water\",Amount:250}",
+    "processingTime": 100,
+    "output": {
+      "item": "farmersdelight:beef_stew",
+      "count": 2
+    }
+  }

@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "forge:ingots/osmium"
+    },
+    "C": {
+      "tag": "forge:circuits/advanced"
+    },
+    "I": {
+      "tag": "mekanism:alloys/infused"
+    },
+    "P": {
+      "item": "mekck:basic_skewering_factory"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "IPI",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:advanced_skewering_factory"
+  },
+  "show_notification": true
+}

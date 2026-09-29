@@ -1,0 +1,21 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "tag": "farm_and_charm:raw_chicken"
+      },{
+        "tag": "farm_and_charm:raw_pork"
+      },
+      {
+        "tag": "farm_and_charm:cooked_beef"
+      },
+      {
+        "tag": "farm_and_charm:raw_fishes"
+      }
+    ],
+    "processingTime": 100,
+    "output": {
+      "item": "farm_and_charm:cat_food",
+      "count": 6
+    }
+  }

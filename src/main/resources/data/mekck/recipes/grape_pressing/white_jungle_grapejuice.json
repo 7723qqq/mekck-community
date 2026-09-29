@@ -1,0 +1,15 @@
+{
+  "type": "mekck:grape_pressing",
+  "ingredients": [
+    {
+      "item": "vinery:jungle_grapes_white",
+      "count": 3
+    },
+    {
+      "item": "vinery:wine_bottle"
+    }
+  ],
+  "result": {
+    "item": "vinery:white_jungle_grapejuice"
+  }
+}

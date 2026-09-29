@@ -1,0 +1,18 @@
+{
+  "loader": "forge:composite",
+  "parent": "block/block",
+  "textures": {
+    "particle": "mekck:block/mekck/cooking_factory/front"
+  },
+  "children": {
+    "base": {
+      "parent": "mekck:block/mekck/cooking_factory/cooking_factory_base",
+      "textures": {
+        "front": "mekck:block/mekck/cooking_factory/front"
+      }
+    },
+    "front_led": {
+      "parent": "mekck:vendor/mekanism_extras/block/factory/front_led/crystal_matrix"
+    }
+  }
+}

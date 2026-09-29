@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/steamer/right",
+    "front": "mekck:block/mekck/steamer/front",
+    "west": "mekck:block/mekck/steamer/right",
+    "east": "mekck:block/mekck/steamer/left",
+    "south": "mekck:block/mekck/steamer/back",
+    "up": "mekck:block/mekck/steamer/top",
+    "down": "mekck:block/mekck/steamer/bottom"
+  }
+}

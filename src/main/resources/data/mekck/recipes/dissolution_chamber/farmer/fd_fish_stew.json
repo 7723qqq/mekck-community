@@ -1,0 +1,29 @@
+  {
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "item": "aquaculture:fish_fillet_raw"
+      },
+      {
+        "item": "aquaculture:fish_fillet_raw"
+      },
+      {
+        "item": "farmersdelight:tomato_sauce"
+      },
+      {
+        "item": "farmersdelight:tomato_sauce"
+      },
+      {
+        "item": "farmersdelight:onion"
+      },
+      {
+        "item": "farmersdelight:onion"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:water\",Amount:250}",
+    "processingTime": 100,
+    "output": {
+      "item": "farmersdelight:fish_stew",
+      "count": 2
+    }
+  }

@@ -1,0 +1,26 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "item": "minecraft:carrot"
+      },
+      {
+        "item": "minecraft:potato"
+      },
+      {
+        "item": "minecraft:beetroot"
+      },
+      {
+        "item": "farmersdelight:cabbage_leaf"
+      },
+      {
+        "item": "minecraft:bowl"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:water\",Amount:125}",
+    "processingTime": 100,
+    "output": {
+      "item": "farmersdelight:vegetable_soup",
+      "count": 1
+    }
+  }

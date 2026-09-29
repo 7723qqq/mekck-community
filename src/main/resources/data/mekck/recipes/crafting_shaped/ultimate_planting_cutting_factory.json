@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "forge:gems/diamond"
+    },
+    "C": {
+      "tag": "forge:circuits/ultimate"
+    },
+    "I": {
+      "tag": "mekanism:alloys/atomic"
+    },
+    "P": {
+      "item": "mekck:elite_planting_cutting_factory"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "IPI",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:ultimate_planting_cutting_factory"
+  },
+  "show_notification": true
+}

@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/winery/winery",
+  "textures": {
+    "front": "mekck:block/mekck/winery/front_active",
+    "west": "mekck:block/mekck/winery/right_active",
+    "east": "mekck:block/mekck/winery/left_active",
+    "south": "mekck:block/mekck/winery/back_active",
+    "up": "mekck:block/mekck/winery/top_active"
+  }
+}

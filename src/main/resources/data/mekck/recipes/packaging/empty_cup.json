@@ -1,0 +1,19 @@
+{
+  "type": "mekck:packaging",
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "kaleidoscope_cookery"
+    }
+  ],
+  "ingredients": [
+    {
+      "item": "minecraft:flower_pot"
+    }
+  ],
+  "result": {
+    "item": "kaleidoscope_cookery:empty_cup",
+    "count": 1
+  },
+  "processingTime": 50
+}

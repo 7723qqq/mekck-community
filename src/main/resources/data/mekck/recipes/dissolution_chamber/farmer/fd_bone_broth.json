@@ -1,0 +1,29 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "item": "minecraft:bone"
+      },
+      {
+        "item": "minecraft:bone"
+      },
+      {
+        "tag": "forge:mushrooms"
+      },
+      {
+        "tag": "forge:mushrooms"
+      },
+      {
+        "item": "minecraft:bowl"
+      },
+      {
+        "item": "minecraft:bowl"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:water\",Amount:250}",
+    "processingTime": 100,
+    "output": {
+      "item": "farmersdelight:bone_broth",
+      "count": 2
+    }
+  }

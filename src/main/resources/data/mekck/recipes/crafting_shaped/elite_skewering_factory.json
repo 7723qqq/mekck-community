@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "forge:ingots/gold"
+    },
+    "C": {
+      "tag": "forge:circuits/elite"
+    },
+    "I": {
+      "tag": "mekanism:alloys/reinforced"
+    },
+    "P": {
+      "item": "mekck:advanced_skewering_factory"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "IPI",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:elite_skewering_factory"
+  },
+  "show_notification": true
+}

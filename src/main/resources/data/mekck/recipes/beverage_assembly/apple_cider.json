@@ -1,0 +1,30 @@
+{
+  "type": "mekck:beverage_assembly",
+  "ingredients": [
+    {
+      "item": "minecraft:glass_bottle"
+    }
+  ],
+  "fluid": {
+    "fluid": "farmersrespite:apple_cider",
+    "amount": 250
+  },
+  "result": {
+    "item": "farmersdelight:apple_cider"
+  },
+  "conditions": [
+    {
+      "condition": "minecraft:all_of",
+      "terms": [
+        {
+          "condition": "forge:mod_loaded",
+          "modid": "farmersdelight"
+        },
+        {
+          "condition": "forge:mod_loaded",
+          "modid": "farmersrespite"
+        }
+      ]
+    }
+  ]
+}

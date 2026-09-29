@@ -1,0 +1,25 @@
+{
+  "type": "mekck:packaging",
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "ccw"
+    }
+  ],
+  "ingredients": [
+    {
+      "item": "minecraft:paper"
+    },
+    {
+      "item": "minecraft:paper"
+    },
+    {
+      "item": "minecraft:paper"
+    }
+  ],
+  "result": {
+    "item": "ccw:milk_packaging",
+    "count": 1
+  },
+  "processingTime": 50
+}

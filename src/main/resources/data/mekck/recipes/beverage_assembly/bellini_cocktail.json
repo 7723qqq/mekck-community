@@ -1,0 +1,21 @@
+{
+  "type": "mekck:beverage_assembly",
+  "ingredients": [
+    {
+      "item": "minecraft:glass_bottle"
+    }
+  ],
+  "fluid": {
+    "fluid": "fruitsdelight:bellini_cocktail",
+    "amount": 250
+  },
+  "result": {
+    "item": "fruitsdelight:bellini_cocktail"
+  },
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "fruitsdelight"
+    }
+  ]
+}

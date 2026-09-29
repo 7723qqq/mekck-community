@@ -1,0 +1,26 @@
+{
+  "display": {
+    "icon": {
+      "item": "mekck:universal_cutting_machine"
+    },
+    "title": {
+      "translate": "advancements.mekck.network_chef_apprentice.title"
+    },
+    "description": {
+      "translate": "advancements.mekck.network_chef_apprentice.description"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "parent": "mekck:root",
+  "criteria": {
+    "connect": {
+      "trigger": "mekck:network_connected"
+    }
+  },
+  "rewards": {
+    "experience": 50
+  }
+}

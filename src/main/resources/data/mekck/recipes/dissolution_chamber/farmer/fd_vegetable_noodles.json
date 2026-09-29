@@ -1,0 +1,29 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "item": "minecraft:carrot"
+      },
+      {
+        "item": "minecraft:brown_mushroom"
+      },
+      {
+        "tag": "forge:pasta/raw_pasta"
+      },
+      {
+        "item": "farmersdelight:cabbage_leaf"
+      },
+      {
+        "tag": "forge:vegetables"
+      },
+      {
+        "item": "minecraft:bowl"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:water\",Amount:125}",
+    "processingTime": 100,
+    "output": {
+      "item": "farmersdelight:vegetable_noodles",
+      "count": 1
+    }
+  }

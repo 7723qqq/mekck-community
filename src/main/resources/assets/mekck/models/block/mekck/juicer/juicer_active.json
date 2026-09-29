@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/juicer/juicer",
+  "textures": {
+    "front": "mekck:block/mekck/juicer/front_active",
+    "west": "mekck:block/mekck/juicer/right_active",
+    "east": "mekck:block/mekck/juicer/left_active",
+    "south": "mekck:block/mekck/juicer/back_active",
+    "up": "mekck:block/mekck/juicer/top_active"
+  }
+}

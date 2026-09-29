@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/dehydrator/dehydrator",
+  "textures": {
+    "front": "mekck:block/mekck/dehydrator/front_active",
+    "west": "mekck:block/mekck/dehydrator/right_active",
+    "east": "mekck:block/mekck/dehydrator/left_active",
+    "south": "mekck:block/mekck/dehydrator/back_active",
+    "up": "mekck:block/mekck/dehydrator/top_active"
+  }
+}

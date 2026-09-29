@@ -1,0 +1,10 @@
+{"type":"immersiveengineering:cloche","input":{
+
+"item":"alexscaves:flytrap"
+},
+"render":{"type":"crop","block":"minecraft:potatoes"},
+"results":[{"count":3,"item":
+
+"alexscaves:flytrap"
+
+}],"soil":{"item":"minecraft:dirt"},"time":800}

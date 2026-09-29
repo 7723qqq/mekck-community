@@ -1,0 +1,18 @@
+{
+  "type": "mekck:extracting",
+  "ingredients": [
+    {
+      "tag": "mekck:mekck_chocolate"
+    },
+    {
+      "item": "mekck:hazelnut_powder"
+    },
+    {
+      "item": "minecraft:sugar"
+    }
+  ],
+  "fluidResult": {
+    "fluid": "mekck:hazelnut_cocoa_paste",
+    "amount": 50
+  }
+}

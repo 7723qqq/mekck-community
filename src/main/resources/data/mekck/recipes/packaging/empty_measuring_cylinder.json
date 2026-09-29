@@ -1,0 +1,22 @@
+{
+  "type": "mekck:packaging",
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "ice_and_fire_delight"
+    }
+  ],
+  "ingredients": [
+    {
+      "tag": "forge:glass"
+    },
+    {
+      "tag": "forge:glass"
+    }
+  ],
+  "result": {
+    "item": "ice_and_fire_delight:empty_measuring_cylinder",
+    "count": 1
+  },
+  "processingTime": 50
+}

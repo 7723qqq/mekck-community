@@ -1,0 +1,23 @@
+{
+  "display": {
+    "icon": {
+      "item": "mekck:universal_cutting_machine"
+    },
+    "title": {
+      "translate": "advancements.mekck.root.title"
+    },
+    "description": {
+      "translate": "advancements.mekck.root.description"
+    },
+    "frame": "task",
+    "show_toast": false,
+    "announce_to_chat": false,
+    "hidden": false,
+    "background": "minecraft:textures/gui/advancements/backgrounds/stone.png"
+  },
+  "criteria": {
+    "connect": {
+      "trigger": "mekck:network_connected"
+    }
+  }
+}

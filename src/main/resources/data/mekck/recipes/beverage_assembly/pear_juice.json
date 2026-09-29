@@ -1,0 +1,21 @@
+{
+  "type": "mekck:beverage_assembly",
+  "ingredients": [
+    {
+      "item": "minecraft:glass_bottle"
+    }
+  ],
+  "fluid": {
+    "fluid": "fruitsdelight:pear_juice",
+    "amount": 250
+  },
+  "result": {
+    "item": "fruitsdelight:pear_juice"
+  },
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "fruitsdelight"
+    }
+  ]
+}

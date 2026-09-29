@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":3,"ingredient":{"item":"minecraft:bowl"}},"mainInput":{"ingredient":{
+    
+"item":"farmersdelight:shepherds_pie_block"
+
+}},"output":{
+    
+"count":4,"item":"farmersdelight:shepherds_pie"}}

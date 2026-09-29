@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/ice_maker/right",
+    "front": "mekck:block/mekck/ice_maker/front",
+    "west": "mekck:block/mekck/ice_maker/right",
+    "east": "mekck:block/mekck/ice_maker/left",
+    "south": "mekck:block/mekck/ice_maker/back",
+    "up": "mekck:block/mekck/ice_maker/top",
+    "down": "mekck:block/mekck/ice_maker/bottom"
+  }
+}

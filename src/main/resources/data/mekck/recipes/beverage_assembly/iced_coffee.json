@@ -1,0 +1,12 @@
+{
+  "type": "mekck:beverage_assembly",
+  "conditions": [
+    {"condition": "forge:mod_loaded", "modid": "createcafe"}
+  ],
+  "ingredients": [
+    {"item": "createcafe:iced_coffee_cup"},
+    {"item": "minecraft:ice"}
+  ],
+  "fluid": { "fluid": "createcafe:coffee", "amount": 250 },
+  "result": { "item": "createcafe:iced_coffee", "count": 1 }
+}

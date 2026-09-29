@@ -1,0 +1,29 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "tag": "forge:raw_mutton"
+      },
+      {
+        "tag": "forge:raw_mutton"
+      },
+      {
+        "tag": "forge:pasta/raw_pasta"
+      },
+      {
+        "tag": "forge:pasta/raw_pasta"
+      },
+      {
+        "item": "farmersdelight:tomato_sauce"
+      },
+      {
+        "item": "farmersdelight:tomato_sauce"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:water\",Amount:250}",
+    "processingTime": 100,
+    "output": {
+      "item": "farmersdelight:pasta_with_mutton_chop",
+      "count": 2
+    }
+  }

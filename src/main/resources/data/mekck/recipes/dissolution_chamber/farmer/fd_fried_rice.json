@@ -1,0 +1,26 @@
+  {
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "tag": "forge:crops/rice"
+      },
+      {
+        "tag": "forge:eggs"
+      },
+      {
+        "item": "minecraft:carrot"
+      },
+      {
+        "item": "farmersdelight:onion"
+      },
+      {
+        "item": "minecraft:bowl"
+      }
+    ],
+    "inputFluid": "{FluidName:\"pneumaticcraft:vegetable_oil\",Amount:25}",
+    "processingTime": 100,
+    "output": {
+      "item": "farmersdelight:fried_rice",
+      "count": 1
+    }
+  }

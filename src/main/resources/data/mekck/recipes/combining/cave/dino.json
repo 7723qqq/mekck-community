@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":3,"ingredient":{"item":"minecraft:bowl"}},"mainInput":{"ingredient":{
+    
+"item":"cavedelight:roasted_dino_chop"
+
+}},"output":{
+    
+"count":4,"item":"cavedelight:plate_of_roasted_dino_chop"}}

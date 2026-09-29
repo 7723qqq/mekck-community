@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/universal_cutting_machine/universal_cutting_machine",
+  "textures": {
+    "front": "mekck:block/mekck/universal_cutting_machine/front_active",
+    "west": "mekck:block/mekck/universal_cutting_machine/right_active",
+    "east": "mekck:block/mekck/universal_cutting_machine/left_active",
+    "south": "mekck:block/mekck/universal_cutting_machine/back_active",
+    "up": "mekck:block/mekck/universal_cutting_machine/top_active"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "type": "mekck:ice_make",
+  "ingredient": {
+    "item": "youkaishomecoming:ice_cube"
+  },
+  "fluidAmount": 125,
+  "results": [
+    {
+      "item": "youkaishomecoming:ice_cube",
+      "count": 1
+    }
+  ]
+}

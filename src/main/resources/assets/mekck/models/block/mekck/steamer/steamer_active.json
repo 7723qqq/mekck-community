@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/steamer/steamer",
+  "textures": {
+    "front": "mekck:block/mekck/steamer/front_active",
+    "west": "mekck:block/mekck/steamer/right_active",
+    "east": "mekck:block/mekck/steamer/left_active",
+    "south": "mekck:block/mekck/steamer/back_active",
+    "up": "mekck:block/mekck/steamer/top_active"
+  }
+}

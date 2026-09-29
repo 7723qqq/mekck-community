@@ -1,0 +1,13 @@
+{
+  "type": "mekck:ice_make",
+  "ingredient": {
+    "item": "minecraft:blue_ice"
+  },
+  "fluidAmount": 1000,
+  "results": [
+    {
+      "item": "minecraft:blue_ice",
+      "count": 1
+    }
+  ]
+}

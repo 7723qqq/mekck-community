@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "mekanism_extras:alloys/shining"
+    },
+    "C": {
+      "tag": "forge:circuits/cosmic"
+    },
+    "I": {
+      "tag": "forge:ingots/refined_obsidian"
+    },
+    "P": {
+      "item": "mekck:supreme_cutting_factory"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "IPI",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:cosmic_cutting_factory"
+  },
+  "show_notification": true
+}

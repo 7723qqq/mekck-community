@@ -1,0 +1,16 @@
+{
+  "replace": false,
+  "values": [
+    "mekck:basic_cutting_factory",
+    "mekck:advanced_cutting_factory",
+    "mekck:elite_cutting_factory",
+    "mekck:ultimate_cutting_factory",
+    "mekck:absolute_cutting_factory",
+    "mekck:supreme_cutting_factory",
+    "mekck:cosmic_cutting_factory",
+    "mekck:infinite_cutting_factory",
+    "mekck:crystal_matrix_cutting_factory",
+    "mekck:nebula_cutting_factory",
+    "mekck:singularity_cutting_factory"
+  ]
+}

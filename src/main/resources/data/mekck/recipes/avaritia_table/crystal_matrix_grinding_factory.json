@@ -1,0 +1,33 @@
+{
+  "type": "avaritia:shaped_table",
+  "category": "misc",
+  "tier": 3,
+  "show_notification": true,
+  "key": {
+    "M": {
+      "item": "avaritia:crystal_matrix_ingot"
+    },
+    "L": {
+      "item": "avaritia:diamond_lattice"
+    },
+    "B": {
+      "item": "avaritia:blaze_cube"
+    },
+    "Z": {
+      "item": "mekck:blaze_grinding_factory"
+    }
+  },
+  "pattern": [
+    "   L   ",
+    "  MLM  ",
+    " MMBMM ",
+    "MMBZBMM",
+    " MMBMM ",
+    "  MLM  ",
+    "   L   "
+  ],
+  "result": {
+    "item": "mekck:crystal_matrix_grinding_factory",
+    "count": 1
+  }
+}

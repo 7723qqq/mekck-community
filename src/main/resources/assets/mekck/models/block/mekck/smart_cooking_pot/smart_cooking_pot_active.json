@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/smart_cooking_pot/smart_cooking_pot",
+  "textures": {
+    "front": "mekck:block/mekck/smart_cooking_pot/front_active",
+    "west": "mekck:block/mekck/smart_cooking_pot/right_active",
+    "east": "mekck:block/mekck/smart_cooking_pot/left_active",
+    "south": "mekck:block/mekck/smart_cooking_pot/back_active",
+    "up": "mekck:block/mekck/smart_cooking_pot/top_active"
+  }
+}

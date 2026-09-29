@@ -1,0 +1,10 @@
+{"type":"immersiveengineering:cloche","input":{
+
+"item":"alexscaves:ancient_leaves"
+},
+"render":{"type":"crop","block":"minecraft:potatoes"},
+"results":[{"count":3,"item":
+
+"alexscaves:tree_star"
+
+}],"soil":{"item":"minecraft:dirt"},"time":800}

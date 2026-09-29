@@ -1,0 +1,21 @@
+{
+  "type": "mekck:beverage_assembly",
+  "ingredients": [
+    {
+      "item": "minecraft:glass_bottle"
+    }
+  ],
+  "fluid": {
+    "fluid": "farmersrespite:yellow_tea",
+    "amount": 250
+  },
+  "result": {
+    "item": "farmersrespite:yellow_tea"
+  },
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "farmersrespite"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/bakery_oven/bakery_oven",
+  "textures": {
+    "front": "mekck:block/mekck/bakery_oven/front_active",
+    "west": "mekck:block/mekck/bakery_oven/right_active",
+    "east": "mekck:block/mekck/bakery_oven/left_active",
+    "south": "mekck:block/mekck/bakery_oven/back_active",
+    "up": "mekck:block/mekck/bakery_oven/top_active"
+  }
+}

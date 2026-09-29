@@ -1,0 +1,34 @@
+{
+  "variants": {
+    "facing=south,active=false": {
+      "model": "mekck:block/mekck/cooking_factory/absolute"
+    },
+    "facing=south,active=true": {
+      "model": "mekck:block/mekck/cooking_factory/active/absolute"
+    },
+    "facing=west,active=false": {
+      "model": "mekck:block/mekck/cooking_factory/absolute",
+      "y": 90
+    },
+    "facing=west,active=true": {
+      "model": "mekck:block/mekck/cooking_factory/active/absolute",
+      "y": 90
+    },
+    "facing=north,active=false": {
+      "model": "mekck:block/mekck/cooking_factory/absolute",
+      "y": 180
+    },
+    "facing=north,active=true": {
+      "model": "mekck:block/mekck/cooking_factory/active/absolute",
+      "y": 180
+    },
+    "facing=east,active=false": {
+      "model": "mekck:block/mekck/cooking_factory/absolute",
+      "y": 270
+    },
+    "facing=east,active=true": {
+      "model": "mekck:block/mekck/cooking_factory/active/absolute",
+      "y": 270
+    }
+  }
+}

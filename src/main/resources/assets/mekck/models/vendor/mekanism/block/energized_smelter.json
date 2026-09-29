@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/vendor/mekanism/block/energized_smelter/side",
+    "front": "mekck:block/vendor/mekanism/block/energized_smelter/front",
+    "west": "mekck:block/vendor/mekanism/block/energized_smelter/side",
+    "east": "mekck:block/vendor/mekanism/block/energized_smelter/side",
+    "south": "mekck:block/vendor/mekanism/block/energized_smelter/back",
+    "up": "mekck:block/vendor/mekanism/block/energized_smelter/top",
+    "down": "mekck:block/vendor/mekanism/block/energized_smelter/bottom"
+  }
+}

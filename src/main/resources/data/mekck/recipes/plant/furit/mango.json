@@ -1,0 +1,16 @@
+{
+  "type": "mekmm:planting",
+  "itemInput": {
+    "ingredient": {
+      "item": "fruitsdelight:mango_leaves"
+    }
+  },
+  "gasInput": {
+    "amount": 1,
+    "gas": "mekmm:nutrient_solution"
+  },
+  "mainOutput": {
+    "count": 3,
+    "item": "fruitsdelight:mango"
+  }
+}

@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":3,"ingredient":{"item":"minecraft:bowl"}},"mainInput":{"ingredient":{
+    
+"item":"ends_delight:grilled_shulker_block"
+
+}},"output":{
+    
+"count":4,"item":"ends_delight:grilled_shulker"}}

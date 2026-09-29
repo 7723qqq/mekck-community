@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/nut_roaster/nut_roaster",
+  "textures": {
+    "front": "mekck:block/mekck/nut_roaster/front_active",
+    "west": "mekck:block/mekck/nut_roaster/right_active",
+    "east": "mekck:block/mekck/nut_roaster/left_active",
+    "south": "mekck:block/mekck/nut_roaster/back_active",
+    "up": "mekck:block/mekck/nut_roaster/top_active"
+  }
+}

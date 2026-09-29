@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/beverage_blender/beverage_blender",
+  "textures": {
+    "front": "mekck:block/mekck/beverage_blender/front_active",
+    "west": "mekck:block/mekck/beverage_blender/right_active",
+    "east": "mekck:block/mekck/beverage_blender/left_active",
+    "south": "mekck:block/mekck/beverage_blender/back_active",
+    "up": "mekck:block/mekck/beverage_blender/top_active"
+  }
+}

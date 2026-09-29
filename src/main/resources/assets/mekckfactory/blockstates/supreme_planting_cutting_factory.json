@@ -1,0 +1,34 @@
+{
+  "variants": {
+    "facing=south,active=false": {
+      "model": "mekck:block/mekck/planting_cutting_factory/supreme"
+    },
+    "facing=south,active=true": {
+      "model": "mekck:block/mekck/planting_cutting_factory/active/supreme"
+    },
+    "facing=west,active=false": {
+      "model": "mekck:block/mekck/planting_cutting_factory/supreme",
+      "y": 90
+    },
+    "facing=west,active=true": {
+      "model": "mekck:block/mekck/planting_cutting_factory/active/supreme",
+      "y": 90
+    },
+    "facing=north,active=false": {
+      "model": "mekck:block/mekck/planting_cutting_factory/supreme",
+      "y": 180
+    },
+    "facing=north,active=true": {
+      "model": "mekck:block/mekck/planting_cutting_factory/active/supreme",
+      "y": 180
+    },
+    "facing=east,active=false": {
+      "model": "mekck:block/mekck/planting_cutting_factory/supreme",
+      "y": 270
+    },
+    "facing=east,active=true": {
+      "model": "mekck:block/mekck/planting_cutting_factory/active/supreme",
+      "y": 270
+    }
+  }
+}

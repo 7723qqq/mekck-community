@@ -1,0 +1,17 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "tag": "forge:flour/wheat"
+      },
+      {
+        "item": "minecraft:wheat"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:water\",Amount:1000}",
+    "processingTime": 100,
+    "output": {
+      "item": "farm_and_charm:dough",
+      "count": 5
+    }
+  }

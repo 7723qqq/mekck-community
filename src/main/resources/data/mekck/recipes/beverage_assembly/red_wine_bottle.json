@@ -1,0 +1,21 @@
+{
+  "type": "mekck:beverage_assembly",
+  "ingredients": [
+    {
+      "item": "youkaishomecoming:sake_bottle"
+    }
+  ],
+  "fluid": {
+    "fluid": "youkaishomecoming:red_wine",
+    "amount": 1000
+  },
+  "result": {
+    "item": "youkaishomecoming:red_wine_bottle"
+  },
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "youkaishomecoming"
+    }
+  ]
+}

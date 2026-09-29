@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":3,"ingredient":{"item":"minecraft:bowl"}},"mainInput":{"ingredient":{
+    
+"item":"fruitsdelight:pineapple_fried_rice"
+
+}},"output":{
+    
+"count":4,"item":"fruitsdelight:bowl_of_pineapple_fried_rice"}}

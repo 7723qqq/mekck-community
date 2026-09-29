@@ -1,0 +1,22 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+    "input": [
+      {
+        "tag": "forge:cheese"
+      },
+      {
+        "tag": "forge:crops/cabbage"
+      },
+      {
+        "item": "minecraft:carrot"
+      },
+      {
+        "tag": "forge:crops/tomato"
+      }
+    ],
+    "processingTime": 100,
+    "output": {
+      "item": "candlelight:salad",
+      "count": 4
+    }
+  }

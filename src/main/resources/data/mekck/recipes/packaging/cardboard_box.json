@@ -1,0 +1,22 @@
+{
+  "type": "mekck:packaging",
+  "ingredients": [
+    {
+      "tag": "forge:sawdust"
+    },
+    {
+      "tag": "forge:sawdust"
+    },
+    {
+      "tag": "forge:sawdust"
+    },
+    {
+      "tag": "forge:sawdust"
+    }
+  ],
+  "result": {
+    "item": "mekanism:cardboard_box",
+    "count": 1
+  },
+  "processingTime": 50
+}

@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":1,"ingredient":{"item":"mekck:atomic_knife"}},"mainInput":{"ingredient":{
+    
+"item":"mekanism:precision_sawmill"
+
+}},"output":{
+    
+"count":1,"item":"mekck:universal_cutting_machine"}}

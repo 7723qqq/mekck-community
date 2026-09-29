@@ -1,0 +1,15 @@
+{
+  "loader": "forge:composite",
+  "parent": "block/block",
+  "textures": {
+    "particle": "mekck:block/mekck/cooking_factory/front"
+  },
+  "children": {
+    "base": {
+      "parent": "mekck:block/mekck/cooking_factory/cooking_factory_base"
+    },
+    "front_led": {
+      "parent": "mekck:vendor/mekanism_extras/block/factory/front_led/singularity"
+    }
+  }
+}

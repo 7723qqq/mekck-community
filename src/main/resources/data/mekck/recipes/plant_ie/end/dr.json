@@ -1,0 +1,10 @@
+{"type":"immersiveengineering:cloche","input":{
+
+"item":"ends_delight:chorus_succulent"
+},
+"render":{"type":"crop","block":"minecraft:potatoes"},
+"results":[{"count":3,"item":
+
+"ends_delight:chorus_succulent"
+
+}],"soil":{"item":"minecraft:end_stone"},"time":800}

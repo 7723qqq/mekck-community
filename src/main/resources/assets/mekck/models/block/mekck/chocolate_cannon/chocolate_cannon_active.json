@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/chocolate_cannon/chocolate_cannon",
+  "textures": {
+    "front": "mekck:block/mekck/chocolate_cannon/front_active",
+    "west": "mekck:block/mekck/chocolate_cannon/right_active",
+    "east": "mekck:block/mekck/chocolate_cannon/left_active",
+    "south": "mekck:block/mekck/chocolate_cannon/back_active",
+    "up": "mekck:block/mekck/chocolate_cannon/top_active"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "type": "mekck:ferrero",
+  "input": {
+    "item": "mekck:hazelnut"
+  },
+  "extra": {
+    "tag": "mekck:mekck_chocolate"
+  },
+  "fluid1": {
+    "fluid": "minecraft:milk",
+    "amount": 50
+  },
+  "fluid2": {
+    "fluid": "mekck:hazelnut_cocoa_paste",
+    "amount": 50
+  },
+  "result": {
+    "item": "mekck:ferrero_chocolate",
+    "count": 1
+  }
+}

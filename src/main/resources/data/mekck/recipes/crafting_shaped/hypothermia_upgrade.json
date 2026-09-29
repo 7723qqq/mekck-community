@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "N": {
+      "item": "avaritia:neutron_ingot"
+    },
+    "D": {
+      "item": "iceandfire:dragonsteel_ice_ingot"
+    },
+    "Q": {
+      "item": "twilightforest:snow_queen_trophy"
+    },
+    "G": {
+      "tag": "forge:glass/silica"
+    }
+  },
+  "pattern": [
+    " D ",
+    "GNG",
+    " Q "
+  ],
+  "result": {
+    "item": "mekck:hypothermia_upgrade"
+  },
+  "show_notification": true
+}

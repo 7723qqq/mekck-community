@@ -1,0 +1,30 @@
+{
+  "type": "mekck:beverage_assembly",
+  "ingredients": [
+    {
+      "item": "minecraft:glass_bottle"
+    }
+  ],
+  "fluid": {
+    "fluid": "farmersrespite:melon_juice",
+    "amount": 250
+  },
+  "result": {
+    "item": "farmersdelight:melon_juice"
+  },
+  "conditions": [
+    {
+      "condition": "minecraft:all_of",
+      "terms": [
+        {
+          "condition": "forge:mod_loaded",
+          "modid": "farmersdelight"
+        },
+        {
+          "condition": "forge:mod_loaded",
+          "modid": "farmersrespite"
+        }
+      ]
+    }
+  ]
+}

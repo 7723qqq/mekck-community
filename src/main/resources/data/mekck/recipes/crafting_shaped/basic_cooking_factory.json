@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "forge:ingots/iron"
+    },
+    "C": {
+      "tag": "forge:circuits/basic"
+    },
+    "I": {
+      "tag": "mekanism:alloys/basic"
+    },
+    "P": {
+      "item": "mekck:smart_cooking_pot"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "IPI",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:basic_cooking_factory"
+  },
+  "show_notification": true
+}

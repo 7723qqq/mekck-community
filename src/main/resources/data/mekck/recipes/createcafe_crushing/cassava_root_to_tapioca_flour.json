@@ -1,0 +1,25 @@
+{
+  "type": "forge:conditional",
+  "recipes": [
+    {
+      "conditions": [
+        {
+          "type": "forge:mod_loaded",
+          "modid": "createcafe"
+        }
+      ],
+      "recipe": {
+        "type": "mekanism:crushing",
+        "input": {
+          "ingredient": {
+            "item": "createcafe:cassava_root"
+          }
+        },
+        "output": {
+          "item": "createcafe:tapioca_flour",
+          "count": 2
+        }
+      }
+    }
+  ]
+}

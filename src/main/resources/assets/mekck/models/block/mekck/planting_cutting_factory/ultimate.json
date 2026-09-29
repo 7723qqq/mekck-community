@@ -1,0 +1,15 @@
+{
+  "loader": "forge:composite",
+  "parent": "block/block",
+  "textures": {
+    "particle": "mekck:block/mekck/planting_cutting_factory/front"
+  },
+  "children": {
+    "base": {
+      "parent": "mekck:block/mekck/planting_cutting_factory/planting_cutting_factory_base"
+    },
+    "front_led": {
+      "parent": "mekck:vendor/mekanism/block/factory/front_led/ultimate"
+    }
+  }
+}

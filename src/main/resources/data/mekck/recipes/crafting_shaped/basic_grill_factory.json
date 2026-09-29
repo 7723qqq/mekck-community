@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "forge:ingots/iron"
+    },
+    "C": {
+      "tag": "forge:circuits/basic"
+    },
+    "I": {
+      "tag": "mekanism:alloys/basic"
+    },
+    "P": {
+      "item": "mekck:electric_grill"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "IPI",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:basic_grill_factory"
+  },
+  "show_notification": true
+}

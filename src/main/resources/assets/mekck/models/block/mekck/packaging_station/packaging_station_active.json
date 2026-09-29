@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/packaging_station/packaging_station",
+  "textures": {
+    "front": "mekck:block/mekck/packaging_station/front_active",
+    "west": "mekck:block/mekck/packaging_station/right_active",
+    "east": "mekck:block/mekck/packaging_station/left_active",
+    "south": "mekck:block/mekck/packaging_station/back_active",
+    "up": "mekck:block/mekck/packaging_station/top_active"
+  }
+}

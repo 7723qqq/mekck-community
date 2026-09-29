@@ -1,0 +1,23 @@
+{
+  "type": "avaritia:extreme_smithing",
+  "addition": [
+    {
+      "item": "avaritia_delight:infinity_knife"
+    },
+    {
+      "item": "avaritia:enhancement_core"
+    },
+    {
+      "item": "avaritia:infinity_upgrade"
+    }
+  ],
+  "base": {
+    "item": "mekck:nebula_cutting_factory"
+  },
+  "result": {
+    "item": "mekck:singularity_cutting_factory"
+  },
+  "template": {
+    "item": "avaritia:upgrade_smithing_template"
+  }
+}

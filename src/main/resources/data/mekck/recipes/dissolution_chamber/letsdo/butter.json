@@ -1,0 +1,14 @@
+{
+    "type": "industrialforegoing:dissolution_chamber",
+       "input": [
+      {
+        "item": "minecraft:bowl"
+      }
+    ],
+    "inputFluid": "{FluidName:\"minecraft:milk\",Amount:1000}",
+    "processingTime": 100,
+    "output": {
+      "item": "farm_and_charm:butter",
+      "count": 4
+    }
+  }

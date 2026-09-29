@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/smart_extractor/smart_extractor",
+  "textures": {
+    "front": "mekck:block/mekck/smart_extractor/front_active",
+    "west": "mekck:block/mekck/smart_extractor/right_active",
+    "east": "mekck:block/mekck/smart_extractor/left_active",
+    "south": "mekck:block/mekck/smart_extractor/back_active",
+    "up": "mekck:block/mekck/smart_extractor/top_active"
+  }
+}

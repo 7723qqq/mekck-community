@@ -1,0 +1,159 @@
+{
+  "type": "avaritia:shapeless_table",
+  "category": "misc",
+  "tier": 4,
+  "show_notification": true,
+  "ingredients": [
+    {
+      "tag": "mekck:cuf_01"
+    },
+    {
+      "tag": "mekck:cuf_02"
+    },
+    {
+      "tag": "mekck:cuf_03"
+    },
+    {
+      "tag": "mekck:cuf_04"
+    },
+    {
+      "tag": "mekck:cuf_05"
+    },
+    {
+      "tag": "mekck:cuf_06"
+    },
+    {
+      "tag": "mekck:cuf_07"
+    },
+    {
+      "tag": "mekck:cuf_08"
+    },
+    {
+      "tag": "mekck:cuf_09"
+    },
+    {
+      "tag": "mekck:cuf_10"
+    },
+    {
+      "tag": "mekck:cuf_11"
+    },
+    {
+      "tag": "mekck:cuf_12"
+    },
+    {
+      "tag": "mekck:cuf_13"
+    },
+    {
+      "tag": "mekck:cuf_14"
+    },
+    {
+      "tag": "mekck:cuf_15"
+    },
+    {
+      "tag": "mekck:cuf_16"
+    },
+    {
+      "tag": "mekck:cuf_17"
+    },
+    {
+      "tag": "mekck:cuf_18"
+    },
+    {
+      "tag": "mekck:cuf_19"
+    },
+    {
+      "tag": "mekck:cuf_20"
+    },
+    {
+      "tag": "mekck:cuf_21"
+    },
+    {
+      "tag": "mekck:cuf_22"
+    },
+    {
+      "tag": "mekck:cuf_23"
+    },
+    {
+      "tag": "mekck:cuf_24"
+    },
+    {
+      "tag": "mekck:cuf_25"
+    },
+    {
+      "tag": "mekck:cuf_26"
+    },
+    {
+      "tag": "mekck:cuf_27"
+    },
+    {
+      "tag": "mekck:cuf_28"
+    },
+    {
+      "tag": "mekck:cuf_29"
+    },
+    {
+      "tag": "mekck:cuf_30"
+    },
+    {
+      "tag": "mekck:cuf_31"
+    },
+    {
+      "tag": "mekck:cuf_32"
+    },
+    {
+      "tag": "mekck:cuf_33"
+    },
+    {
+      "tag": "mekck:cuf_34"
+    },
+    {
+      "tag": "mekck:cuf_35"
+    },
+    {
+      "tag": "mekck:cuf_36"
+    },
+    {
+      "tag": "mekck:cuf_37"
+    },
+    {
+      "tag": "mekck:cuf_38"
+    },
+    {
+      "tag": "mekck:cuf_39"
+    },
+    {
+      "tag": "mekck:cuf_40"
+    },
+    {
+      "tag": "mekck:cuf_41"
+    },
+    {
+      "tag": "mekck:cuf_42"
+    },
+    {
+      "tag": "mekck:cuf_43"
+    },
+    {
+      "tag": "mekck:cuf_44"
+    },
+    {
+      "tag": "mekck:cuf_45"
+    },
+    {
+      "tag": "mekck:cuf_46"
+    },
+    {
+      "tag": "mekck:cuf_47"
+    },
+    {
+      "tag": "mekck:cuf_48"
+    },
+    {
+      "tag": "mekck:cuf_49"
+    }
+  ],
+  "result": {
+    "item": "mekanism_extras:upgrade_creative",
+    "count": 1
+  }
+}

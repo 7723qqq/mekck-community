@@ -1,0 +1,12 @@
+{
+  "variants": {
+    "facing=north,active=false": { "model": "mekck:block/mekck/ice_factory/blaze", "y": 180 },
+    "facing=north,active=true": { "model": "mekck:block/mekck/ice_factory/active/blaze", "y": 180 },
+    "facing=south,active=false": { "model": "mekck:block/mekck/ice_factory/blaze" },
+    "facing=south,active=true": { "model": "mekck:block/mekck/ice_factory/active/blaze" },
+    "facing=east,active=false": { "model": "mekck:block/mekck/ice_factory/blaze", "y": 270 },
+    "facing=east,active=true": { "model": "mekck:block/mekck/ice_factory/active/blaze", "y": 270 },
+    "facing=west,active=false": { "model": "mekck:block/mekck/ice_factory/blaze", "y": 90 },
+    "facing=west,active=true": { "model": "mekck:block/mekck/ice_factory/active/blaze", "y": 90 }
+  }
+}

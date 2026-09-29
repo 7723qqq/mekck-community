@@ -1,0 +1,28 @@
+{
+  "variants": {
+    "facing=north,active=false": {
+      "model": "mekck:block/mekck/bioreactor/bioreactor_layer0"
+    },
+    "facing=north,active=true": {
+      "model": "mekck:block/mekck/bioreactor/bioreactor_layer0"
+    },
+    "facing=south,active=false": {
+      "model": "mekck:block/mekck/bioreactor/bioreactor_layer0"
+    },
+    "facing=south,active=true": {
+      "model": "mekck:block/mekck/bioreactor/bioreactor_layer0"
+    },
+    "facing=east,active=false": {
+      "model": "mekck:block/mekck/bioreactor/bioreactor_layer0"
+    },
+    "facing=east,active=true": {
+      "model": "mekck:block/mekck/bioreactor/bioreactor_layer0"
+    },
+    "facing=west,active=false": {
+      "model": "mekck:block/mekck/bioreactor/bioreactor_layer0"
+    },
+    "facing=west,active=true": {
+      "model": "mekck:block/mekck/bioreactor/bioreactor_layer0"
+    }
+  }
+}

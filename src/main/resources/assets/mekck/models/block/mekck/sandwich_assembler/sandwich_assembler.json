@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/sandwich_assembler/right",
+    "front": "mekck:block/mekck/sandwich_assembler/front",
+    "west": "mekck:block/mekck/sandwich_assembler/right",
+    "east": "mekck:block/mekck/sandwich_assembler/left",
+    "south": "mekck:block/mekck/sandwich_assembler/back",
+    "up": "mekck:block/mekck/sandwich_assembler/top",
+    "down": "mekck:block/mekck/sandwich_assembler/bottom"
+  }
+}

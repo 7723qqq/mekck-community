@@ -1,0 +1,8 @@
+{"type":"mekanism:sawing","input":{"ingredient":{
+
+"item":"ice_and_fire_delight:frost_pie"
+
+}},"mainOutput":{"count":4,
+
+"item":"ice_and_fire_delight:frost_pie_slice"
+}}

@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":3,"ingredient":{"item":"minecraft:bowl"}},"mainInput":{"ingredient":{
+    
+"item":"mynethersdelight:striderloaf"
+
+}},"output":{
+    
+"count":4,"item":"mynethersdelight:plate_of_striderloaf"}}

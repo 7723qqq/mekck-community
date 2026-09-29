@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "item": "mekanism:alloy_infused"
+    },
+    "C": {
+      "item": "mekanism:basic_control_circuit"
+    },
+    "D": {
+      "item": "minecraft:iron_ingot"
+    },
+    "S": {
+      "item": "mekanism:steel_casing"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "ASA",
+    "ADA"
+  ],
+  "result": {
+    "item": "mekck:smart_skewering_machine"
+  },
+  "show_notification": true
+}

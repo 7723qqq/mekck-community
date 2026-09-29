@@ -1,0 +1,10 @@
+{"type":"immersiveengineering:cloche","input":{
+
+"item":"mynethersdelight:bullet_pepper"
+},
+"render":{"type":"crop","block":"minecraft:potatoes"},
+"results":[{"count":3,"item":
+
+"mynethersdelight:bullet_pepper"
+
+}],"soil":{"item":"minecraft:dirt"},"time":800}

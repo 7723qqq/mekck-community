@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":1,"ingredient":{"item":"farmersdelight:cooking_pot"}},"mainInput":{"ingredient":{
+    
+"item":"mekanism:energized_smelter"
+
+}},"output":{
+    
+"count":1,"item":"mekck:smart_cooking_pot"}}

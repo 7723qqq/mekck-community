@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":1,"ingredient":{"item":"mekck:atomic_knife"}},"mainInput":{"ingredient":{
+    
+"item":"mekanism_extras:cosmic_sawing_factory"
+
+}},"output":{
+    
+"count":1,"item":"mekck:cosmic_cutting_factory"}}

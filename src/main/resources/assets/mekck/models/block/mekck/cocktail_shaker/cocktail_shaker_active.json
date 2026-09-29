@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/cocktail_shaker/cocktail_shaker",
+  "textures": {
+    "front": "mekck:block/mekck/cocktail_shaker/front_active",
+    "west": "mekck:block/mekck/cocktail_shaker/right_active",
+    "east": "mekck:block/mekck/cocktail_shaker/left_active",
+    "south": "mekck:block/mekck/cocktail_shaker/back_active",
+    "up": "mekck:block/mekck/cocktail_shaker/top_active"
+  }
+}

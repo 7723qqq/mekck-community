@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/smart_skewering_machine/right",
+    "front": "mekck:block/mekck/smart_skewering_machine/front",
+    "west": "mekck:block/mekck/smart_skewering_machine/right",
+    "east": "mekck:block/mekck/smart_skewering_machine/left",
+    "south": "mekck:block/mekck/smart_skewering_machine/back",
+    "up": "mekck:block/mekck/smart_skewering_machine/top",
+    "down": "mekck:block/mekck/smart_skewering_machine/bottom"
+  }
+}

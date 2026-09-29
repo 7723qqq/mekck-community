@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/ice_maker/ice_maker",
+  "textures": {
+    "front": "mekck:block/mekck/ice_maker/front_active",
+    "west": "mekck:block/mekck/ice_maker/right_active",
+    "east": "mekck:block/mekck/ice_maker/left_active",
+    "south": "mekck:block/mekck/ice_maker/back_active",
+    "up": "mekck:block/mekck/ice_maker/top_active"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "type": "mekck:packaging",
+  "ingredients": [
+    {
+      "tag": "forge:glass/colorless"
+    },
+    {
+      "tag": "forge:glass/colorless"
+    },
+    {
+      "tag": "forge:glass/colorless"
+    }
+  ],
+  "result": {
+    "item": "minecraft:glass_bottle",
+    "count": 3
+  },
+  "processingTime": 50
+}

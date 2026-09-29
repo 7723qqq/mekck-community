@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "G": {
+      "tag": "forge:glass/silica"
+    },
+    "A": {
+      "item": "iceandfire:dragonsteel_ice_ingot"
+    },
+    "#": {
+      "item": "iceandfire:dragonforge_ice_core"
+    }
+  },
+  "pattern": [
+    " G ",
+    "A#A",
+    " G "
+  ],
+  "result": {
+    "item": "mekck:dragon_frost_cold_brew_upgrade"
+  },
+  "show_notification": true
+}

@@ -1,0 +1,333 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// Mojang ships Java 17 to end users in 1.18+, so your mod should target Java 17.
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
+minecraft {
+    // The mappings can be changed at any time and must be in the following format.
+    // Channel:   Version:
+    // official   MCVersion             Official field/method names from Mojang mapping files
+    // parchment  YYYY.MM.DD-MCVersion  Open community-sourced parameter names and javadocs layered on top of official
+    //
+    // You must be aware of the Mojang license when using the 'official' or 'parchment' mappings.
+    // See more information here: https://github.com/MinecraftForge/MCPConfig/blob/master/Mojang.md
+    //
+    // Parchment is an unofficial project maintained by ParchmentMC, separate from MinecraftForge
+    // Additional setup is needed to use their mappings: https://parchmentmc.org/docs/getting-started
+    //
+    // Use non-default mappings at your own risk. They may not always work.
+    // Simply re-run your setup task after changing the mappings to update your workspace.
+    mappings channel: mapping_channel, version: mapping_version
+
+    // When true, this property will have all Eclipse/IntelliJ IDEA run configurations run the "prepareX" task for the given run configuration before launching the game.
+    // In most cases, it is not necessary to enable.
+    // enableEclipsePrepareRuns = true
+    // enableIdeaPrepareRuns = true
+
+    // This property allows configuring Gradle's ProcessResources task(s) to run on IDE output locations before launching the game.
+    // It is REQUIRED to be set to true for this template to function.
+    // See https://docs.gradle.org/current/dsl/org.gradle.language.jvm.tasks.ProcessResources.html
+    copyIdeResources = true
+
+    // When true, this property will add the folder name of all declared run configurations to generated IDE run configurations.
+    // The folder name can be set on a run configuration using the "folderName" property.
+    // By default, the folder name of a run configuration is the name of the Gradle project containing it.
+    // generateRunFolders = true
+
+    // This property enables access transformers for use in development.
+    // They will be applied to the Minecraft artifact.
+    // The access transformer file can be anywhere in the project.
+    // However, it must be at "META-INF/accesstransformer.cfg" in the final mod jar to be loaded by Forge.
+    // This default location is a best practice to automatically put the file in the right place in the final jar.
+    // See https://docs.minecraftforge.net/en/latest/advanced/accesstransformers/ for more information.
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
+
+    // Default run configurations.
+    // These can be tweaked, removed, or duplicated as needed.
+    runs {
+        // applies to all the run configs below
+        configureEach {
+            workingDirectory project.file('run')
+
+            // Recommended logging data for a userdev environment
+            // The markers can be added/remove as needed separated by commas.
+            // "SCAN": For mods scan.
+            // "REGISTRIES": For firing of registry events.
+            // "REGISTRYDUMP": For getting the contents of all registries.
+            property 'forge.logging.markers', 'REGISTRIES'
+
+            // Recommended logging level for the console
+            // You can set various levels here.
+            // Please read: https://stackoverflow.com/questions/2031163/when-to-use-the-different-log-levels
+            property 'forge.logging.console.level', 'debug'
+
+            // 原子刀砧板兼容 Mixin：开发环境通过运行参数启用（生产环境由 jar MANIFEST MixinConfigs 加载）
+            arg '-mixin.config=mekck.mixins.json'
+
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        client {
+            // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
+            property 'forge.enabledGameTestNamespaces', mod_id
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '--nogui'
+        }
+
+        // This run config launches GameTestServer and runs all registered gametests, then exits.
+        // By default, the server will crash when no gametests are provided.
+        // The gametest system is also enabled by default for other run configs under the /test command.
+        gameTestServer {
+            property 'forge.enabledGameTestNamespaces', mod_id
+        }
+
+        data {
+            // example of overriding the workingDirectory set in configureEach above
+            workingDirectory project.file('run-data')
+
+            // Specify the modid for data generation, where to output the resulting resource, and where to look for existing resources.
+            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+        }
+    }
+}
+
+// Include resources generated by data generators.
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+/**
+ * 解析 libs/ 下的本地依赖 jar，缺文件时抛一条**带解决方案**的错误。
+ *
+ * 为什么需要它：libs/ 被 .gitignore 排除（第三方 jar 不得再分发），
+ * 而 plain files("libs/x.jar") 在文件缺失时只会让 Gradle 报一句
+ * "Could not find libs/x.jar"，看不出该放哪个文件、从哪来。
+ */
+def localDep(String fileName, String displayName, String sourceUrl) {
+    def jar = file("libs/${fileName}")
+    if (!jar.exists()) {
+        throw new GradleException("""
+======================================================================
+缺少本地依赖：${displayName}
+  期望路径： ${jar}
+  获取地址： ${sourceUrl}
+
+把该 jar 原样放进 libs/ 后重新执行构建。libs/ 不进版本控制，
+因此每次全新克隆都需要手动补齐（共两个，另一个见 dependencies 中的注释）。
+======================================================================
+""".stripIndent())
+    }
+    return jar
+}
+
+repositories {
+    // Put repositories for dependencies here
+    // ForgeGradle automatically adds the Forge maven and Maven Central for you
+
+    // 外部模组一律走正规 Maven 坐标（见 dependencies）。
+    // 不要再把 jar 路径硬编码成 ~/.gradle/caches/... —— 那是「本机 + 本次缓存布局」的快照，
+    // 缓存目录一变就静默失效，且全新克隆/换机器 100% 编不过。
+
+    // If you have mod jar dependencies in ./libs, you can declare them as a repository like so.
+    // See https://docs.gradle.org/current/userguide/declaring_repositories.html#sub:flat_dir_resolver
+    // flatDir {
+    //     dir 'libs'
+    // }
+    // CurseMaven：<mod>-<projectId> / <fileId>，供 fg.deobf("curse.maven:<mod>-<projectId>:<fileId>") 使用
+    maven {
+        url "https://cursemaven.com"
+    }
+    flatDir {
+        dirs 'libs'
+    }
+}
+
+dependencies {
+    // Specify the version of Minecraft to use.
+    // Any artifact can be supplied so long as it has a "userdev" classifier artifact and is a compatible patcher artifact.
+    // The "userdev" classifier will be requested and setup by ForgeGradle.
+    // If the group id is "net.minecraft" and the artifact id is one of ["client", "server", "joined"],
+    // then special handling is done to allow a setup of a vanilla dependency without the use of an external repository.
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+    // 农夫乐事（F12 依赖降级 1.2.7）：编译期引用 libs 下的 raw 1.2.7 jar，交给 FG 按需重映射
+    // （fg.deobf）到 mojmap，使编译真正对着 1.2.7 API，反向验证砧板 mixin 已清除 1.3.x-only 符号引用。
+    // 注意：早期经 CurseMaven 缓存的 4679318_mapped_official_1.20.1 jar 内部 mods.toml 实为 1.19.2-1.2.3
+    // （minecraft [1.19,1.20)），会导致 FML 判定缺失依赖而无法启动；故此处固定引用本地 raw 1.2.7 jar 现场重映射。
+    //
+    // libs/ 被 .gitignore 排除（第三方模组 jar 不得再分发），因此**全新克隆必须先补齐这两个 jar**，
+    // 否则 Gradle 只会抛一句无上下文的 "Could not find libs/..."。缺文件时由下方 requireLocalDeps 报清楚。
+    implementation fg.deobf(files(localDep('FarmersDelight-1.20.1-1.2.7.jar',
+            "Farmer's Delight 1.20.1-1.2.7（raw，未重映射）",
+            'https://www.curseforge.com/minecraft/mc-mods/farmers-delight/files')))
+
+    // Mekanism（必需依赖，源码中有 100+ 处直接 import）：CurseMaven 坐标。
+    // mods.toml 要求 versionRange="[10.4,)"；升级 fileId 时同步核对。
+    implementation fg.deobf("curse.maven:mekanism-268560:6018299")
+
+    // JEI（可选联动，但 integration/jei 下 14 个类直接实现其 API，必须编译期可见）：
+    // CurseMaven 坐标。
+    implementation fg.deobf("curse.maven:jei-238222:7391695")
+
+    // 森罗物语（Kaleidoscope Cookery / Grilling / Tavern）：可选联动。
+    // 原先声明过 compileOnly 依赖，但全仓库对森罗系的访问 **零处** 直接 import
+    // —— 全部经 util/KaleidoscopeCompat 等以 Class.forName + 字符串契约完成，
+    // 因此编译期根本不需要它的 jar。删除该依赖以去掉最后一处硬编码缓存路径。
+    // 若将来确需直接引用，再按正规坐标加回（不要写 ~/.gradle/caches 路径）。
+
+    // 应用能源2（AE2）：可选联动。所有 AE2 访问都集中在 cn.ism.mekck.ae2 包，
+    // 仅当 ModList.isLoaded("ae2") 时才通过 util/AE2Compat 反射加载，未安装不崩溃。
+    compileOnly files(localDep('appliedenergistics2-forge-15.4.10.jar',
+            'Applied Energistics 2 15.4.10（编译期 API，运行时可选）',
+            'https://www.curseforge.com/minecraft/mc-mods/applied-energistics-2/files'))
+
+    // Example mod dependency using a mod jar from ./libs with a flat dir repository
+    // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar
+    // The group id is ignored when searching -- in this case, it is "blank"
+    // implementation fg.deobf("blank:coolmod-${mc_version}:${coolmod_version}")
+
+    // For more info:
+    // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
+    // http://www.gradle.org/docs/current/userguide/dependency_management.html
+
+    // 单元测试：TavernBrewBatch 等纯状态组件（普通 JVM，MC 数据结构类随 compileClasspath 提供）
+    testImplementation 'junit:junit:4.13.2'
+}
+
+// 单元测试使用 JUnit4（依赖 Minecraft 数据类如 CompoundTag/ResourceLocation 的普通 JVM 运行）
+tasks.withType(Test).configureEach {
+    useJUnit()
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showExceptions = true
+    }
+}
+
+// This block of code expands all declared replace properties in the specified resource targets.
+// A missing property will result in an error. Properties are expanded using ${} Groovy notation.
+// When "copyIdeResources" is enabled, this will also run before the game launches in IDE environments.
+// See https://docs.gradle.org/current/dsl/org.gradle.language.jvm.tasks.ProcessResources.html
+tasks.named('processResources', ProcessResources).configure {
+    var replaceProperties = [
+            minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
+            forge_version: forge_version, forge_version_range: forge_version_range,
+            loader_version_range: loader_version_range,
+            mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
+            mod_authors: mod_authors, mod_description: mod_description,
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties + [project: project]
+    }
+}
+
+// Example for how to get properties into the manifest for reading at runtime.
+tasks.named('jar', Jar).configure {
+    // 发布 jar 不包含 GameTest 类与结构模板（与 mekckf 的 jar 排除规则保持一致）。
+    // dev 运行时用的是 build/classes 与 build/resources，不受本排除影响，GameTest 仍可正常跑。
+    exclude 'cn/ism/mekck/blockentity/TestMekCkHeatIntegration*.class'
+    exclude 'data/mekck/gametest/**'
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : mod_authors,
+                'MixinConfigs'            : 'mekck.mixins.json',
+                'Specification-Version'   : '1', // We are version 1 of ourselves
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : mod_authors,
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+
+    // This is the preferred method to reobfuscate your jar file
+    finalizedBy 'reobfJar'
+    finalizedBy 'copyJarToLibs'
+}
+
+// Copy the reobfuscated jar to the libs directory for easy access
+tasks.register('copyJarToLibs', Copy) {
+    dependsOn 'reobfJar'
+    from layout.buildDirectory.dir('reobfJar')
+    include '*.jar'
+    exclude '*sources*'
+    // 版本号只从 gradle.properties 的 mod_version 派生。
+    // 原先这里写死 'mekck-0.0.4.jar'，而 mod_version=1.0.0，两者长期不一致。
+    rename 'output.jar', "mekck-${mod_version}.jar"
+    into file('libs')
+}
+
+// 测试编译使用 libs/ 目录（含本模组 jar）作为 classpath，显式声明依赖以避免 Gradle 8 的顺序校验失败
+tasks.named('compileTestJava').configure {
+    dependsOn 'copyJarToLibs'
+}
+
+// However if you are in a multi-project build, dev time needs unobfed jar files, so you can delay the obfuscation until publishing by doing:
+// tasks.named('publish').configure {
+//     dependsOn 'reobfJar'
+// }
+
+// Example configuration to allow publishing using the maven-publish plugin
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/mcmodsrepo"
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
+}
+
+// GameTest 结构模板同步：Forge 从 gamedir/run/gameteststructures/ 回退加载 .snbt/.nbt。
+// 源码内结构在 data/<ns>/gametest/structures/ 下，需在 GameTest 运行前复制到位。
+tasks.register('syncGameTestStructures') {
+    group = 'gametest'
+    description = 'Copy GameTest structures into run/gameteststructures for the dev GameTest server.'
+    def srcDir = file("${project.projectDir}/src/main/resources/data/mekck/gametest/structures")
+    def dstDir = file("${project.projectDir}/run/gameteststructures")
+    outputs.upToDateWhen { false }
+    doFirst {
+        println ">>> syncGameTestStructures: src=" + srcDir + " exists=" + srcDir.exists()
+        if (!srcDir.exists()) { throw new GradleException('GameTest structures src dir missing: ' + srcDir) }
+        project.mkdir(dstDir)
+        project.copy {
+            from srcDir
+            include '*.snbt'
+            include '*.nbt'
+            into dstDir
+        }
+        println ">>> synced GameTest structures to " + dstDir
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name == 'runGameTestServer') {
+        task.dependsOn 'syncGameTestStructures'
+    }
+}

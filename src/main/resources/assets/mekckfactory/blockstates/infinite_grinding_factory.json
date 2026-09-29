@@ -1,0 +1,34 @@
+{
+  "variants": {
+    "facing=south,active=false": {
+      "model": "mekck:block/mekck/grinding_factory/infinite"
+    },
+    "facing=south,active=true": {
+      "model": "mekck:block/mekck/grinding_factory/active/infinite"
+    },
+    "facing=west,active=false": {
+      "model": "mekck:block/mekck/grinding_factory/infinite",
+      "y": 90
+    },
+    "facing=west,active=true": {
+      "model": "mekck:block/mekck/grinding_factory/active/infinite",
+      "y": 90
+    },
+    "facing=north,active=false": {
+      "model": "mekck:block/mekck/grinding_factory/infinite",
+      "y": 180
+    },
+    "facing=north,active=true": {
+      "model": "mekck:block/mekck/grinding_factory/active/infinite",
+      "y": 180
+    },
+    "facing=east,active=false": {
+      "model": "mekck:block/mekck/grinding_factory/infinite",
+      "y": 270
+    },
+    "facing=east,active=true": {
+      "model": "mekck:block/mekck/grinding_factory/active/infinite",
+      "y": 270
+    }
+  }
+}

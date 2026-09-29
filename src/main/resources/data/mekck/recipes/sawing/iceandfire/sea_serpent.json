@@ -1,0 +1,1 @@
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"ice_and_fire_delight:sea_serpent_meat"}},"mainOutput":{"count":2,"item":"ice_and_fire_delight:sea_serpent_slice"},"secondaryChance":1.0,"secondaryOutput":{"item":"minecraft:bone_meal"}}

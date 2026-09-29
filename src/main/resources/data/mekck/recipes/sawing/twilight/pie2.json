@@ -1,0 +1,8 @@
+{"type":"mekanism:sawing","input":{"ingredient":{
+
+"item":"twilightdelight:aurora_pie"
+
+}},"mainOutput":{"count":4,
+
+"item":"twilightdelight:aurora_pie_slice"
+}}

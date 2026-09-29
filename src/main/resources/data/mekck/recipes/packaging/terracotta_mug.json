@@ -1,0 +1,25 @@
+{
+  "type": "mekck:packaging",
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "coffeecraft"
+    }
+  ],
+  "ingredients": [
+    {
+      "item": "minecraft:terracotta"
+    },
+    {
+      "item": "minecraft:terracotta"
+    },
+    {
+      "item": "minecraft:terracotta"
+    }
+  ],
+  "result": {
+    "item": "coffeecraft:terracotta_mug",
+    "count": 1
+  },
+  "processingTime": 50
+}

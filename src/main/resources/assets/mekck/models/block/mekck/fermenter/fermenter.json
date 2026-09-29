@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/mekck/fermenter/right",
+    "front": "mekck:block/mekck/fermenter/front",
+    "west": "mekck:block/mekck/fermenter/right",
+    "east": "mekck:block/mekck/fermenter/left",
+    "south": "mekck:block/mekck/fermenter/back",
+    "up": "mekck:block/mekck/fermenter/top",
+    "down": "mekck:block/mekck/fermenter/bottom"
+  }
+}

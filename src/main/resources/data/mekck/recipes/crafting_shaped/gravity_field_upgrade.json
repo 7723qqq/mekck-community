@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "G": {
+      "tag": "forge:glass/silica"
+    },
+    "A": {
+      "tag": "mekanism_extras:alloys/spectrum"
+    },
+    "#": {
+      "item": "minecraft:anvil"
+    }
+  },
+  "pattern": [
+    " G ",
+    "A#A",
+    " G "
+  ],
+  "result": {
+    "item": "mekck:gravity_field_upgrade"
+  },
+  "show_notification": true
+}

@@ -1,0 +1,15 @@
+{
+  "type": "mekck:grape_pressing",
+  "ingredients": [
+    {
+      "item": "vinery:red_grape",
+      "count": 3
+    },
+    {
+      "item": "vinery:wine_bottle"
+    }
+  ],
+  "result": {
+    "item": "vinery:red_grapejuice"
+  }
+}

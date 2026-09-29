@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/tea_brewer/tea_brewer",
+  "textures": {
+    "front": "mekck:block/mekck/tea_brewer/front_active",
+    "west": "mekck:block/mekck/tea_brewer/right_active",
+    "east": "mekck:block/mekck/tea_brewer/left_active",
+    "south": "mekck:block/mekck/tea_brewer/back_active",
+    "up": "mekck:block/mekck/tea_brewer/top_active"
+  }
+}

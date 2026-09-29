@@ -1,0 +1,21 @@
+{
+  "type": "mekck:beverage_assembly",
+  "ingredients": [
+    {
+      "item": "minecraft:glass_bottle"
+    }
+  ],
+  "fluid": {
+    "fluid": "farmersrespite:dandelion_tea",
+    "amount": 250
+  },
+  "result": {
+    "item": "farmersrespite:dandelion_tea"
+  },
+  "conditions": [
+    {
+      "condition": "forge:mod_loaded",
+      "modid": "farmersrespite"
+    }
+  ]
+}

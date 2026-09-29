@@ -1,0 +1,23 @@
+{
+  "type": "forge:conditional",
+  "recipes": [
+    {
+      "conditions": [
+        {
+          "type": "forge:mod_loaded",
+          "modid": "createcafe"
+        }
+      ],
+      "recipe": {
+        "type": "kaleidoscope_cookery:millstone",
+        "ingredient": {
+          "item": "createcafe:roasted_coffee_beans"
+        },
+        "result": {
+          "item": "createcafe:coffee_grounds",
+          "count": 2
+        }
+      }
+    }
+  ]
+}

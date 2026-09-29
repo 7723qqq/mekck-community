@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/curd_maker/curd_maker",
+  "textures": {
+    "front": "mekck:block/mekck/curd_maker/front_active",
+    "west": "mekck:block/mekck/curd_maker/right_active",
+    "east": "mekck:block/mekck/curd_maker/left_active",
+    "south": "mekck:block/mekck/curd_maker/back_active",
+    "up": "mekck:block/mekck/curd_maker/top_active"
+  }
+}

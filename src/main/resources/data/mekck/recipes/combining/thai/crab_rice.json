@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":3,"ingredient":{"item":"minecraft:bowl"}},"mainInput":{"ingredient":{
+    
+"item":"muffins_thaidelight:crab_fried_rice_feast"
+
+}},"output":{
+    
+"count":4,"item":"muffins_thaidelight:crab_fried_rice"}}

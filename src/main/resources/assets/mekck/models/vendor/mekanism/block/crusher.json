@@ -1,0 +1,12 @@
+{
+  "parent": "mekck:vendor/mekanism/block/machine",
+  "textures": {
+    "sides": "mekck:block/vendor/mekanism/block/crusher/side",
+    "front": "mekck:block/vendor/mekanism/block/crusher/front",
+    "west": "mekck:block/vendor/mekanism/block/crusher/side",
+    "east": "mekck:block/vendor/mekanism/block/crusher/side",
+    "south": "mekck:block/vendor/mekanism/block/crusher/back",
+    "up": "mekck:block/vendor/mekanism/block/crusher/top",
+    "down": "mekck:block/vendor/mekanism/block/crusher/bottom"
+  }
+}

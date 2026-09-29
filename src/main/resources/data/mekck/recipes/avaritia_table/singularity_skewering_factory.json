@@ -1,0 +1,41 @@
+{
+  "type": "avaritia:shaped_table",
+  "category": "misc",
+  "tier": 4,
+  "show_notification": true,
+  "key": {
+    "P": {
+      "item": "avaritia:infinity_ingot"
+    },
+    "N": {
+      "item": "avaritia:neutron_ingot"
+    },
+    "B": {
+      "item": "avaritia:neutron"
+    },
+    "C": {
+      "item": "avaritia:crystal_matrix"
+    },
+    "A": {
+      "item": "avaritia:crystal_matrix_ingot"
+    },
+    "Z": {
+      "item": "mekck:nebula_skewering_factory"
+    }
+  },
+  "pattern": [
+    "         ",
+    " P    CP ",
+    " CB  NB  ",
+    "  NNAN   ",
+    "   AZA   ",
+    "   NANN  ",
+    "  BN  BC ",
+    " PC    P ",
+    "         "
+  ],
+  "result": {
+    "item": "mekck:singularity_skewering_factory",
+    "count": 1
+  }
+}

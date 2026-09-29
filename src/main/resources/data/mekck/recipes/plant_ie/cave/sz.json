@@ -1,0 +1,10 @@
+{"type":"immersiveengineering:cloche","input":{
+
+"item":"alexscaves:pewen_branch"
+},
+"render":{"type":"crop","block":"minecraft:potatoes"},
+"results":[{"count":3,"item":
+
+"alexscaves:pine_nuts"
+
+}],"soil":{"item":"minecraft:dirt"},"time":800}

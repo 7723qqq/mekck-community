@@ -1,0 +1,23 @@
+{
+  "type": "forge:conditional",
+  "recipes": [
+    {
+      "conditions": [
+        {
+          "type": "forge:mod_loaded",
+          "modid": "createcafe"
+        }
+      ],
+      "recipe": {
+        "type": "kaleidoscope_cookery:millstone",
+        "ingredient": {
+          "item": "createcafe:cassava_root"
+        },
+        "result": {
+          "item": "createcafe:tapioca_flour",
+          "count": 2
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "forge:ingots/gold"
+    },
+    "C": {
+      "tag": "forge:circuits/elite"
+    },
+    "I": {
+      "tag": "mekanism:alloys/reinforced"
+    },
+    "P": {
+      "item": "mekck:advanced_cutting_factory"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "IPI",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:elite_cutting_factory"
+  },
+  "show_notification": true
+}

@@ -1,0 +1,28 @@
+{
+  "type": "avaritia:shaped_table",
+  "category": "misc",
+  "tier": 2,
+  "show_notification": true,
+  "key": {
+    "M": {
+      "item": "avaritia:blaze_cube"
+    },
+    "L": {
+      "item": "avaritia:blaze_cube_block"
+    },
+    "Z": {
+      "item": "mekck:infinite_planting_cutting_factory"
+    }
+  },
+  "pattern": [
+    "  M  ",
+    " MM  ",
+    "MLZLM",
+    "MLMM ",
+    "MMMMM"
+  ],
+  "result": {
+    "item": "mekck:blaze_planting_cutting_factory",
+    "count": 1
+  }
+}

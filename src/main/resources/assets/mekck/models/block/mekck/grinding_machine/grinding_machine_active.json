@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/grinding_machine/grinding_machine",
+  "textures": {
+    "front": "mekck:block/mekck/grinding_machine/front_active",
+    "west": "mekck:block/mekck/grinding_machine/right_active",
+    "east": "mekck:block/mekck/grinding_machine/left_active",
+    "south": "mekck:block/mekck/grinding_machine/back_active",
+    "up": "mekck:block/mekck/grinding_machine/top_active"
+  }
+}

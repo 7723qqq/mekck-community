@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/fermenter/fermenter",
+  "textures": {
+    "front": "mekck:block/mekck/fermenter/front_active",
+    "west": "mekck:block/mekck/fermenter/right_active",
+    "east": "mekck:block/mekck/fermenter/left_active",
+    "south": "mekck:block/mekck/fermenter/back_active",
+    "up": "mekck:block/mekck/fermenter/top_active"
+  }
+}

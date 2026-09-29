@@ -1,0 +1,9 @@
+{
+  "type": "mekck:grinding",
+  "ingredient": {
+    "item": "mekck:roasted_hazelnut"
+  },
+  "result": {
+    "item": "mekck:hazelnut_powder"
+  }
+}

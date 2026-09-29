@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "mekck:item/overlord_reaper_upgrade"
+  }
+}

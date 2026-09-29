@@ -1,0 +1,7 @@
+{"type":"mekanism:combining","extraInput":{"amount":3,"ingredient":{"item":"minecraft:bowl"}},"mainInput":{"ingredient":{
+    
+"item":"muffins_thaidelight:spicy_minced_meat_salad_feast"
+
+}},"output":{
+    
+"count":4,"item":"muffins_thaidelight:spicy_minced_meat_salad"}}

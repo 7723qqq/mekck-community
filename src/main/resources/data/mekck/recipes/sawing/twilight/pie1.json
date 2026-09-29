@@ -1,0 +1,8 @@
+{"type":"mekanism:sawing","input":{"ingredient":{
+
+"item":"twilightdelight:torchberry_pie"
+
+}},"mainOutput":{"count":4,
+
+"item":"twilightdelight:torchberry_pie_slice"
+}}

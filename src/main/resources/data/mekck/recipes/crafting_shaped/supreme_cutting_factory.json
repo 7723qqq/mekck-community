@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "A": {
+      "tag": "mekanism_extras:alloys/thermonuclear"
+    },
+    "C": {
+      "tag": "forge:circuits/supreme"
+    },
+    "I": {
+      "tag": "forge:ingots/netherite"
+    },
+    "P": {
+      "item": "mekck:absolute_cutting_factory"
+    }
+  },
+  "pattern": [
+    "ACA",
+    "IPI",
+    "ACA"
+  ],
+  "result": {
+    "item": "mekck:supreme_cutting_factory"
+  },
+  "show_notification": true
+}

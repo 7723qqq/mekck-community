@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "G": {
+      "tag": "forge:glass/silica"
+    },
+    "A": {
+      "tag": "mekanism_extras:alloys/shining"
+    },
+    "#": {
+      "item": "minecraft:tnt"
+    }
+  },
+  "pattern": [
+    " G ",
+    "A#A",
+    " G "
+  ],
+  "result": {
+    "item": "mekck:overlord_reaper_upgrade"
+  },
+  "show_notification": true
+}

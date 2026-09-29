@@ -1,0 +1,36 @@
+{
+  "type": "avaritia:shaped_table",
+  "category": "misc",
+  "tier": 3,
+  "show_notification": true,
+  "key": {
+    "N": {
+      "item": "avaritia:neutron_ingot"
+    },
+    "M": {
+      "item": "avaritia:neutron"
+    },
+    "A": {
+      "item": "avaritia:crystal_matrix_ingot"
+    },
+    "L": {
+      "item": "avaritia:diamond_lattice"
+    },
+    "Z": {
+      "item": "mekck:crystal_matrix_skewering_factory"
+    }
+  },
+  "pattern": [
+    "       ",
+    " M  NM ",
+    " NALA  ",
+    "  LZL  ",
+    "  ALAN ",
+    " MN  M ",
+    "       "
+  ],
+  "result": {
+    "item": "mekck:nebula_skewering_factory",
+    "count": 1
+  }
+}

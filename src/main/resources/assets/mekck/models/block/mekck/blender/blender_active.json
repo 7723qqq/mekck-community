@@ -1,0 +1,10 @@
+{
+  "parent": "mekck:block/mekck/blender/blender",
+  "textures": {
+    "front": "mekck:block/mekck/blender/front_active",
+    "west": "mekck:block/mekck/blender/right_active",
+    "east": "mekck:block/mekck/blender/left_active",
+    "south": "mekck:block/mekck/blender/back_active",
+    "up": "mekck:block/mekck/blender/top_active"
+  }
+}

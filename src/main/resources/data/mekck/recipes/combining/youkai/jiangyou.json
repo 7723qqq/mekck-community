@@ -1,0 +1,21 @@
+{
+  "type": "mekanism:combining",
+  "mainInput": {
+    "ingredient": {
+      "item": "youkaishomecoming:soybean"
+    },
+    "amount": 1
+  },
+  "extraInput": {
+    "ingredient": {
+      "type": "forge:nbt",
+      "item": "minecraft:potion",
+      "nbt": "{\"Potion\":\"minecraft:water\"}"
+    },
+    "amount": 1
+  },
+  "output": {
+    "count": 1,
+    "item": "youkaishomecoming:soy_sauce_bottle"
+  }
+}
