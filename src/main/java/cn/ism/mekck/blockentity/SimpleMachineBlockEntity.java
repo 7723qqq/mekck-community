@@ -4835,6 +4835,11 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         tag.putBoolean("MeOrderEnabled", meOrderEnabled);
         tag.put("InputFluid", inputTank.writeToNBT(new CompoundTag()));
         tag.put("OutputFluid", outputTank.writeToNBT(new CompoundTag()));
+        // 同理必须调用两个外部持久化助手：AE2 的自动补料清单（缺失会丢玩家逐条配的补料规则）
+        // 与放置器 UUID（缺失会让已放置的机器被当成新机器）。load 侧两者都会读回，
+        // 此处不写就等于「挖起来再放下」必丢，而 getDrops 为空时物品是状态的唯一载体。
+        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
         if (orderRecipeId != null) {
             tag.putString("OrderRecipeId", orderRecipeId.toString());
             tag.putInt("OrderQuantity", orderQuantity);
