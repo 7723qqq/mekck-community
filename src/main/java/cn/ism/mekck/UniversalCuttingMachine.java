@@ -153,6 +153,13 @@ public final class UniversalCuttingMachine {
     /** 通用机械指南手册（右键打开 GuideME 指南 mekguide:mek）。 */
     public static final RegistryObject<Item> GUIDE_HANDBOOK_ITEM = ITEMS.register("guide_handbook",
             () -> new cn.ism.mekck.item.GuideHandbookItem(new Item.Properties().stacksTo(1)));
+
+    /** 存储升级卡（mekck:upgrade_storage）：提升并行线程数与缓冲容量，{@code Upgrade.getMax()} 为 6。 */
+    public static final RegistryObject<Item> STORAGE_UPGRADE_ITEM = ITEMS.register("upgrade_storage",
+            () -> new cn.ism.mekck.upgrade.MekCkStorageUpgradeItem(new Item.Properties().stacksTo(64)));
+    /** 随机化升级卡（mekck:upgrade_randomize）：随机化本局 49 种可用食物，{@code Upgrade.getMax()} 为 1。 */
+    public static final RegistryObject<Item> RANDOMIZE_UPGRADE_ITEM = ITEMS.register("upgrade_randomize",
+            () -> new cn.ism.mekck.upgrade.MekCkRandomizeUpgradeItem(new Item.Properties().stacksTo(64)));
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(ForgeRegistries.BLOCK_ENTITY_TYPES, MOD_ID);
     public static final DeferredRegister<MenuType<?>> MENUS = DeferredRegister.create(ForgeRegistries.MENU_TYPES, MOD_ID);
     public static final DeferredRegister<FluidType> FLUID_TYPES = DeferredRegister.create(ForgeRegistries.Keys.FLUID_TYPES, MOD_ID);
