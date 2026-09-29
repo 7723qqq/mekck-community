@@ -608,7 +608,7 @@ B/C 组旧机器用旧的，A 组新机器用 Mek 的。阶段 5 后再决定是
 **未声明 `mekanism_extras`**。未装 Mek Extras 时两类升级卡静默失效——
 `getType()` 恒返回 `NONE`，STACK/CREATIVE 槽永远填不上，线程数锁死基础值。
 
-### 8.3 档位接入 Mek `ITier`（v4 新增，2026-09-29 决策）
+### 8.3 档位接入 Mek `ITier`（v4 新增，2026-09-29 决策，**已实现**）
 
 **决策**：`MekCkFactoryTier` 实现 `mekanism.api.tier.ITier`，让 12 档成为**合法的 Mek 档位**，
 而不是私有平行枚举。
@@ -968,6 +968,11 @@ COOKING 有 144 格材料库（`§6.4`），与另外 6 个工艺的 `processes 
 
 1. **档位映射完整性**：`MekCkFactoryTier.values()` 每一项 `getBaseTier()` 非 null；
    12 档全部映射到 4 个 `BaseTier` 常量；`CREATIVE` 不被任何档位使用。
+   → **`TestFactoryTierBaseTierMapping` 已覆盖（5 条断言）**。
+   该测试复刻映射表而不加载枚举本体（`SupportsColorMap` 的静态初始化链在裸 JVM 里
+   必然失败），编译期 `implements ITier` 与实机共同保证「表真的接在枚举上」。
+   其余 8 条用例针对阶段 2 迁移后的 `CachedRecipe` 语义，**当前无法编写**——那些机制
+   还不存在，提前写只能测到旧实现，是自欺。
 2. **产物闸门**：`currentMax` 在「输出满」时**必须为 0**，不为负。
    构造一个输出槽已满的场景，断言 `operatingTicks` 未被清零。
 3. **能量不足**：`currentMax == 0` 且 `operatingTicks` 保留。
