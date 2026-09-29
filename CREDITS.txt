@@ -13,7 +13,8 @@ MekCK — Credits
   Farmer's Delight      https://github.com/vectorwing/FarmersDelight
 
 可选联动 / Optional Integrations
-  Mekanism Extras       工厂安装器（绝对 ~ 悖论无限）
+  Mekanism Extras       工厂安装器（绝对 ~ 悖论无限）；MekCK 自己的升级卡
+                        （存储 / 随机化）已自注册，不依赖本模组
   Barbeque's Delight    穿串 / 烧烤配方
   Kaleidoscope Cookery  锅具 / 炒锅 / 研磨配方
   Kaleidoscope Grilling 烤制 / 调味

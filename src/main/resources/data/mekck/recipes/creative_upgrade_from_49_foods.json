@@ -153,7 +153,10 @@
     }
   ],
   "result": {
-    "item": "mekanism_extras:upgrade_creative",
+    "item": "mekck:upgrade_randomize",
     "count": 1
-  }
+  },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "avaritia"}
+  ]
 }

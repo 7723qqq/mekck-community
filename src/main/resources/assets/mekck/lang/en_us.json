@@ -312,5 +312,13 @@
   "item.mekck.grilled_cod": "Grilled Cod",
   "item.mekck.grilled_salmon": "Grilled Salmon",
   "item.mekck.grilled_carrot": "Grilled Carrot",
-  "item.mekck.grilled_mushroom": "Grilled Mushroom"
+  "item.mekck.grilled_mushroom": "Grilled Mushroom",
+  "upgrade.mekck.storage": "Storage Upgrade",
+  "upgrade.mekck.storage.description": "Increases a machine's parallel thread count and buffer capacity.",
+  "upgrade.mekck.randomize": "Randomize Upgrade",
+  "upgrade.mekck.randomize.description": "Randomizes which foods this world's machines can produce.",
+  "item.mekck.upgrade_storage": "Storage Upgrade",
+  "item.mekck.upgrade_randomize": "Randomize Upgrade",
+  "tooltip.mekck.upgrade_storage": "Increases parallel thread count and buffer capacity.",
+  "tooltip.mekck.upgrade_randomize": "Randomizes this world's available foods."
 }

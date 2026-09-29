@@ -333,5 +333,13 @@
   "item.mekck.grilled_cod": "烤鳕鱼",
   "item.mekck.grilled_salmon": "烤鲑鱼",
   "item.mekck.grilled_carrot": "烤胡萝卜",
-  "item.mekck.grilled_mushroom": "烤蘑菇"
+  "item.mekck.grilled_mushroom": "烤蘑菇",
+  "upgrade.mekck.storage": "存储升级",
+  "upgrade.mekck.storage.description": "提升机器的并行线程数与缓冲容量。",
+  "upgrade.mekck.randomize": "随机化升级",
+  "upgrade.mekck.randomize.description": "随机化本局机器可生产的食物种类。",
+  "item.mekck.upgrade_storage": "存储升级",
+  "item.mekck.upgrade_randomize": "随机化升级",
+  "tooltip.mekck.upgrade_storage": "提升并行线程数与缓冲容量。",
+  "tooltip.mekck.upgrade_randomize": "随机化本局可用的食物种类。"
 }
