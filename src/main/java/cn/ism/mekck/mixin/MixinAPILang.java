@@ -36,8 +36,9 @@ import java.util.Arrays;
  * 匹配上之后生成 {@code NEW / DUP / 压参 / INVOKESPECIAL / ARETURN}。
  * 所以参数必须按<b>字节码元数</b>写，不能按源码元数写：
  * 枚举构造的前两个槽位是编译器合成的 {@code (String name, int ordinal)}。
- * {@code javap} 不带 {@code -s} 不打印 {@code descriptor:} 行，带了也不打印参数名
- * （除非另加 {@code -parameters}），所以「源码几参」与「字节码几参」不是一回事。实测输出：
+ * {@code javap -p} 打印源码层签名但不打印参数名；{@code javap -p -s} 额外打印
+ * {@code descriptor:} 行，<b>那才是判断 {@code @Invoker} 参数个数的依据</b>。
+ * （javap 没有任何能打开参数名的选项，别指望从签名里读出 {@code key} 这类名字。）实测输出：
  * <pre>
  *   $ javap -p -s mekanism.api.text.APILang
  *     private mekanism.api.text.APILang(java.lang.String, java.lang.String);
@@ -50,42 +51,53 @@ import java.util.Arrays;
  * 传 1 个参数会让 Mixin 去找不存在的 {@code (Ljava/lang/String;)V}，
  * 在 required mixin 下直接抛 {@code InvalidAccessorException} 导致启动失败。
  *
- * <h3>为什么必须「先构造、后写回数组」——JDK 17 不变式</h3>
- * {@link #mekck$add(String, String)} 的顺序不能调换：先 {@code NEW} 出新常量，
- * 再把加长后的数组写回 {@code $VALUES}。这依赖 JDK 17 的 {@code java.lang.Enum(String, int)}
- * 只做两次字段赋值、不碰共享常量数组。实测（Temurin 17.0.20+8）：
+ * <h3>为什么是「先构造、后写回数组」这个顺序</h3>
+ * {@link #mekck$add(String, String)} 先 {@code NEW} 出新常量，再把加长后的数组写回
+ * {@code $VALUES}。这个顺序之所以安全，依据是一条已实测的事实：
+ * {@code java.lang.Enum(String, int)} <b>只做两次字段赋值，不写共享常量数组</b>，
+ * 枚举常量目录由 {@code java.lang.Class} 侧维护。两个 JDK 实测同形：
  * <pre>
- *   $ javap -c -p java.lang.Enum
+ *   $ javap -c -p java.lang.Enum                    # Temurin 17.0.20+8
+ *   $ /d/mc/neon_jdk8/bin/javap.exe -c -p java.lang.Enum   # Alibaba Dragonwell 1.8.0_292
  *     protected java.lang.Enum(java.lang.String, int);
  *       Code:
  *          0: aload_0
- *          1: invokespecial #11   // Method java/lang/Object."&lt;init&gt;":()V
+ *          1: invokespecial  // Method java/lang/Object."&lt;init&gt;":()V
  *          4: aload_0
  *          5: aload_1
- *          6: putfield      #1    // Field name:Ljava/lang/String;
+ *          6: putfield      // Field name:Ljava/lang/String;
  *          9: aload_0
  *         10: iload_2
- *         11: putfield      #7    // Field ordinal:I
+ *         11: putfield      // Field ordinal:I
  *         14: return
  * </pre>
- * <b>不要把它「优化」成先写回加长后的数组再构造</b>：一旦目标构造会去按 ordinal 写共享数组
- * （旧 JDK 的枚举实现有此行为，本机无 JDK 8/11 可实测，此处未验证），
- * ordinal 就得落在长度为 N 的旧数组之外，直接 {@code ArrayIndexOutOfBoundsException}。
- * 保持现在的顺序即可。
+ * 两边都没有 {@code values[ordinal] = this}，所以新常量的 ordinal 即使超出当前数组长度也不会越界。
+ * 保持现在这个顺序即可；<b>不要再为它编一个并不存在的越界理由</b>。
  *
  * <h3>为什么 ordinal 取数组长度</h3>
  * {@code ordinal} 必须是常量在 {@code $VALUES} 里的下标。{@code variants} 是加入新常量
  * <i>之前</i>的快照，其长度恰好等于新常量的下标。name 传常量名后 {@code name()} 正常。
  *
- * <h3>为什么不能用 {@code APILang.valueOf(...)} 取常量</h3>
- * 4 个注入常量<b>只能</b>经 {@code MekCkAPILang} 的访问器取，不能靠 {@code valueOf}。
- * JDK 17 的 {@code Enum.valueOf(Class, String)} 走 {@code Class.enumConstantDirectory()}，
- * 那是一个建在 {@code transient volatile Map} 字段里的一次性缓存：首次调用时从
- * {@code getEnumConstantsShared()} 拉一次快照，之后永不刷新；{@code Class.getEnumConstants()}
- * 同样只是把该缓存克隆一份返回。改写 {@code $VALUES} 不会让任何一处重建它。
- * 所以只要有谁在注入之前碰过一次 {@code Enum.valueOf} / {@code getEnumConstants()}
- * （反射扫描、库预热等，顺序不受本 Mixin 控制），这 4 个常量对它就不可见，
- * 会抛 {@code IllegalArgumentException: No enum constant}。
+ * <h3>为什么不要依赖 {@code APILang.valueOf(...)} 取常量</h3>
+ * 4 个注入常量<b>只能</b>经 {@code MekCkAPILang} 的访问器取。{@code java.lang.Class} 上有
+ * <b>两个各自独立</b>的一次性缓存字段，二者都不会因改写 {@code $VALUES} 而重建：
+ * <pre>
+ *   private volatile transient T[] enumConstants;                    // 数组缓存
+ *   private volatile transient Map&lt;String, T&gt; enumConstantDirectory;  // 名字→常量的 Map 缓存
+ * </pre>
+ * {@code Enum.valueOf(Class, String)} 走 {@code enumConstantDirectory()}（那个 Map）；
+ * {@code Class.getEnumConstants()} 走 {@code getEnumConstantsShared().clone()}，克隆的是
+ * <b>数组缓存</b>。两者只在为 null 时填充一次。
+ *
+ * <p>填充时机决定了可见性：{@code getEnumConstantsShared()} 是靠
+ * {@code getMethod("values") + Method.invoke} 取快照的，而反射调静态方法会强制
+ * {@code <clinit>} 完成——所以外部任何人都无法在本 Mixin 的 TAIL 注入之前把缓存填上，
+ * {@code valueOf} <b>通常</b>能命中注入的常量。真正能污染缓存的只有<b>重入</b>：
+ * 在 {@code APILang.<clinit>} 完成之前，从 {@code <clinit>} 内部调
+ * {@code APILang.valueOf(...)}（例如另一个 Mixin 的注入点排在 TAIL 之前），
+ * 快照会取到尚未加长的数组并被永久钉死，此后 {@code valueOf("UPGRADE_STORAGE")}
+ * 抛 {@code IllegalArgumentException: No enum constant}。
+ * 这个时序没有任何契约保证，所以不要依赖 {@code valueOf}。
  *
  * <h3>与其它注入者的共存</h3>
  * {@code @Shadow} 读的是目标类的活字段，所以本 Mixin 看到的是
