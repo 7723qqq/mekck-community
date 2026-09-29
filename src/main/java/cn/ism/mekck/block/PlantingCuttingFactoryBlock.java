@@ -1,173 +1,213 @@
 package cn.ism.mekck.block;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
-import cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity;
+import cn.ism.mekck.machine.plantingcutting.PlantingCuttingFactoryTile;
+import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.util.MekCkMultiblock;
+import mekanism.api.math.FloatingLong;
+import mekanism.api.text.ILangEntry;
+import mekanism.common.block.attribute.AttributeEnergy;
+import mekanism.common.block.attribute.AttributeStateFacing;
+import mekanism.common.block.attribute.Attributes;
+import mekanism.common.block.prefab.BlockTile;
+import mekanism.common.content.blocktype.BlockTypeTile;
+import mekanism.common.inventory.container.MekanismContainer;
+import mekanism.common.registries.MekanismSounds;
+import mekanism.common.registration.impl.ContainerTypeRegistryObject;
+import mekanism.common.registration.impl.TileEntityTypeRegistryObject;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.Containers;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.context.BlockPlaceContext;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.BaseEntityBlock;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Mirror;
-import net.minecraft.world.level.block.RenderShape;
-import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.block.SoundType;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityTicker;
-import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
-import net.minecraft.world.level.block.state.properties.DirectionProperty;
-import net.minecraft.world.level.storage.loot.LootParams;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraftforge.network.NetworkHooks;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
+import java.util.Set;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
 
-public final class PlantingCuttingFactoryBlock extends BaseEntityBlock {
-    public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    public static final BooleanProperty ACTIVE = BooleanProperty.create("active");
+/**
+ * 种植切配工厂方块（Mek 体系版）—— 阶段 3 从自研 {@code BaseEntityBlock} 换成 {@link BlockTile}。
+ *
+ * <h3>与切菜方块的三处差别</h3>
+ * <ol>
+ *   <li><b>1×2×1 多方块的放置校验</b>保留在本类：{@code getStateForPlacement} 里查
+ *       {@link MekCkMultiblock#canPlace}，{@code setPlacedBy} 里放绑定方块，
+ *       {@code onRemove} 里拆绑定方块。Mek 的 {@code BlockTile} 不管多方块，
+ *       这三步必须自己留着。</li>
+ *   <li><b>落地方块</b>不覆写 {@code getDrops} 返空、也不在 {@code onRemove} 里手动掉物品
+ *       ——切菜已经验证过 Mek 的 {@code BlockMekanism.onRemove} 会处理，
+ *       物品由 {@code data/mekck/loot_tables/blocks/<id>.json} 掉出。
+ *       旧实现在这里 {@code saveToItem} + 手动掉，与 Mek 的路径重复，
+ *       留着会双份掉落。</li>
+ *   <li><b>「潜行 + 手持升级模块直接装槽」快捷键</b>作废，由 Mek 升级 tab 取代。</li>
+ * </ol>
+ */
+public final class PlantingCuttingFactoryBlock
+        extends BlockTile<PlantingCuttingFactoryTile, BlockTypeTile<PlantingCuttingFactoryTile>> {
+
+    /**
+     * 1×2×1 多方块形状：主方块 + 上方 1 个绑定方块。
+     *
+     * <p>逐字取自旧实现，与 {@code MekCkMultiblock.SHAPE_2_TALL} 同一个对象。</p>
+     */
+    private static final mekanism.api.functions.TriConsumer<BlockPos, BlockState, Stream.Builder<BlockPos>>
+            BOUNDING_SHAPE = MekCkMultiblock.SHAPE_2_TALL;
+
+    /**
+     * 朝向属性。
+     *
+     * <p>与 {@code blockTypeFor} 里 {@code new AttributeStateFacing()} 用的是
+     * <b>同一个无参构造</b>，所以两边的 facingProperty 一致
+     * （默认 {@code BlockStateProperties.HORIZONTAL_FACING}），
+     * 现有 blockstate JSON 里的 {@code facing=} 变体因此照旧匹配，贴图与模型都不用改。
+     */
+    private static final AttributeStateFacing FACING_ATTRIBUTE = new AttributeStateFacing();
+
     private final CuttingMachineFactoryTier tier;
-    /** 绑定方块形状：与种植切配站一致，1×2×1（主方块 + 上方 1 个绑定方块）。 */
-    private static final mekanism.api.functions.TriConsumer<BlockPos, BlockState, java.util.stream.Stream.Builder<BlockPos>> BOUNDING_SHAPE = MekCkMultiblock.SHAPE_2_TALL;
 
-    public PlantingCuttingFactoryBlock(CuttingMachineFactoryTier tier) {
-        super(BlockBehaviour.Properties.of().strength(3.5F).sound(SoundType.METAL).requiresCorrectToolForDrops());
+    public PlantingCuttingFactoryBlock(BlockTypeTile<PlantingCuttingFactoryTile> type,
+                                      CuttingMachineFactoryTier tier,
+                                      UnaryOperator<BlockBehaviour.Properties> propertyModifier) {
+        super(type, propertyModifier);
         this.tier = tier;
-        this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(ACTIVE, false));
     }
 
-    @Override
-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING, ACTIVE);
+    /**
+     * 本方块的等级。
+     *
+     * <p>{@code PlantingCuttingFactoryTile} 在构造期就靠它反查档位
+     * （基类注释的「构造期顺序陷阱」），所以必须由构造参数带进来。</p>
+     */
+    public CuttingMachineFactoryTier getTier() {
+        return tier;
     }
 
-    @Nullable
+    // ── 1×2×1 多方块：Mek 的 BlockTile 不管这三步 ──────────────────────
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>在 {@link AttributeStateFacing} 给出的朝向之外，额外要求上方一格空着——
+     * 绑定方块放不下时直接拒绝放置，否则会造出半截多方块。</p>
+     */
     @Override
-    public BlockState getStateForPlacement(BlockPlaceContext context) {
-        BlockState state = this.defaultBlockState().setValue(FACING, context.getHorizontalDirection());
-        // 绑定方块位置被占用时禁止放置
+    public BlockState getStateForPlacement(net.minecraft.world.item.context.BlockPlaceContext context) {
+        // 用 AttributeStateFacing 的实例方法而不是直接 setValue：
+        // 它持有自己的 facingProperty（默认 HORIZONTAL_FACING），
+        // 且保证写进 state 的属性名与 Mek 的方块描述一致。
+        BlockState state = FACING_ATTRIBUTE.setDirection(
+                this.defaultBlockState(), context.getHorizontalDirection());
         if (!MekCkMultiblock.canPlace(context.getLevel(), context.getClickedPos(), state, BOUNDING_SHAPE)) {
             return null;
         }
         return state;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>放绑定方块组成 1×2×1 整体。自定义名仍由 {@code setPlacedBy} 处理
+     * （{@code TileEntityMekanism} 实现了 {@code Nameable}）。</p>
+     */
     @Override
-    public BlockState rotate(BlockState state, Rotation rotation) {
-        return state.setValue(FACING, rotation.rotate(state.getValue(FACING)));
-    }
-
-    @Override
-    public BlockState mirror(BlockState state, Mirror mirror) {
-        return state.rotate(mirror.getRotation(state.getValue(FACING)));
-    }
-
-    public CuttingMachineFactoryTier getTier() {
-        return tier;
-    }
-
-    @Override
-    public RenderShape getRenderShape(BlockState state) {
-        return RenderShape.MODEL;
-    }
-
-    @Override
-    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (!level.isClientSide && player instanceof ServerPlayer serverPlayer
-                && level.getBlockEntity(pos) instanceof PlantingCuttingFactoryBlockEntity machine) {
-            if (player.isShiftKeyDown()) {
-                ItemStack held = player.getItemInHand(hand);
-                if (!held.isEmpty() && cn.ism.mekck.util.UpgradeHelper.isUpgrade(held)) {
-                    String upgradeName = held.getHoverName().getString();
-                    int added = machine.addUpgradesFromHand(held);
-                    if (added > 0) {
-                        held.shrink(added);
-                        player.setItemInHand(hand, held);
-                        player.displayClientMessage(net.minecraft.network.chat.Component.literal("§a已安装升级：§f" + upgradeName), true);
-                        return InteractionResult.sidedSuccess(false);
-                    }
-                    player.displayClientMessage(net.minecraft.network.chat.Component.literal("§c无法安装升级：对应槽位已满或本机器不支持该升级"), true);
-                    return InteractionResult.sidedSuccess(false);
-                }
-            }
-            NetworkHooks.openScreen(serverPlayer, machine, pos);
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state,
+                            net.minecraft.world.entity.LivingEntity placer, ItemStack stack) {
+        if (stack.hasCustomHoverName() && level.getBlockEntity(pos) instanceof PlantingCuttingFactoryTile tile) {
+            tile.setCustomName(stack.getHoverName());
         }
-        return InteractionResult.sidedSuccess(level.isClientSide);
-    }
-
-    @Override
-    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
-        if (stack.hasCustomHoverName() && level.getBlockEntity(pos) instanceof PlantingCuttingFactoryBlockEntity machine) {
-            machine.setCustomName(stack.getHoverName());
-        }
-        // 放置绑定方块，组成 1×2×1 多方块整体
         MekCkMultiblock.placeBoundingBlocks(level, pos, state, BOUNDING_SHAPE);
     }
 
+    /** 拆绑定方块：多方块整体破坏。物品掉落交给 Mek 的 onRemove + loot table。 */
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading()) {
-            // 清理绑定方块（整体一起破坏）
             MekCkMultiblock.removeBoundingBlocks(level, pos, state, BOUNDING_SHAPE);
-            if (level.getBlockEntity(pos) instanceof PlantingCuttingFactoryBlockEntity machine) {
-                ItemStack stack = new ItemStack(this);
-                machine.saveToItem(stack);
-                Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
-                level.updateNeighbourForOutputSignal(pos, this);
-            }
         }
         super.onRemove(state, level, pos, newState, movedByPiston);
     }
 
-    @Override
-    public List<ItemStack> getDrops(BlockState state, LootParams.Builder builder) {
-        return List.of();
+    // ── 方块类型描述 ────────────────────────────────────────────────────
+
+    /**
+     * 构造本等级种植切配工厂的方块类型描述。
+     *
+     * <p>四个属性一个都不能少，<b>各自的缺失症状</b>：
+     * <ul>
+     *   <li>{@code withGui} → 缺了右键不开界面；</li>
+     *   <li>{@code withEnergyConfig} → {@code MachineEnergyContainer.input} 在构造时读它；</li>
+     *   <li>{@code withSupportedUpgrades} → 缺了 {@code supportsUpgrades()} 为 false；</li>
+     *   <li>{@link AttributeStateFacing} → 缺了 blockstate 的 {@code facing=} 变体全不匹配，方块隐形。</li>
+     * </ul>
+     */
+    public static BlockTypeTile<PlantingCuttingFactoryTile> blockTypeFor(
+            CuttingMachineFactoryTier tier,
+            Supplier<ContainerTypeRegistryObject<? extends MekanismContainer>> containerRef,
+            Supplier<TileEntityTypeRegistryObject<PlantingCuttingFactoryTile>> tileRef) {
+
+        BlockTypeTile.BlockTileBuilder<BlockTypeTile<PlantingCuttingFactoryTile>,
+                PlantingCuttingFactoryTile, ?> builder =
+                BlockTypeTile.BlockTileBuilder.createBlock(tileRef, new PlantingCuttingLangEntry(tier));
+
+        builder.withGui(containerRef);
+
+        // AttributeEnergy 的参数是 (usage, storage)（先用后容）。用 lambda 延迟取值。
+        builder.withEnergyConfig(
+                () -> FloatingLong.create(tier.energyPerTick),
+                () -> FloatingLong.create(tier.energyCapacity));
+
+        builder.withSupportedUpgrades(supportedUpgrades());
+        builder.withSound(MekanismSounds.PRECISION_SAWMILL);
+
+        builder.with(new AttributeStateFacing());
+        builder.with(Attributes.ACTIVE);
+        builder.with(Attributes.REDSTONE);
+        builder.with(Attributes.SECURITY);
+        builder.with(Attributes.INVENTORY);
+
+        return builder.build();
     }
 
-    @Nullable
-    @Override
-    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new PlantingCuttingFactoryBlockEntity(tier, pos, state);
+    /**
+     * 本模组允许装进种植切配工厂的升级类型。
+     *
+     * <p>与 {@code MekCkMachineTile#getSupportedUpgrade()} 是<b>两道不同的闸门</b>：
+     * 这里决定方块属性 {@code AttributeUpgradeSupport}（进而决定升级槽与升级 tab
+     * 是否出现），那个方法决定 {@code TileComponentUpgrade} 收哪几种卡。
+     *
+     * <p>刻意只列这 4 种，<b>不要写 {@code Upgrade.values()}</b>——
+     * 那会把其它注入者（Mek Extras 等）的几十种升级一并开放，本机一个都用不上。
+     *
+     * <p>写成方法而不是 {@code static final}：常量会在本类 {@code <clinit>} 求值，
+     * 而 {@link MekCkUpgradeRefs#storage()} 读的是 Mixin 在 {@code Upgrade.<clinit>}
+     * 的 TAIL 才赋值的字段。放进方法里，异常至少带着调用栈出现。
+     */
+    private static Set<mekanism.api.Upgrade> supportedUpgrades() {
+        return Set.of(
+                mekanism.api.Upgrade.SPEED,
+                mekanism.api.Upgrade.ENERGY,
+                MekCkUpgradeRefs.storage(),
+                MekCkUpgradeRefs.randomize());
     }
 
-    @Nullable
-    @Override
-    @SuppressWarnings("unchecked")
-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
-        BlockEntityType<?> expectedType = getExpectedTileType();
-        if (expectedType == null) return null;
-        if (type != expectedType) return null;
-        if (level.isClientSide) {
-            BlockEntityTicker<PlantingCuttingFactoryBlockEntity> ticker = PlantingCuttingFactoryBlockEntity::clientTick;
-            return (BlockEntityTicker<T>) (BlockEntityTicker<?>) ticker;
+    /**
+     * 逐等级的方块译名。
+     *
+     * <p>本模组的 lang key 是 {@code block.mekck.<tier>_planting_cutting_factory}
+     * （每等级一条），而 {@code MekCkFactoryType.PLANTING_CUTTING} 的 key 不带等级，
+     * 对不上，所以这里自带一个按等级拼的 entry。</p>
+     */
+    private static final class PlantingCuttingLangEntry implements ILangEntry {
+        private final CuttingMachineFactoryTier tier;
+
+        PlantingCuttingLangEntry(CuttingMachineFactoryTier tier) {
+            this.tier = tier;
         }
-        BlockEntityTicker<PlantingCuttingFactoryBlockEntity> ticker = PlantingCuttingFactoryBlockEntity::serverTick;
-        return (BlockEntityTicker<T>) (BlockEntityTicker<?>) ticker;
-    }
 
-    private BlockEntityType<?> getExpectedTileType() {
-        // 直接查注册表，不再逐个 case 列等级。
-        // 原先的 switch 只列了 11 个等级、**漏了 BLAZE** ⇒ 烈焰等级工厂的 ticker
-        // 取不到类型，同样会在放置时抛 IllegalArgumentException（2026-09-16 修复）。
-        return cn.ism.mekck.UniversalCuttingMachine.PLANTING_CUTTING_FACTORY_BLOCK_ENTITIES.get(tier).get();
-    }
-
-    @Override
-    public int getLightEmission(BlockState state, BlockGetter level, BlockPos pos) {
-        return 0;
+        @Override
+        public String getTranslationKey() {
+            return "block.mekck." + tier.getPlantingBlockId();
+        }
     }
 }

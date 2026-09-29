@@ -976,7 +976,7 @@ public final class MekckAe2 {
      *
      * <p>切菜工厂（阶段 2 Task 4.6）与研磨工厂（阶段 3 Task 1）走
      * {@link IMekCkPorted}，烧烤工厂仍走旧 {@code ItemStackHandler}。烧烤分支刻意只判这一个类：
-     * 其余 4 个家族不参与 ME 自动处理，判宽了会让「自动补料」误作用到
+     * 其余 3 个家族不参与 ME 自动处理，判宽了会让「自动补料」误作用到
      * 不该参与的机器上。新增家族时同理：先在 {@code portedFamily} 里登记，
      * 再来这里看是否需要补分支。</p>
      */
@@ -1010,7 +1010,9 @@ public final class MekckAe2 {
         MekCkFactoryType type = tile.getFactoryType();
         // 切菜（阶段 2 Task 4.6）与研磨（阶段 3 Task 1）是目前两个已接线的家族。
         // 其余四个仍返回 null：它们会走自己的旧方块实体，该分支正在迁移中。
-        return (type == MekCkFactoryType.CUTTING || type == MekCkFactoryType.GRINDING) ? type : null;
+        return (type == MekCkFactoryType.CUTTING
+                || type == MekCkFactoryType.GRINDING
+                || type == MekCkFactoryType.PLANTING_CUTTING) ? type : null;
     }
 
     /**
@@ -1603,7 +1605,8 @@ public final class MekckAe2 {
                 entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "ice_make"), avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity) {
                 entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "ferrero"), avail);
-            } else if (owner instanceof cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity) {
+            } else if (owner instanceof MekCkMachineTile && portedFamily(owner) == MekCkFactoryType.PLANTING_CUTTING) {
+                // 端口声明型工厂（阶段 3）：plantcut 配方，构建器与旧的种植切配工厂同款
                 entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "plantcut"), avail);
             } else if (owner instanceof MekCkMachineTile && portedFamily(owner) == MekCkFactoryType.CUTTING) {
                 // 端口声明型工厂（切菜，阶段 2 Task 4.6 起）：FD cutting 配方，
@@ -1796,8 +1799,6 @@ public final class MekckAe2 {
                 ice.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity cannon) {
                 cannon.setOrder(entry.recipeId, 1);
-            } else if (owner instanceof cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity pf) {
-                pf.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.GrillFactoryBlockEntity gfac) {
                 // 烧烤工厂的加工有订单门禁（无订单不自动加工），必须显式设订单
                 gfac.setOrder(entry.recipeId, 1, null); // 第三参为调味（终端下单不带调味）
@@ -1820,7 +1821,6 @@ public final class MekckAe2 {
             if (owner instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity roaster) return roaster.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity ice) return ice.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity cannon) return cannon.getItems();
-            if (owner instanceof cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity pf) return pf.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity kitchen) return kitchen.items;
             if (owner instanceof cn.ism.mekck.blockentity.SandwichAssemblerBlockEntity asm) return asm.items;
             return null;
@@ -1863,15 +1863,6 @@ public final class MekckAe2 {
             }
             if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity) {
                 return new int[]{cn.ism.mekck.blockentity.ChocolateCannonBlockEntity.OUTPUT_SLOT};
-            }
-            // 种植切配工厂：输出槽区 = [inputSlots, 2 * inputSlots)
-            // （研磨工厂的同一段已在阶段 3 Task 1 删掉：它走 MekCkMachineTile + IMekCkPorted，
-            //   槽位由 portWindow() 提供，不再需要手算下标。）
-            if (owner instanceof cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity pf) {
-                int n = pf.getInputSlots();
-                int[] slots = new int[n];
-                for (int i = 0; i < n; i++) slots[i] = n + i;
-                return slots;
             }
             if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity) {
                 int[] slots = new int[cn.ism.mekck.blockentity.CentralKitchenBlockEntity.OUTPUT_SLOTS];

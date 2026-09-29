@@ -281,7 +281,8 @@ public class MekCkBlockItem extends BlockItem {
             tooltip.add(Component.literal("该机器需要安装[mekmm]通用机械：更多机器才能运行")
                     .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
         }
-        // 种植切配工厂：烈焰炽焱及以上等级内置营养液消耗减免（与 PlantingCuttingFactoryBlockEntity 的倍率一致）
+        // 种植切配工厂：烈焰炽焱及以上等级内置营养液消耗减免
+        // （倍率定义在 PlantingCuttingFactoryTile.getGasConsumptionMultiplier）
         if (isPlantingCuttingMachine && tier != null) {
             int reduction = switch (tier) {
                 case BLAZE -> 90;

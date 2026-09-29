@@ -8,7 +8,6 @@ import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
 import cn.ism.mekck.blockentity.SimpleMachineBlockEntity;
 import cn.ism.mekck.blockentity.GrillBlockEntity;
 import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
-import cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
@@ -85,9 +84,7 @@ public final class SideConfigPacket {
             }
             // 气体侧面配置
             if (configType == TYPE_GAS) {
-                if (be instanceof PlantingCuttingFactoryBlockEntity machine) {
-                    machine.setGasSideMode(dir, mode);
-                } else if (be instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity machine) {
+                if (be instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity machine) {
                     machine.setGasSideMode(dir, mode);
                 }
                 return;
@@ -120,8 +117,6 @@ public final class SideConfigPacket {
             } else if (be instanceof GrillFactoryBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof PlantingCuttingStationBlockEntity machine) {
-                machine.setSideMode(dir, mode);
-            } else if (be instanceof PlantingCuttingFactoryBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof IceMakerBlockEntity machine) {
                 machine.setSideMode(dir, mode);

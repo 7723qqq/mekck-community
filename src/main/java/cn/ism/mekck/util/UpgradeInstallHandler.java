@@ -9,7 +9,6 @@ import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
-import cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
@@ -112,8 +111,6 @@ public final class UpgradeInstallHandler {
         } else if (be instanceof UniversalCuttingMachineBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof PlantingCuttingStationBlockEntity m) {
-            added = m.addUpgradesFromHand(held);
-        } else if (be instanceof PlantingCuttingFactoryBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof ElectricGrindingMachineBlockEntity m) {
             added = m.addUpgradesFromHand(held);

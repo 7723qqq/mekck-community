@@ -253,6 +253,52 @@ public class PlantingCuttingFactoryTile extends MekCkMachineTile implements IMek
         builder.addSlot(growthSlot);
     }
 
+    /**
+     * 营养液罐的存档键。
+     *
+     * <p><b>与旧实现逐字同名</b>（旧 {@code PlantingCuttingFactoryBlockEntity} 也写
+     * {@code "GasTank"}），所以旧档的营养液<b>不需要任何转换</b>，直接读同一个键。
+     *
+     * <p>为什么自己管这个键而不用 Mek 的：{@code TileEntityMekanism.saveAdditional}
+     * 实测只写 {@code redstone} / {@code Items} / {@code activeState} /
+     * {@code updateDelay} / {@code currentRedstone} 五个键，<b>没有气体罐</b>；
+     * {@code GasHandlerManager} 也没有 serialize/deserialize 方法。
+     * 也就是说 Mek 把「罐怎么存」留给具体机器自己决定——那我们自己决定，用旧键。
+     */
+    public static final String TAG_NUTRIENT_TANK = "GasTank";
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>在 {@code super} 之后写营养液罐：父类写的是 Mek 那五个键，
+     * 两者不在同一个命名空间里，不存在互相覆盖。</p>
+     */
+    @Override
+    public void saveAdditional(net.minecraft.nbt.CompoundTag tag) {
+        super.saveAdditional(tag);
+        if (nutrientTank != null) {
+            tag.put(TAG_NUTRIENT_TANK, nutrientTank.serializeNBT());
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>在 {@code super.load} 之后读营养液罐。父类的 {@code TileComponentUpgrade.read}
+     * 第一件事是 {@code upgrades.clear()}，所以家族自有状态一律排在它后面读。</p>
+     */
+    @Override
+    public void load(net.minecraft.nbt.CompoundTag tag) {
+        super.load(tag);
+        // 罐在父类构造期由 getInitialGasTanks 创建，这里取同一份而不是缓存字段。
+        IGasTank tank = getNutrientTank();
+        if (tank != null && tag.contains(TAG_NUTRIENT_TANK, net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            // IChemicalTank extends INBTSerializable<CompoundTag>，
+            // deserializeNBT 是接口自带的读档方法；键名与旧实现逐字相同，无需转换。
+            tank.deserializeNBT(tag.getCompound(TAG_NUTRIENT_TANK));
+        }
+    }
+
     /** 营养液容器槽（GUI 用）。 */
     public IInventorySlot getNutrientSlot() {
         return nutrientSlot;

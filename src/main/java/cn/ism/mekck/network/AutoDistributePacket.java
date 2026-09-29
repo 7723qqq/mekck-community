@@ -1,7 +1,6 @@
 package cn.ism.mekck.network;
 
 import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
-import cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -38,9 +37,11 @@ public final class AutoDistributePacket {
             // 保留分支只会让包「到达但无事发生」，且在 Task 5 删掉旧类后直接编译不过。
             if (be instanceof GrillFactoryBlockEntity grill) {
                 grill.toggleAutoDistribute();
-            } else if (be instanceof PlantingCuttingFactoryBlockEntity planting) {
-                planting.toggleAutoDistribute();
             }
+            // 种植切配工厂分支在阶段 3 Task 2 删除：新的 PlantingCuttingFactoryTile 是
+            // Mek 原生 tile，自动补料开关由 Mek 侧配/弹出取代；
+            // 而 ME 自动处理走 IMekCkPorted 端口声明（在 MekckAe2 的 autoWindow /
+            // portedFamily 里），不经这个包。详见上面切菜工厂的同款注释。
         });
         context.setPacketHandled(true);
     }
