@@ -1,4 +1,4 @@
-package cn.ism.mekck.factory;
+package cn.ism.mekck.machine.cutting;
 
 import org.junit.Test;
 

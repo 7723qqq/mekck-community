@@ -43,7 +43,7 @@ import static org.junit.Assert.assertTrue;
  * 被测的 {@link MekCkLegacyMachineNbt} 是<b>纯 NBT → NBT 函数</b>：吃一份
  * {@link CompoundTag}、吐一份 {@link CompoundTag}，除了 {@link ItemStack} 之外
  * 不碰任何方块实体状态。这正是它被单独拆出来的原因——真 tile 在裸 JVM 里造不出来
- * （{@code MekCkMachineTile} 的构造链要 {@code MekCkFactoryBlock} 与 Mek 的
+ * （{@code MekCkMachineTile} 的构造链要 {@code CuttingMachineFactoryBlock} 与 Mek 的
  * {@code Attribute} 注册表，见 {@code TestCuttingBatchPacking} 的同类说明），
  * 但迁移逻辑本身必须能测，否则「玩家旧存档有没有被读回来」就只能靠实机。
  *

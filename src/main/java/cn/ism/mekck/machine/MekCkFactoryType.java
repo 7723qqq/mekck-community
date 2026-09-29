@@ -1,10 +1,10 @@
-package cn.ism.mekck.factory;
+package cn.ism.mekck.machine;
 
 import mekanism.api.text.ILangEntry;
 import net.minecraft.network.chat.Component;
 
 /**
- * MekCK 工厂工艺类型（7 家族）。
+ * MekCK 工厂工艺家族（7 个）—— {@link MekCkMachineTile#getFactoryType()} 的取值域。
  *
  * <h3>为什么自建而不是复用 Mek 的 FactoryType</h3>
  * Mek 的 {@code FactoryType} 是<b>封闭枚举</b>（SMELTING/ENRICHING/CRUSHING/COMPRESSING/
@@ -16,7 +16,15 @@ import net.minecraft.network.chat.Component;
  * {@code ExtraFactoryMachine} 上提供对应的重载构造器。本枚举照此范式实现，
  * 用 {@link ILangEntry} 自带译名（Mek 的译名接口，可外部实现）。</p>
  *
- * <p>{@link #recipeTypeName} 用于后续接入配方查找时定位本工艺的 {@code RecipeType}。</p>
+ * <h3>本类为什么从 {@code cn.ism.mekck.factory} 包搬到这里</h3>
+ * 原先它在 {@code cn.ism.mekck.factory} 里，和 84 个死方块的注册类
+ * （{@code MekCkFactoryRegistration}）同包。阶段 3 Task 0 删掉了整个
+ * {@code factory} 包与 {@code mekckfactory} 命名空间，但<b>这一个类不能删</b>：
+ * {@link MekckAe2#portedFamily} 靠它判断「这台机器接没接 AE2 自动化」，
+ * {@link cn.ism.mekck.machine.cutting.CuttingFactoryTile#typeFromBlock} 靠它报出自己的家族。
+ * 它是阶段 3 剩下 6 个家族要填的槽位，故随唯一消费方一起搬到 {@code machine} 包。
+ * 配套删除的是它唯一引用已删枚举的方法 {@code blockId(MekCkFactoryTier)}——
+ * 那个方法拼的是 {@code mekckfactory} 命名空间的方块 ID，命名空间没了它就没有意义。
  */
 public enum MekCkFactoryType implements ILangEntry {
 
@@ -51,7 +59,7 @@ public enum MekCkFactoryType implements ILangEntry {
         return modelDir;
     }
 
-    /** 工艺短名（用于方块 ID 拼接与配方类型定位）。 */
+    /** 工艺短名。原先还兼作方块 ID 拼接与配方类型定位的入参，那部分随注册类一起删了。 */
     public String getTypeName() {
         return typeName;
     }
@@ -64,11 +72,6 @@ public enum MekCkFactoryType implements ILangEntry {
     }
 
     // ── 便捷 ───────────────────────────────────────────────────────────────
-
-    /** 本工艺 + 指定等级对应的方块注册名，如 {@code basic_cutting_factory}。 */
-    public String blockId(MekCkFactoryTier tier) {
-        return tier.getLowerName() + "_" + typeName + "_factory";
-    }
 
     /** 供 GUI 标题使用的译名组件。 */
     public Component displayName() {

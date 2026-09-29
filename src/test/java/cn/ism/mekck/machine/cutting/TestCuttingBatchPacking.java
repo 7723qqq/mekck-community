@@ -33,7 +33,7 @@ import static org.junit.Assert.assertTrue;
  * 实测吞掉之后 {@code ItemStack} / {@code Items} / {@code ForgeRegistries} 全部可用。
  *
  * <p>另一半（配方匹配）做不到，原因见
- * {@code cn.ism.mekck.factory.TestCuttingRecipeInvariants} 的类注释：
+ * {@code cn.ism.mekck.machine.cutting.TestCuttingRecipeInvariants} 的类注释：
  * {@code CuttingBoardRecipe} 在测试期是 raw 未重映射 jar，字节码里 MC 成员仍是 SRG 名
  * （{@code f_41583_} / {@code m_7983_}），构造即 {@code NoSuchFieldError}。
  * 本类与那个类合起来覆盖执行器的全部逻辑。</p>

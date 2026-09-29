@@ -28,7 +28,7 @@ import appeng.capabilities.Capabilities;
 import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity;
-import cn.ism.mekck.factory.MekCkFactoryType;
+import cn.ism.mekck.machine.MekCkFactoryType;
 import cn.ism.mekck.machine.MekCkMachineTile;
 import cn.ism.mekck.machine.ports.IMekCkPorted;
 import cn.ism.mekck.util.KaleidoscopeCompat;

@@ -898,8 +898,6 @@ public final class UniversalCuttingMachine {
             // 原样返回存进去的那个，没有任何兜底（实测字节码：ifeq 取 serverTicker / else 取
             // clientTicker，直接 areturn）。不填就是 null，而 Level 只在 ticker 非 null 时才
             // 驱动方块实体 —— 机器会「放置成功、界面能开、就是不干活」。
-            // 也正因为如此，mekckfactory 那套实验注册（TILE_ENTITIES.register(block, supplier) 两参版）
-            // 至今不 tick；那是那套自己的问题，不在本任务范围。
             CUTTING_FACTORY_TILES.put(tier, CUTTING_FACTORY_TILES_REG.register(handle,
                     (pos, state) -> new cn.ism.mekck.machine.cutting.CuttingFactoryTile(handle, pos, state),
                     (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickClient(level, pos, state, tile),
@@ -1215,8 +1213,8 @@ public final class UniversalCuttingMachine {
      * 按等级取回已注册的切菜 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
      *
      * <p>必须延迟：{@code TILE_ENTITIES.register(block, ...)} 要求先有方块，而方块的
-     * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。这里照
-     * {@code factory/MekCkFactoryRegistration#findTile} 的写法破环。</p>
+     * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。这里用一个
+     * 延迟查找破环：Supplier 只在 Mek 真正需要它时才求值，那时注册已完成。</p>
      */
     private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cutting.CuttingFactoryTile> findCuttingFactoryTile(
             CuttingMachineFactoryTier tier) {
@@ -1245,9 +1243,6 @@ public final class UniversalCuttingMachine {
         FLUIDS.register(bus);
         ENTITY_TYPES.register(bus);
         MOB_EFFECTS.register(bus);
-        // Mek 体系版工厂（新套，命名空间 mekckfactory）：与上面的自研套并列共存，
-        // 走 Mek 的机器注册/容器/GUI 体系，用于 tab 布局与 Mek 完全对齐。
-        cn.ism.mekck.factory.MekCkFactoryRegistration.register(bus);
         // 切菜工厂（阶段 2 Task 4）：注册名仍是 mekck:<tier>_cutting_factory，
         // 但注册器换成 Mek 的——方块因此带上 AttributeGui / AttributeEnergy /
         // AttributeStateFacing / AttributeUpgradeSupport，tile 也就顺理成章地
@@ -1900,15 +1895,6 @@ public final class UniversalCuttingMachine {
                 MenuScreens.register(CHOCOLATE_CANNON_MENU.get(), ChocolateCannonScreen::new);
                 MenuScreens.register(NUT_ROASTER_MENU.get(), NutRoasterScreen::new);
                 MenuScreens.register(SIMPLE_MACHINE_MENU.get(), cn.ism.mekck.client.SimpleMachineScreen::new);
-                // Mek 体系版工厂（新套）：逐家族 × 等级绑定 Screen。GUI 走 GuiConfigurableTile，
-                // 侧栏 tab 由 Mek 自己排布，不再手写坐标。
-                for (cn.ism.mekck.factory.MekCkFactoryType ftype : cn.ism.mekck.factory.MekCkFactoryType.values()) {
-                    for (cn.ism.mekck.factory.MekCkFactoryTier tier : cn.ism.mekck.factory.MekCkFactoryTier.values()) {
-                        MenuScreens.register(
-                                cn.ism.mekck.factory.MekCkFactoryRegistration.getContainer(ftype, tier).get(),
-                                cn.ism.mekck.factory.MekCkFactoryScreen::new);
-                    }
-                }
                 net.minecraft.client.renderer.entity.EntityRenderers.register(ICE_CUBE_ENTITY.get(),
                         cn.ism.mekck.client.IceCubeRenderer::new);
                 net.minecraft.client.renderer.entity.EntityRenderers.register(FERRERO_ENTITY.get(),

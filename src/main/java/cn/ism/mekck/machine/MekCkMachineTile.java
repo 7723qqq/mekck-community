@@ -2,9 +2,6 @@ package cn.ism.mekck.machine;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.config.MekckConfig;
-import cn.ism.mekck.factory.MekCkFactoryBlock;
-import cn.ism.mekck.factory.MekCkFactoryTier;
-import cn.ism.mekck.factory.MekCkFactoryType;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.upgrade.MekCkUpgradeTypes;
 import mekanism.api.Action;
@@ -36,9 +33,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -94,7 +89,7 @@ import java.util.Set;
  * <ul>
  *   <li>类名对不上 → 走不到，返回 {@code null} → 存储卡读档被
  *       {@code isSupportedBy(STORAGE, null)} 静默判 false，<b>没有任何日志</b>；</li>
- *   <li>返回类型对不上（返回 {@link MekCkFactoryTier} 之类）→ 强转抛
+ *   <li>返回类型对不上（返回别的等级枚举之类）→ 强转抛
  *       {@code ClassCastException}，而该 catch 只接 {@code ReflectiveOperationException}，
  *       会一路冒到读档路径上炸服。</li>
  * </ul>
@@ -103,6 +98,18 @@ import java.util.Set;
  * {@code MekckConfig.getFactoryStackUpgradeMax} 的入参类型一致，
  * 也与阶段 2 Task 4 里「{@code CuttingFactoryTile.getTier()} 返回
  * {@code CuttingMachineFactoryTier}」的要求兼容（同类型才允许覆写）。
+ *
+ * <h3>⚠️ 双枚举并存期已结束（阶段 3 Task 0）</h3>
+ * 本类曾经带一段静态块，把「另一个 12 档枚举」{@code cn.ism.mekck.factory.MekCkFactoryTier}
+ * 按序列化名映射成本类要用的 {@link CuttingMachineFactoryTier}，并用 fail-fast
+ * 兜底「两个枚举必须同名同集合」。两个枚举（常量同名同值、类型不同）现已合并为
+ * <b>只剩 {@link CuttingMachineFactoryTier}</b>，那段映射与其 fail-fast 静态块
+ * 一并删除。<b>原因不是审美，是那份映射本身就是 {@code ClassCastException} 的引信</b>：
+ * 阶段 1 的 Mixin 只认 {@code CuttingMachineFactoryTier}，一旦某台机器的
+ * {@code getTier()} 返回了另一套枚举，读档路径会炸服而不是静默降级。
+ * <b>阶段 1 的反射桥接（类名 {@code cn.ism.mekck.machine.MekCkMachineTile} 与
+ * {@code getTier()} 的返回类型）一个字符都不许改</b>，否则切菜工厂存档里的存储卡
+ * 会在读档时被 {@code isSupportedBy(STORAGE, null)} 静默判 false，且没有任何日志。
  */
 public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
 
@@ -128,32 +135,6 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
     static final String TAG_WORK_PROGRESS = "MekCkWorkProgress";
     /** 当前存档格式版本。v1 是首个 Mek 原生版本，没有需要迁移的旧格式。 */
     private static final int NATIVE_VERSION = 1;
-
-    /**
-     * {@link MekCkFactoryTier} → {@link CuttingMachineFactoryTier} 的按名映射。
-     *
-     * <p>两个枚举是并行新增的（前者实现 {@code ITier} 供 Mek API 用，后者是旧自研套的
-     * 等级、也是升级与配置体系的入参类型），常量名一一对应但<b>是两个不同的类型</b>。
-     * 这里按<b>序列化名</b>而不是 {@code ordinal()} 对齐：{@code ordinal()} 一旦在任一侧
-     * 插入常量就会静默错位一名档位，而档位错位直接等价于「支持哪些升级」判错。</p>
-     */
-    private static final Map<String, CuttingMachineFactoryTier> CUTTING_TIER_BY_NAME;
-
-    static {
-        Map<String, CuttingMachineFactoryTier> byName = new LinkedHashMap<>();
-        for (CuttingMachineFactoryTier tier : CuttingMachineFactoryTier.values()) {
-            byName.put(tier.name, tier);
-        }
-        // 缺一档就在类初始化时炸，而不是等到某一台机器安静地少一档能力。
-        for (MekCkFactoryTier tier : MekCkFactoryTier.values()) {
-            if (!byName.containsKey(tier.getLowerName())) {
-                throw new IllegalStateException("工厂等级 " + tier.getLowerName()
-                        + " 在 MekCkFactoryTier 里存在、在 CuttingMachineFactoryTier 里缺失："
-                        + "两个枚举必须同名同集合。缺一档会让该档机器静默失去存储卡倍增能力。");
-            }
-        }
-        CUTTING_TIER_BY_NAME = Map.copyOf(byName);
-    }
 
     /**
      * 家族执行器，懒加载。
@@ -195,24 +176,32 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
     // ── 等级与工艺类型 ───────────────────────────────────────────────────
 
     /**
-     * 本机等级 —— <b>从方块反查</b>，不读实例字段（构造期字段尚未初始化的原因见类注释）。
+     * 本机等级 —— <b>子类必须覆写</b>。
      *
-     * <p>子类若绑定的不是 {@link MekCkFactoryBlock}，覆写本方法返回自己的等级即可。
-     * 返回 {@code null} 表示「本机档位未知」：此时 {@code MekCkUpgradeTypes.isSupportedBy}
-     * 对存储卡判 {@code false}（缺依据即不放行），其余升级不受影响。</p>
+     * <p><b>基类为什么给不出答案（阶段 3 Task 0 改）</b>：原先这里靠
+     * {@code blockProvider.getBlock() instanceof MekCkFactoryBlock} 从方块反查等级。
+     * 那条路现在<b>永远走不到</b>——唯一的 {@code MekCkFactoryBlock} 实例由
+     * {@code MekCkFactoryRegistration} 的 84 个 {@code mekckfactory:<tier>_<family>_factory}
+     * 方块持有，那套注册连同 {@code mekckfactory} 命名空间已在本次删除。
+     * 换句话说：游戏里不再存在任何一块「能从基类反查等级」的方块，留着这个分支
+     * 只会让人以为存在一条通用反查路径。
+     *
+     * <p>返回 {@code null} 表示「本机档位未知」：此时 {@code MekCkUpgradeTypes.isSupportedBy}
+     * 对存储卡判 {@code false}（缺依据即不放行），其余升级不受影响；而且
+     * {@link #getInitialInventory} 会先抛一条指明根因的 {@link IllegalStateException}，
+     * 不存在「安静地少一档能力」这种失败形态。</p>
      */
     protected CuttingMachineFactoryTier tierFromBlock() {
-        if (blockProvider != null && blockProvider.getBlock() instanceof MekCkFactoryBlock block) {
-            return CUTTING_TIER_BY_NAME.get(block.getFactoryTier().getLowerName());
-        }
         return null;
     }
 
-    /** 工艺类型：与 {@link #tierFromBlock()} 同理，同样是 {@code protected} 以便子类覆写。 */
+    /**
+     * 工艺家族 —— <b>子类必须覆写</b>，理由与 {@link #tierFromBlock()} 相同。
+     *
+     * <p>{@code null} 表示「本机未声明家族」，消费方
+     * （{@code MekckAe2.portedFamily}）据此判定该机器不接 AE2 自动化端口。
+     */
     protected MekCkFactoryType typeFromBlock() {
-        if (blockProvider != null && blockProvider.getBlock() instanceof MekCkFactoryBlock block) {
-            return block.getFactoryType();
-        }
         return null;
     }
 
@@ -283,8 +272,8 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
             // 显式失败优于 NPE：旧实现在这里是 "Cannot read field processes because this.tier is null"，
             // 排查时完全看不出是「方块没带等级」。这条消息直接指明根因与修法。
             throw new IllegalStateException("工厂方块 " + getBlockType()
-                    + " 未携带 MekCK 等级：MekCkMachineTile 只能从 MekCkFactoryBlock（或子类覆写"
-                    + " tierFromBlock()）反查档位。请给该 BlockType 绑定 MekCkFactoryBlock。");
+                    + " 未携带 MekCK 等级：MekCkMachineTile 的 tierFromBlock() 默认返回 null，"
+                    + "子类必须覆写它并从自己的方块类型读出等级（参考 CuttingFactoryTile）。");
         }
 
         inputSlots = new ArrayList<>(tier.processes);

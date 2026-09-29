@@ -57,18 +57,29 @@
 | `10b4f97` | I6 | 大堆叠掉落物经 `putByte("Count")` 损坏；新增 `MixinItemStack` 让 `McCount` 旁路全局生效 |
 | `8ec8e7c` | I7 | 中央厨房加工线程不落盘 → 区块卸载**已扣材料永久损失** |
 | `290b3ef` | I5 | `saveToItem` 漏调两个持久化助手 → 挖机再放下，**ME 补料清单与放置器 UUID 必丢** |
-| `59c69f1` | — | 实现 `MekCkFactoryTier implements ITier`（兑现 8.3 决策） |
+| `59c69f1` | — | 实现 `MekCkFactoryTier implements ITier`（兑现 8.3 决策）。**已作废**，见 §5 |
 
-### 5. 档位接入（`59c69f1`）
+### 5. 档位接入 —— 已作废（`59c69f1` → 阶段 3 Task 0）
 
-`ITier` 只有一个方法 `getBaseTier()`。映射：**前 4 档一一对应，其余 8 档全归
-`BaseTier.ULTIMATE`**；`CREATIVE` 不被任何档位占用。
+`59c69f1` 曾让 `MekCkFactoryTier implements ITier`（`ITier` 只有一个方法 `getBaseTier()`，
+映射规则：前 4 档一一对应、其余 8 档全归 `BaseTier.ULTIMATE`，`CREATIVE` 不被任何档位占用）。
 
-**⚠ 硬边界（别夸大）**：接了 `ITier` **不会**让 `Attribute.getBaseTier(block)` 生效——
-`AttributeTier` 对 addon 不可设置（`withComputerSupport` 在构建期就把 ITier 消费成字符串）。
-实际收益是「12 档成为任何接受 `ITier` 的 Mek API 的合法输入」。
+**阶段 3 Task 0 查证结论：全仓库 `ITier` 零消费方，已随该枚举一并删除。**
+`grep -rn "ITier" src/` 的全部命中只有三处：`MekCkFactoryTier` 自己的声明与 javadoc、
+`MekCkMachineTile` 的一句 javadoc、一个**完全不加载生产代码**的测试类。
+**没有**任何代码把档位传进接受 `ITier` 的 Mek API——`blockTypeFor` 从来没调用过
+`withComputerSupport`，而 `AttributeTier` 对 addon 本就不可设置，
+所以 `Attribute.getBaseTier(block)` 对这套档位恒返回 null（这条边界 `59c69f1` 当时就写对了）。
 
-存档无需兼容层：本枚举实现 `StringRepresentable`，走名字而非 `ordinal()`。
+> 原文写的「实际收益是『12 档成为任何接受 `ITier` 的 Mek API 的合法输入』」是一句
+> **从未兑现的推测**，不是既成事实。**不要**再把它当作「已接入 Mek 档位体系」的依据。
+
+**为什么连 `ITier` 一起删、而不移植到 `CuttingMachineFactoryTier`**：移植的前提是
+「有 Mek API 在消费它」，而查证结果是没有；硬移植等于给 12 档枚举加一个
+`baseTier` 字段 + 一个没人读的 `getBaseTier()`，并把死代码带进阶段 3，
+还要扩大与并行同学的 `CuttingMachineFactoryTier.java` 冲突面。
+
+档位本身的存档安全结论不变且仍然有效：等级走 `StringRepresentable` 的名字而非 `ordinal()`。
 
 ---
 

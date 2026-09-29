@@ -3,7 +3,7 @@ package cn.ism.mekck.machine.cutting;
 import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.block.CuttingMachineFactoryBlock;
 import cn.ism.mekck.config.MekckConfig;
-import cn.ism.mekck.factory.MekCkFactoryType;
+import cn.ism.mekck.machine.MekCkFactoryType;
 import cn.ism.mekck.machine.MekCkMachineTile;
 import cn.ism.mekck.machine.MekCkRecipeExecutor;
 import cn.ism.mekck.machine.ports.IMekCkPorted;
@@ -73,11 +73,15 @@ public class CuttingFactoryTile extends MekCkMachineTile implements IMekCkPorted
     /**
      * {@inheritDoc}
      *
-     * <p>基类默认从 {@code MekCkFactoryBlock} 反查档位；切菜方块走的是
-     * {@code mekck:<tier>_cutting_factory} 那套注册（见
-     * {@link CuttingMachineFactoryBlock}），基类认不出来，所以在这里改口。
-     * 仍然<b>从方块反查</b>而不是读实例字段——原因见基类类注释的「构造期顺序陷阱」：
+     * <p>仍然<b>从方块反查</b>而不是读实例字段——原因见基类类注释的「构造期顺序陷阱」：
      * {@code getInitialInventory} 在父类构造器内部就被回调，此刻本类字段初始化器一个都还没跑。</p>
+     *
+     * <p><b>覆写它不是可选的</b>（阶段 3 Task 0 起）：基类的默认实现直接返回
+     * {@code null}。原先基类靠 {@code instanceof MekCkFactoryBlock} 反查，而那类方块
+     * 只由已删除的 {@code mekckfactory} 命名空间持有，现在游戏里一块都不存在，
+     * 那条反查路径已经永远走不到。漏覆写的后果不是降级而是
+     * {@code getInitialInventory} 抛 {@link IllegalStateException}（消息会指名道姓
+     * 告诉你覆写本方法），不会静默少一档能力。</p>
      */
     @Override
     protected CuttingMachineFactoryTier tierFromBlock() {

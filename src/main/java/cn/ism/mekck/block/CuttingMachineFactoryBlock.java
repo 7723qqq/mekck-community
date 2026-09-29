@@ -68,8 +68,7 @@ public final class CuttingMachineFactoryBlock extends BlockTile<CuttingFactoryTi
     /**
      * 构造本等级切菜工厂的方块类型描述。
      *
-     * <p>抄自 {@code factory/MekCkFactoryRegistration#blockTypeFor}，四个属性一个都不能少，
-     * 各自的缺失症状都写在那里的注释里：
+     * <p>四个属性一个都不能少，<b>各自的缺失症状</b>：
      * <ul>
      *   <li>{@code withGui} → 缺了右键不开界面；</li>
      *   <li>{@code withEnergyConfig} → {@code MachineEnergyContainer.input} 在构造时读它，
@@ -152,8 +151,8 @@ public final class CuttingMachineFactoryBlock extends BlockTile<CuttingFactoryTi
      *
      * <p>本模组的 lang key 是 {@code block.mekck.<tier>_cutting_factory}（每个等级一条，
      * 实测 {@code en_us.json} / {@code zh_cn.json} 的第 17 行起），
-     * 而 {@code MekCkFactoryType.CUTTING} 指向的是 {@code block.mekck.cutting_factory}
-     * ——那是 {@code mekckfactory} 那套新方块用的 key，对不上。所以这里自带一个。</p>
+     * 而 {@code MekCkFactoryType.CUTTING} 的译名 key 是 {@code block.mekck.cutting_factory}
+     * ——不带等级，对不上。所以这里自带一个按等级拼的 lang entry。</p>
      */
     private static final class CuttingFactoryLangEntry implements ILangEntry {
         private final CuttingMachineFactoryTier tier;

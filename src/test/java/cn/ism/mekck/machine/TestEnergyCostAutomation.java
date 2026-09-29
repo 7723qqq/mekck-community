@@ -30,7 +30,7 @@ import static org.junit.Assert.assertTrue;
  * 于是那一行<b>一 FE 都扣不下来</b>：机器照常加工、进度条照常走、能量条却永不掉。
  *
  * <h3>为什么这里能跑真行为测试</h3>
- * 真 tile 在裸 JVM 里造不出来（构造链要 {@code MekCkFactoryBlock} 与 Mek 的注册表），
+ * 真 tile 在裸 JVM 里造不出来（构造链要 {@code CuttingMachineFactoryBlock} 与 Mek 的注册表），
  * 但扣电这一步被收进了包级静态方法 {@link MekCkMachineTile#deductEnergy}，
  * 它的全部输入就是「一个容器 + 一个扣减额」。于是本测试可以拿一个与生产
  * <b>同谓词形状</b>的 {@link BasicEnergyContainer} 直接调它，

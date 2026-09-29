@@ -47,7 +47,7 @@ import static org.junit.Assert.assertTrue;
  * 剩下 {@code ItemStack}/{@code Items} 需要注册表，用 {@link #boot()} 那两步拉起来。
  *
  * <p>真 tile（{@link MekCkMachineTile}）在裸 JVM 里造不出来——它的构造链要
- * {@code MekCkFactoryBlock} 与 Mek 的 {@code Attribute} 注册表。
+ * {@code CuttingMachineFactoryBlock} 与 Mek 的 {@code Attribute} 注册表。
  * 所以「{@code load} 里覆盖必须排在 {@code super.load} 之后」这条顺序约束
  * 改用与 {@code TestCuttingRecipeInvariants} 相同的读源文本手法钉死，见
  * {@link #mekckSlotReadIsAppliedAfterSuperLoad()}。</p>

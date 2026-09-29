@@ -45,7 +45,7 @@ import static org.junit.Assert.assertTrue;
  *       {@code <clinit>} 不碰注册表——实测本类 12 条断言在裸 JVM 里跑得通）。
  *       另外两条断言直接拿<b>真的</b> {@code BasicEnergyContainer} 跑 Mek 自己的闸门语义，
  *       把「字节码读数」升级成「可执行证据」。</li>
- *   <li><b>源码不变量</b>：真 tile 造不出来（构造链要 {@code MekCkFactoryBlock} 与 Mek 的
+ *   <li><b>源码不变量</b>：真 tile 造不出来（构造链要 {@code CuttingMachineFactoryBlock} 与 Mek 的
  *       注册表，见 {@code TestMekCkSlot} 的类注释），所以「钩子默认关、切菜 tile 开」
  *       这件事只能钉在源码上。这与本仓库既有的做法同源
  *       （{@code TestMekCkSlot.tileBuildsItsSlotsThroughMekCkSlot} 等）。</li>

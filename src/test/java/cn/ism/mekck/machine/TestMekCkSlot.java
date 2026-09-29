@@ -31,7 +31,7 @@ import static org.junit.Assert.assertTrue;
  * {@code ItemStack}/{@code Items} 靠 {@link #boot()} 那两步拉起注册表。
  *
  * <p>真 tile（{@link MekCkMachineTile}）在裸 JVM 里造不出来（构造链要
- * {@code MekCkFactoryBlock} 与 Mek 的 {@code Attribute} 注册表），
+ * {@code CuttingMachineFactoryBlock} 与 Mek 的 {@code Attribute} 注册表），
  * 所以「基类换用了 {@code MekCkSlot}」与「上限来自配置」这两条改用读源文本钉死，
  * 见 {@link #tileBuildsItsSlotsThroughMekCkSlot()} 与
  * {@link #obeyStackLimitIsTurnedOffInMekCkSlot()}。</p>
