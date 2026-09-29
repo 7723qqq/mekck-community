@@ -446,18 +446,6 @@ public GrillBlockEntity(BlockPos pos, BlockState state) {
         return false;
     }
 
-    /**
-     * Gets the barbecuing time from a recipe using reflection.
-     */
-    private static int getBarbecuingTime(Recipe<?> recipe) {
-        try {
-            java.lang.reflect.Field field = recipe.getClass().getField("barbecuingTime");
-            return field.getInt(recipe);
-        } catch (Exception e) {
-            return PROCESS_TIME;
-        }
-    }
-
     @Nullable
     private Recipe<?> findRecipeById(Level level, ResourceLocation recipeId) {
         ResourceLocation grillingTypeId = new ResourceLocation("barbequesdelight", "grilling");
@@ -745,7 +733,9 @@ public GrillBlockEntity(BlockPos pos, BlockState state) {
 
     @Override
     public Component getDisplayName() {
-        return customName != null ? customName : Component.translatable("block.mekck.grill");
+        // 键必须与注册名一致：方块注册为 mekck:electric_grill（UniversalCuttingMachine:655），
+        // 原先写的 block.mekck.grill 在语言文件里不存在 ⇒ GUI 标题显示 raw key。
+        return customName != null ? customName : Component.translatable("block.mekck.electric_grill");
     }
 
     @Nullable

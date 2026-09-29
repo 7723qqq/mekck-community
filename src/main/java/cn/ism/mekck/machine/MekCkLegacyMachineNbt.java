@@ -183,11 +183,29 @@ public final class MekCkLegacyMachineNbt {
      * @return 只含原生键的全新标签
      */
     public static CompoundTag migrate(CompoundTag legacy, Direction facing, int inputSlotCount) {
+        return migrate(legacy, facing, inputSlotCount, inputSlotCount * 2 + 1);
+    }
+
+    /**
+     * {@link #migrate(CompoundTag, Direction, int)} 的完整形态。
+     *
+     * <p><b>为什么要单独传 {@code totalSlotCount}</b>：迁移写出的
+     * {@link MekCkSlotNbt#ENTRY_COUNT} 必须等于<b>读档时那台机器真实的槽位数</b>，
+     * 否则 {@link MekCkSlotNbt#read} 每次读档都会记一条「记录的槽位数与实际不符」的
+     * WARN。而真实槽位数不止 {@code 2N + 1}——{@code appendExtraSlots} 追加的家族专属槽
+     * （烧烤 3 个调味料 / 种植切配 2 个）也要算进去。调用方用
+     * {@code MekCkMachineTile} 的那份权威槽位列表长度即可，见其 {@code load}。</p>
+     *
+     * @param totalSlotCount 新机器实际会持有的槽位总数（含 {@code appendExtraSlots} 追加的）
+     */
+    public static CompoundTag migrate(CompoundTag legacy, Direction facing, int inputSlotCount,
+                                      int totalSlotCount) {
         if (legacy == null) {
             return new CompoundTag();
         }
         CompoundTag out = legacy.copy();
-        migrateSlots(legacy, out, Math.max(0, inputSlotCount));
+        migrateSlots(legacy, out, Math.max(0, inputSlotCount),
+                Math.max(1, totalSlotCount));
         migrateEnergy(legacy, out);
         migrateRedstone(legacy, out);
         migrateSideConfig(legacy, out, facing);
@@ -236,7 +254,8 @@ public final class MekCkLegacyMachineNbt {
      * 少了第二份，81 并行机器在<b>迁移那一刻</b>就会丢掉那 34 槽的产物与能源物品——
      * 之后再怎么修基类也救不回来。升级卡槽只有 2 格，byte 下标安全，仍只写一份。</p>
      */
-    private static void migrateSlots(CompoundTag legacy, CompoundTag out, int inputSlotCount) {
+    private static void migrateSlots(CompoundTag legacy, CompoundTag out, int inputSlotCount,
+                                     int totalSlotCount) {
         if (!legacy.contains(LEGACY_ITEMS, Tag.TAG_COMPOUND)) {
             return;
         }
@@ -268,14 +287,18 @@ public final class MekCkLegacyMachineNbt {
                 upgradeCards.add(nativeSlot((byte) upgradeCards.size(), stack));
             } else {
                 dropped++;
-                LOGGER.warn("切菜工厂旧存档的槽位 {}（共 {} 槽）里的 {} 无处安放，已丢弃。",
+                // 文案不写家族名：本方法被 4 个家族共用（切菜/研磨/烧烤/种植切配），
+                // 写死「切菜工厂」会让另外三个家族的告警指错方向。
+                LOGGER.warn("工厂旧存档的槽位 {}（共 {} 槽）里的 {} 无处安放，已丢弃。",
                         slot, powerSlot + 1, stack);
             }
         }
         // 同名不同型：必须整体覆盖，否则读档侧会拿到旧格式的 CompoundTag 并静默丢光槽位。
         out.put(LEGACY_ITEMS, items);
         if (!mekckItems.isEmpty()) {
-            out.put(MekCkSlotNbt.TAG_SLOTS, MekCkSlotNbt.block(machineSlots + 1, mekckItems));
+            // 记录的必须是「新机器真实的槽位总数」（含家族专属槽），不是 2N + 1：
+            // read 侧按它判「档位是否变过」，写小了会对每次读档都报一条 WARN。
+            out.put(MekCkSlotNbt.TAG_SLOTS, MekCkSlotNbt.block(totalSlotCount, mekckItems));
         }
         if (!upgradeCards.isEmpty()) {
             CompoundTag component = new CompoundTag();
@@ -401,7 +424,7 @@ public final class MekCkLegacyMachineNbt {
         config.put("config" + TransmissionType.ITEM.ordinal(), sides);
         out.put(NATIVE_CONFIG, config);
         if (lostStorage > 0) {
-            LOGGER.warn("切菜工厂旧存档有 {} 个面配成了「抽进存储区」，而本机的物品侧配"
+            LOGGER.warn("工厂旧存档有 {} 个面配成了「抽进存储区」，而本机的物品侧配"
                     + "没有存储区概念，这些面已落成「无」。请在 GUI 里重新配置。", lostStorage);
         }
     }

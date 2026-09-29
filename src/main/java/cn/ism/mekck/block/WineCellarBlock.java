@@ -27,9 +27,11 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
+import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraftforge.network.NetworkHooks;
 import org.jetbrains.annotations.Nullable;
+import java.util.List;
 
 /**
  * 陈化窖（时间悖论产生器，F20）方块：独立容器方块（非 SimpleMachine 加工机），
@@ -87,6 +89,21 @@ public final class WineCellarBlock extends BaseEntityBlock {
             level.updateNeighbourForOutputSignal(pos, this);
         }
         super.onRemove(state, level, pos, newState, movedByPiston);
+    }
+
+    /**
+     * 抑制战利品表掉落：本方块的全部状态（Items/Energy/Speed/Progress/AgedDays）**只能**经
+     * {@link WineCellarBlockEntity#saveToItem} 写进掉落物，走战利品表只会掉一个裸方块。
+     *
+     * <p>当前 {@code data/mekck/loot_tables/blocks/wine_cellar.json} 并不存在（等于没有战利品表掉落），
+     * 所以这条覆写今天是空操作。它与其余 14 个自研加工方块保持同一份契约，目的是堵住一个陷阱：
+     * 将来若有人补上该战利品表（或把方块属性改成 {@code Properties.copy(...)} 继承别人的战利品表），
+     * 就会与 {@code onRemove} 的掉落撞成「双掉落」或「内容蒸发」——显式返空后，
+     * {@code onRemove} 永远是掉落的唯一出口。</p>
+     */
+    @Override
+    public List<ItemStack> getDrops(BlockState state, LootParams.Builder builder) {
+        return List.of();
     }
 
     @Nullable

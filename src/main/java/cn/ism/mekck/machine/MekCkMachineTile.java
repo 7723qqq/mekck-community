@@ -16,13 +16,18 @@ import mekanism.common.capabilities.energy.MachineEnergyContainer;
 import mekanism.common.capabilities.holder.energy.EnergyContainerHelper;
 import mekanism.common.capabilities.holder.energy.IEnergyContainerHolder;
 import mekanism.common.capabilities.holder.slot.IInventorySlotHolder;
+import mekanism.common.inventory.container.SelectedWindowData;
 import mekanism.common.capabilities.holder.slot.InventorySlotHelper;
 import mekanism.common.inventory.slot.EnergyInventorySlot;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.component.TileComponentConfig;
+import mekanism.common.tile.component.config.ConfigInfo;
+import mekanism.common.tile.component.config.DataType;
+import mekanism.common.tile.component.config.slot.InventorySlotInfo;
 import mekanism.common.tile.component.TileComponentEjector;
 import mekanism.common.tile.component.TileComponentUpgrade;
 import mekanism.common.tile.interfaces.IRedstoneControl;
+import mekanism.common.tile.interfaces.ISustainedData;
 import mekanism.common.tile.prefab.TileEntityConfigurableMachine;
 import mekanism.common.util.MekanismUtils;
 import net.minecraft.core.BlockPos;
@@ -34,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -111,7 +117,7 @@ import java.util.Set;
  * {@code getTier()} 的返回类型）一个字符都不许改</b>，否则切菜工厂存档里的存储卡
  * 会在读档时被 {@code isSupportedBy(STORAGE, null)} 静默判 false，且没有任何日志。
  */
-public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
+public abstract class MekCkMachineTile extends TileEntityConfigurableMachine implements ISustainedData {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MekCkMachineTile.class);
 
@@ -167,6 +173,81 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
      */
     protected List<IInventorySlot> inputSlots;
     protected List<IInventorySlot> outputSlots;
+
+    /**
+     * 本机是否走「一行式」布局 —— 在 {@link #getInitialInventory} 里按槽数判定并赋值。
+     *
+     * <p>给 {@link #appendExtraSlots} 的子类用：一行式下槽区只占 y=13..75，
+     * 家族专属槽（调味料 / 营养液 / 生长土）必须挪到 y=77 那一行，否则会和输出槽重叠。
+     * 也供屏幕侧查（面板尺寸要跟着变）。</p>
+     *
+     * <p>值在构造期（父类构造器回调 {@code getInitialInventory}）就定好，
+     * 之后不再变，所以读取是安全的。</p>
+     */
+    protected boolean oneRowLayout;
+
+    /**
+     * 本机是否走「输入/输出进悬浮窗」布局 —— 见 {@link #getInitialInventory} 里的判定。
+     *
+     * <p>为 true 时输入/输出槽的容器槽是虚拟槽（{@code ContainerSlotType.IGNORED}），
+     * 不参与主面板渲染，由 {@code MekCkSlotWindow} 以 9 列区块显示。</p>
+     */
+    protected boolean windowLayout;
+
+    /**
+     * 悬浮窗的窗口身份 —— 存储槽与「输入/输出槽」<b>共用同一个实例</b>。
+     *
+     * <h3>为什么必须共享</h3>
+     * {@code VirtualInventoryContainerSlot.exists(windowData)} 的实现是
+     * {@code this.windowData.equals(windowData)}，而 {@code MekanismContainer.quickMoveStack}
+     * 与 {@code insertItem} 都拿「当前选中的窗口」去过滤候选槽。共用一份身份，
+     * 才能让「窗口里看得见的槽」与「shift-click 能进的槽」严格一致。
+     *
+     * <h3>为什么不能拆成两个（原先拆过，是无效的）</h3>
+     * {@code SelectedWindowData.equals} 只比 {@code type} 与 {@code extraData}
+     * （实测字节码偏移 29-56），而 {@code WindowType.UNSPECIFIED} 的 {@code maxData == 1}
+     * ⇒ {@code isValid(extraData)} 只接受 0 ⇒ <b>两个 UNSPECIFIED 实例必然相等</b>。
+     * 拆成两个常量只是让读者以为它们不同，实际行为一模一样。
+     *
+     * <p>而且拆开是<b>错的</b>：{@code MekCkSlotWindowTab} 会把非空的组（输入 / 输出 / 存储）
+     * 放进<b>同一扇窗</b>，所以三类槽必须共享身份——否则窗口里看得见、shift-click 却进不去。
+     * 今天没有任何家族同时具备两类窗口槽（{@code windowLayout} 要求输入输出对称且 &gt;17，
+     * 而带存储槽的烹饪 6/12、穿串 3/2 都不对称），但共享身份在那种情况下同样是正确的。</p>
+     *
+     * <p>为什么用 {@code WindowType.UNSPECIFIED}：该枚举是 Mek 的固定值
+     * （{@code COLOR/CRAFTING/SIDE_CONFIG/UPGRADE/...}），加不进去；
+     * 参照实现 productive-bees-genesis 的 {@code FeederInventorySlot} 也是这么绕的。
+     * 代价是窗口位置按 {@code "unspecified"} 这一个键共享
+     * （{@code getSaveName} 返回的是字符串 {@code "unspecified"}，<b>不是</b> null），
+     * 不会按机器分别记忆。</p>
+     */
+    public static final SelectedWindowData SLOT_WINDOW =
+            new SelectedWindowData(SelectedWindowData.WindowType.UNSPECIFIED);
+
+    /** 本机是否走一行式布局（构造完成后恒定）。 */
+    public boolean usesOneRowLayout() {
+        return oneRowLayout;
+    }
+
+    /** 本机是否把输入/输出槽放进悬浮窗（构造完成后恒定）。 */
+    public boolean usesWindowLayout() {
+        return windowLayout;
+    }
+
+    /**
+     * 本机输入槽数（构造完成后恒定）。
+     *
+     * <p>给换档路径用：{@link MekCkSlotNbt} 的 int 下标存档在换档后必须按角色重映射，
+     * 而重映射需要知道新旧两套布局的输入/输出边界。</p>
+     */
+    public int inputSlotCount() {
+        return inputSlots == null ? 0 : inputSlots.size();
+    }
+
+    /** 本机输出槽数（构造完成后恒定）。见 {@link #inputSlotCount()}。 */
+    public int outputSlotCount() {
+        return outputSlots == null ? 0 : outputSlots.size();
+    }
 
     protected MekCkMachineTile(IBlockProvider blockProvider, BlockPos pos, BlockState state) {
         super(blockProvider, pos, state);
@@ -300,17 +381,125 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
 
         InventorySlotHelper builder = InventorySlotHelper.forSideWithConfig(this::getDirection, this::getConfig);
         int slotLimit = slotLimitPerSlot(tier);
-        // 输入方阵在左、输出方阵右移「**输入**方阵宽度 + 间隔」，与旧实现一致。
-        // 间隔按输入宽度算而不是各自宽度：并行方阵两者相等，穿串工厂的
-        // 「3 宽输入 + 1 宽输出」也正好是旧版 38/130 的间距。
-        addSlotGrid(builder, listener, INPUT_START_X, inputCount, inputColumns, slotLimit, true);
-        addSlotGrid(builder, listener, INPUT_START_X + inputColumns * SLOT_STEP + GRID_GAP,
-                outputCount, outputColumns, slotLimit, false);
+
+        // ── 两种布局，判据只有一个 ─────────────────────────────────────
+        // 「一行式」= Mek 与 Mekanism Extras 的做法（真源码见 MekCkFactoryLayout）：
+        // 输入一行 y=13、输出在其正下方 y=57，同 x 成对，间距随档位压缩 38→26→19。
+        // 它只覆盖 ≤17 并行（Mek 的 4 档 + MekExtras 的 4 档 = 我们前 8 档）。
+        //
+        // 判据额外要求「输入槽数 == 输出槽数」：烹饪（6 输入 / 12 输出）与穿串
+        // （3 输入 / 2 输出）的槽数与并行数**脱钩**，套一行式会把它们错位；
+        // 这两个家族因此自动落回方阵分支。
+        this.oneRowLayout = inputCount == outputCount
+                && cn.ism.mekck.menu.MekCkFactoryLayout.useOneRow(inputCount);
+
+        // 「进悬浮窗」= 输入输出对称、但格数超过一行式上限（>17 并行：烈焰炽焱 25 /
+        // 晶钛矩阵 36 / 星云塑造 49 / 奇点创世 81）。奇点创世是 81 进 + 81 出 = 162 格，
+        // 留在主面板会把面板撑到 412×310；放进悬浮窗后按 9 列分两块并排，一页显示完。
+        //
+        // 烹饪(6 进/12 出)与穿串(3 进/2 出)不对称 ⇒ 不进窗口，仍走主面板方阵。
+        this.windowLayout = !oneRowLayout
+                && inputCount == outputCount
+                && inputCount > cn.ism.mekck.menu.MekCkFactoryLayout.ONE_ROW_MAX_PROCESSES;
+
+        if (oneRowLayout) {
+            // ⚠️ 必须「先加完全部输入、再加全部输出」：Mek 的 byte 下标存档与
+            // {@link #mekckPersistedSlots()} 都按「加入 builder 的顺序」编号，
+            // 交叉加入（进0/出0/进1/出1…）会让两份下标对不上 → 存读档错位。
+            for (int i = 0; i < inputCount; i++) {
+                int x = cn.ism.mekck.menu.MekCkFactoryLayout.oneRowSlotX(i, inputCount);
+                inputSlots.add(builder.addSlot(MekCkSlot.input(slotLimit, listener, x,
+                        cn.ism.mekck.menu.MekCkFactoryLayout.ONE_ROW_INPUT_Y)));
+            }
+            for (int i = 0; i < outputCount; i++) {
+                int x = cn.ism.mekck.menu.MekCkFactoryLayout.oneRowSlotX(i, outputCount);
+                outputSlots.add(builder.addSlot(MekCkSlot.output(slotLimit, listener, x,
+                        cn.ism.mekck.menu.MekCkFactoryLayout.ONE_ROW_OUTPUT_Y)));
+            }
+        } else if (windowLayout) {
+            // 输入/输出整块进悬浮窗。这里仍按方阵坐标给：虚拟槽的容器槽坐标恒为 (0,0)，
+            // 实际渲染位置由 GuiVirtualSlot 写入，所以这些坐标只是调试时可读的「第几路」。
+            // ⚠️ 与一行式同一条铁律：**先全部输入、再全部输出**，否则容器槽下标
+            // 与 mekckPersistedSlots() 对不上 → 存读档错位。
+            for (int i = 0; i < inputCount; i++) {
+                int x = INPUT_START_X + (i % inputColumns) * SLOT_STEP;
+                int y = GRID_START_Y + (i / inputColumns) * SLOT_STEP;
+                inputSlots.add(builder.addSlot(
+                        MekCkSlot.windowInput(slotLimit, SLOT_WINDOW, listener, x, y)));
+            }
+            for (int i = 0; i < outputCount; i++) {
+                int x = INPUT_START_X + (i % outputColumns) * SLOT_STEP;
+                int y = GRID_START_Y + (i / outputColumns) * SLOT_STEP;
+                outputSlots.add(builder.addSlot(
+                        MekCkSlot.windowOutput(slotLimit, SLOT_WINDOW, listener, x, y)));
+            }
+        } else {
+            // 方阵：输入在左、输出整体右移「**输入**方阵宽度 + 间隔」。
+            // 间隔按输入宽度算而不是各自宽度：并行方阵两者相等，穿串工厂的
+            // 「3 宽输入 + 1 宽输出」也正好是旧版 38/130 的间距。
+            addSlotGrid(builder, listener, INPUT_START_X, inputCount, inputColumns, slotLimit, true);
+            addSlotGrid(builder, listener, INPUT_START_X + inputColumns * SLOT_STEP + GRID_GAP,
+                    outputCount, outputColumns, slotLimit, false);
+        }
         energySlot = EnergyInventorySlot.fillOrConvert(energyContainer, this::getLevel, listener,
                 ENERGY_SLOT_X, ENERGY_SLOT_Y);
         builder.addSlot(energySlot);
         appendExtraSlots(builder, listener);
+        registerExtraSlotsAsDataType(extraSlotsForConfig());
         return builder.build();
+    }
+
+    /**
+     * 家族专属槽（调味料 / 营养液 / 生长土 / 存储）—— 供 {@link #registerExtraSlotsAsDataType} 登记。
+     *
+     * <p>默认空。**家族必须覆写它并返回 {@code appendExtraSlots} 里加的那些槽**，
+     * 否则它们不属于任何 {@code DataType}（后果见 {@link #registerExtraSlotsAsDataType}）。</p>
+     *
+     * <p>返回活列表即可（{@code appendExtraSlots} 已在本方法调用前填好）；
+     * 本方法只读不存。</p>
+     */
+    protected List<IInventorySlot> extraSlotsForConfig() {
+        return List.of();
+    }
+
+    /**
+     * 把家族专属槽登记为 {@code DataType.EXTRA} —— <b>照 Mek 的 {@code TileEntityFactory} 抄的</b>。
+     *
+     * <h3>不登记会怎样（两条都是静默的）</h3>
+     * <ol>
+     *   <li><b>贴图错</b>：{@code GuiMekanism.addSlots()} 选槽位贴图的优先级是
+     *       「先按侧配 {@code DataType}（{@code findDataType}），查不到再退回
+     *       {@code ContainerSlotType}」——而退回时 {@code INPUT/OUTPUT/EXTRA} 一律映射成
+     *       {@code SlotType.NORMAL}（见其真源码第 512-513 行）。所以未登记的槽
+     *       <b>无论 {@code setSlotType} 设成什么，都画成 {@code normal.png}</b>。</li>
+     *   <li><b>侧配里看不见</b>：{@code ISideConfiguration.getActiveDataType(container)} 是按
+     *       「槽在哪个 {@code SlotInfo} 里」反查的，不在任何列表里就返回 {@code null}，
+     *       于是这些槽在侧配 GUI 中不存在、外部自动化（漏斗 / AE2）对它们的可见性也不明确。</li>
+     * </ol>
+     *
+     * <p>Mek 自己的 {@code TileEntityFactory}（真源码 133-139 行）就是这么做的：
+     * {@code addSlotInfo(DataType.EXTRA, new InventorySlotInfo(true, true, extraSlot))}
+     * 并 {@code setDataType(DataType.EXTRA, RelativeSide.BOTTOM)}。
+     * 这里只做前半句（登记），<b>不设默认面</b>：默认面会改变管道/漏斗对这几个槽的既有行为，
+     * 属于需要单独决策的变更，不顺手打开。</p>
+     *
+     * @param extraSlots 额外槽；空列表时什么都不做
+     */
+    protected void registerExtraSlotsAsDataType(List<IInventorySlot> extraSlots) {
+        if (extraSlots == null || extraSlots.isEmpty()) {
+            return;
+        }
+        TileComponentConfig config = getConfig();
+        if (config == null) {
+            return;
+        }
+        ConfigInfo itemConfig = config.getConfig(TransmissionType.ITEM);
+        if (itemConfig == null) {
+            return;
+        }
+        // canInput = true, canOutput = true：与 Mek 对 EXTRA 槽的取值一致（两侧都放行），
+        // 具体能否被自动化访问仍由槽自己的 canInsert/canExtract 谓词把关。
+        itemConfig.addSlotInfo(DataType.EXTRA, new InventorySlotInfo(true, true, extraSlots));
     }
 
     // ── 槽位布局（阶段 3 Task 4 引入：穿串工厂触发）────────────────────
@@ -511,9 +700,12 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
      * 被调用（见 {@link #onUpdateServer}），它内部的 {@code busy} 标志在那一 tick 置位后
      * 一直保持到下一次调用。若拿它当忙碌态，机器跑完第一批之后就会永远显示「在忙」。
      * 进度条是逐 tick 更新的，天然没有这种陈旧问题。</p>
+     *
+     * <p>走 {@link #getWorkProgress()} 而不是直接读字段：客户端要读同步镜像，
+     * 否则 {@code GuiProgress.isActive()} 在客户端恒为 false，进度条连底图都不画。</p>
      */
     public boolean isBusy() {
-        return workProgress > 0;
+        return getWorkProgress() > 0;
     }
 
     // ── 能量闸门与进度条 ────────────────────────────────────────────────
@@ -523,8 +715,41 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
 
     /** 进度条已走的 tick 数（一个批次内单调递增）。 */
     private int workProgress;
+    /**
+     * 客户端镜像 —— {@link #workProgress} 的同步副本。
+     *
+     * <p><b>为什么必须有它</b>：{@code workProgress} 只在服务端推进，此前唯一的出口是
+     * {@code saveAdditional} 写进 NBT，<b>没有任何网络同步通道</b>。而 GUI 的进度条读的是
+     * {@code menu.getProgressRatio() → tile.getWorkProgress()}，客户端 tile 上这个字段
+     * 恒为 0 ⇒ <b>进度条永远不动</b>（六个工厂家族的进度条此前全部是死的）。
+     * 同步走 Mek 自己的容器追踪机制，见 {@link #addContainerTrackers}。</p>
+     */
+    private int clientWorkProgress;
     /** PULSE 锁存：收到上升沿后一直放行，直到跑完一个完整批次。 */
     private boolean pulseLatched;
+
+    /**
+     * 把进度条数据挂进 Mek 的容器同步通道。
+     *
+     * <h3>为什么用 {@code container.track} 而不是自己发包</h3>
+     * 这是 Mek 机器同步数据的<b>唯一</b>正规入口：{@code MekanismTileContainer.addContainerTrackers()}
+     * 会调 {@code tile.addContainerTrackers(this)}，而 {@code MekanismContainer.track(ISyncableData)}
+     * 把条目收进 {@code trackedData}，由 Mek 自己的容器属性包按脏值增量下发。
+     * 自己发包要另写一套「谁在什么时候发、玩家关屏后怎么办」的状态机，
+     * 而 Mek 这套已经处理好了开屏/关屏/重开屏。
+     *
+     * <p>写法逐字对齐 Mek 的 {@code TileEntityFactory.addContainerTrackers}：
+     * {@code container.track(SyncableInt.create(this::getX, this::setX))}。
+     * <b>getter 在服务端读权威值、setter 在客户端写镜像</b>，
+     * 所以 {@link #getWorkProgress()} 必须按端分流，否则服务端会读到客户端那份恒 0 的镜像、
+     * 脏值判定永远不触发。</p>
+     */
+    @Override
+    public void addContainerTrackers(mekanism.common.inventory.container.MekanismContainer container) {
+        super.addContainerTrackers(container);
+        container.track(mekanism.common.inventory.container.sync.SyncableInt.create(
+                this::getWorkProgress, value -> this.clientWorkProgress = value));
+    }
 
     /**
      * 完成一个批次需要累计多少 tick —— 进度条长度。
@@ -886,9 +1111,15 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         return gatedTicksPerCycle(randomizeCollapsesWorkCycle(), ticksPerWorkCycle());
     }
 
-    /** 进度条已走的 tick 数（GUI 用）。 */
+    /**
+     * 进度条已走的 tick 数（GUI 用）。
+     *
+     * <p><b>按端分流</b>：服务端返回权威值 {@link #workProgress}，客户端返回同步镜像
+     * {@link #clientWorkProgress}。分流是必须的——{@code SyncableInt} 的脏值判定在服务端
+     * 调 getter，若这里无条件返回镜像，服务端读到的永远是 0，同步一次都不会发。</p>
+     */
     public int getWorkProgress() {
-        return workProgress;
+        return level != null && level.isClientSide ? clientWorkProgress : workProgress;
     }
 
     /** 完成一个批次需要的 tick 数（GUI 画进度条分母用）。 */
@@ -1005,15 +1236,62 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
             // IllegalStateException，真到这里说明方块被换成了非工厂方块。
             // 此时宁可让旧内容被逐条记日志丢掉，也不要在区块加载路径上抛 NPE。
             CuttingMachineFactoryTier tier = getTier();
-            tag = MekCkLegacyMachineNbt.migrate(legacyTag, getDirection(), tier == null ? 0 : tier.processes);
+            // 第 4 个参数是「新机器真实的槽位总数」（含 appendExtraSlots 追加的家族专属槽）：
+            // 迁移写出的 MekCkSlotCount 必须与读档时的槽位数一致，否则每次读档都多一条 WARN。
+            tag = MekCkLegacyMachineNbt.migrate(legacyTag, getDirection(),
+                    tier == null ? 0 : tier.processes, mekckPersistedSlots().size());
         }
         super.load(tag);
-        // 专属键不存在时 read 返回 false、什么都不做：那种档只有 Mek 那份 byte 存档，
-        // 退化到修复前的行为（低端位照常读、高端位照常丢），而不是报错或清空。
-        MekCkSlotNbt.read(tag, mekckPersistedSlots());
+        // ⚠️ 这一次显式调用不能省，理由不是「顺序好看」而是实测的调用点次序：
+        // 本类实现的 {@link ISustainedData#readSustainedData} 也会被父类的读档链调到
+        // （{@code TileEntityMekanism.load} 偏移 59 → {@code loadGeneralPersistentData} → 钩子），
+        // 但那一处在 {@code DataHandlerUtils.readContainers}（偏移 90，Mek 自己那份 byte 下标
+        // Items）<b>之前</b>。也就是说钩子那一次跑完，0..127 号槽还会被 Mek 用同一批值覆盖一遍；
+        // 只有本条（在 super.load 之后）能保证「int 下标那份是最后落地的权威来源」。
+        // 顺序不变量由 {@code TestMekCkSlotNbt#mekckSlotReadIsAppliedAfterSuperLoad} 钉住。
+        readMekckPersistentState(tag);
         if (legacyTag != null) {
             installLegacyUpgrades(legacyTag);
         }
+    }
+
+    // ── ISustainedData：掉落 → 再放置 的 MekCK 状态恢复 ─────────────────
+    //
+    // 背景：迁到 Mek 的 BlockTile 之后，破坏方块走的是战利品表，BE 的内容不会自动跟着
+    // 物品走；恢复走 BlockMekanism.setPlacedBy（实测偏移 102 取 ItemDataUtils.getDataMapIfPresent，
+    // 299~361 读 SubstanceType 容器，364~391 调 ISustainedData.readSustainedData）。
+    // 因此 MekCK 自有的键必须自己接这一钩子，否则「挖掉再放下」等于整机清零。
+    //
+    // ⚠️ 键契约（与战利品表 copy_nbt 的 target 路径逐字对齐，全部在 BE 存档根 / mekData 根）：
+    //   MekCkSlots        (CompoundTag)  int 下标槽位存档，见 MekCkSlotNbt
+    //   mekckExecutor     (CompoundTag)  执行器自有状态（订单等）
+    //   MekCkWorkProgress (int)          进度条
+    //   MekCkNative       (int)          存档格式版本
+    //   GasTank           (CompoundTag)  种植切配的营养液罐（家族钩子）
+    //   FluidTanks        (CompoundTag)  烹饪的三个流体罐（家族钩子）
+    //   MekckPlacerUuid   (UUID)         放置者归属（PlacerPersist，可选）
+    // AE2 节点键（MekckAe2Main / MekckAe2Extra1..7 / MekCkAutoSel）<b>刻意不搬</b>：
+    // 节点在拆机时已被 AE2Compat.onRemoved 销毁，重新放置时应按新节点重新入网。
+
+    /**
+     * MekCK 自有键的读取 —— {@link #load} 与 {@link #readSustainedData} <b>共用这一段</b>。
+     *
+     * <p>传进来的标签有两种来源，但<b>键名与层级完全相同</b>：方块实体的存档根
+     * （{@code load} 路径）与物品的 {@code mekData} 层（{@code BlockMekanism.setPlacedBy} 路径，
+     * 战利品表的 {@code copy_nbt} 把 BE 的键原样拷进 {@code mekData.<同名>}）。</p>
+     *
+     * <p>两条路径都幂等：{@link MekCkSlotNbt#read} 是「先清空再灌」，重复读同一份标签结果不变；
+     * 执行器 {@code load}、AE2 缓存、放置者 UUID 同理。因此读档路径上钩子与本方法各跑一次
+     * 不会产生差异（代价只是多一次反序列化）。</p>
+     */
+    private void readMekckPersistentState(CompoundTag tag) {
+        if (tag == null) {
+            return;
+        }
+        // 专属键不存在时 read 返回 false、什么都不做：那种档只有 Mek 那份 byte 存档，
+        // 退化到修复前的行为（低端位照常读、高端位照常丢），而不是报错或清空。
+        MekCkSlotNbt.read(tag, mekckPersistedSlots());
+        readExtraSustainedData(tag);
         int version = tag.getInt(TAG_NATIVE_VERSION);
         if (version > NATIVE_VERSION) {
             LOGGER.warn("工厂方块 {} 的存档格式版本为 {}，高于本版本 MekCK 支持的 {}，"
@@ -1026,6 +1304,107 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         // 下一次 serverTick 的 init()，与旧 BE 的调用位置一致。
         cn.ism.mekck.util.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
+    }
+
+    /**
+     * 家族专属状态的读取钩子（营养液罐 / 流体罐）。默认什么都不做。
+     *
+     * <p>基类只认得自己写的那几个键；{@code GasTank} / {@code FluidTanks} 由各自家族写出，
+     * 因此也由各自家族读回，但读的时机必须与基类那几个键同批（读档、以及再放置时）。</p>
+     */
+    protected void readExtraSustainedData(CompoundTag tag) {
+    }
+
+    /**
+     * {@inheritDoc} —— 掉落物再放置时，把 MekCK 自有状态读回来。
+     *
+     * <h3>为什么先判「载荷里有 MekCK 的键」再动手</h3>
+     * 本钩子的调用方<b>不止</b>「再放置」一条（见 {@link #writeSustainedData} 的调用点清单）：
+     * {@code ItemConfigurationCard}（配置卡）粘贴时走
+     * {@code setConfigurationData → loadGeneralPersistentData → 本方法}，而配置卡的载荷里
+     * <b>不会有</b> MekCK 的任何键（写侧有意为空）。此时必须整段跳过，否则会出现配置卡
+     * 本不该有的副作用：
+     * <ul>
+     *   <li>{@code executor().load(空标签)} → 清掉目标机器<b>正在执行的订单</b>
+     *       （执行器把「键不存在」定义为「订单清空」，那是给真读档用的语义）；</li>
+     *   <li>{@code AE2Compat.load} → {@code FactoryGridHost.loadFromNBT} 在没有任何节点键时
+     *       会 {@code selectedAutoItems.clear()}，<b>清掉目标机器的自动补料勾选</b>；</li>
+     *   <li>{@code workProgress} 被重置为 0。</li>
+     * </ul>
+     * 判据取「四个基类键里任意一个存在」，而不是某一个特定键：这样战利品表少写一项时
+     * 仍然是「能恢复多少恢复多少」，而不是全有或全无。
+     */
+    @Override
+    public void readSustainedData(CompoundTag tag) {
+        if (!hasMekckKeys(tag)) {
+            return;
+        }
+        readMekckPersistentState(tag);
+    }
+
+    /** 载荷里是否出现了任何一个 MekCK 自有键（见 {@link #readSustainedData} 的判据说明）。 */
+    private static boolean hasMekckKeys(CompoundTag tag) {
+        if (tag == null) {
+            return false;
+        }
+        return tag.contains(MekCkSlotNbt.TAG_SLOTS, net.minecraft.nbt.Tag.TAG_COMPOUND)
+                || tag.contains(TAG_EXECUTOR, net.minecraft.nbt.Tag.TAG_COMPOUND)
+                || tag.contains(TAG_WORK_PROGRESS, net.minecraft.nbt.Tag.TAG_INT)
+                || tag.contains(TAG_NATIVE_VERSION, net.minecraft.nbt.Tag.TAG_INT);
+    }
+
+    /**
+     * <b>有意为空实现</b>：MekCK 不往「可复制的配置数据」里写任何自有键。
+     *
+     * <h3>为什么不能在这里写（这是一个已经查证的复用陷阱）</h3>
+     * 本钩子<b>不是</b>「只在挖掉时调用」——实测 {@code javap -p -c} 的全部调用点是：
+     * <ol>
+     *   <li>{@code TileEntityMekanism.addGeneralPersistentData} 偏移 21~34 ——
+     *       被 {@code saveAdditional}（偏移 57）与
+     *       <b>{@code getConfigurationData(Player)}（偏移 10）</b>调用；</li>
+     *   <li>{@code BlockMekanism.getCloneItemStack} 偏移 184~211 —— 中键取方块的复制品。</li>
+     * </ol>
+     * 而 {@code TileEntityMekanism implements mekanism.api.IConfigCardAccess}，
+     * {@code ItemConfigurationCard}（配置卡）复制时调 {@code getConfigurationData}、
+     * 粘贴时调 {@code setConfigurationData} → {@code loadGeneralPersistentData} →
+     * {@link #readSustainedData}。于是：<b>只要这里写了槽位/流体键，配置卡就会连带复制整机库存</b>
+     * —— 从一台满机器复制一张卡，再往空机器上反复粘贴，就是一次干净的物品复制漏洞
+     * （粘贴侧 {@code MekCkSlotNbt.read} 还会先清空目标机器自己的槽位）。
+     *
+     * <p>而「挖掉再放下」这条路径<b>不需要</b>本方法出力：它由战利品表的 {@code copy_nbt}
+     * 直接把 BE 存档键拷进 {@code mekData.*}，{@link #readSustainedData} 侧照读即可。
+     * 对称性因此落在「读侧对缺键一律无操作」上，而不在写侧。</p>
+     *
+     * <p>将来若确实想让配置卡复制「订单 / 工作模式」这类<b>纯设置</b>，正确做法是只在这里写
+     * {@code mekckExecutor} 这类不含内容的键，而把 {@code MekCkSlots} / {@code GasTank} /
+     * {@code FluidTanks} 永远排除在外——那是一条需要单独决策的变更，不要顺手打开。</p>
+     */
+    @Override
+    public void writeSustainedData(CompoundTag tag) {
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p><b>Mek 10.4.6 里没有任何外部消费方</b>。对 {@code Mekanism-1.20.1-10.4.6.20} 全 jar 做
+     * 常量池扫描 + 逐类 {@code javap -p -c} 复核，结论要写全免得后来者以为本条断言写错了：
+     * <ul>
+     *   <li>含 {@code getTileDataRemap} 常量的类共 <b>14</b> 个：接口本身 + 13 个实现类；</li>
+     *   <li>其中确实有 <b>4 处真实方法调用</b>，但全是 {@code invokespecial}
+     *       ——{@code TileEntityQIOExporter → TileEntityQIOFilterHandler →
+     *       TileEntityQIOComponent} 这条继承链上，子类在自己的覆写里调
+     *       {@code super.getTileDataRemap()} 合并父类表。那是**实现内部**，不是消费方；</li>
+     *   <li>按接口调用（{@code invokeinterface}）或虚调用（{@code invokevirtual}）的
+     *       <b>外部消费方为 0</b>：{@code BlockMekanism} 与 {@code TileEntityMekanism}
+     *       都不含该字符串。</li>
+     * </ul>
+     * 也就是说这个钩子是「留给键名在 BE 与物品之间需要改名的场合」的，而本模组的键名
+     * 两侧同名（战利品表 {@code copy_nbt} 的 target 就是 {@code mekData.<同名键>}），
+     * 因此照接口返回空表。</p>
+     */
+    @Override
+    public Map<String, String> getTileDataRemap() {
+        return Map.of();
     }
 
     /**
@@ -1042,23 +1421,32 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
     }
 
     /**
-     * 参与 MekCK 专属 int 下标存档的槽位组，顺序与 {@link #getInitialInventory} 里
-     * 往 builder 加槽的顺序<b>逐位一致</b>：{@code [0,N) 输入、[N,2N) 输出、[2N] 能量槽}。
+     * 参与 MekCK 专属 int 下标存档的槽位组 —— <b>就是 Mek 写 {@code Items} 用的那一份列表</b>。
      *
-     * <p>下标必须与 Mek 的 byte 下标指向同一个槽，所以这里不能自行重排、
-     * 也不能漏掉能量槽——{@code 2N} 号那格正是随 {@code SINGULARITY} 一起越界的那一格。
-     * 另注：{@code componentUpgrade} 的两张升级卡槽由 Mek 自己存（只有 2 格，
-     * byte 下标绰绰有余），不在本列表内。</p>
+     * <h3>为什么由 {@code getInventorySlots(null)} 给出，而不是自己拼 {@code [输入][输出][能量槽]}</h3>
+     * 自己拼的版本<b>漏掉了 {@link #appendExtraSlots} 追加的家族专属槽</b>
+     * （烹饪 144 格存储 / 穿串 81 格存储 / 烧烤 3 个调味料槽 / 种植切配的营养液 + 生长土），
+     * 而那些槽只走 Mek 自己的 byte 下标存档，于是下标 ≥ 128 的槽每次存读档都被静默丢掉：
+     * 烹饪工厂 144 格存储里有 35 格落在 128..162 <b>（全部 12 档，新建机器就中招）</b>，
+     * 烧烤/种植切配在 {@code SINGULARITY} 档各丢 3 / 2 格。实测：
+     * {@code DataHandlerUtils.writeContents} 偏移 48~53 `iload_3; i2b; putByte`、
+     * {@code readContents} 偏移 35~49 `iflt 64`（负下标整条跳过）—— 与
+     * {@link MekCkSlotNbt} 类注释里那条是同一段字节码。
      *
-     * <p>每次都新建列表而不是缓存：一次 {@code ArrayList} 分配在存档路径上
-     * 相对 NBT 序列化本身可以忽略，换来的是不可能有人往这个列表里塞脏数据的保证。</p>
+     * <h3>为什么这份列表的下标一定等于 Mek 的 byte 下标</h3>
+     * {@code TileEntityMekanism.saveAdditional} 写的是
+     * {@code DataHandlerUtils.writeContainers(getInventorySlots(null))}（偏移 74~86），
+     * 读的是同一个调用（偏移 76~90）。而 {@code getInventorySlots(null)} 最终走到
+     * {@code ConfigHolder.getSlots(side, fn)}，其第一支就是
+     * {@code if (side == null) return this.slots;} —— {@code side} 为 null 时直接返回
+     * {@code addSlot} 的插入序 {@code ArrayList}。所以「取同一个方法的结果」是唯一
+     * 结构上不可能错位的写法：任何手工重排都只是把错位风险从编译器手里拿回来。
+     *
+     * <p>每次调用重新取列表（不缓存）：一次调用在存档路径上相对 NBT 序列化可以忽略，
+     * 换来的是不可能有人往这个列表里塞脏数据、也不会与 Mek 换列表实现脱节。</p>
      */
     private List<IInventorySlot> mekckPersistedSlots() {
-        List<IInventorySlot> all = new ArrayList<>(2 * inputSlots.size() + 1);
-        all.addAll(inputSlots);
-        all.addAll(outputSlots);
-        all.add(energySlot);
-        return all;
+        return getInventorySlots(null);
     }
 
     /**

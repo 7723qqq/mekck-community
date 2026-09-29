@@ -46,6 +46,21 @@ _mekckf_*/
 __pycache__/
 *.py[cod]
 
+# ── Mixin 注解处理器/AP 事故残留 ──────────────────────
+# 阶段：曾尝试用 MixinGradle + 注解处理器自动生成 refmap（路线失败，见 STATUS.md §六.4），
+# 该过程把 Mixin 库自身的**源码**解包到了仓库根：org/spongepowered/** 共 431 个 .java，
+# 外加 META-INF/{MANIFEST.MF,services/*} 共 8 个 SPI 声明。
+#
+# 为什么必须忽略而不是删了就完事：
+#   1. META-INF/services/javax.annotation.processing.Processor 会在任何以仓库根为
+#      classpath 的 javac/IDE 场景里**全局注册 Mixin 注解处理器**，也就是把那条
+#      已确认走不通的路线重新激活（AP 会对 4 个 remap=false 的 mod 类 mixin 报成员级错误）；
+#   2. 根目录 META-INF/ 与 src/main/resources/META-INF/ 同名极易混淆，误删后者会连带
+#      删掉 mods.toml 与 accesstransformer.cfg。
+# 误 add 的补救：git rm -r --cached META-INF org && git rm -r META-INF org
+/META-INF/
+/org/
+
 # ── 手动备份目录（重写前的临时快照，非源码）──────────
 .backup-*/
 

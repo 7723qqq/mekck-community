@@ -1,0 +1,16 @@
+{
+  "mappings": {
+    "cn/ism/mekck/mixin/MixinItemStack": {
+      "save": "Lnet/minecraft/world/item/ItemStack;m_41739_(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag;",
+      "of": "Lnet/minecraft/world/item/ItemStack;m_41712_(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/world/item/ItemStack;"
+    }
+  },
+  "data": {
+    "searge": {
+      "cn/ism/mekck/mixin/MixinItemStack": {
+        "save": "Lnet/minecraft/world/item/ItemStack;m_41739_(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag;",
+        "of": "Lnet/minecraft/world/item/ItemStack;m_41712_(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/world/item/ItemStack;"
+      }
+    }
+  }
+}

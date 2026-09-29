@@ -8,7 +8,6 @@ import cn.ism.mekck.network.ModMessages;
 import mekanism.api.math.FloatingLong;
 import mekanism.client.gui.GuiConfigurableTile;
 import mekanism.client.gui.element.progress.GuiProgress;
-import mekanism.client.gui.element.progress.IProgressInfoHandler;
 import mekanism.client.gui.element.progress.ProgressType;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
 import net.minecraft.client.gui.GuiGraphics;
@@ -52,32 +51,31 @@ import net.minecraft.world.entity.player.Inventory;
  *       显示一个没有数据源的读数只会误导玩家。真要迁时见 P3-T3 的遗留项。</li>
  * </ul>
  */
-public final class GrillFactoryScreen extends GuiConfigurableTile<GrillFactoryTile, GrillFactoryMenu> {
+public final class GrillFactoryScreen extends MekCkFactoryScreenBase<GrillFactoryTile, GrillFactoryMenu> {
+
+    /**
+     * 槽位悬浮窗标签页 —— 只有 &gt;17 并行的高档工厂才有窗口槽，
+     * 所以本字段可能恒为 null（见 {@code menu.windowSlots().isEmpty()}）。
+     * 关闭窗口后需要用同一实例重新激活，因此必须留引用。
+     */
+    private MekCkSlotWindowTab slotWindowTab;
 
     /** 输入方阵与输出方阵的水平间隔，与 tile 侧 {@code GRID_GAP} 同值。 */
     private static final int GAP_BETWEEN = 30;
     /** 调味料列的横向起点，与 tile 侧 {@code SEASONING_SLOT_X} 同值。 */
     private static final int SEASONING_COL_X = 8;
-    /** 调味料列的纵向起点，与 tile 侧 {@code SEASONING_SLOT_Y} 同值。 */
-    private static final int SEASONING_COL_Y = 55;
     /** 单个槽位间距，与 tile 侧 {@code SEASONING_SLOT_STEP} 同值。 */
     private static final int SLOT_STEP = 18;
     /** 调味料槽数。 */
     private static final int SEASONING_SLOTS = GrillFactoryTile.SEASONING_SLOTS;
-    /** 调味料槽列与开关行合计多占的高度（3 个槽 + 1 行开关）。 */
-    private static final int SEASONING_BLOCK_HEIGHT = (SEASONING_SLOTS + 1) * SLOT_STEP;
 
     public GrillFactoryScreen(GrillFactoryMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
-        CuttingMachineFactoryTier tier = tile.getTier();
-        int columns = tier == null ? 1 : (int) Math.ceil(Math.sqrt(tier.processes));
-        int rows = tier == null ? 1 : (int) Math.ceil((double) tier.processes / columns);
-        int extraHeight = Math.max(0, (rows - 2) * SLOT_STEP) + SEASONING_BLOCK_HEIGHT;
-        // 面板尺寸必须随并行数长，否则高等级工厂的槽位会画到面板外面。
-        // 底图不用自己画：GuiMekanism.renderBg 直接把 base.png 拉到 (imageWidth, imageHeight)。
-        imageWidth = 38 + columns * SLOT_STEP + GAP_BETWEEN + columns * SLOT_STEP + 20;
-        imageHeight = 184 + extraHeight;
-        inventoryLabelY = 89 + extraHeight;
+        // 面板尺寸由 MekCkFactoryLayout 统一给出（屏幕与菜单共用同一份公式），见该类注释。
+        // 3 个调味料槽 + 1 行开关是「额外槽」，方阵分支的高度沿用旧值（不加行）。
+        imageWidth = cn.ism.mekck.menu.MekCkFactoryLayout.gridFamilyPanelWidth(tile);
+        imageHeight = cn.ism.mekck.menu.MekCkFactoryLayout.gridFamilyPanelHeight(tile, SEASONING_SLOTS, 1, 0);
+        inventoryLabelY = cn.ism.mekck.menu.MekCkFactoryLayout.inventoryLabelY(imageHeight);
         dynamicSlots = true;
     }
 
@@ -92,22 +90,35 @@ public final class GrillFactoryScreen extends GuiConfigurableTile<GrillFactoryTi
         addRenderableWidget(new GuiEnergyTab(this, tile.getEnergyContainer(),
                 () -> FloatingLong.create(tier == null ? 0 : tier.energyPerTick)));
 
-        // 进度条：SMALL_RIGHT 箭头，横在输入方阵与输出方阵之间。
-        int columns = tier == null ? 1 : (int) Math.ceil(Math.sqrt(tier.processes));
-        int rows = tier == null ? 1 : (int) Math.ceil((double) tier.processes / columns);
-        int progressX = 38 + columns * SLOT_STEP + (GAP_BETWEEN - 28) / 2;
-        int progressY = 41 + rows * SLOT_STEP / 2 - 4;
-        addRenderableWidget(new GuiProgress(new IProgressInfoHandler() {
-            @Override
-            public double getProgress() {
-                return menu.getProgressRatio();
-            }
+        // 竖直能源条（旧 GUI 有、迁移时丢的那条），位置与数据源见基类。
+        addEnergyBar();
 
-            @Override
-            public boolean isActive() {
-                return menu.isBusy();
-            }
-        }, ProgressType.SMALL_RIGHT, this, progressX, progressY));
+        // 槽位悬浮窗标签页：只有高档工厂（>17 并行）或烹饪/穿串才有窗口槽，
+        // 三组皆空时不加标签页（menu.windowSlots().isEmpty()）。
+        if (!menu.windowSlots().isEmpty()) {
+            slotWindowTab = addRenderableWidget(new MekCkSlotWindowTab(this, tile,
+                    menu.windowSlots(), () -> slotWindowTab));
+        }
+
+        // 进度条：SMALL_RIGHT 箭头（悬浮窗 / 一行式 / 方阵三种落点）。
+        int progressX;
+        int progressY;
+        int processes = tier == null ? 1 : tier.processes;
+        if (cn.ism.mekck.menu.MekCkFactoryLayout.usesSlotWindow(tile)) {
+            progressX = (imageWidth - 28) / 2;
+            progressY = 41;
+        } else if (cn.ism.mekck.menu.MekCkFactoryLayout.useOneRow(processes)) {
+            int rowWidth = (processes - 1) * cn.ism.mekck.menu.MekCkFactoryLayout.oneRowStep(processes) + 18;
+            progressX = cn.ism.mekck.menu.MekCkFactoryLayout.oneRowBaseX(processes) + (rowWidth - 28) / 2;
+            progressY = 33;
+        } else {
+            int columns = (int) Math.ceil(Math.sqrt(processes));
+            int rows = (int) Math.ceil((double) processes / columns);
+            progressX = 38 + columns * SLOT_STEP + (GAP_BETWEEN - 28) / 2;
+            progressY = 41 + rows * SLOT_STEP / 2 - 4;
+        }
+        // isActive() 不覆写（Mek 默认 true，底图常驻）——理由见 MekCkFactoryScreenBase 类注释。
+        addRenderableWidget(new GuiProgress(() -> menu.getProgressRatio(), ProgressType.SMALL_RIGHT, this, progressX, progressY));
     }
 
     @Override
@@ -116,7 +127,7 @@ public final class GrillFactoryScreen extends GuiConfigurableTile<GrillFactoryTi
 
         // 调味料启用按钮（每枚槽正下方一枚）：默认工作模式下这一格是否参与自动调味。
         // 不是槽位，Mek 的自动通路认不出来，只能自己画自己命中。
-        int buttonY = topPos + SEASONING_COL_Y + SEASONING_SLOTS * SLOT_STEP;
+        int buttonY = topPos + seasoningButtonY();
         for (int i = 0; i < SEASONING_SLOTS; i++) {
             int bx = leftPos + SEASONING_COL_X + i * SLOT_STEP;
             boolean enabled = menu.isSeasoningEnabled(i);
@@ -132,10 +143,24 @@ public final class GrillFactoryScreen extends GuiConfigurableTile<GrillFactoryTi
         }
     }
 
+    /**
+     * 调味料开关行的 y（面板相对坐标）。
+     *
+     * <p><b>必须与 tile 侧的槽位几何同源</b>：槽位由
+     * {@code MekCkFactoryLayout.extraSlotY(i, oneRow)} 排在
+     * {@code extraSlotY0(oneRow)} 起的一列，开关行紧接在最后一枚槽下面。
+     * 此前这里写死 {@code 55 + 3*18 = 109}，而一行式布局下槽位其实从 <b>41</b> 起
+     * ⇒ 开关行比槽列低 14px，且 109..127 正好压进玩家背包首行（一行式面板 187 的背包在 105）。</p>
+     */
+    private int seasoningButtonY() {
+        return cn.ism.mekck.menu.MekCkFactoryLayout.extraSlotRowBelow(
+                SEASONING_SLOTS, 0, tile.usesOneRowLayout());
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
-            int buttonY = topPos + SEASONING_COL_Y + SEASONING_SLOTS * SLOT_STEP;
+            int buttonY = topPos + seasoningButtonY();
             for (int i = 0; i < SEASONING_SLOTS; i++) {
                 int bx = leftPos + SEASONING_COL_X + i * SLOT_STEP;
                 if (mouseX >= bx && mouseX < bx + SLOT_STEP

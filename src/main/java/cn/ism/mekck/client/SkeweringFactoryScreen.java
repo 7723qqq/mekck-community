@@ -6,7 +6,6 @@ import cn.ism.mekck.menu.SkeweringFactoryMenu;
 import mekanism.api.math.FloatingLong;
 import mekanism.client.gui.GuiConfigurableTile;
 import mekanism.client.gui.element.progress.GuiProgress;
-import mekanism.client.gui.element.progress.IProgressInfoHandler;
 import mekanism.client.gui.element.progress.ProgressType;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
 import net.minecraft.client.gui.GuiGraphics;
@@ -44,26 +43,22 @@ import net.minecraft.world.entity.player.Inventory;
  *       {@code INetworkPullable} 一并退役，AE2 侧改走 {@code IMekCkPorted} 端口声明。</li>
  * </ul>
  */
-public final class SkeweringFactoryScreen extends GuiConfigurableTile<SkeweringFactoryTile, SkeweringFactoryMenu> {
+public final class SkeweringFactoryScreen extends MekCkFactoryScreenBase<SkeweringFactoryTile, SkeweringFactoryMenu> {
 
-    /** 面板宽：Mek 标准宽度，81 格存储挂在它左右外侧。 */
+    /** 存储悬浮窗标签页（关闭窗口后需要用同一个实例重新激活，所以必须留引用）。 */
+    private MekCkSlotWindowTab slotWindowTab;
+
+    /** 面板宽：Mek 标准宽度（81 格存储已改为悬浮窗虚拟槽，不再挂在面板外侧）。 */
     private static final int PANEL_WIDTH = 176;
     /** 输入三格与输出两格之间的水平间隔，与 tile 侧 {@code GRID_GAP} 同值。 */
     private static final int GAP_BETWEEN = 30;
-    /** 存储列起点，与 tile 侧存储布局常量同源。 */
-    private static final int STORAGE_COLS = 7;
-    private static final int STORAGE_LEFT_COUNT = 42;
-    private static final int STORAGE_X_OFFSET = -(STORAGE_COLS * 18) - 4;
-    private static final int STORAGE_Y = 62;
-    private static final int STORAGE_RIGHT_X = PANEL_WIDTH + 4;
 
     public SkeweringFactoryScreen(SkeweringFactoryMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
-        CuttingMachineFactoryTier tier = tile.getTier();
-        // 耗电 tooltip 用的每 tick 能耗来自等级，档位未知时给 0 而不是抛。
+        // 耗电 tooltip 用的每 tick 能耗来自等级（在 addGuiElements 里取），档位未知时给 0 而不是抛。
         imageWidth = PANEL_WIDTH;
-        imageHeight = 184;
-        inventoryLabelY = 89;
+        imageHeight = cn.ism.mekck.menu.MekCkFactoryLayout.skeweringImageHeight();
+        inventoryLabelY = cn.ism.mekck.menu.MekCkFactoryLayout.inventoryLabelY(imageHeight);
         dynamicSlots = true;
     }
 
@@ -76,34 +71,29 @@ public final class SkeweringFactoryScreen extends GuiConfigurableTile<SkeweringF
         addRenderableWidget(new GuiEnergyTab(this, tile.getEnergyContainer(),
                 () -> FloatingLong.create(tier == null ? 0 : tier.energyPerTick)));
 
+        // 竖直能源条（旧 GUI 有、迁移时丢的那条），位置与数据源见基类。
+        addEnergyBar();
+
+        // 槽位悬浮窗标签页：只有高档工厂（>17 并行）或烹饪/穿串才有窗口槽，
+        // 三组皆空时不加标签页（menu.windowSlots().isEmpty()）。
+        if (!menu.windowSlots().isEmpty()) {
+            slotWindowTab = addRenderableWidget(new MekCkSlotWindowTab(this, tile,
+                    menu.windowSlots(), () -> slotWindowTab));
+        }
+
         // 进度条：SMALL_RIGHT 箭头，横在输入三格与输出两格之间。
         int progressX = 38 + SkeweringFactoryTile.INPUT_SLOTS * 18 + (GAP_BETWEEN - 28) / 2;
         int progressY = 41 + 18 / 2 - 4;
-        addRenderableWidget(new GuiProgress(new IProgressInfoHandler() {
-            @Override
-            public double getProgress() {
-                return menu.getProgressRatio();
-            }
-
-            @Override
-            public boolean isActive() {
-                return menu.isBusy();
-            }
-        }, ProgressType.SMALL_RIGHT, this, progressX, progressY));
+        // isActive() 不覆写（Mek 默认 true，底图常驻）——理由见 MekCkFactoryScreenBase 类注释。
+        addRenderableWidget(new GuiProgress(() -> menu.getProgressRatio(), ProgressType.SMALL_RIGHT, this, progressX, progressY));
     }
 
     @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
         super.renderBg(guiGraphics, partialTick, mouseX, mouseY);
-
-        // 存储区只有槽位 widget（由 dynamicSlots 建在面板外侧），没有底板也没有标签——
-        // 底板画在 panel 之外会被 renderBg 的 base.png 盖掉，所以标签跟着面板走。
-        // 两块存储的标题贴在各自的左上角，让玩家知道屏外那两片是什么。
-        int leftLabelX = leftPos + STORAGE_X_OFFSET;
-        int rightLabelX = leftPos + STORAGE_RIGHT_X;
-        int labelY = topPos + STORAGE_Y - 10;
-        guiGraphics.drawString(font, "存储", leftLabelX, labelY, 0xFFAAAAAA);
-        guiGraphics.drawString(font, "存储", rightLabelX, labelY, 0xFFAAAAAA);
+        // 81 格存储已改为**悬浮窗虚拟槽**（见 SkeweringFactoryTile.extraSlotsForConfig 的注释），
+        // 主面板左右外侧不再有槽区。此前这里在那两片早已不存在的位置各画一个「存储」标签，
+        // 纯死 UI，已删。
     }
 
     @Override

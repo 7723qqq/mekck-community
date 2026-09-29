@@ -1,6 +1,8 @@
 package cn.ism.mekck.kitchen;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
+import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
+import cn.ism.mekck.upgrade.MekCkUpgradeTypes;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -50,7 +52,7 @@ public final class KitchenModule {
         // ① 基础机器：与系列图标一一对应
         KitchenFamily baseFamily = KitchenFamily.byIconItem(id.toString());
         if (baseFamily != null) {
-            return new Ability(baseFamily, 1, readParallelFromNbt(stack), -1,
+            return new Ability(baseFamily, 1, readParallelFromNbt(stack, null), -1,
                     net.minecraft.network.chat.Component.translatable(
                             stack.getDescriptionId()).getString());
         }
@@ -63,7 +65,7 @@ public final class KitchenModule {
             String tierName = path.substring(0, path.length() - suffix.length());
             CuttingMachineFactoryTier tier = tierByName(tierName);
             if (tier == null) continue;
-            return new Ability(family, Math.max(1, tier.processes), readParallelFromNbt(stack),
+            return new Ability(family, Math.max(1, tier.processes), readParallelFromNbt(stack, tier),
                     tier.ordinal(), net.minecraft.network.chat.Component.translatable(
                             stack.getDescriptionId()).getString());
         }
@@ -80,24 +82,50 @@ public final class KitchenModule {
 
     /**
      * 从模块物品 NBT 读取每线程并行（堆叠升级倍率 ×2^n）。
-     * 阶段 2 先返回 1；后续阶段接入工厂物品的升级 NBT（StackUpgradeTracker）。
+     *
+     * <h3>读的是 Mek 的升级持久化，不是旧追踪器</h3>
+     * 迁移后的工厂把存储卡交给 Mek 的 {@code TileComponentUpgrade} 持有，物品 NBT 里
+     * 的形状是 {@code BlockEntityTag.componentUpgrade.upgrades} —— 一个
+     * {@code [{type: "<rawName>", amount: n}, ...]} 列表（见
+     * {@code MekCkUpgradeCodec.encode}）。所以这里按 {@code type == "storage"} 找条目、
+     * 取 {@code amount}。
+     *
+     * <p><b>旧实现读的两个键都是死的</b>：{@code StackUpgradeTracker} 全仓只有已退役的
+     * {@code IceFactoryBlockEntity} 写过，而 {@code MekCkLegacyMachineNbt} 会在迁移时把它剥掉；
+     * {@code "StackUpgrade"} 更是<b>没有任何写入方</b>。两个分支因此恒不命中、恒返回 1，
+     * 而 javadoc 却写着「阶段 2 先返回 1」——注释与代码互相矛盾。现已按真实键重写。</p>
+     *
+     * <p>上限取 {@link MekCkUpgradeTypes#capOf} 而不是写死 20：它是「本档能装几张存储卡」的
+     * 唯一权威定义，同时把 {@code SINGULARITY}（无堆叠升级槽）判成 0 ⇒ 倍率 1。
+     * 写死 20 会让手改存档的机器在中央厨房里虚报吞吐。</p>
+     *
+     * @param tier 工厂等级；{@code null}（基础机器）没有存储卡槽，直接返回 1
      */
-    private static int readParallelFromNbt(ItemStack stack) {
+    private static int readParallelFromNbt(ItemStack stack, CuttingMachineFactoryTier tier) {
+        if (tier == null) return 1;
+        int installed = readStorageUpgradeCount(stack);
+        if (installed <= 0) return 1;
+        int cap = MekCkUpgradeTypes.capOf(MekCkUpgradeRefs.storage(), tier);
+        if (cap <= 0) return 1;
+        // 移位按 mod 32 处理：1<<31 是负数、1<<32 绕回 1。cap 当前是 6，走不到这里，
+        // 但这段算术不该依赖「配置值恰好很小」这个巧合。
+        return 1 << Math.min(installed, Math.min(cap, 30));
+    }
+
+    /** 从 {@code BlockEntityTag.componentUpgrade.upgrades} 里取存储卡的 {@code amount}。 */
+    private static int readStorageUpgradeCount(ItemStack stack) {
         net.minecraft.nbt.CompoundTag beTag = stack.getTagElement("BlockEntityTag");
-        if (beTag == null) return 1;
-        // 工厂物品的堆叠升级读条数据（MekCkUpgradeTracker 序列化格式）
-        if (beTag.contains("StackUpgradeTracker", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
-            int installed = beTag.getCompound("StackUpgradeTracker").getInt("Installed");
-            if (installed > 0) {
-                return (int) Math.pow(2, Math.min(installed, 20)); // 每级 ×2
+        if (beTag == null) return 0;
+        net.minecraft.nbt.CompoundTag component = beTag.getCompound("componentUpgrade");
+        net.minecraft.nbt.ListTag list = component.getList(
+                cn.ism.mekck.upgrade.MekCkUpgradeCodec.KEY, net.minecraft.nbt.Tag.TAG_COMPOUND);
+        String storageName = MekCkUpgradeTypes.nameOf(MekCkUpgradeRefs.storage());
+        for (int i = 0; i < list.size(); i++) {
+            net.minecraft.nbt.CompoundTag one = list.getCompound(i);
+            if (storageName.equals(one.getString("type"))) {
+                return one.getInt("amount");
             }
         }
-        if (beTag.contains("StackUpgrade")) {
-            int installed = beTag.getCompound("StackUpgrade").getInt("Installed");
-            if (installed > 0) {
-                return (int) Math.pow(2, Math.min(installed, 20));
-            }
-        }
-        return 1;
+        return 0;
     }
 }

@@ -37,10 +37,14 @@ public final class MekCkTransfer {
                 if (!existing.isEmpty() && existing.getItem() == source.getItem()
                         && ItemStack.isSameItemSameTags(source, existing)) {
                     int capacity = capacityOf(slot);
-                    int total = existing.getCount() + source.getCount();
+                    // 计数一律先转 long 再相加：槽位上限可达 Integer.MAX_VALUE，两个 21 亿级堆叠
+                    // 在 int 下相加会溢出为负，于是 total <= capacity 成立 ⇒ 源堆清零、目标堆被写成
+                    // 负数，两个堆叠在下次 NBT 往返时一起消失（审查项 I10）。收窄回 int 是安全的：
+                    // 能进这一支必有 total <= capacity <= Integer.MAX_VALUE。
+                    long total = (long) existing.getCount() + (long) source.getCount();
                     if (total <= capacity) {
                         source.setCount(0);
-                        existing.setCount(total);
+                        existing.setCount((int) total);
                         slot.setChanged();
                         moved = true;
                     } else if (existing.getCount() < capacity) {

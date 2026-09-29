@@ -45,7 +45,10 @@ public class GrillSeasoningOrderPacket {
         context.get().enqueueWork(() -> {
             ServerPlayer player = context.get().getSender();
             if (PacketGuard.target(player, packet.pos) instanceof GrillFactoryTile machine) {
-                machine.setOrder(packet.recipeId, packet.quantity,
+                // quantity 是客户端可控的 int：夹下界。recipeId == null 表示取消订单，原样透传。
+                // （本包今天没有客户端发送方，属纯加固；见 OrderRecipePacket.handle 的同款说明。）
+                int quantity = packet.recipeId == null ? packet.quantity : Math.max(1, packet.quantity);
+                machine.setOrder(packet.recipeId, quantity,
                         packet.seasoningId.isEmpty() ? null : packet.seasoningId);
             }
         });

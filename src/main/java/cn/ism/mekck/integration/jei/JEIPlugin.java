@@ -106,6 +106,17 @@ public class JEIPlugin implements IModPlugin {
     public static final RecipeType<cn.ism.mekck.recipe.GrapePressingRecipe> GRAPE_PRESSING_TYPE =
             RecipeType.create("mekck", "grape_pressing", cn.ism.mekck.recipe.GrapePressingRecipe.class);
 
+    // MekCK: 自有配方类型 mekck:skewering / mekck:grilling 的 **JEI** RecipeType。
+    // ⚠️ 这两个是 mezz.jei.api.recipe.RecipeType，与
+    // UniversalCuttingMachine.SKEWERING_RECIPE_TYPE（原版 net.minecraft...RecipeType）
+    // 是**两个不同的类**，不能互相赋值。UID 与 path 必须与注册表里那个逐字相同
+    // （"mekck" / "skewering" / "grilling"），配方类必须写成真实的配方类——
+    // JEI 的 RecipeType.equals 同时比 UID 与配方类，写成 Recipe.class 就配不上分类。
+    public static final RecipeType<cn.ism.mekck.recipe.MekCkSkeweringRecipe> MEKCK_SKEWERING_TYPE =
+            RecipeType.create("mekck", "skewering", cn.ism.mekck.recipe.MekCkSkeweringRecipe.class);
+    public static final RecipeType<cn.ism.mekck.recipe.MekCkGrillingRecipe> MEKCK_GRILLING_TYPE =
+            RecipeType.create("mekck", "grilling", cn.ism.mekck.recipe.MekCkGrillingRecipe.class);
+
     // KaleidoscopeCookery recipe types (pot/stockpot and their flex variants)
     private static final RecipeType<?> KC_STOCKPOT = createRecipeType(
             "kaleidoscope_cookery", "stockpot", "com.github.ysbbbbbb.kaleidoscopecookery.crafting.recipe.StockpotRecipe");
@@ -388,6 +399,20 @@ public class JEIPlugin implements IModPlugin {
                 GRAPE_PRESSING_TYPE,
                 new ItemStack(UniversalCuttingMachine.JUICER_BLOCK.get())
         ));
+
+        // 自有配方类型 mekck:skewering / mekck:grilling 的分类。
+        // ⚠️ 用的是 JEI 的 RecipeType 常量（MEKCK_*_TYPE），不是注册表里那个原版
+        // RecipeType——两者是不同的类。配方类必须写成真实配方类，理由见常量声明处。
+        registration.addRecipeCategories(new SkeweringRecipeCategory(
+                helper,
+                MEKCK_SKEWERING_TYPE,
+                new ItemStack(UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK.get())
+        ));
+        registration.addRecipeCategories(new GrillingRecipeCategory(
+                helper,
+                MEKCK_GRILLING_TYPE,
+                new ItemStack(UniversalCuttingMachine.GRILL_BLOCK.get())
+        ));
     }
 
     @Override
@@ -474,6 +499,19 @@ public class JEIPlugin implements IModPlugin {
             if (!grapeRecipes.isEmpty()) {
                 registration.addRecipes(GRAPE_PRESSING_TYPE, grapeRecipes);
             }
+
+            // 自有配方类型 mekck:skewering / mekck:grilling 的配方本体。
+            // 此前只注册了催化剂、没注册配方，也没有分类 ⇒ 这 16 条数据包配方在 JEI 里查不到。
+            List<cn.ism.mekck.recipe.MekCkSkeweringRecipe> skeweringRecipes = recipeManager.getAllRecipesFor(
+                    UniversalCuttingMachine.SKEWERING_RECIPE_TYPE.get());
+            if (!skeweringRecipes.isEmpty()) {
+                registration.addRecipes(MEKCK_SKEWERING_TYPE, skeweringRecipes);
+            }
+            List<cn.ism.mekck.recipe.MekCkGrillingRecipe> grillingRecipes = recipeManager.getAllRecipesFor(
+                    UniversalCuttingMachine.GRILLING_RECIPE_TYPE.get());
+            if (!grillingRecipes.isEmpty()) {
+                registration.addRecipes(MEKCK_GRILLING_TYPE, grillingRecipes);
+            }
         }
 
         // 陈化窖（F20）介绍页：始终挂一条（未装 vinery 时示例瓶为空、仅留文字）
@@ -542,22 +580,22 @@ public class JEIPlugin implements IModPlugin {
 
         // mekck:skewering（串烧工厂自有配方类型）——无条件注册，该类型恒存在。
         // 语义：签子(载体，不消耗) + 主料 + 辅料 → 串烧物。
-        RecipeType<?> mekckSkewering = RecipeType.create(
-                "mekck", "skewering", (Class) Recipe.class);
+        // ⚠️ 必须用 MEKCK_SKEWERING_TYPE（JEI 的 RecipeType，配方类写成真实配方类），
+        // 不能 RecipeType.create("mekck", "skewering", Recipe.class) 另造一个：
+        // JEI 的 RecipeType.equals 同时比 UID 与配方类，另造的那个与分类用的类型不相等，
+        // 催化剂会挂在一个永远没有分类的类型上（这正是修复前的状态）。
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK.get()), mekckSkewering);
+                new ItemStack(UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK.get()), MEKCK_SKEWERING_TYPE);
         for (var entry : UniversalCuttingMachine.SKEWERING_FACTORY_BLOCKS.entrySet()) {
-            registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), mekckSkewering);
+            registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), MEKCK_SKEWERING_TYPE);
         }
 
         // mekck:grilling（烧烤工厂自有配方类型）——无条件注册，该类型恒存在。
         // 语义：单一输入 → 烤制产物。
-        RecipeType<?> mekckGrilling = RecipeType.create(
-                "mekck", "grilling", (Class) Recipe.class);
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.GRILL_BLOCK.get()), mekckGrilling);
+                new ItemStack(UniversalCuttingMachine.GRILL_BLOCK.get()), MEKCK_GRILLING_TYPE);
         for (var entry : UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.entrySet()) {
-            registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), mekckGrilling);
+            registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), MEKCK_GRILLING_TYPE);
         }
 
         // 原版烟熏炉 / 篝火烹饪（熟肉 ×7、烤马铃薯、干燥海带）——全档位烧烤工厂均可处理，

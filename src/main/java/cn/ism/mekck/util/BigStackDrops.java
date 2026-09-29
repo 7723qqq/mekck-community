@@ -10,9 +10,11 @@ import net.minecraft.world.level.Level;
 /**
  * 大堆叠掉落工具。
  *
- * <p><b>为什么不能用原版</b>：{@code Containers.dropItemStack} 会按 {@code getMaxStackSize()}（64）
- * 把堆叠拆成多个物品实体——本模组的槽位上限是 21 亿，一次掉落就会瞬间生成
- * <b>3355 万个</b>物品实体，直接把服务器打爆。</p>
+ * <p><b>为什么单独写一个</b>：本模组的槽位上限是 21 亿。vanilla 1.20.1 的
+ * {@code Containers.dropItemStack} 其实<b>只生成一个</b> {@code ItemEntity}（源码里没有任何
+ * 按 {@code getMaxStackSize()} 拆堆的循环——旧注释声称「会瞬间生成 3355 万个实体」，
+ * 与 vanilla 源码不符，已订正），所以这里的价值不在「避免拆堆」，而在于把大堆叠掉落
+ * 集中到一处、并给 {@link #dropBulk} 的 long 数量留出统一入口。</p>
  *
  * <p><b>做法</b>：数量不超过 {@link #SPLIT_THRESHOLD} 时完全走原版（行为不变）；
  * 超过阈值时**整堆只生成一个物品实体**。拾取时原版 {@code Inventory.add} 会自动按 64

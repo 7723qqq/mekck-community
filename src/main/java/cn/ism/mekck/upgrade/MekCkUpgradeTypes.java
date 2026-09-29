@@ -94,6 +94,62 @@ public final class MekCkUpgradeTypes {
     }
 
     /**
+     * MekCK 机器基类的<b>类名</b>——升级持久化 Mixin 沿类链按名字找的唯一目标。
+     *
+     * <p>这是一条<b>不可改的跨文件契约</b>（与 {@code MekCkMachineTile} 类注释里那条同源）：
+     * 改类名/包名会让 {@link #isMekCkOwnedTile(Class)} 恒判 false，于是 MekCK 工厂的升级
+     * 持久化退回 Mek 原生 ordinal 编解码——<b>不报错、不写日志</b>，只是存储卡的数量键
+     * 静默变回 ordinal 语义。{@code TestUpgradePersistenceOwnership} 钉住了这个字符串。
+     */
+    public static final String MEKCK_TILE_CLASS_NAME = "cn.ism.mekck.machine.MekCkMachineTile";
+
+    /**
+     * 该 tile 类是否由 MekCK 的机器体系托管（= 类链上存在 {@link #MEKCK_TILE_CLASS_NAME}）。
+     *
+     * <h3>为什么必须按类链判定，而不是「tier 是否为 null」</h3>
+     * {@code MixinTileComponentUpgradePersistence.mekck$tier()} 返回 null 有<b>两种</b>成因：
+     * <ol>
+     *   <li>不是 MekCK 的机器（Mek 自家的机器、第三方挂 {@code TileComponentUpgrade} 的机器）；</li>
+     *   <li><b>是</b> MekCK 的机器，但反射调 {@code getTier()} 抛 {@code ReflectiveOperationException}，
+     *       或组件尚未挂上 tile（{@code tile == null}）。</li>
+     * </ol>
+     * 两者要采取<b>相反</b>的处理：前者必须把持久化整个交回 Mek——否则 Mek 机器上的
+     * MUFFLING / FILTER / GAS / ANCHOR / STONE_GENERATOR 会因
+     * {@link #capOf(Upgrade, CuttingMachineFactoryTier)} 返回 0 而被 {@code decode} 丢弃，
+     * 并在下一次存档时从 NBT 永久消失；后者仍应使用 MekCK 的名字键，只是按「档位未知」裁剪。
+     * 用 {@code tier != null} 当判据会把第 2 类误判成第 1 类。
+     *
+     * <p>沿 {@code getSuperclass()} 逐级比较而不是只比直接父类：阶段 2/3 的机器 tile 都是
+     * {@code MekCkMachineTile} 的中间子类（{@code CookingFactoryTile} 等），只比直接父类会全部落空。
+     *
+     * @param tileClass 目标类，{@code null} 视为「不是 MekCK 机器」
+     */
+    public static boolean isMekCkOwnedTile(Class<?> tileClass) {
+        return isMekCkOwnedTile(tileClass, MEKCK_TILE_CLASS_NAME);
+    }
+
+    /**
+     * 沿类链按名字找基类。
+     *
+     * <p>把「要找的名字」参数化的唯一理由是<b>可测</b>：普通 JUnit 里加载不了
+     * {@code cn.ism.mekck.machine.MekCkMachineTile}（它需要游戏环境），所以测试用本地嵌套类
+     * 造一条真实继承链来验证比较逻辑。
+     *
+     * @param baseClassName 目标基类全限定名；{@code null} 返回 false
+     */
+    static boolean isMekCkOwnedTile(Class<?> tileClass, String baseClassName) {
+        if (tileClass == null || baseClassName == null) {
+            return false;
+        }
+        for (Class<?> c = tileClass; c != null; c = c.getSuperclass()) {
+            if (baseClassName.equals(c.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 存储卡倍增系数 = {@code 2^min(已安装数, 本档上限)}，再被
      * 「基础并行 × 倍增 ≤ 配置允许的最大并行」钳一次。
      *

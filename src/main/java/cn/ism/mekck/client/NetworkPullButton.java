@@ -100,13 +100,10 @@ public final class NetworkPullButton {
                 // —— 后者是**绝对屏幕坐标** = guiTop + relativeY，与 baseY 不是同一坐标系。
                 // 混用会让 bottom 随窗口高度放大（guiTop 越大推得越远），拉料按钮被顶出屏幕。
                 // 实测 GuiEnergyTab 的 relativeY = 137（构造字节码 sipush 137），故 bottom 恒为 167。
-                int bottom = energy.getRelativeY() + energy.getHeight() + GAP;
-                if (bottom != y) {
-                    org.slf4j.LoggerFactory.getLogger("mekck/tabdebug").info(
-                            "[NetworkPullButton] energyTab relativeY={} h={} → bottom={}；基准={}；采用={}（children 数 {}）",
-                            energy.getRelativeY(), energy.getHeight(), bottom, baseY, Math.max(y, bottom), gui.children().size());
-                }
-                y = Math.max(y, bottom);
+                //
+                // ⚠️ 这里**不能**记日志：本方法由 render 每帧调用，而「能量 tab 下沿超过基准」
+                // 是多数屏幕的常态，任何级别的日志都会变成每帧一条的刷屏。
+                y = Math.max(y, energy.getRelativeY() + energy.getHeight() + GAP);
             }
         }
         return y;

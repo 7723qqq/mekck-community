@@ -2,11 +2,16 @@ package cn.ism.mekck.machine;
 
 import mekanism.api.AutomationType;
 import mekanism.api.IContentsListener;
+import mekanism.common.inventory.container.SelectedWindowData;
 import mekanism.common.inventory.container.slot.ContainerSlotType;
+import mekanism.common.inventory.container.slot.InventoryContainerSlot;
+import mekanism.common.inventory.container.slot.VirtualInventoryContainerSlot;
 import mekanism.common.inventory.slot.BasicInventorySlot;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.function.BiPredicate;
+
+import org.jetbrains.annotations.Nullable;
 
 /**
  * MekCK 机器的输入/输出槽 —— <b>单槽容量可配</b>的 {@link BasicInventorySlot}（阶段 2 Task 4.9）。
@@ -61,18 +66,108 @@ import java.util.function.BiPredicate;
  */
 public final class MekCkSlot extends BasicInventorySlot {
 
+    /**
+     * 非 null 时本槽是「悬浮窗虚拟槽」—— {@link #createContainerSlot()} 会返回
+     * {@link VirtualInventoryContainerSlot} 而不是普通槽。
+     *
+     * <p>见 {@link #storage} 的注释：一个 {@code IInventorySlot} 同时只能有<b>一个</b> Slot
+     * 对象，所以「挪进窗口」只能靠改 {@code createContainerSlot()} 的返回类型，
+     * 不能另造一个槽再塞进菜单。</p>
+     */
+    @Nullable
+    private final SelectedWindowData windowData;
+
+    /**
+     * 本槽的类别（{@code INPUT} / {@code OUTPUT} / {@code EXTRA}）。
+     *
+     * <p>自己留一份而不是去问父类：{@code BasicInventorySlot.slotType} 是私有的、
+     * 没有 getter，而容器要把「窗口里的输入槽 / 输出槽 / 存储槽」分成不同区块显示，
+     * 必须有办法区分。</p>
+     */
+    private final ContainerSlotType kind;
+
     private MekCkSlot(int limit,
                       BiPredicate<ItemStack, AutomationType> canExtract,
                       BiPredicate<ItemStack, AutomationType> canInsert,
                       IContentsListener listener,
                       int x,
                       int y,
-                      ContainerSlotType slotType) {
+                      ContainerSlotType slotType,
+                      @Nullable SelectedWindowData windowData) {
         super(limit, canExtract, canInsert, alwaysTrue, listener, x, y);
         // 见类注释第 1 条：必须在 super(...) 之后改，构造器里赋值的那一刻起本槽的容量口径才成立。
         this.obeyStackLimit = false;
         // 见类注释第 2 条：7 参构造把类型留成 NORMAL，由这里改回调用方要的 INPUT / OUTPUT。
         setSlotType(slotType);
+        this.windowData = windowData;
+        this.kind = slotType;
+    }
+
+    /** 本槽类别（INPUT / OUTPUT / EXTRA）。 */
+    public ContainerSlotType kind() {
+        return kind;
+    }
+
+    /** 是否是「进悬浮窗的输入槽」。 */
+    public boolean isWindowInput() {
+        return windowData != null && kind == ContainerSlotType.INPUT;
+    }
+
+    /** 是否是「进悬浮窗的输出槽」。 */
+    public boolean isWindowOutput() {
+        return windowData != null && kind == ContainerSlotType.OUTPUT;
+    }
+
+    /** 是否是「进悬浮窗的存储槽」。 */
+    public boolean isWindowExtra() {
+        return windowData != null && kind == ContainerSlotType.EXTRA;
+    }
+
+    /**
+     * 窗口槽的容器槽工厂 —— <b>逐字照 Mek 的 {@code CraftingWindowInventorySlot}</b>。
+     *
+     * <pre>
+     * // Mek 真源码 BasicInventorySlot:217（普通槽）
+     * public InventoryContainerSlot createContainerSlot() {
+     *     return new InventoryContainerSlot(this, x, y, slotType, slotOverlay, warningAdder, this::setStackUnchecked);
+     * }
+     * // Mek 真源码 CraftingWindowInventorySlot（窗口槽）
+     * public VirtualInventoryContainerSlot createContainerSlot() {
+     *     return new VirtualInventoryContainerSlot(this, craftingWindow.getWindowData(), getSlotOverlay(), this::setStackUnchecked);
+     * }
+     * </pre>
+     *
+     * <p><b>为什么必须走这条路（而不是把存储槽另塞一个窗口槽）</b>：
+     * {@code MekanismTileContainer.addSlots()}（真源码 78-84 行）是
+     * 「遍历 {@code tile.getInventorySlots(null)}，对每个槽调 {@code createContainerSlot()} 后 addSlot」。
+     * 一个 {@code IInventorySlot} 只能对应一个 {@code Slot}；若既是普通槽又是窗口槽，
+     * 菜单里就会有两个 Slot 指向同一格，{@code quickMoveStack} 会遍历两次 → shift-click 双倍处理。
+     * 改 {@code createContainerSlot()} 的返回类型则从头到尾只有一个 Slot。</p>
+     *
+     * <p>{@link VirtualInventoryContainerSlot} 的父构造把类型钉成
+     * {@code ContainerSlotType.IGNORED}（真源码 26 行），因此
+     * {@code GuiMekanism.addSlots()} 的槽位遍历会 {@code continue} 跳过它
+     * —— 不开窗时自然「收起来」，开窗时由 {@code GuiVirtualSlot} 负责画。</p>
+     */
+    @Override
+    public InventoryContainerSlot createContainerSlot() {
+        if (windowData == null) {
+            return super.createContainerSlot();
+        }
+        return new VirtualInventoryContainerSlot(this, windowData, getSlotOverlay(), this::setStackUnchecked);
+    }
+
+    /**
+     * 本槽是否是「悬浮窗虚拟槽」（由 {@link #storage} 创建）。
+     *
+     * <p>给容器用：{@code MekanismTileContainer.addSlots()} 会把本模组的存储槽
+     * <b>自动</b>建成 {@link VirtualInventoryContainerSlot}（因为 {@link #createContainerSlot()} 改了返回值），
+     * 但<b>不会保留引用</b>。容器要在 {@code super.addSlots()} 之后从 {@code slots} 里把它们捞出来
+     * 交给窗口，就需要一个能把「我们的存储槽」与「Mek 自己的升级虚拟槽」区分开的判据——
+     * 这就是它。</p>
+     */
+    public boolean isWindowSlot() {
+        return windowData != null;
     }
 
     /**
@@ -98,7 +193,7 @@ public final class MekCkSlot extends BasicInventorySlot {
      * 与原行为相反。</p>
      */
     public static MekCkSlot input(int limit, IContentsListener listener, int x, int y) {
-        return new MekCkSlot(limit, notExternal, alwaysTrueBi, listener, x, y, ContainerSlotType.INPUT);
+        return new MekCkSlot(limit, notExternal, alwaysTrueBi, listener, x, y, ContainerSlotType.INPUT, null);
     }
 
     /**
@@ -118,6 +213,49 @@ public final class MekCkSlot extends BasicInventorySlot {
      * 产物槽形同虚设（而且这会悄悄改掉侧配/弹出之外的另一条既有行为）。</p>
      */
     public static MekCkSlot output(int limit, IContentsListener listener, int x, int y) {
-        return new MekCkSlot(limit, alwaysTrueBi, internalOnly, listener, x, y, ContainerSlotType.OUTPUT);
+        return new MekCkSlot(limit, alwaysTrueBi, internalOnly, listener, x, y, ContainerSlotType.OUTPUT, null);
+    }
+
+    /**
+     * 存储槽 —— <b>内容活在悬浮窗里</b>，主面板不放。
+     *
+     * <p>谓词与 {@link #input} 完全相同（存储仓对自动化而言就是「可进料、外部不可抽」的输入侧资源），
+     * 唯一区别是 {@link #createContainerSlot()} 会返回
+     * {@link VirtualInventoryContainerSlot}，于是这些槽在菜单里是
+     * {@code ContainerSlotType.IGNORED} —— 不参与主面板渲染，只由
+     * {@code GuiVirtualSlot} 在窗口里画。</p>
+     *
+     * @param windowData 窗口身份。同一批存储槽必须传<b>同一个实例</b>，
+     *                   否则 {@code GuiMekanism.isVirtualSlotAvailable} 认不出它们属于同一扇窗。
+     */
+    public static MekCkSlot storage(int limit, SelectedWindowData windowData,
+                                    IContentsListener listener, int x, int y) {
+        return new MekCkSlot(limit, notExternal, alwaysTrueBi, listener, x, y,
+                ContainerSlotType.EXTRA, windowData);
+    }
+
+    /**
+     * 「进悬浮窗的输入槽」—— 谓词与 {@link #input} 完全相同，只是容器槽改成虚拟槽。
+     *
+     * <p>用途：高档工厂（&gt;17 并行）的输入槽有 {@code processes} 个，
+     * 奇点创世是 81 格；这些槽不再进主面板，改由 {@code MekCkSlotWindow} 以 9×9 显示。</p>
+     */
+    public static MekCkSlot windowInput(int limit, SelectedWindowData windowData,
+                                        IContentsListener listener, int x, int y) {
+        return new MekCkSlot(limit, notExternal, alwaysTrueBi, listener, x, y,
+                ContainerSlotType.INPUT, windowData);
+    }
+
+    /**
+     * 「进悬浮窗的输出槽」—— 谓词与 {@link #output} 完全相同，只是容器槽改成虚拟槽。
+     *
+     * <p><b>谓词不能照抄输入槽</b>：输出槽的 {@code canInsert} 是 {@code internalOnly}
+     * （只有机器自己能写产物），否则外部自动化与玩家都能往产物槽里塞东西，
+     * 产物槽就形同虚设。窗口只改「显示在哪」，不改「谁能动」。</p>
+     */
+    public static MekCkSlot windowOutput(int limit, SelectedWindowData windowData,
+                                         IContentsListener listener, int x, int y) {
+        return new MekCkSlot(limit, alwaysTrueBi, internalOnly, listener, x, y,
+                ContainerSlotType.OUTPUT, windowData);
     }
 }

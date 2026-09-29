@@ -79,7 +79,16 @@ public class SkeweringFactoryTile extends MekCkMachineTile implements IMekCkPort
     private static final int STORAGE_Y = 62;
     private static final int STORAGE_RIGHT_X = 176 + 4;
 
-    private final List<IInventorySlot> storageSlots = new ArrayList<>(STORAGE_SLOTS);
+    /**
+     * 81 格存储。
+     *
+     * <p><b>不能写成 {@code = new ArrayList<>(...)} 字段初始化器</b>：本列表由
+     * {@link #appendExtraSlots} 填充，而它在<b>父类构造器内部</b>经 {@code getInitialInventory}
+     * 回调（见 {@code MekCkMachineTile} 类注释的构造期顺序陷阱），那一刻本类的字段初始化器
+     * 还没跑。写成字段初始化器 + 方法里 {@code clear()} 会在构造期对 {@code null} 调
+     * {@code clear()} 抛 NPE，症状是「方块放下去建不出方块实体」。</p>
+     */
+    private List<IInventorySlot> storageSlots;
 
     public SkeweringFactoryTile(IBlockProvider blockProvider, BlockPos pos, BlockState state) {
         super(blockProvider, pos, state);
@@ -148,7 +157,12 @@ public class SkeweringFactoryTile extends MekCkMachineTile implements IMekCkPort
      */
     @Override
     protected void appendExtraSlots(InventorySlotHelper builder, IContentsListener listener) {
-        storageSlots.clear();
+        // 见字段注释：本方法跑在父类构造器内部，此刻字段初始化器还没执行。
+        if (storageSlots == null) {
+            storageSlots = new ArrayList<>(STORAGE_SLOTS);
+        } else {
+            storageSlots.clear();
+        }
         int limit = slotLimitPerSlot(getTier());
         for (int i = 0; i < STORAGE_SLOTS; i++) {
             int x;
@@ -159,10 +173,26 @@ public class SkeweringFactoryTile extends MekCkMachineTile implements IMekCkPort
                 x = STORAGE_RIGHT_X + (j % STORAGE_COLS) * 18;
             }
             int y = STORAGE_Y + (i / STORAGE_COLS) * 18;
-            IInventorySlot slot = MekCkSlot.input(limit, listener, x, y);
+            // 存储槽走「悬浮窗虚拟槽」：主面板不再放这 81 格，改由 GuiStorageWindow 分页显示。
+            // x/y 保留仅为可读性（VirtualInventoryContainerSlot 的容器槽坐标恒为 0,0，
+            // 实际渲染位置由 GuiVirtualSlot 动态写入，见 MekCkSlot#storage 的注释）。
+            IInventorySlot slot = MekCkSlot.storage(limit, SLOT_WINDOW, listener, x, y);
             storageSlots.add(slot);
             builder.addSlot(slot);
         }
+    }
+
+    /**
+     * <b>刻意返回空</b>：81 格存储是<b>悬浮窗虚拟槽</b>，不登记为 {@code DataType.EXTRA}。
+     *
+     * <p>理由与 {@code CookingFactoryTile#extraSlotsForConfig()} 逐字相同：登记会让
+     * {@code GuiMekanism.addSlots()} 给每个虚拟槽建一个 {@code GuiSlot(SlotType.EXTRA)}，
+     * 而虚拟槽坐标恒为 {@code (0,0)} ⇒ 81 个槽框叠在面板左上角 {@code (-1,-1)}；
+     * 不登记则 {@code ContainerSlotType.IGNORED} 让它们被跳过，正是「收进悬浮窗」的效果。</p>
+     */
+    @Override
+    protected List<IInventorySlot> extraSlotsForConfig() {
+        return List.of();
     }
 
     // ── 给执行器与界面的读取口 ──────────────────────────────────────────
@@ -271,12 +301,27 @@ public class SkeweringFactoryTile extends MekCkMachineTile implements IMekCkPort
     /**
      * {@inheritDoc}
      *
-     * <p>覆写成「有订单」而非基类的「有非空输入槽」——这台机器<b>无订单不自转</b>，
-     * 用基类判据会让材料摆满时进度条照走、跑一个空批次。理由见类注释的已知坑第 2 条。</p>
+     * <p><b>本机的判据是「有订单 <u>且</u> 输入槽里有料」</b>，而不是基类的「有非空输入槽」，
+     * 也不是单纯的「有订单」：</p>
+     * <ul>
+     *   <li>不带订单判据时，材料摆满就会推着进度条走空批次（本机无订单绝不加工，
+     *       见类注释的已知坑第 2 条）；</li>
+     *   <li>只带订单判据时，<b>下了单却没投料</b>的机器会照常走满一个周期并按 tick 扣电，
+     *       而执行器 {@code batch <= 0} 直接返回、什么也不做。旧实现不是这样：
+     *       {@code SkeweringFactoryBlockEntity.serverTick} 先算 {@code canProcess}
+     *       （有配方 + {@code maxConsumable > 0} + 产物装得下），再
+     *       {@code energyPerTick = canProcess ? mulClamp(...) : 0}（旧文件第 478 行），
+     *       第 486 行才 {@code extractEnergy}。缺料时旧机器一滴电都不扣。</li>
+     * </ul>
+     *
+     * <p><b>这是一处保守近似，不是对旧语义的完整复刻</b>：它只挡住了「输入槽全空」，
+     * 挡不住「有料但都不是订单要的那张配方」与「产物槽满」。要做到与旧 {@code canProcess}
+     * 等价，需要执行器对外暴露一个「本 tick 真的能加工」的查询（它才知道配方与容量），
+     * 那是一次接口改动，留给后续决策。此处先把「空转吃电」这个最常见的形态去掉。</p>
      */
     @Override
     protected boolean hasWorkToDo() {
-        return hasOrder();
+        return hasOrder() && activeWorkSlots() > 0;
     }
 
     public double effectiveSpeedMultiplier() {

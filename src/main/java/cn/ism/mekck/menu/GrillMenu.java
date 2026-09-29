@@ -23,13 +23,27 @@ import net.minecraftforge.items.SlotItemHandler;
 import java.util.function.IntSupplier;
 
 public final class GrillMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
-    private static final int MACHINE_SLOT_COUNT = 4;
+    /**
+     * 机器槽在 {@code slots} 里的数量：input / output / speed / energy / power = <b>5</b>。
+     *
+     * <p><b>写小 1 会造成双重错误</b>：① 能源槽（下标 4）落进 else 分支被当成玩家槽；
+     * ② else 分支里 {@code powerSlot = MACHINE_SLOT_COUNT} 恰好等于能源槽自己的下标，
+     * 被点槽就是能源槽时区间自指 ⇒ 原版 {@code moveItemStackTo} 合并阶段自我合并、
+     * 数量翻倍（1 个红石 6 次 shift-click 到 64，可无限复制）。</p>
+     */
+    private static final int MACHINE_SLOT_COUNT = 5;
     private final GrillBlockEntity machine;
     private final ContainerData data;
     private boolean upgradePageActive = false;
 
     private final UpgradeSlot speedUpgradeSlot;
     private final UpgradeSlot energyUpgradeSlot;
+
+    /**
+     * 能源槽的<b>菜单下标</b>（不是 handler 下标）：handler 侧 {@code SLOT_POWER=5}，
+     * 而本菜单只 addSlot 了 handler 的 0/1/2/3/5（跳过创造升级槽 4），能源槽在菜单里是下标 4。
+     */
+    private final int powerSlotIndex;
 
     public GrillMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
@@ -54,6 +68,7 @@ public final class GrillMenu extends AbstractContainerMenu implements ISideConfi
         addSlot(this.energyUpgradeSlot);
 
         // Power slot (energy items: energy cube / tablet / redstone), on the right near the energy bar
+        this.powerSlotIndex = slots.size();
         addSlot(new PowerSlot(machine, machine.getPowerSlot(), 7, 13, this));
 
         for (int row = 0; row < 3; row++) {
@@ -92,9 +107,9 @@ public final class GrillMenu extends AbstractContainerMenu implements ISideConfi
                 return ItemStack.EMPTY;
             }
         } else {
-            int powerSlot = MACHINE_SLOT_COUNT;
             if (GrillBlockEntity.isUsablePowerItem(stack)) {
-                if (!moveItemStackTo(stack, powerSlot, powerSlot + 1, false)) {
+                // 必须用菜单下标 powerSlotIndex；用 MACHINE_SLOT_COUNT(=被点槽自身) 会区间自指 → 复制
+                if (!moveItemStackTo(stack, powerSlotIndex, powerSlotIndex + 1, false)) {
                     return ItemStack.EMPTY;
                 }
             } else if (GrillBlockEntity.isSpeedUpgrade(stack)) {

@@ -4249,29 +4249,6 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         return slots.isEmpty() ? null : slots;
     }
 
-    /** 从指定起始槽开始匹配（酿酒机：槽 0 预留给果汁）。 */
-    private List<Integer> matchIngredientsFrom(List<Ingredient> required, int startSlot) {
-        if (required == null || required.isEmpty()) return null;
-        boolean[] used = new boolean[INPUT_COUNT];
-        List<Integer> slots = new ArrayList<>(required.size());
-        for (Ingredient ing : required) {
-            if (ing == null || ing.isEmpty()) continue;
-            boolean ok = false;
-            for (int s = startSlot; s < INPUT_COUNT; s++) {
-                if (used[s]) continue;
-                ItemStack st = items.getStackInSlot(s);
-                if (!st.isEmpty() && ing.test(st)) {
-                    used[s] = true;
-                    slots.add(s);
-                    ok = true;
-                    break;
-                }
-            }
-            if (!ok) return null;
-        }
-        return slots.isEmpty() ? null : slots;
-    }
-
     /**
      * 提交前输入验证：每个消耗槽当前仍满足配方的 Ingredient 条件与数量；输入流体仍充足。
      * 失败表示加工过程中输入被抽走/替换/数量不足，不允许扣料提交。
@@ -4320,6 +4297,12 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         if (!recipe.drainFluid.isEmpty()) {
             // 输入流体抽取量必须充足（加工中途可能被抽走）
             if (inputTank.getFluidAmount() < recipe.drainFluid.getAmount()) return false;
+            // 类型必须在这里就判，与 validateInputsFor 逐字同口径（那里也有这一条）：
+            // 只判量会让 canWork 恒真 —— 每 tick 扣电、progress 推满，complete() 再被
+            // validateInputsFor 的类型比较挡回、progress 归零，表现为「机器亮着、电一直掉、
+            // 产物永远不出」的静默空转。触发路径有二：matchHeatedMultiInput 匹配时根本不看罐，
+            // 以及匹配结果被 matchCached 缓存而缓存键不含罐内容（换液不换物品）。
+            if (!inputTank.isEmpty() && !inputTank.getFluid().isFluidEqual(recipe.drainFluid)) return false;
         }
         return true;
     }

@@ -23,12 +23,32 @@ import net.minecraftforge.items.SlotItemHandler;
 import java.util.function.IntSupplier;
 
 public final class UniversalCuttingMachineMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
-    private static final int MACHINE_SLOT_COUNT = 4;
+    /**
+     * 机器槽在 {@code slots} 里的数量：input / output / speed / energy / power = <b>5</b>。
+     *
+     * <p><b>这个值必须等于构造器实际 addSlot 的机器槽数</b>。写小 1 会让最后一个机器槽
+     * （能源槽）落进 {@code quickMoveStack} 的 else 分支，即被当成「玩家槽」，
+     * 于是「从能源槽 shift-click 出去」会走玩家分支，而 else 分支里指向能源槽的区间
+     * 又恰好等于被点槽自身 ⇒ 原版 {@code moveItemStackTo} 的合并分支自我合并、堆叠翻倍。
+     * 历史上这里写的是 4（漏了能源槽），构成可无限复制红石/能量方块的复制路径。</p>
+     */
+    private static final int MACHINE_SLOT_COUNT = 5;
     private final UniversalCuttingMachineBlockEntity machine;
     private final ContainerData data;
     private boolean upgradePageActive = false;
     private final UpgradeSlot speedUpgradeSlot;
     private final UpgradeSlot energyUpgradeSlot;
+
+    /**
+     * 能源槽的<b>菜单下标</b>（不是 handler 下标）。
+     *
+     * <p>必须走 {@code slots.size()} 现场捕获：两套编号在本菜单里不同
+     * （handler 侧 {@code SLOT_POWER=5} 而菜单侧是 4，因为 handler 的 4 号槽
+     * 「创造升级槽」在本菜单没有 addSlot）。拿 handler 常量当菜单下标传进
+     * {@code moveItemStackTo} 会指向玩家背包第 0 格，被点槽正好是那一格时区间自指 →
+     * 自我合并 → 翻倍。</p>
+     */
+    private final int powerSlotIndex;
 
     public UniversalCuttingMachineMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
@@ -53,6 +73,7 @@ public final class UniversalCuttingMachineMenu extends AbstractContainerMenu imp
         addSlot(this.energyUpgradeSlot);
 
         // Power slot (energy items: energy cube / tablet / redstone), on the right near the energy bar
+        this.powerSlotIndex = slots.size();
         addSlot(new PowerSlot(machine, machine.getPowerSlot(), 7, 13, this));
 
         for (int row = 0; row < 3; row++) {
@@ -93,8 +114,8 @@ public final class UniversalCuttingMachineMenu extends AbstractContainerMenu imp
             }
         } else {
             if (UniversalCuttingMachineBlockEntity.isUsablePowerItem(stack)) {
-                if (!moveItemStackTo(stack, UniversalCuttingMachineBlockEntity.SLOT_POWER,
-                        UniversalCuttingMachineBlockEntity.SLOT_POWER + 1, false)) {
+                // powerSlotIndex 是菜单下标；用 handler 常量 SLOT_POWER(=5) 会指向玩家背包第 0 格
+                if (!moveItemStackTo(stack, powerSlotIndex, powerSlotIndex + 1, false)) {
                     return ItemStack.EMPTY;
                 }
             } else if (UniversalCuttingMachineBlockEntity.isSpeedUpgrade(stack)) {

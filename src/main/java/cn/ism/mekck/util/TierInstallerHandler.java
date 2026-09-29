@@ -16,6 +16,8 @@ import cn.ism.mekck.block.SkeweringFactoryBlock;
 import cn.ism.mekck.block.SkeweringMachineBlock;
 import cn.ism.mekck.block.SmartCookingPotBlock;
 import cn.ism.mekck.block.UniversalCuttingMachineBlock;
+import cn.ism.mekck.machine.MekCkMachineTile;
+import cn.ism.mekck.machine.MekCkSlotNbt;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
@@ -261,6 +263,11 @@ public final class TierInstallerHandler {
         // 1. 保存旧方块实体数据（含物品/能量/进度/侧边配置/红石/流体等）
         BlockEntity oldTile = level.getBlockEntity(pos);
         CompoundTag data = oldTile == null ? new CompoundTag() : oldTile.saveWithoutMetadata();
+        // 换档会移动并行方阵家族的槽位边界（输入/输出各 = 并行数），而 MekCkSlotNbt 是按
+        // int 下标灌的 ⇒ 必须按角色重映射，否则物品静默错位（BASIC(3)→ADVANCED(5) 时
+        // 旧「输出 0」会落进新「输入 3」）。这里先记下旧布局，第 4 步拿到新 tile 后再算。
+        int oldInputCount = oldTile instanceof MekCkMachineTile machine ? machine.inputSlotCount() : -1;
+        int oldOutputCount = oldTile instanceof MekCkMachineTile machine ? machine.outputSlotCount() : -1;
         // 2. 多方块（种植切配站/工厂 1×2×1）先移除上方绑定块
         if (multiblock) {
             MekCkMultiblock.removeBoundingBlocks(level, pos, oldState, MekCkMultiblock.SHAPE_2_TALL);
@@ -282,6 +289,11 @@ public final class TierInstallerHandler {
         // 4. 恢复数据到新方块实体
         BlockEntity newTile = level.getBlockEntity(pos);
         if (newTile != null && !data.isEmpty()) {
+            // 换档前先按角色重映射 MekCkSlots 的 int 下标（见第 1 步的说明）。
+            if (oldInputCount >= 0 && newTile instanceof MekCkMachineTile machine) {
+                MekCkSlotNbt.remapForLayoutChange(data, oldInputCount, oldOutputCount,
+                        machine.inputSlotCount(), machine.outputSlotCount());
+            }
             newTile.load(data);
             newTile.setChanged();
         }

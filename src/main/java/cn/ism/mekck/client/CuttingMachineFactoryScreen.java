@@ -6,7 +6,6 @@ import cn.ism.mekck.menu.CuttingMachineFactoryMenu;
 import mekanism.api.math.FloatingLong;
 import mekanism.client.gui.GuiConfigurableTile;
 import mekanism.client.gui.element.progress.GuiProgress;
-import mekanism.client.gui.element.progress.IProgressInfoHandler;
 import mekanism.client.gui.element.progress.ProgressType;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
 import net.minecraft.network.chat.Component;
@@ -49,23 +48,29 @@ import net.minecraft.world.entity.player.Inventory;
  * 声明的就是那一层要消费的端口契约，切菜这一档已经按契约把
  * {@code meGroupParallelItemInputs()} 等 7 个方法填好了。
  */
-public final class CuttingMachineFactoryScreen extends GuiConfigurableTile<CuttingFactoryTile, CuttingMachineFactoryMenu> {
+public final class CuttingMachineFactoryScreen extends MekCkFactoryScreenBase<CuttingFactoryTile, CuttingMachineFactoryMenu> {
+
+    /**
+     * 槽位悬浮窗标签页 —— 只有 &gt;17 并行的高档工厂才有窗口槽，
+     * 所以本字段可能恒为 null（见 {@code menu.windowSlots().isEmpty()}）。
+     * 关闭窗口后需要用同一实例重新激活，因此必须留引用。
+     */
+    private MekCkSlotWindowTab slotWindowTab;
 
     /** 输入方阵与输出方阵的水平间隔，与 tile 侧 {@code GRID_GAP} 同值。 */
     private static final int GAP_BETWEEN = 30;
 
     public CuttingMachineFactoryScreen(CuttingMachineFactoryMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
-        CuttingMachineFactoryTier tier = tile.getTier();
-        int columns = tier == null ? 1 : (int) Math.ceil(Math.sqrt(tier.processes));
-        int rows = tier == null ? 1 : (int) Math.ceil((double) tier.processes / columns);
-        int extraHeight = Math.max(0, (rows - 2) * 18);
-        // 面板尺寸必须随并行数长，否则高等级工厂的槽位会画到面板外面。
-        // 底图不用自己画：GuiMekanism.renderBg 直接把 base.png 拉到 (imageWidth, imageHeight)
-        // （实测字节码：renderBackgroundTexture(..., imageWidth, imageHeight, 256, 256)）。
-        imageWidth = 38 + columns * 18 + GAP_BETWEEN + columns * 18 + 20;
-        imageHeight = 184 + extraHeight;
-        inventoryLabelY = 89 + extraHeight;
+        // 面板尺寸由 MekCkFactoryLayout 统一给出（屏幕与菜单共用同一份公式）：
+        // 悬浮窗布局（>17 并行，输入输出整块在窗口里）收窄到 Mek 的标准 176×166；
+        // 一行式（≤17）照 Mek / MekExtras 的实测值；其余走方阵公式。
+        // 此前这里自己写三分支、菜单只按方阵公式算，一行式档位下背包槽比标签低 18px。
+        imageWidth = cn.ism.mekck.menu.MekCkFactoryLayout.gridFamilyPanelWidth(tile);
+        imageHeight = cn.ism.mekck.menu.MekCkFactoryLayout.gridFamilyPanelHeight(tile, 0, 0, 0);
+        // 菜单侧用它覆写 {@code getInventoryYOffset()}，屏幕侧用同一份算标签，
+        // 两边不可能再各算各的。公式来源见该类注释（反推自 Mek 的三档实测）。
+        inventoryLabelY = cn.ism.mekck.menu.MekCkFactoryLayout.inventoryLabelY(imageHeight);
         // 让 GuiMekanism.addSlots() 从容器槽自动建 widget（见类注释）。
         dynamicSlots = true;
     }
@@ -83,21 +88,39 @@ public final class CuttingMachineFactoryScreen extends GuiConfigurableTile<Cutti
         addRenderableWidget(new GuiEnergyTab(this, tile.getEnergyContainer(),
                 () -> FloatingLong.create(tier == null ? 0 : tier.energyPerTick)));
 
-        // 进度条：SMALL_RIGHT 箭头，横在输入方阵与输出方阵之间。
-        int columns = tier == null ? 1 : (int) Math.ceil(Math.sqrt(tier.processes));
-        int rows = tier == null ? 1 : (int) Math.ceil((double) tier.processes / columns);
-        int progressX = 38 + columns * 18 + (GAP_BETWEEN - 28) / 2;
-        int progressY = 41 + rows * 18 / 2 - 4;
-        addRenderableWidget(new GuiProgress(new IProgressInfoHandler() {
-            @Override
-            public double getProgress() {
-                return menu.getProgressRatio();
-            }
+        // 竖直能源条（旧 GUI 有、迁移时丢的那条），位置与数据源见基类。
+        addEnergyBar();
 
-            @Override
-            public boolean isActive() {
-                return menu.isBusy();
-            }
-        }, ProgressType.SMALL_RIGHT, this, progressX, progressY));
+        // 槽位悬浮窗标签页：只有高档工厂（>17 并行）或烹饪/穿串才有窗口槽，
+        // 三组皆空时不加标签页（menu.windowSlots().isEmpty()）。
+        if (!menu.windowSlots().isEmpty()) {
+            slotWindowTab = addRenderableWidget(new MekCkSlotWindowTab(this, tile,
+                    menu.windowSlots(), () -> slotWindowTab));
+        }
+
+        // 进度条：SMALL_RIGHT 箭头。
+        int progressX;
+        int progressY;
+        int processes = tier == null ? 1 : tier.processes;
+        if (cn.ism.mekck.menu.MekCkFactoryLayout.usesSlotWindow(tile)) {
+            // 悬浮窗布局：主面板上没有机器槽，居中即可。
+            progressX = (imageWidth - 28) / 2;
+            progressY = 41;
+        } else if (cn.ism.mekck.menu.MekCkFactoryLayout.useOneRow(processes)) {
+            // 一行式：输入 y=13（占 13..31）、输出 y=57（占 57..75），中间 31..57 是空带。
+            // 进度条放这一带的垂直中点（y=33），水平居中于整行 —— 与两侧槽位都不重叠。
+            // （Mek 自己的工厂也是把进度条放在 y=33，见 GuiFactory 的 addProgress。）
+            int rowWidth = (processes - 1) * cn.ism.mekck.menu.MekCkFactoryLayout.oneRowStep(processes) + 18;
+            progressX = cn.ism.mekck.menu.MekCkFactoryLayout.oneRowBaseX(processes) + (rowWidth - 28) / 2;
+            progressY = 33;
+        } else {
+            // 方阵：横在输入方阵与输出方阵之间的竖直中点。
+            int columns = (int) Math.ceil(Math.sqrt(processes));
+            int rows = (int) Math.ceil((double) processes / columns);
+            progressX = 38 + columns * 18 + (GAP_BETWEEN - 28) / 2;
+            progressY = 41 + rows * 18 / 2 - 4;
+        }
+        // isActive() 不覆写（Mek 默认 true，底图常驻）——理由见 MekCkFactoryScreenBase 类注释。
+        addRenderableWidget(new GuiProgress(() -> menu.getProgressRatio(), ProgressType.SMALL_RIGHT, this, progressX, progressY));
     }
 }

@@ -131,6 +131,11 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
         orderQuantity = 0;
         orderCompleted = 0;
         orderCustomIngredients.clear();
+        // 契约（MekCkRecipeExecutor#load）：旧存档无此键时必须保持默认态、不得抛异常。
+        // 其余 5 个家族都判了 null，这里也判——今天调用方恒传非 null，但不能靠调用方兜底。
+        if (tag == null) {
+            return;
+        }
         // getString 对缺失键给空串、getInt 给 0，因此两条路都不需要 contains 分支。
         // 固定配方与自选组合是互斥的两条路：各自读各自的数量（见 save 的注释）。
         String raw = tag.getString(TAG_ORDER_RECIPE);

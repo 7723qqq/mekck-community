@@ -35,6 +35,22 @@ import java.util.List;
  * 第 128~161 号那 34 个输出槽，以及第 162 号的能量槽</b>。
  * 这不是迁移引入的——新建的 81 并行机器照样丢。
  *
+ * <h3>覆盖范围是「Mek 写 {@code Items} 用的那一份列表」，不是「前 2N+1 格」</h3>
+ * 本类的入参由 {@code MekCkMachineTile.mekckPersistedSlots()} 给出，而它返回的是
+ * {@code getInventorySlots(null)}——与 {@code TileEntityMekanism.saveAdditional} 写
+ * {@code Items} 时用的是<b>同一个方法、同一份列表</b>。这一点很关键：
+ * {@code appendExtraSlots} 追加的家族专属槽（烹饪 144 格存储 / 穿串 81 格存储 /
+ * 烧烤 3 个调味料槽 / 种植切配的营养液 + 生长土）也在同一份列表里，同样受 byte
+ * 下标上限约束：
+ * <ul>
+ *   <li><b>烹饪工厂：全部 12 档</b>都是 6 输入 + 12 输出 + 1 能量 + 144 存储 = 163 槽，
+ *      存储段落在 19..162 ⇒ <b>第 128~162 号那 35 格</b>靠 Mek 那份存档根本寻址不到；</li>
+ *   <li>烧烤 / 种植切配：{@code SINGULARITY} 档的专属槽落在 163~165 / 163~164，同样越界；</li>
+ *   <li>穿串的 81 格存储落在 6..86，安全。</li>
+ * </ul>
+ * 也就是说「{@code N ≤ 63} 并行才安全」这条旧结论只覆盖了 {@code 2N + 1} 那一截；
+ * 真正决定上限的是<b>机器槽位总数</b>。</p>
+ *
  * <h3>为什么不用第 5 个 Mixin 去改 {@code DataHandlerUtils}</h3>
  * {@code writeContents}/{@code readContents} 是 {@code static}，签名只接
  * {@code List<? extends INBTSerializable<CompoundTag>>} 与 {@code String tagName}，
@@ -196,6 +212,71 @@ public final class MekCkSlotNbt {
             LOGGER.warn("专属槽位存档里有 {} 条下标缺失或越界的条目，已跳过。", skipped);
         }
         return true;
+    }
+
+    /**
+     * 按「角色」把 {@link #TAG_SLOTS} 里的 int 下标从旧布局重映射到新布局。
+     *
+     * <h3>为什么需要它</h3>
+     * 换档（工厂安装器 / 无尽升级组件）走的是
+     * {@code TierInstallerHandler.upgradeMachine}：
+     * {@code newTile.load(oldTile.saveWithoutMetadata())}。而并行方阵家族的槽位边界
+     * <b>随档位移动</b>——布局恒为
+     * {@code [0,in) 输入、[in,in+out) 输出、[in+out] 能量、其余家族专属槽}，
+     * 其中 {@code in == out == 并行数}。BASIC(3)→ADVANCED(5) 时旧 3 号槽（输出 0）
+     * 在新布局里是<b>输入 3</b>，直接按下标灌就是静默错位。
+     *
+     * <p>旧格式迁移器 {@code MekCkLegacyMachineNbt.migrateSlots} 早就是按角色重映射的
+     * （{@code slot == powerSlot → machineSlots}），换档路径此前漏了同一套映射。</p>
+     *
+     * <p>只改 {@link #ENTRY_INDEX} 与 {@link #ENTRY_COUNT}，条目负载原样保留。
+     * 新旧布局相同时直接返回，不做任何事。</p>
+     *
+     * @param root   方块实体存档根（或物品的 {@code mekData} 层）
+     * @param oldIn  旧布局的输入槽数
+     * @param oldOut 旧布局的输出槽数
+     * @param newIn  新布局的输入槽数
+     * @param newOut 新布局的输出槽数
+     */
+    public static void remapForLayoutChange(CompoundTag root, int oldIn, int oldOut, int newIn, int newOut) {
+        if (root == null || !root.contains(TAG_SLOTS, Tag.TAG_COMPOUND)) {
+            return;
+        }
+        if (oldIn == newIn && oldOut == newOut) {
+            return;
+        }
+        CompoundTag block = root.getCompound(TAG_SLOTS);
+        ListTag items = block.getList(ENTRY_LIST, Tag.TAG_COMPOUND);
+        int oldEnergy = oldIn + oldOut;
+        int newEnergy = newIn + newOut;
+        ListTag remapped = new ListTag();
+        for (int i = 0; i < items.size(); i++) {
+            CompoundTag entry = items.getCompound(i);
+            if (!entry.contains(ENTRY_INDEX, Tag.TAG_INT)) {
+                remapped.add(entry);
+                continue;
+            }
+            int old = entry.getInt(ENTRY_INDEX);
+            int now;
+            if (old < oldIn) {
+                now = old;                                   // 输入：左对齐，下标不变
+            } else if (old < oldEnergy) {
+                now = newIn + (old - oldIn);                 // 输出：整体右移 (newIn - oldIn)
+            } else if (old == oldEnergy) {
+                now = newEnergy;                             // 能量槽：跟着边界走
+            } else {
+                now = newEnergy + 1 + (old - oldEnergy - 1); // 家族专属槽：跟在能量槽之后
+            }
+            CompoundTag copy = entry.copy();
+            copy.putInt(ENTRY_INDEX, now);
+            remapped.add(copy);
+        }
+        block.put(ENTRY_LIST, remapped);
+        // 槽位总数也要跟着改，否则 read 侧每次读档都会记一条「记录的槽位数与实际不符」的 WARN。
+        // 家族专属槽的个数 = 旧总数 − 旧机器段长度，换档不改它。
+        int recorded = block.getInt(ENTRY_COUNT);
+        int extras = Math.max(0, recorded - oldEnergy - 1);
+        block.putInt(ENTRY_COUNT, newEnergy + 1 + extras);
     }
 
     /**

@@ -505,6 +505,13 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
                 return;
             }
         }
+        // 三个返还槽都被异类物品占位：旧实现在这里直接返回 ⇒ 返还物（奶桶→桶、瓶→空瓶）
+        // 静默消失，而且没有任何日志。掉落物是最后一道兜底：宁可掉在地上也不吞。
+        // 只做服务端（与各方块 onRemove 的掉落约定一致，客户端没有权威槽位状态）。
+        if (!stack.isEmpty() && level != null && !level.isClientSide) {
+            cn.ism.mekck.util.BigStackDrops.dropAbove(level, worldPosition, stack.copy());
+            setChanged();
+        }
     }
 
     // ================== 序列组（F11 §四.3：create:sequenced_assembly → 独立物品） ==================

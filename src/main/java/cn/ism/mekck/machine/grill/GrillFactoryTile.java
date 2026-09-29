@@ -48,7 +48,18 @@ public class GrillFactoryTile extends MekCkMachineTile implements IMekCkPorted {
     private static final int SEASONING_SLOT_Y = 55;
     private static final int SEASONING_SLOT_STEP = 18;
 
-    private final List<IInventorySlot> seasoningSlots = new ArrayList<>(SEASONING_SLOTS);
+    /**
+     * 3 个调味料槽。
+     *
+     * <p><b>不能写成 {@code = new ArrayList<>(...)} 字段初始化器</b>：本列表由
+     * {@link #appendExtraSlots} 填充，而该方法在 <b>父类构造器内部</b>经
+     * {@code getInitialInventory} 回调（见 {@code MekCkMachineTile} 类注释的构造期顺序陷阱），
+     * 那一刻本类的字段初始化器<b>一个都还没跑</b>。字段初始化器写在这里、方法里再
+     * {@code clear()}，就会在构造期对 {@code null} 调 {@code clear()} 抛 NPE ——
+     * 症状是「这台方块放下去就建不出方块实体」。所以由 {@link #appendExtraSlots}
+     * 自己负责 {@code new}（并保留重复调用时的 {@code clear}）。</p>
+     */
+    private List<IInventorySlot> seasoningSlots;
 
     public GrillFactoryTile(IBlockProvider blockProvider, BlockPos pos, BlockState state) {
         super(blockProvider, pos, state);
@@ -83,13 +94,32 @@ public class GrillFactoryTile extends MekCkMachineTile implements IMekCkPorted {
      */
     @Override
     protected void appendExtraSlots(InventorySlotHelper builder, IContentsListener listener) {
-        seasoningSlots.clear();
+        // 见字段注释：本方法跑在父类构造器内部，此刻字段初始化器还没执行。
+        // 这里 new 而不是 clear()，重复调用（理论上不会发生）时才走 clear。
+        if (seasoningSlots == null) {
+            seasoningSlots = new ArrayList<>(SEASONING_SLOTS);
+        } else {
+            seasoningSlots.clear();
+        }
+        // 位置统一由 MekCkFactoryLayout 决定（单一出处）：左边缘一列 x=8，纵向排列。
+        // 之前这里是「一行式横排 / 方阵竖排」两套算法，而屏幕侧的开关用的是第三套坐标，
+        // 三者对不上。现在 tile 与屏幕都读同一份几何。
+        boolean oneRow = usesOneRowLayout();
         for (int i = 0; i < SEASONING_SLOTS; i++) {
             IInventorySlot slot = MekCkSlot.input(slotLimitPerSlot(getTier()), listener,
-                    SEASONING_SLOT_X, SEASONING_SLOT_Y + i * SEASONING_SLOT_STEP);
+                    cn.ism.mekck.menu.MekCkFactoryLayout.EXTRA_SLOT_X, cn.ism.mekck.menu.MekCkFactoryLayout.extraSlotY(i, oneRow));
             seasoningSlots.add(slot);
             builder.addSlot(slot);
         }
+    }
+
+    /**
+     * 3 个调味料槽登记为 {@code DataType.EXTRA}（基类注释解释了不登记的两条后果：
+     * 贴图一律退化成 {@code normal.png}、侧配 GUI 里看不见）。
+     */
+    @Override
+    protected List<IInventorySlot> extraSlotsForConfig() {
+        return seasoningSlots == null ? List.of() : seasoningSlots;
     }
 
     /**
@@ -193,8 +223,11 @@ public class GrillFactoryTile extends MekCkMachineTile implements IMekCkPorted {
         }
         double speedMult = effectiveSpeedMultiplier();
         double consumptionMult = effectiveEnergyConsumptionMultiplier();
-        int base = (int) Math.ceil(ENERGY_PER_PROCESS * speedMult * speedMult * consumptionMult
-                * MekckConfig.getTierEnergyEfficiency(tier));
+        // 与切菜/研磨的 baseEnergyPerTick 同一个夹紧口径：ceil 之后再夹到 [0, int 上界]，
+        // 免得「配置被调成天文数字/负数」这种输入在整数转换处产生与另两个家族不同的行为。
+        int base = (int) Math.min(Integer.MAX_VALUE, Math.max(0.0,
+                Math.ceil(ENERGY_PER_PROCESS * speedMult * speedMult * consumptionMult
+                        * MekckConfig.getTierEnergyEfficiency(tier))));
         return cn.ism.mekck.util.CountMath.mulClamp(Integer.MAX_VALUE, base, active, stackMultiplier());
     }
 

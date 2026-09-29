@@ -382,9 +382,6 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
         }
     }
 
-    private static final int[][] IO_PULL_RANGES = {{STORAGE_SLOT_START, STORAGE_SLOT_COUNT}, {INPUT_SLOT_START, INPUT_SLOT_COUNT}};
-    private static final int[][] IO_PUSH_RANGES = {{OUTPUT_SLOT, 1}, {RETURN_SLOT, 1}};
-
     private final AutoIO autoIO = new AutoIO(this,
             new int[][]{{INPUT_SLOT_START, INPUT_SLOT_COUNT}},
             new int[][]{{STORAGE_SLOT_START, STORAGE_SLOT_COUNT}},
@@ -392,19 +389,6 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
 
     private void autoIO(Level level, BlockPos pos) {
         if (autoIO.run(level, pos, sideConfig, items)) setChanged();
-    }
-
-    private ItemStack insertIntoStorageOrInput(ItemStack stack, boolean simulate) {
-        ItemStack remainder = stack.copy();
-        // Try storage slots first
-        for (int slot = STORAGE_SLOT_START; slot < STORAGE_SLOT_START + STORAGE_SLOT_COUNT && !remainder.isEmpty(); slot++) {
-            remainder = items.insertItem(slot, remainder, simulate);
-        }
-        // Then try input slots (0-2)
-        for (int slot = INPUT_SLOT_START; slot <= INPUT_SLOT_END && !remainder.isEmpty(); slot++) {
-            remainder = items.insertItem(slot, remainder, simulate);
-        }
-        return remainder;
     }
 
     private int encodeSideConfig() {
@@ -944,7 +928,9 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
 
     @Override
     public Component getDisplayName() {
-        return customName != null ? customName : Component.translatable("block.mekck.skewering_machine");
+        // 键必须与注册名一致：方块注册为 mekck:smart_skewering_machine（UniversalCuttingMachine:645），
+        // 原先写的 block.mekck.skewering_machine 在语言文件里不存在 ⇒ GUI 标题显示 raw key。
+        return customName != null ? customName : Component.translatable("block.mekck.smart_skewering_machine");
     }
 
     @Nullable

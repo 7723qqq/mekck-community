@@ -60,6 +60,9 @@ public class SkewerThreadingOrderPacket {
         context.get().enqueueWork(() -> {
             ServerPlayer player = context.get().getSender();
             if (PacketGuard.target(player, packet.pos) instanceof SkeweringFactoryTile machine) {
+                // quantity 是客户端可控的 int：夹下界（同 OrderRecipePacket.handle）。
+                // 本包今天没有客户端发送方，属纯加固。
+                int quantity = Math.max(1, packet.quantity);
                 // 自选组合与固定配方是<b>两条互斥的路</b>（见执行器的 findRecipe）：
                 // 自选组合现场拼一张虚拟配方，固定配方按 id 查。
                 // 因此这里按「有没有自选材料」分流，不做「先设固定再被自选覆盖」。
@@ -67,7 +70,7 @@ public class SkewerThreadingOrderPacket {
                     if (packet.recipeId == null) {
                         machine.clearOrder();
                     } else {
-                        machine.setOrder(packet.recipeId, packet.quantity);
+                        machine.setOrder(packet.recipeId, quantity);
                     }
                 } else {
                     List<String> ids = new ArrayList<>(packet.customIngredients.size());
@@ -82,7 +85,7 @@ public class SkewerThreadingOrderPacket {
                             ids.add(id.toString());
                         }
                     }
-                    machine.setCustomOrder(ids, packet.quantity);
+                    machine.setCustomOrder(ids, quantity);
                 }
             }
         });

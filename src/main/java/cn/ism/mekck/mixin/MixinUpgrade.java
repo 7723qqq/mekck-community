@@ -186,7 +186,13 @@ import java.util.Arrays;
 @Mixin(value = Upgrade.class, remap = false)
 public abstract class MixinUpgrade {
 
-    @Shadow
+    // remap = false 是**必需**的，不是保险：`Shadow.remap` 的注解默认值是 true
+    // （实测：反射读 Shadow.class 的 remap() 默认值 = true），**不继承**类级
+    // `@Mixin(remap = false)`。缺这一行时注解处理器会拿它去混淆映射表里找，
+    // 而 `$VALUES` 是枚举编译器合成的字段，映射表里根本没有，编译直接报
+    // `Cannot find target for @Shadow field`。那个处理器以前从未运行过
+    // （build.gradle 没接 refmap 接线），所以这个错误一直被藏着。
+    @Shadow(remap = false)
     @Final
     @Mutable
     private static Upgrade[] $VALUES;

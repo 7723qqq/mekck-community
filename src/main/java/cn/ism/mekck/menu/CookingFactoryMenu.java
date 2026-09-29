@@ -6,6 +6,7 @@ import mekanism.common.inventory.container.tile.MekanismTileContainer;
 import mekanism.common.registration.impl.ContainerTypeRegistryObject;
 import net.minecraft.world.entity.player.Inventory;
 
+
 /**
  * 烹饪工厂容器（Mek 体系版）—— 阶段 3 Task 7。
  *
@@ -25,8 +26,25 @@ import net.minecraft.world.entity.player.Inventory;
  */
 public final class CookingFactoryMenu extends MekanismTileContainer<CookingFactoryTile> {
 
+    /**
+     * 144 格存储的虚拟容器槽 —— 由 {@code super.addSlots()} 自动建成后捞出来交给悬浮窗。
+     *
+     * <p>构造器里 {@code addSlotsAndOpen()} 会调用 {@code addSlots()}，所以本字段在
+     * 构造完成后即已填好；窗口构造时读取它是安全的。</p>
+     */
+    /**
+     * 悬浮窗槽位（按类别分三组）—— 字段初始化器在 {@code super(...)} 之后执行，
+     * 那时 {@code addSlots()} 已把虚拟槽建好，所以这里能捞到。
+     */
+    private final MekCkWindowSlotHolder windowSlots = new MekCkWindowSlotHolder(this);
+
     public CookingFactoryMenu(int containerId, Inventory inventory, CookingFactoryTile tile) {
         super(resolveContainer(tile), containerId, inventory, tile);
+    }
+
+    /** 悬浮窗槽位（输入 / 输出 / 存储三组）。 */
+    public MekCkWindowSlotHolder windowSlots() {
+        return windowSlots;
     }
 
     private static ContainerTypeRegistryObject<CookingFactoryMenu> resolveContainer(CookingFactoryTile tile) {
@@ -90,5 +108,34 @@ public final class CookingFactoryMenu extends MekanismTileContainer<CookingFacto
     public int getOrderCompleted() {
         CookingFactoryTile tile = getTileEntity();
         return tile == null ? 0 : tile.getOrderCompleted();
+    }
+
+    /**
+     * 玩家背包首行的 y —— <b>必须与屏幕侧的面板高度同源</b>。
+     *
+     * <p>Mek 的 {@code MekanismContainer.getInventoryYOffset()} 默认返回
+     * {@code BASE_Y_OFFSET = 84}；Mek 自己的 {@code FactoryContainer} 会按机器形态覆写成
+     * 85 / 95 / 105（见其真源码）。MekCK 此前<b>零覆写</b>，于是面板随并行数长高、背包却钉死在 84，
+     * 从 ELITE 档起机器槽就压进玩家背包（SINGULARITY 重叠 119px）。</p>
+     *
+     * <p>这里按 Mek 的规则算：格数与档位无关 ⇒ 面板高度是常量。
+     * 公式与依据见 {@link MekCkFactoryLayout} 的类注释。</p>
+     */
+    @Override
+    protected int getInventoryYOffset() {
+        return MekCkFactoryLayout.inventoryYOffset(MekCkFactoryLayout.cookingImageHeight());
+    }
+
+    /**
+     * 玩家背包首列的 x —— <b>随面板宽度横向居中</b>。
+     *
+     * <p>Mek 的 {@code MekanismContainer} 默认返回 8，而 Mek 自己的 {@code FactoryContainer}
+     * 会按面板宽度改它（ULTIMATE 用 26）。MekCK 此前<b>零覆写</b>，恒为 8 ⇒ 面板越宽、
+     * 背包越贴左：SINGULARITY 面板 412 宽而背包只占最左 162px，右侧空出 250px。
+     * 公式与实测依据见 {@link MekCkFactoryLayout#inventoryXOffset(int)}。</p>
+     */
+    @Override
+    protected int getInventoryXOffset() {
+        return MekCkFactoryLayout.inventoryXOffset(MekCkFactoryLayout.COOKING_PANEL_WIDTH);
     }
 }

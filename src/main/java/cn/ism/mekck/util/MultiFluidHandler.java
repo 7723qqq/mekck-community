@@ -139,6 +139,8 @@ public class MultiFluidHandler implements IFluidHandler {
         }
         CompoundTag tag = new CompoundTag();
         tag.put("Tanks", list);
+        // "Count" 是历史遗留键：读侧（readFromNBT）只按 Tanks 的列表长度取值，从不读它。
+        // 保留写出只为不改动旧存档的键集合；新增代码不要依赖该键。
         tag.putInt("Count", tanks.length);
         return tag;
     }

@@ -29,13 +29,30 @@ import org.jetbrains.annotations.Nullable;
 import java.util.function.IntSupplier;
 
 public final class SmartCookingPotMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
-    private static final int MACHINE_SLOT_COUNT = 10 + SmartCookingPotBlockEntity.STORAGE_SLOT_COUNT;
+    /**
+     * 机器槽在 {@code slots} 里的数量：6 输入 + 产物 + 返还 + 速度 + 能量
+     * + {@code STORAGE_SLOT_COUNT} 存储 + 能源 = <b>11 + STORAGE_SLOT_COUNT</b>。
+     *
+     * <p><b>原来的 {@code 10 + STORAGE_SLOT_COUNT} 少算了能源槽</b>，于是菜单下标 91 的能源槽
+     * 落进 {@code quickMoveStack} 的 else 分支（当成玩家槽）；而 else 里指向能源槽的区间用的是
+     * handler 常量 {@code SLOT_POWER = 92}（= 本菜单玩家背包第 0 格的下标）⇒ 点那一格且持能量
+     * 物品时区间自指 → 原版 {@code moveItemStackTo} 的合并分支自我合并 → 数量翻倍。</p>
+     */
+    private static final int MACHINE_SLOT_COUNT = 11 + SmartCookingPotBlockEntity.STORAGE_SLOT_COUNT;
     private final SmartCookingPotBlockEntity machine;
     private final ContainerData data;
     private boolean upgradePageActive = false;
 
     private final UpgradeSlot speedUpgradeSlot;
     private final UpgradeSlot energyUpgradeSlot;
+
+    /**
+     * 能源槽的<b>菜单下标</b>（= 91），不是 handler 下标（= 92）。
+     *
+     * <p>handler 的 91 号「创造升级槽」在本菜单没有 addSlot，所以 91 之后所有 handler 下标
+     * 都比菜单下标大 1；拿 {@code SLOT_POWER} 当菜单下标会指向玩家背包第 0 格。</p>
+     */
+    private final int powerSlotIndex;
 
     public SmartCookingPotMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
@@ -79,6 +96,7 @@ public final class SmartCookingPotMenu extends AbstractContainerMenu implements 
         }
 
         // Power slot (energy items: energy cube / tablet / redstone), on the right near the energy bar
+        this.powerSlotIndex = slots.size();
         addSlot(new PowerSlot(machine, machine.getPowerSlot(), 7, 13, this));
 
         // Player inventory: starting from (20, 152)——下移到流体计（y88~146）下方，修正旧版与流体计重叠的错位
@@ -126,8 +144,8 @@ public final class SmartCookingPotMenu extends AbstractContainerMenu implements 
             }
         } else {
             if (SmartCookingPotBlockEntity.isUsablePowerItem(stack)) {
-                if (!moveItemStackTo(stack, SmartCookingPotBlockEntity.SLOT_POWER,
-                        SmartCookingPotBlockEntity.SLOT_POWER + 1, false)) {
+                // powerSlotIndex(=91) 是菜单下标；handler 常量 SLOT_POWER(=92) 会指向玩家背包第 0 格
+                if (!moveItemStackTo(stack, powerSlotIndex, powerSlotIndex + 1, false)) {
                     return ItemStack.EMPTY;
                 }
             } else if (SmartCookingPotBlockEntity.isSpeedUpgrade(stack)) {

@@ -3,6 +3,7 @@ package cn.ism.mekck.client;
 import cn.ism.mekck.menu.CentralKitchenMenu;
 import cn.ism.mekck.network.KitchenViewPacket;
 import cn.ism.mekck.network.ModMessages;
+import mekanism.client.gui.element.window.GuiWindow;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -176,10 +177,54 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
         return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
+    /**
+     * 打开一扇窗口 —— <b>两条注册都要做</b>。
+     *
+     * <ul>
+     *   <li>{@code addRenderableWidget} 把它放进 {@code Screen.renderables}，
+     *       而 {@code Screen.render} 正是遍历那份列表画的（实测 SRG 字节码
+     *       {@code Screen.m_88315_} 偏移 0-45）；</li>
+     *   <li>{@code addWindow} 把它放进 {@code GuiMekanism.windows}，
+     *       而 {@code GuiMekanism.mouseClicked} / {@code keyPressed} / {@code mouseReleased}
+     *       都是遍历那份 LRU 的。</li>
+     * </ul>
+     * 只做前者 ⇒ 窗口画得出来但<b>点不动</b>，连它自己的关闭按钮都按不了；
+     * 只做后者 ⇒ 进得了 LRU 但画不出来。原先这里只做了前者，
+     * 正是「关不掉、再点一次还会叠一个」的根因。
+     */
+    private void openWindow(GuiWindow window) {
+        addRenderableWidget(window);
+        addWindow(window);
+    }
+
+    /** 关闭一扇窗口 —— 与 {@link #openWindow} 对称，两条注册都要撤。 */
+    private void closeWindow(GuiWindow window) {
+        window.close();       // 第一句就是 gui().removeWindow(this)，出窗口 LRU
+        removeWidget(window); // 出 renderables / children
+    }
+
+    /**
+     * 对账：窗口若已被它自己的关闭按钮关掉，把残留的 widget 也摘掉并返回 {@code null}。
+     *
+     * <p>{@code GuiWindow.close()} 只把自己移出窗口 LRU，<b>不会</b>移出
+     * {@code Screen.renderables}，所以那条路径会留下一个「画得出来但点不动」的残影。</p>
+     */
+    private <T extends GuiWindow> T reapClosedWindow(T window) {
+        if (window != null && !getWindows().contains(window)) {
+            removeWidget(window);
+            return null;
+        }
+        return window;
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         int x = leftPos;
         int y = topPos;
+        // 三个窗口都可能被它们自己的关闭按钮关掉，先对一次账。
+        sideWindow = reapClosedWindow(sideWindow);
+        orderWindow = reapClosedWindow(orderWindow);
+        moduleWindow = reapClosedWindow(moduleWindow);
         // 侧配按钮
         if (mouseX >= x + SIDE_BTN_X && mouseX < x + SIDE_BTN_X + SIDE_BTN_W
                 && mouseY >= y + SIDE_BTN_Y && mouseY < y + SIDE_BTN_Y + SIDE_BTN_H) {
@@ -190,8 +235,9 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
                             ? state.getValue(cn.ism.mekck.block.CentralKitchenBlock.FACING)
                             : net.minecraft.core.Direction.NORTH;
                 });
-                addRenderableWidget(sideWindow);
+                openWindow(sideWindow);
             } else {
+                closeWindow(sideWindow);
                 sideWindow = null;
             }
             return true;
@@ -201,8 +247,9 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
                 && mouseY >= y + ORDER_BTN_Y && mouseY < y + ORDER_BTN_Y + MODULE_BTN_H) {
             if (orderWindow == null) {
                 orderWindow = new KitchenOrderWindow(this, menu);
-                addRenderableWidget(orderWindow);
+                openWindow(orderWindow);
             } else {
+                closeWindow(orderWindow);
                 orderWindow = null;
             }
             return true;
@@ -212,8 +259,9 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
                 && mouseY >= y + MODULE_BTN_Y && mouseY < y + MODULE_BTN_Y + MODULE_BTN_H) {
             if (moduleWindow == null) {
                 moduleWindow = new KitchenModuleWindow(this, menu);
-                addRenderableWidget(moduleWindow);
+                openWindow(moduleWindow);
             } else {
+                closeWindow(moduleWindow);
                 moduleWindow = null;
             }
             return true;

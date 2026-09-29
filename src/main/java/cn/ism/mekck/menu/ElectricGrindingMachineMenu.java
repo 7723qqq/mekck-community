@@ -23,12 +23,27 @@ import net.minecraftforge.items.SlotItemHandler;
 import java.util.function.IntSupplier;
 
 public final class ElectricGrindingMachineMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
-    private static final int MACHINE_SLOT_COUNT = 4;
+    /**
+     * 机器槽在 {@code slots} 里的数量：input / output / speed / energy / power = <b>5</b>。
+     * 写小 1 会让能源槽落进 {@code quickMoveStack} 的 else 分支（当成玩家槽），
+     * 而 else 里指向能源槽的区间会自指 ⇒ 原版 {@code moveItemStackTo} 自我合并、堆叠翻倍。
+     * 与 {@code UniversalCuttingMachineMenu} 同源，见那边的详细注释。
+     */
+    private static final int MACHINE_SLOT_COUNT = 5;
     private final ElectricGrindingMachineBlockEntity machine;
     private final ContainerData data;
     private boolean upgradePageActive = false;
     private final UpgradeSlot speedUpgradeSlot;
     private final UpgradeSlot energyUpgradeSlot;
+
+    /**
+     * 能源槽的<b>菜单下标</b>（不是 handler 下标）。
+     *
+     * <p>handler 侧 {@code SLOT_POWER=5}，而本菜单只 addSlot 了 handler 的
+     * 0/1/2/3/5 五个槽（跳过创造升级槽 4），所以能源槽在菜单里是第 5 个 = 下标 4。
+     * 拿 handler 常量当菜单下标会指向玩家背包第 0 格 ⇒ 自指 ⇒ 复制。</p>
+     */
+    private final int powerSlotIndex;
 
     public ElectricGrindingMachineMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
@@ -53,6 +68,7 @@ public final class ElectricGrindingMachineMenu extends AbstractContainerMenu imp
         addSlot(this.energyUpgradeSlot);
 
         // Power slot (energy items: energy cube / tablet / redstone), on the right near the energy bar
+        this.powerSlotIndex = slots.size();
         addSlot(new PowerSlot(machine, machine.getPowerSlot(), 7, 13, this));
 
         for (int row = 0; row < 3; row++) {
@@ -93,8 +109,8 @@ public final class ElectricGrindingMachineMenu extends AbstractContainerMenu imp
             }
         } else {
             if (ElectricGrindingMachineBlockEntity.isUsablePowerItem(stack)) {
-                if (!moveItemStackTo(stack, ElectricGrindingMachineBlockEntity.SLOT_POWER,
-                        ElectricGrindingMachineBlockEntity.SLOT_POWER + 1, false)) {
+                // powerSlotIndex 是菜单下标；handler 常量 SLOT_POWER(=5) 会指向玩家背包第 0 格
+                if (!moveItemStackTo(stack, powerSlotIndex, powerSlotIndex + 1, false)) {
                     return ItemStack.EMPTY;
                 }
             } else if (ElectricGrindingMachineBlockEntity.isSpeedUpgrade(stack)) {

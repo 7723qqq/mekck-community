@@ -1440,6 +1440,24 @@ public final class UniversalCuttingMachine {
         COOKING_FACTORY_BLOCKS_REG.register(bus);
         COOKING_FACTORY_TILES_REG.register(bus);
         COOKING_FACTORY_CONTAINERS_REG.register(bus);
+        // 种植切配工厂（阶段 3 Task 2）—— **这三行此前漏了**，是实机启动才暴露的缺陷。
+        //
+        // 症状（2026-09-30 实例 latest.log）：
+        //   [FATAL] Mod 'mekck' encountered an error in a deferred task:
+        //   java.lang.NullPointerException: Registry Object not present: mekck:planting_cutting_factory
+        //       at UniversalCuttingMachine$ClientEvents.lambda$onClientSetup$0(UniversalCuttingMachine.java:2075)
+        // 机制：静态块里 {@code PLANTING_CUTTING_FACTORY_*_REG.register(...)} 只是造出
+        // {@code RegistryObject} 壳子（所以字段非 null、编译也不报错），
+        // **真正把内容写进 Forge 注册表的是这里这个 register(bus)**。少了它，
+        // 该族的方块 / tile / 容器一个都没注册，客户端 {@code MenuScreens.register(...CONTAINER.get()...)}
+        // 一取就抛 {@code Registry Object not present}。
+        //
+        // 为什么长期没被发现：它被上一个缺陷（打包产物缺 refmap ⇒ MixinItemStack 应用失败 ⇒
+        // 启动即崩）完全掩盖了——那时根本走不到客户端初始化。修好 refmap 之后它才露出来。
+        // ⚠️ 以后新增工厂家族时，**三件套要成组出现**：静态块里 register(...) + 构造函数里 register(bus)。
+        PLANTING_CUTTING_FACTORY_BLOCKS_REG.register(bus);
+        PLANTING_CUTTING_FACTORY_TILES_REG.register(bus);
+        PLANTING_CUTTING_FACTORY_CONTAINERS_REG.register(bus);
         bus.addListener(this::addCreativeTabContents);
         bus.addListener(this::onCommonSetup);
         // 配置文件生成到 config/mekck/mekck-common.toml（与 planting 等配置文件同目录）

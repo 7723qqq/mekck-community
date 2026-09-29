@@ -245,12 +245,28 @@ public class PlantingCuttingFactoryTile extends MekCkMachineTile implements IMek
      */
     @Override
     protected void appendExtraSlots(InventorySlotHelper builder, IContentsListener listener) {
-        nutrientSlot = MekCkSlot.input(
-                slotLimitPerSlot(getTier()), listener, EXTRA_SLOT_X, EXTRA_SLOT_Y);
+        // 位置统一由 MekCkFactoryLayout 决定（单一出处）：左边缘一列 x=8，纵向排列。
+        // ⚠️ 原先两格是**横排** (8,55) 与 (26,55)，而 x=26 那格占 26..44，
+        // 机器槽区最左在 x=27（一行式）或 x=38（方阵）—— 它会**压住第一个输入槽**。
+        // 收敛成单列后这个重叠不存在。
+        boolean oneRow = usesOneRowLayout();
+        nutrientSlot = MekCkSlot.input(slotLimitPerSlot(getTier()), listener,
+                cn.ism.mekck.menu.MekCkFactoryLayout.EXTRA_SLOT_X, cn.ism.mekck.menu.MekCkFactoryLayout.extraSlotY(0, oneRow));
         builder.addSlot(nutrientSlot);
-        growthSlot = MekCkSlot.input(
-                slotLimitPerSlot(getTier()), listener, EXTRA_SLOT_X + EXTRA_SLOT_STEP, EXTRA_SLOT_Y);
+        growthSlot = MekCkSlot.input(slotLimitPerSlot(getTier()), listener,
+                cn.ism.mekck.menu.MekCkFactoryLayout.EXTRA_SLOT_X, cn.ism.mekck.menu.MekCkFactoryLayout.extraSlotY(1, oneRow));
         builder.addSlot(growthSlot);
+    }
+
+    /**
+     * 营养液槽 + 生长土槽登记为 {@code DataType.EXTRA}
+     * （不登记的后果见 {@code MekCkMachineTile#registerExtraSlotsAsDataType}）。
+     */
+    @Override
+    protected List<IInventorySlot> extraSlotsForConfig() {
+        return nutrientSlot == null || growthSlot == null
+                ? List.of()
+                : List.of(nutrientSlot, growthSlot);
     }
 
     /**
@@ -290,11 +306,26 @@ public class PlantingCuttingFactoryTile extends MekCkMachineTile implements IMek
     @Override
     public void load(net.minecraft.nbt.CompoundTag tag) {
         super.load(tag);
-        // 罐在父类构造期由 getInitialGasTanks 创建，这里取同一份而不是缓存字段。
+        // 父类读档链里 ISustainedData 钩子也会调本方法（见 MekCkMachineTile 的键契约注释），
+        // 这里再调一次是幂等的；两条路径共用同一段读取，不会漂移。
+        readExtraSustainedData(tag);
+    }
+
+    /**
+     * 读营养液罐 —— 读档与「掉落物再放置」共用的唯一入口。
+     *
+     * <p>罐在父类构造期由 {@code getInitialGasTanks} 创建，这里取同一份而不是缓存字段。
+     * 键名 {@code GasTank} 与旧实现逐字相同，所以旧存档与战利品表 {@code copy_nbt} 都零转换。</p>
+     */
+    @Override
+    protected void readExtraSustainedData(net.minecraft.nbt.CompoundTag tag) {
+        if (tag == null) {
+            return;
+        }
         IGasTank tank = getNutrientTank();
         if (tank != null && tag.contains(TAG_NUTRIENT_TANK, net.minecraft.nbt.Tag.TAG_COMPOUND)) {
             // IChemicalTank extends INBTSerializable<CompoundTag>，
-            // deserializeNBT 是接口自带的读档方法；键名与旧实现逐字相同，无需转换。
+            // deserializeNBT 是接口自带的读档方法。
             tank.deserializeNBT(tag.getCompound(TAG_NUTRIENT_TANK));
         }
     }
@@ -328,8 +359,10 @@ public class PlantingCuttingFactoryTile extends MekCkMachineTile implements IMek
         }
         double speedMult = effectiveSpeedMultiplier();
         double consumptionMult = effectiveEnergyConsumptionMultiplier();
-        int base = (int) Math.ceil(ENERGY_PER_PROCESS * speedMult * speedMult * consumptionMult
-                * MekckConfig.getTierEnergyEfficiency(tier));
+        // 与切菜/研磨的 baseEnergyPerTick 同一个夹紧口径：ceil 之后再夹到 [0, int 上界]。
+        int base = (int) Math.min(Integer.MAX_VALUE, Math.max(0.0,
+                Math.ceil(ENERGY_PER_PROCESS * speedMult * speedMult * consumptionMult
+                        * MekckConfig.getTierEnergyEfficiency(tier))));
         return cn.ism.mekck.util.CountMath.mulClamp(Integer.MAX_VALUE, base, active, stackMultiplier());
     }
 

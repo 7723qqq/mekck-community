@@ -7,7 +7,6 @@ import mekanism.api.fluid.IExtendedFluidTank;
 import mekanism.api.math.FloatingLong;
 import mekanism.client.gui.GuiConfigurableTile;
 import mekanism.client.gui.element.progress.GuiProgress;
-import mekanism.client.gui.element.progress.IProgressInfoHandler;
 import mekanism.client.gui.element.progress.ProgressType;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
 import net.minecraft.client.gui.GuiGraphics;
@@ -49,7 +48,10 @@ import net.minecraftforge.fluids.FluidStack;
  * </ul>
  */
 public final class CookingFactoryScreen
-        extends GuiConfigurableTile<CookingFactoryTile, CookingFactoryMenu> {
+        extends MekCkFactoryScreenBase<CookingFactoryTile, CookingFactoryMenu> {
+
+    /** 存储悬浮窗标签页（关闭窗口后需用同一实例重新激活，所以必须留引用）。 */
+    private MekCkSlotWindowTab slotWindowTab;
 
     /** 输入方阵与输出方阵的水平间隔，与 tile 侧 {@code GRID_GAP} 同值。 */
     private static final int GAP_BETWEEN = 30;
@@ -66,14 +68,10 @@ public final class CookingFactoryScreen
 
     public CookingFactoryScreen(CookingFactoryMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
-        CuttingMachineFactoryTier tier = tile.getTier();
-        int inputRows = tier == null ? 1 : (int) Math.ceil((double) CookingFactoryTile.INPUT_SLOTS / INPUT_COLS);
-        int outputRows = (int) Math.ceil(
-                (double) (CookingFactoryTile.PRODUCT_SLOTS + CookingFactoryTile.RETURN_SLOTS) / OUTPUT_COLS);
-        int extraHeight = Math.max(0, Math.max(inputRows, outputRows) - 2) * 18;
         imageWidth = PANEL_WIDTH;
-        imageHeight = 184 + extraHeight;
-        inventoryLabelY = 89 + extraHeight;
+        // 烹饪的输入/输出格数与档位无关，面板高度是常量；与菜单侧的覆写同源。
+        imageHeight = cn.ism.mekck.menu.MekCkFactoryLayout.cookingImageHeight();
+        inventoryLabelY = cn.ism.mekck.menu.MekCkFactoryLayout.inventoryLabelY(imageHeight);
         dynamicSlots = true;
     }
 
@@ -86,21 +84,22 @@ public final class CookingFactoryScreen
         addRenderableWidget(new GuiEnergyTab(this, tile.getEnergyContainer(),
                 () -> FloatingLong.create(tier == null ? 0 : tier.energyPerTick)));
 
+        // 竖直能源条（旧 GUI 有、迁移时丢的那条），位置与数据源见基类。
+        addEnergyBar();
+
+        // 槽位悬浮窗标签页：只有高档工厂（>17 并行）或烹饪/穿串才有窗口槽，
+        // 三组皆空时不加标签页（menu.windowSlots().isEmpty()）。
+        if (!menu.windowSlots().isEmpty()) {
+            slotWindowTab = addRenderableWidget(new MekCkSlotWindowTab(this, tile,
+                    menu.windowSlots(), () -> slotWindowTab));
+        }
+
         // 进度条：SMALL_RIGHT 箭头，横在输入网格与输出网格之间。
         int inputGridWidth = INPUT_COLS * 18;
         int progressX = 38 + inputGridWidth + (GAP_BETWEEN - 28) / 2;
         int progressY = 41 + 18 / 2 - 4;
-        addRenderableWidget(new GuiProgress(new IProgressInfoHandler() {
-            @Override
-            public double getProgress() {
-                return menu.getProgressRatio();
-            }
-
-            @Override
-            public boolean isActive() {
-                return menu.isBusy();
-            }
-        }, ProgressType.SMALL_RIGHT, this, progressX, progressY));
+        // isActive() 不覆写（Mek 默认 true，底图常驻）——理由见 MekCkFactoryScreenBase 类注释。
+        addRenderableWidget(new GuiProgress(() -> menu.getProgressRatio(), ProgressType.SMALL_RIGHT, this, progressX, progressY));
 
         // 3 个流体液位条：唯一 Mek 没有对应物、必须自己建的控件。
         for (int i = 0; i < CookingFactoryTile.FLUID_TANKS; i++) {
@@ -125,12 +124,9 @@ public final class CookingFactoryScreen
     @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
         super.renderBg(guiGraphics, partialTick, mouseX, mouseY);
-
-        // 144 格存储只有槽位 widget（由 dynamicSlots 建在面板外侧）、没有底板也没有标签。
-        // 底图画在 panel 之外会被 renderBg 的 base.png 盖掉，所以标签跟着面板走。
-        int labelY = topPos + 34 - 10;
-        guiGraphics.drawString(font, "存储", leftPos - 130, labelY, 0xFFAAAAAA);
-        guiGraphics.drawString(font, "存储", leftPos + 204 + 4, labelY, 0xFFAAAAAA);
+        // 144 格存储已改为**悬浮窗虚拟槽**（见 CookingFactoryTile.extraSlotsForConfig 的注释），
+        // 主面板上不再有它们的位置。此前这里在面板左右外侧各画一个「存储」标签，
+        // 指向的是两块早已不存在的槽区——纯死 UI，已删。
     }
 
     @Override

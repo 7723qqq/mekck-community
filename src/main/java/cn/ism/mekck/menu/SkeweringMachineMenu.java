@@ -25,6 +25,14 @@ import org.jetbrains.annotations.Nullable;
 import java.util.function.IntSupplier;
 
 public final class SkeweringMachineMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
+    /**
+     * 机器槽在 {@code slots} 里的数量：3 输入 + 产物 + 返还 + 速度 + 能量 + 81 存储 + 能源 = 89。
+     *
+     * <p>恒等于 {@code 8 + STORAGE_SLOT_COUNT}，所以它本身是对的；出问题的是 else 分支
+     * 指向能源槽的那个区间用了 <b>handler 下标</b> {@code SLOT_POWER = 8 + 81 = 89}，
+     * 而能源槽的<b>菜单</b>下标是 88（handler 的 88 号「创造升级槽」在本菜单没有 addSlot）。
+     * 89 恰好是本菜单玩家背包第 0 格的下标 ⇒ 点那一格且持能量物品时区间自指 → 复制。</p>
+     */
     private static final int MACHINE_SLOT_COUNT = 8 + SkeweringMachineBlockEntity.STORAGE_SLOT_COUNT;
     private final SkeweringMachineBlockEntity machine;
     private final ContainerData data;
@@ -32,6 +40,14 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
 
     private final UpgradeSlot speedUpgradeSlot;
     private final UpgradeSlot energyUpgradeSlot;
+
+    /**
+     * 能源槽的<b>菜单下标</b>（= 88，不是 handler 的 89）。
+     *
+     * <p>本菜单跳过了 handler 的 88 号创造升级槽，所以 88 之后所有 handler 下标都比
+     * 菜单下标大 1；任何「用 handler 常量当菜单下标」的写法都会错位到玩家背包。</p>
+     */
+    private final int powerSlotIndex;
 
     public SkeweringMachineMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
@@ -70,6 +86,7 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
         }
 
         // Power slot (energy items: energy cube / tablet / redstone) next to the energy bar
+        this.powerSlotIndex = slots.size();
         addSlot(new PowerSlot(machine, SkeweringMachineBlockEntity.SLOT_POWER, 7, 13, this));
 
         // Player inventory: starting from (20, 101)
@@ -116,8 +133,8 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
             }
         } else {
             if (SkeweringMachineBlockEntity.isUsablePowerItem(stack)) {
-                if (!moveItemStackTo(stack, SkeweringMachineBlockEntity.SLOT_POWER,
-                        SkeweringMachineBlockEntity.SLOT_POWER + 1, false)) {
+                // powerSlotIndex(=88) 是菜单下标；handler 常量 SLOT_POWER(=89) 会指向玩家背包第 0 格
+                if (!moveItemStackTo(stack, powerSlotIndex, powerSlotIndex + 1, false)) {
                     return ItemStack.EMPTY;
                 }
             } else if (SkeweringMachineBlockEntity.isSpeedUpgrade(stack)) {

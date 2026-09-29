@@ -4,6 +4,7 @@ import cn.ism.mekck.blockentity.SandwichAssemblerBlockEntity;
 import cn.ism.mekck.menu.SandwichAssemblerMenu;
 import cn.ism.mekck.network.ModMessages;
 import cn.ism.mekck.network.SandwichConfigPacket;
+import mekanism.client.gui.element.window.GuiWindow;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -132,10 +133,37 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
         super.drawForegroundText(guiGraphics, mouseX, mouseY);
     }
 
+    /**
+     * 打开一扇窗口 —— <b>两条注册都要做</b>。
+     *
+     * <ul>
+     *   <li>{@code addRenderableWidget} 把它放进 {@code Screen.renderables}，
+     *       而 {@code Screen.render} 正是遍历那份列表画的；</li>
+     *   <li>{@code addWindow} 把它放进 {@code GuiMekanism.windows}，
+     *       而 {@code GuiMekanism.mouseClicked} / {@code keyPressed} 都是遍历那份 LRU 的。</li>
+     * </ul>
+     * 只做前者 ⇒ 窗口画得出来但点不动，连它自己的关闭按钮都按不了。
+     */
+    private void openWindow(GuiWindow window) {
+        addRenderableWidget(window);
+        addWindow(window);
+    }
+
+    /** 关闭一扇窗口 —— 与 {@link #openWindow} 对称，两条注册都要撤。 */
+    private void closeWindow(GuiWindow window) {
+        window.close();       // 第一句就是 gui().removeWindow(this)，出窗口 LRU
+        removeWidget(window); // 出 renderables / children
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         int x = leftPos;
         int y = topPos;
+        // 窗口可能已被它自己的关闭按钮关掉（close() 只出 LRU，不出 renderables），先对一次账。
+        if (sideWindow != null && !getWindows().contains(sideWindow)) {
+            removeWidget(sideWindow);
+            sideWindow = null;
+        }
         // 侧面配置
         if (inRect(mouseX, mouseY, x + SIDE_BTN_X, y + SIDE_BTN_Y, 40, BTN_H)) {
             if (sideWindow == null) {
@@ -145,8 +173,9 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
                             ? state.getValue(cn.ism.mekck.block.SandwichAssemblerBlock.FACING)
                             : net.minecraft.core.Direction.NORTH;
                 });
-                addRenderableWidget(sideWindow);
+                openWindow(sideWindow);
             } else {
+                closeWindow(sideWindow);
                 sideWindow = null;
             }
             return true;

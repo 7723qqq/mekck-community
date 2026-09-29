@@ -1,11 +1,51 @@
 # mekck 当前状态汇总
 
-- 最后更新：2026-09-29
-- 基线提交：`b6fbcc0`（本轮之前）
-- HEAD：`59c69f1`
-- 验收口径：`./gradlew clean build --offline` → **115 测试 / 0 失败 / 0 错误 / 0 跳过**
+- 最后更新：2026-09-30（第二轮全量审查）
+- 审查基线：HEAD `83830e0`（阶段 3 Task 7）
+- 验收口径：`./gradlew build`（**联网**；理由见第五节第 6 条）→
+  **305 测试 / 0 失败 / 0 错误 / 0 跳过**，且产物内含 `mekck.refmap.json`
 
 本文是**单一入口**。细节看各专项文档（见文末索引）。
+
+---
+
+## 〇、第二轮全量审查（2026-09-30）—— 只读这一节也够
+
+报告：`docs/audit/2026-09-30-full-code-review.md`（分域明细在 `.review/*.md`）。**6 个 Critical 全部已修**：
+
+| # | 一句话 | 状态 |
+|---|---|---|
+| C1 | **打包产物启动即崩**：没有 refmap ⇒ `MixinItemStack` 匹配不到 `ItemStack.save/of`，而配置是 `required:true` ⇒ 直接终止 | 已修 + **有护栏测试** |
+| C2 | 烧烤/穿串/烹饪三家 `appendExtraSlots` 在父类构造期对 `null` 调 `clear()` ⇒ **机器建不出来** | 已修 |
+| C3 | 迁到 Mek `BlockTile` 后**破坏丢全部内容**；烹饪 12 档 + `blaze_*` 5 个**连方块都不掉** ⇒ 72 张战利品表重写/新建 | 已修 |
+| C4 | `mekckPersistedSlots()` 漏掉家族专属槽 ⇒ 下标 ≥128 的槽**每次存读档静默丢失**（烹饪 35 格，全 12 档） | 已修 |
+| C5 | 5 个菜单把 handler 索引当菜单下标 ⇒ shift-click **堆叠翻倍**（可无限刷） | 已修 |
+| C6 | `@Redirect` 打在 `TileComponentUpgrade` **类**上 ⇒ **Mek 自己机器**上的静音/过滤升级读档即清零、回写后永久消失 | 已修 |
+
+另修上轮遗留的 **I10**（`MekCkTransfer` int 溢出 ⇒ 两个大堆叠同时消失）等约 10 项 Important，
+**新增 33 个回归测试**（272 → 305）。
+
+### ⚠️ C1 的护栏：refmap 是**手写**的，别让它腐烂
+
+`src/main/resources/mekck.refmap.json` 手写（MixinGradle + 注解处理器那条路走不通：AP 会对 4 个
+`remap = false` 的 mod 类 mixin 报成员级错误——合成 lambda 名、`$VALUES`/`UPGRADES` 这类
+javac 合成字段没有映射——而 `disableTargetValidator` / `@Pseudo` 只能消掉其中一条）。
+`TestMixinRefmapIntegrity` 用三条断言钉住它，其中最强的一条拿 `build/reobfJar/mappings.tsrg`
+（ForgeGradle 重混淆**自己用的那份映射**）核对 SRG 名，**名字写错也能抓到**：
+已用变异测试证明——把 `m_41739_` 改成别的值，该断言立刻变红。
+
+⇒ **只要有人给 `MixinItemStack` 新加一条打原版方法的 `@Inject`，测试先红，而不是等启动崩。**
+
+### 仍未验证
+
+C1 的修复效果需要**真实实例复跑**一次才能坐实（本轮无法自动启动游戏）。
+上一轮之所以能定位它，靠的正是实例日志里那条 `No refMap loaded`。
+
+### 需用户裁决（本轮未动，共 11 项）
+
+上轮 I1 / I3 / I8，以及本轮新发现：AE2 job 无回收、`pushPattern` 事务语义、
+6 个工厂 GUI **进度条无同步通道**、高并行档 GUI 与玩家背包物理重叠、迁移器串位、
+I2 旧档丢升级卡、中央厨房拆模块丢料、`en_us` 缺 21 键。理由见报告 §二。
 
 ---
 

@@ -1,6 +1,7 @@
 package cn.ism.mekck.mixin;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
+import cn.ism.mekck.upgrade.IMekCkUnknownUpgradeHolder;
 import cn.ism.mekck.upgrade.MekCkUpgradeCodec;
 import cn.ism.mekck.upgrade.MekCkUpgradeTypes;
 import mekanism.api.Upgrade;
@@ -30,7 +31,15 @@ import java.util.Map;
  * <h3>为什么用 @Redirect 而不是 @Inject</h3>
  * {@code Upgrade.saveMap} / {@code buildMap} 是 {@code public static}，
  * 在 {@code Upgrade} 上注入会波及整合包里<b>所有</b> Mekanism 机器（Mek 自己的也在内）。
- * 重定向本组件的实例调用则只作用于挂了本 Mixin 的 tile。
+ * <b>但 {@code @Redirect} 作用在<b>类</b>上，不是「作用在挂了本 Mixin 的 tile 上」</b>：
+ * 它改写的是 {@code TileComponentUpgrade} 本身，因此整合包里<b>每一个</b>
+ * {@code TileComponentUpgrade} 实例（含 Mek 自己机器的）都会走到本类的方法体。
+ * 所以两个重定向都必须先判「这台机器是不是 MekCK 的」，不是则原样退回 Mek 的实现，
+ * 判据是 {@link MekCkUpgradeTypes#isMekCkOwnedTile(Class)}（沿类链找
+ * {@code cn.ism.mekck.machine.MekCkMachineTile}），<b>不能用 {@code mekck$tier() != null}</b>——
+ * 它在「是 MekCK 机器但反射取档位失败」时同样返回 null，那种情况必须继续走名字键。
+ * 不退回的后果见 {@code MekCkUpgradeTypes.isMekCkOwnedTile} 的注释：Mek 机器上的
+ * MUFFLING / FILTER / GAS / ANCHOR / STONE_GENERATOR 会被 {@code capOf(…, null) == 0} 静默丢弃。
  *
  * <h3>只换持久化，运行时行为一概不动</h3>
  * 20 tick 安装读条、槽位合法性（{@code UpgradeInventorySlot.input(listener, supported)}）、
@@ -54,22 +63,40 @@ public abstract class MixinTileComponentUpgradePersistence implements IMekCkUnkn
     private List<CompoundTag> mekck$unknownRaw = List.of();
 
     /**
+     * 本组件是否属于 MekCK 自己的机器（决定升级持久化走名字键还是原样交回 Mek）。
+     *
+     * <p>与 {@link #mekck$tier()} 是<b>两件不同的事</b>：这里的判据是「类链上有没有
+     * {@code cn.ism.mekck.machine.MekCkMachineTile}」，与能否取到档位无关。
+     * 详见 {@link MekCkUpgradeTypes#isMekCkOwnedTile(Class)}。
+     */
+    @Unique
+    private boolean mekck$isMekCkTile() {
+        return MekCkUpgradeTypes.isMekCkOwnedTile(this.tile == null ? null : this.tile.getClass());
+    }
+
+    /**
      * 本组件所属的机器档位，取自 tile。
      *
      * <p>只用于 {@link MekCkUpgradeTypes#decode(CompoundTag, CuttingMachineFactoryTier)}
-     * 的按档位裁剪。tile 不是 MekCK 机器时返回 {@code null}，
-     * 此时 decode 退化为「只按枚举自带 maxStack 裁剪」。
+     * 的按档位裁剪，且<b>只在 {@link #mekck$isMekCkTile()} 为真时才会被调用</b>。
      *
-     * <p><b>⚠️ 这是阶段 1 与阶段 2 之间的临时桥接，走反射而非直接类型判断。</b>
-     * {@code cn.ism.mekck.machine.MekCkMachineTile}（阶段 2 才建）此刻还不存在，
-     * 本任务不创建它，否则会把阶段 2 的基类设计提前锁死。
-     * 因此这里沿类链按名字找到那个基类再反射调 {@code getTier()}：
+     * <p><b>{@code null} 的语义是「是 MekCK 的机器，但档位取不到」</b>（{@code tile == null}，
+     * 或反射调 {@code getTier()} 抛 {@code ReflectiveOperationException}），此时 decode 退化为
+     * 「只按枚举自带 maxStack 裁剪」。<b>它不再表示「不是 MekCK 机器」</b>——
+     * 那个判断已经上移到 {@link #mekck$isMekCkTile()}，两者不可互换，理由见该类注释与
+     * {@link MekCkUpgradeTypes#isMekCkOwnedTile(Class)}。
+     *
+     * <p><b>⚠️ 这里是走反射而非直接类型判断的桥接，且按契约保留。</b>
+     * 判据是「类链上存在 {@code cn.ism.mekck.machine.MekCkMachineTile}」+ 反射调 {@code getTier()}：
      * <ul>
-     *   <li>阶段 1 编译得过， MekCK 自有 tile 走到这里返回真实档位；</li>
-     *   <li>非 MekCK 的 tile（纯 Mek 机器）返回 {@code null}，走「不知档位」的保守分支；</li>
-     *   <li>阶段 2 的 {@code MekCkMachineTile} 落地后，把这段反射换成
-     *       {@code owner instanceof MekCkMachineTile machine ? machine.getTier() : null}
-     *       即可，其余调用方不受影响。</li>
+     *   <li>{@code MekCkMachineTile} 的类名与 {@code getTier()} 的返回类型是
+     *       {@code cn.ism.mekck.CuttingMachineFactoryTier}——这个三元契约写在该类的类注释里，
+     *       <b>一个字符都不许改</b>（改了就是读档时静默丢掉存储卡）。
+     *       类名字符串另由 {@code TestUpgradePersistenceOwnership} 钉住。</li>
+     *   <li>MekCK 自有 tile 走到这里返回真实档位；反射失败返回 {@code null}（见上）。</li>
+     *   <li>本可以改成 {@code owner instanceof MekCkMachineTile machine ? machine.getTier() : null}，
+     *       但阶段 3 未做这次替换：现有反射路径已实测可用，而替换会在读档路径上引入
+     *       一个新的类加载点。要改时请连带把 {@code mekck$isMekCkTile()} 一并简化。</li>
      * </ul>
      * 沿 {@code getSuperclass()} 往上找而不是只比 {@code ==}：
      * 阶段 2 的机器 tile 几乎肯定会再派生出各机器自己的子类（如
@@ -139,12 +166,25 @@ public abstract class MixinTileComponentUpgradePersistence implements IMekCkUnkn
      * 遍历 {@code getSupportedTypes()} 调 {@code recalculateUpgrades}、读 {@code "Items"} 槽位
      * 全部仍走 Mek 原生。
      */
+    // remap = false 是**必需**的：目标 lambda$read$1 是 lambda 编译产物（合成方法），
+    // 混淆映射表里不会有它。`Redirect.remap` 同样默认 true、不继承类级的
+    // `@Mixin(remap = false)`，缺这一行时处理器报
+    // `Cannot find target method "lambda$read$1(...)"` 直接编译失败。
+    // 该 lambda 在生产环境的 Mek jar 里确实存在（名字由 Mek 自己编译时定，
+    // 合成方法不被 SRG 重命名），所以运行期语义不变。
     @Redirect(
+            remap = false,
             method = "lambda$read$1(Lnet/minecraft/nbt/CompoundTag;)V",
             at = @At(value = "INVOKE",
                     target = "Lmekanism/api/Upgrade;buildMap(Lnet/minecraft/nbt/CompoundTag;)"
                             + "Ljava/util/Map;"))
     private Map<Upgrade, Integer> mekck$decode(CompoundTag tag) {
+        // 非 MekCK 机器：原样交回 Mek 的 ordinal 编解码。
+        // 少了这一行，Mek 自己机器上的 MUFFLING/FILTER/GAS/ANCHOR/STONE_GENERATOR
+        // 会被 capOf(…, null) == 0 判成「裁到 0」并由 decode 丢弃，回写后存档永久丢失。
+        if (!mekck$isMekCkTile()) {
+            return Upgrade.buildMap(tag);
+        }
         MekCkUpgradeCodec.Decoded<Upgrade> decoded = MekCkUpgradeTypes.decode(tag, mekck$tier());
         this.mekck$unknownRaw = decoded.unknownRaw();
         return decoded.known();
@@ -188,6 +228,13 @@ public abstract class MixinTileComponentUpgradePersistence implements IMekCkUnkn
             at = @At(value = "INVOKE",
                     target = "Lmekanism/api/Upgrade;saveMap(Ljava/util/Map;Lnet/minecraft/nbt/CompoundTag;)V"))
     private void mekck$encode(Map<Upgrade, Integer> map, CompoundTag tag) {
+        // 与 mekck$decode 对称：非 MekCK 机器交回 Mek 自己的 ordinal 编解码。
+        // 少了这一行，Mek 机器会被改写成名字键格式（Mek 自己读得回来，但那是「本模组
+        // 悄悄改写了别人的存档格式」，一旦玩家卸掉 mekck 就整批不可读）。
+        if (!mekck$isMekCkTile()) {
+            Upgrade.saveMap(map, tag);
+            return;
+        }
         tag.merge(MekCkUpgradeTypes.encode(map, this.mekck$unknownRaw));
     }
 }

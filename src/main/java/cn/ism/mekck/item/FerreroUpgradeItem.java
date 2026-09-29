@@ -47,7 +47,7 @@ public class FerreroUpgradeItem extends Item {
     @Override
     public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> tooltip, TooltipFlag flag) {
         // 本档的具体升级效果（颜色与精英等级机器物品名一致）
-        tooltip.add(Component.translatable("tooltip.mekck.ferrero_upgrade." + tier.name().toLowerCase())
+        tooltip.add(Component.translatable("tooltip.mekck.ferrero_upgrade." + tier.langSuffix)
                 .withStyle(style -> style.withColor(cn.ism.mekck.CuttingMachineFactoryTier.ELITE.getColor())));
         // 链式安装提示（需按顺序安装前几档，同冷萃升级模式）
         if (tier.ordinal() > 0) {

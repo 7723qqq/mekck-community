@@ -23,7 +23,18 @@ public final class PlacerPersist {
 
     private static final String KEY_UUID = "MekckPlacerUuid";
 
-    private static final WeakHashMap<BlockEntity, UUID> PLACERS = new WeakHashMap<>();
+    /**
+     * 运行时缓存。
+     *
+     * <p><b>必须同步</b>：{@code WeakHashMap} 不是线程安全的，而 {@link #save} 会在
+     * 区块保存路径上被调用、{@link #get} 会在机器 tick 上被调用，两者不保证同线程
+     * （区块卸载/保存与主线程逻辑之间没有互斥）。并发 {@code put} 触发的扩容会让
+     * {@code get} 读到半成品链表——表现为「放置者归属偶发丢失」，且不报错。
+     * 本模组其它 WeakHashMap 缓存（{@code RecipeCache} / {@code TavernBarrelCompat}）
+     * 同样包了 {@code synchronizedMap}，这里保持一致。</p>
+     */
+    private static final java.util.Map<BlockEntity, UUID> PLACERS =
+            java.util.Collections.synchronizedMap(new WeakHashMap<>());
 
     private PlacerPersist() {
     }

@@ -625,6 +625,9 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
         if (orderListDirty) {
             availableRecipes = menu.getMachine().getAvailableRecipes();
             orderListDirty = false;
+            // 列表可能在两次刷新之间变短（玩家把材料取走），偏移必须跟着回夹，
+            // 否则下面的 recipeIdx 会变成负数。
+            orderScrollOffset = clampOrderScroll(orderScrollOffset, availableRecipes.size());
         }
 
         int listTop = panelY + 16;
@@ -634,7 +637,8 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
         int visibleCount = Math.min(ORDER_LIST_ROWS, availableRecipes.size() - orderScrollOffset);
         for (int i = 0; i < visibleCount; i++) {
             int recipeIdx = orderScrollOffset + i;
-            if (recipeIdx >= availableRecipes.size()) break;
+            // 上下界都要判：只判上界时，负的 orderScrollOffset 会直接落到 List.get(负数)。
+            if (recipeIdx < 0 || recipeIdx >= availableRecipes.size()) continue;
 
             Recipe<?> recipe = availableRecipes.get(recipeIdx);
             int entryY = listTop + i * ORDER_ENTRY_HEIGHT;
@@ -866,6 +870,18 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
         return orderMode ? mePanel : null;
     }
 
+    /**
+     * 把下单列表的滚动偏移夹进合法区间 {@code [0, max(0, size - ORDER_LIST_ROWS)]}。
+     *
+     * <p><b>下界不能省</b>：配方数少于 {@link #ORDER_LIST_ROWS} 时
+     * {@code size - ORDER_LIST_ROWS} 是负数，直接 {@code Math.min} 会把偏移写成负数，
+     * 下一帧渲染就 {@code List.get(负数)} 抛 {@code IndexOutOfBoundsException} 崩客户端。
+     * 上界同理——列表变短（玩家取走材料）后旧偏移会越界。</p>
+     */
+    private static int clampOrderScroll(int offset, int size) {
+        return Math.max(0, Math.min(Math.max(0, size - ORDER_LIST_ROWS), offset));
+    }
+
     private boolean handleOrderClick(double mouseX, double mouseY, int x, int y) {
         int panelX = x + ORDER_PANEL_LEFT;
         int panelY = y + ORDER_PANEL_TOP;
@@ -894,7 +910,8 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
 
         for (int i = 0; i < ORDER_LIST_ROWS; i++) {
             int recipeIdx = orderScrollOffset + i;
-            if (recipeIdx >= availableRecipes.size()) break;
+            // 与渲染循环同一条判据：负下标同样会落到 List.get(负数)。
+            if (recipeIdx < 0 || recipeIdx >= availableRecipes.size()) continue;
 
             int entryY = listTop + i * ORDER_ENTRY_HEIGHT;
             if (mouseX >= panelX + 2 && mouseX < panelX + listWidth
@@ -915,7 +932,11 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
         int listBottom = listTop + ORDER_LIST_HEIGHT;
         if (mouseX >= panelX + listWidth - 12 && mouseX < panelX + listWidth
                 && mouseY >= listBottom - 10 && mouseY < listBottom) {
-            orderScrollOffset = Math.min(availableRecipes.size() - ORDER_LIST_ROWS, orderScrollOffset + 1);
+            // 必须走 clampOrderScroll：配方数少于 ORDER_LIST_ROWS 时
+            // `size - ORDER_LIST_ROWS` 是负数，直接 Math.min 会把偏移写成负数，
+            // 下一帧渲染就 List.get(负数) 崩客户端。热区在配方行下方、行循环提前 break
+            // 之后才判，所以这条路径是可达的。
+            orderScrollOffset = clampOrderScroll(orderScrollOffset + 1, availableRecipes.size());
             return true;
         }
 

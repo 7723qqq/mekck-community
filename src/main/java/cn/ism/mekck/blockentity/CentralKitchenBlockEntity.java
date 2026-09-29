@@ -557,6 +557,27 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                 else startThread(level, ability, t);
             }
         }
+        // 方块激活态：任一线程在跑即为激活。这段原先写在 tickThreads 里，而该方法全仓
+        // 没有任何调用者（serverTick 只调 tickOrders + 本方法）⇒ ACTIVE 永不更新，
+        // 模型永远停在未激活态。现挂在「本 tick 最后推进线程」的一步之后；
+        // 订单驱动不占线程（走 order.buffer），故只看线程表。
+        // 刻意不迁移旧 tickThreads 里的缩容逻辑（while (size > ability.threads()) remove）：
+        // 在 tick 路径上缩容会把**正在加工**的线程（材料已扣、产物未出）直接删掉 ⇒ 材料凭空损失。
+        // 槽位长度只在 load 时按已安装模块对齐（那时没有在跑的线程）。
+        boolean anyRunning = false;
+        for (var list : threads.values()) {
+            for (KitchenThread t : list) {
+                if (t.busy()) {
+                    anyRunning = true;
+                    break;
+                }
+            }
+            if (anyRunning) break;
+        }
+        if (state.hasProperty(cn.ism.mekck.block.CentralKitchenBlock.ACTIVE)
+                && state.getValue(cn.ism.mekck.block.CentralKitchenBlock.ACTIVE) != anyRunning) {
+            level.setBlock(pos, state.setValue(cn.ism.mekck.block.CentralKitchenBlock.ACTIVE, anyRunning), 3);
+        }
     }
 
     public boolean isAutoMode(cn.ism.mekck.kitchen.KitchenFamily family) {
@@ -570,32 +591,6 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
 
     public java.util.List<cn.ism.mekck.kitchen.KitchenOrder> getOrders() {
         return orders;
-    }
-
-    /** 线程调度核心：保证线程数 → 推进占用线程 → 为空闲线程匹配新配方。 */
-    private void tickThreads(Level level, BlockPos pos, BlockState state) {
-        boolean anyRunning = false;
-        for (var ability : installedAbilities()) {
-            var list = threads.computeIfAbsent(ability.family(), f -> new java.util.ArrayList<>());
-            // 线程数随模块变化调整
-            while (list.size() < ability.threads()) list.add(new KitchenThread());
-            while (list.size() > ability.threads()) list.remove(list.size() - 1);
-
-            for (KitchenThread t : list) {
-                if (t.busy()) {
-                    anyRunning = true;
-                    advanceThread(level, pos, ability, t);
-                } else {
-                    startThread(level, ability, t);
-                    if (t.busy()) anyRunning = true;
-                }
-            }
-        }
-        // 方块激活状态
-        if (state.hasProperty(cn.ism.mekck.block.CentralKitchenBlock.ACTIVE)
-                && state.getValue(cn.ism.mekck.block.CentralKitchenBlock.ACTIVE) != anyRunning) {
-            level.setBlock(pos, state.setValue(cn.ism.mekck.block.CentralKitchenBlock.ACTIVE, anyRunning), 3);
-        }
     }
 
     /** 计算某系列每 tick 的能耗（线程数 × 20 FE）。 */

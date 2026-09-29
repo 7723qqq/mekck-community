@@ -383,7 +383,9 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
         String seasoning = currentSeasoningFor(result);
         ItemStack preview = result.copy();
         if (seasoning != null) {
-            BarbequesDelightCompat.applySeasoning(preview, seasoning);
+            // 预演必须与实际落槽走同一个分派（见 applySeasoningTo）：两个兼容门面写的 NBT
+            // 键不同，预演写错门面就会让 canFitAll 与实际 insertOutput 的口径分家。
+            applySeasoningTo(preview, seasoning);
         }
         if (!canFitAll(outputs, preview, consumeCount)) {
             return;
@@ -404,11 +406,7 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
         multiplied.setCount(outputCount);
 
         if (seasoning != null && outputCount > 0) {
-            if (seasoning.startsWith(KaleidoscopeGrillingCompat.MOD_ID)) {
-                KaleidoscopeGrillingCompat.applySeasoningToSkewer(multiplied, seasoning);
-            } else {
-                BarbequesDelightCompat.applySeasoning(multiplied, seasoning);
-            }
+            applySeasoningTo(multiplied, seasoning);
             consumeSeasoningUses(seasoning, outputCount, orderSeasoning == null || orderSeasoning.isEmpty());
         }
 
@@ -425,6 +423,26 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
     /** 单份产出的容量判定。传的是<b>已调味</b>的栈。 */
     static boolean canFitAll(List<IInventorySlot> outputs, ItemStack seasoned, int multiplier) {
         return MekCkBatchPacking.canFitAll(outputs, List.of(seasoned), multiplier);
+    }
+
+    /**
+     * 把调味写进烤串 —— <b>预演与落槽的唯一入口</b>。
+     *
+     * <p>两个兼容门面写的 NBT <b>不是同一个键</b>：{@code BarbequesDelightCompat.applySeasoning}
+     * 写 {@code {Seasoning: <id>}}（{@code BarbequesDelightCompat:73-76}），
+     * {@code KaleidoscopeGrillingCompat.applySeasoningToSkewer} 写
+     * {@code {SeasoningIngredients:[<id>], SeasoningUses:n}}（{@code KaleidoscopeGrillingCompat:265-272}）。
+     * 而 {@code ItemStack.isSameItemSameTags} 是逐 NBT 比较 ⇒ 预演用什么门面，就等于
+     * 「canFitAll 认为哪些已有的堆能并进来」。两处一旦分派不一致：预演说装得下、
+     * {@code insertOutput} 却并进不去，余量留在参数里被丢弃 —— <b>产物静默消失</b>，
+     * 不报错、不留日志。所以两处必须调本方法，谁都不许自己写 if。</p>
+     */
+    static void applySeasoningTo(ItemStack skewer, String seasoning) {
+        if (seasoning.startsWith(KaleidoscopeGrillingCompat.MOD_ID)) {
+            KaleidoscopeGrillingCompat.applySeasoningToSkewer(skewer, seasoning);
+        } else {
+            BarbequesDelightCompat.applySeasoning(skewer, seasoning);
+        }
     }
 
     // ── 调味料 ──────────────────────────────────────────────────────────

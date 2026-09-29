@@ -111,7 +111,17 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
     private static final int PANEL_WIDTH = 204;
     private static final int STORAGE_RIGHT_X = PANEL_WIDTH + 4;
 
-    private final List<IInventorySlot> storageSlots = new ArrayList<>(STORAGE_SLOTS);
+    /**
+     * 144 格存储。
+     *
+     * <p><b>不能写成 {@code = new ArrayList<>(...)} 字段初始化器</b>：本列表由
+     * {@link #appendExtraSlots} 填充，而它在<b>父类构造器内部</b>经 {@code getInitialInventory}
+     * 回调（与本类 {@code getInitialFluidTanks} 同一批，见类注释的构造期顺序陷阱），
+     * 那一刻本类的字段初始化器还没跑。写成字段初始化器 + 方法里 {@code clear()} 会在
+     * 构造期对 {@code null} 调 {@code clear()} 抛 NPE，症状是「方块放下去建不出方块实体」。
+     * 这与 {@link #getInitialFluidTanks} 里 {@code fluidTanks} 必须就地 {@code new} 是同一条规则。</p>
+     */
+    private List<IInventorySlot> storageSlots;
     private IFluidTankHolder fluidTankHolder;
     private IExtendedFluidTank[] fluidTanks;
 
@@ -187,7 +197,12 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
      */
     @Override
     protected void appendExtraSlots(InventorySlotHelper builder, IContentsListener listener) {
-        storageSlots.clear();
+        // 见字段注释：本方法跑在父类构造器内部，此刻字段初始化器还没执行。
+        if (storageSlots == null) {
+            storageSlots = new ArrayList<>(STORAGE_SLOTS);
+        } else {
+            storageSlots.clear();
+        }
         int limit = slotLimitPerSlot(getTier());
         for (int i = 0; i < STORAGE_SLOTS; i++) {
             int x;
@@ -198,10 +213,35 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
                 x = STORAGE_RIGHT_X + (j % STORAGE_COLS) * 18;
             }
             int y = STORAGE_Y + (i / STORAGE_COLS) * 18;
-            IInventorySlot slot = MekCkSlot.input(limit, listener, x, y);
+            // 存储槽走「悬浮窗虚拟槽」：主面板不再放这 144 格，改由 GuiStorageWindow 分页显示。
+            // x/y 保留仅为可读性（VirtualInventoryContainerSlot 的容器槽坐标恒为 0,0，
+            // 实际渲染位置由 GuiVirtualSlot 动态写入，见 MekCkSlot#storage 的注释）。
+            IInventorySlot slot = MekCkSlot.storage(limit, SLOT_WINDOW, listener, x, y);
             storageSlots.add(slot);
             builder.addSlot(slot);
         }
+    }
+
+    /**
+     * <b>刻意返回空</b>：144 格存储是<b>悬浮窗虚拟槽</b>，不登记为 {@code DataType.EXTRA}。
+     *
+     * <p>登记对虚拟槽只有害处、没有收益：</p>
+     * <ul>
+     *   <li><b>害处</b>：{@code GuiMekanism.addSlots()} 的优先级是「先 {@code findDataType}，
+     *       查不到再退回 {@code ContainerSlotType}」。登记后 {@code getActiveDataType} 会返回
+     *       {@code EXTRA}（判据 {@code 0 < list.size() < supportedDataTypes.size()} 成立），
+     *       于是每个虚拟槽都被建成一个 {@code GuiSlot(SlotType.EXTRA, ...)}；而
+     *       {@code VirtualInventoryContainerSlot} 的坐标恒为 {@code (0,0)} ⇒ 144 个槽框
+     *       全部叠在面板左上角 {@code (-1,-1)}。不登记时 {@code ContainerSlotType.IGNORED}
+     *       会让 {@code addSlots()} 直接跳过它们——这正是「收进悬浮窗」想要的效果。</li>
+     *   <li><b>无收益</b>：登记的两条理由（贴图、侧配可见性）都只对<b>主面板上的真实槽</b>成立。
+     *       虚拟槽不参与主面板渲染，而 {@code registerExtraSlotsAsDataType} 又刻意不设默认面，
+     *       所以外部自动化本来也访问不到它们。</li>
+     * </ul>
+     */
+    @Override
+    protected List<IInventorySlot> extraSlotsForConfig() {
+        return List.of();
     }
 
     // ── 三个流体罐 ──────────────────────────────────────────────────────
@@ -278,7 +318,21 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
-        if (fluidTanks == null || !tag.contains(TAG_FLUID_TANKS, Tag.TAG_COMPOUND)) {
+        // 父类读档链里 ISustainedData 钩子也会调本方法（见 MekCkMachineTile 的键契约注释），
+        // 这里再调一次是幂等的；两条路径共用同一段读取，不会漂移。
+        readExtraSustainedData(tag);
+    }
+
+    /**
+     * 读三个流体罐 —— 读档与「掉落物再放置」共用的唯一入口。
+     *
+     * <p>键名 {@code FluidTanks}（内含 {@code Tanks} 列表 + {@code Count}）与旧实现逐字相同，
+     * 旧存档与战利品表 {@code copy_nbt} 都零转换；罐数不匹配时按 {@code min} 截断，
+     * 不会因为档位/版本变化而抛异常。</p>
+     */
+    @Override
+    protected void readExtraSustainedData(CompoundTag tag) {
+        if (tag == null || fluidTanks == null || !tag.contains(TAG_FLUID_TANKS, Tag.TAG_COMPOUND)) {
             return;
         }
         CompoundTag container = tag.getCompound(TAG_FLUID_TANKS);
@@ -394,13 +448,28 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
     /**
      * {@inheritDoc}
      *
-     * <p>覆写成「有订单」而非基类的「有非空输入槽」——这台机器<b>无订单不自转</b>
-     * （旧实现第 729-730 行 {@code // No order set - do not auto-process}），
-     * 用基类判据会让材料摆满时进度条照走、跑一个空批次。</p>
+     * <p><b>本机的判据是「有订单 <u>且</u> 输入槽里有料」</b>，而不是基类的「有非空输入槽」，
+     * 也不是单纯的「有订单」：</p>
+     * <ul>
+     *   <li>不带订单判据时，材料摆满就会推着进度条走空批次（本机无订单绝不加工，
+     *       旧实现第 729-730 行 {@code // No order set - do not auto-process}）；</li>
+     *   <li>只带订单判据时，<b>下了单却没投料</b>的机器会照常走满一个周期并按 tick 扣电，
+     *       而执行器在 {@code batch <= 0} 时直接返回、什么也不做。旧实现不是这样：
+     *       {@code CookingFactoryBlockEntity.serverTick} 先算 {@code canProcess}
+     *       （配方存在 + {@code maxConsumable > 0} + 产物装得下），再
+     *       {@code energyPerTick = canProcess ? mulClamp(...) : 0}（旧文件第 570 行），
+     *       第 578 行才 {@code extractEnergy}。缺料时旧机器一滴电都不扣。</li>
+     * </ul>
+     *
+     * <p><b>这是一处保守近似，不是对旧语义的完整复刻</b>：它只挡住了「6 个输入槽全空」，
+     * 挡不住「有料但都不匹配订单配方」与「产物槽满 / 流体不够」。要做到与旧
+     * {@code canProcess} 等价，需要执行器对外暴露一个「本 tick 真的能加工」的查询
+     * （配方匹配与容量判定只有它知道），那是一次接口改动，留给后续决策。
+     * 此处先把「空转吃电」这个最常见的形态去掉。</p>
      */
     @Override
     protected boolean hasWorkToDo() {
-        return hasOrder();
+        return hasOrder() && activeWorkSlots() > 0;
     }
 
     public double effectiveSpeedMultiplier() {

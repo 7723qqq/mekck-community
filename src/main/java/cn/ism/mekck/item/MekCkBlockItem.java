@@ -137,6 +137,38 @@ public class MekCkBlockItem extends BlockItem {
         return tier != null || simpleParallel > 0;
     }
 
+    /**
+     * 「无限」阈值 —— 达到此值的并行数不再显示数字，改显示「无限」。
+     *
+     * <h3>为什么需要它</h3>
+     * 奇点创世（SINGULARITY）的基础并行是 {@code Integer.MAX_VALUE - 1}
+     * （见 {@code MekckConfig.getMultithreadedDefaults}：它的设计前提是「基础并行即为极限并行」，
+     * 不支持堆叠升级）。直接打出来就是 {@code 并行：2147483646} ——
+     * 同一个 tooltip 里「线程数：81」和「并行：2147483646」并列，玩家会以为机器真能并行 21 亿次。
+     * 实际语义是「不设上限，能放多少料就并行多少」，所以显示成「无限」才准确。
+     *
+     * <p>取 {@code Integer.MAX_VALUE / 2} 作为阈值：正常档位的并行上限是
+     * 基础并行 × 64（最高 NEBULA 的 8 × 64 = 512），离这个阈值有 6 个数量级的余量，
+     * 不会误伤任何真实档位。</p>
+     */
+    private static final int INFINITE_PARALLEL_THRESHOLD = Integer.MAX_VALUE / 2;
+
+    /**
+     * 并行数 → 显示组件：达到 {@link #INFINITE_PARALLEL_THRESHOLD} 时用
+     * {@code infiniteKey}（「无限」），否则用 {@code numericKey} 带数字。
+     *
+     * @param numericKey  带 {@code %s} 的数字文案键
+     * @param infiniteKey 不带占位符的「无限」文案键
+     */
+    private static Component parallelComponent(String numericKey, String infiniteKey, int value) {
+        // 声明成 MutableComponent 而不是 Component：三元表达式的目标类型若写成基类
+        // Component，{@code withStyle} 就找不到了（那是 MutableComponent 上的方法）。
+        net.minecraft.network.chat.MutableComponent body = value >= INFINITE_PARALLEL_THRESHOLD
+                ? Component.translatable(infiniteKey)
+                : Component.translatable(numericKey, value);
+        return body.withStyle(style -> style.withColor(EnumColor.GRAY.getColor()));
+    }
+
     private void addStats(List<Component> tooltip, ItemStack stack) {
         if (tier != null) {
             // 显示工厂等级：等级名颜色与对应物品名一致（tier.getColor()），"工厂等级："标签保持灰色
@@ -148,7 +180,8 @@ public class MekCkBlockItem extends BlockItem {
             if (!isCooking) {
                 tooltip.add(Component.translatable("tooltip.mekck.threads", tier.processes).withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
             }
-            tooltip.add(Component.translatable("tooltip.mekck.parallel", getParallelValue(stack)).withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
+            tooltip.add(parallelComponent("tooltip.mekck.parallel", "tooltip.mekck.parallel_infinite",
+                    getParallelValue(stack)));
             // 显示MAX并行值（对烹饪/串串工厂显示，或有堆叠升级槽的工厂）；奇点创世等级只显示并行。
             // 「是否支持堆叠升级」由枚举的 supportsStackUpgrade() 统一定义，此处不再复述
             // processes >= 11 这条规则（外层已排除 SINGULARITY，故与 supportsStackUpgrade() 严格等价）。
@@ -163,7 +196,8 @@ public class MekCkBlockItem extends BlockItem {
                     // 多线程工厂：使用配置文件中的 multithreaded maxParallel
                     maxParallel = MekckConfig.getMultithreadedMax(tier);
                 }
-                tooltip.add(Component.translatable("tooltip.mekck.max_parallel", maxParallel).withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
+                tooltip.add(parallelComponent("tooltip.mekck.max_parallel", "tooltip.mekck.max_parallel_infinite",
+                        maxParallel));
             }
             tooltip.add(Component.translatable("tooltip.mekck.energy_per_tick", tier.energyPerTick).withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
             
@@ -177,7 +211,8 @@ public class MekCkBlockItem extends BlockItem {
             if (!isCooking) {
                 tooltip.add(Component.translatable("tooltip.mekck.threads", simpleParallel).withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
             }
-            tooltip.add(Component.translatable("tooltip.mekck.parallel", simpleParallel).withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
+            tooltip.add(parallelComponent("tooltip.mekck.parallel", "tooltip.mekck.parallel_infinite",
+                    simpleParallel));
             tooltip.add(Component.translatable("tooltip.mekck.energy_per_tick", simpleEnergyPerTick).withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
             
             // Mod detection tooltips for basic machines
@@ -299,16 +334,25 @@ public class MekCkBlockItem extends BlockItem {
 
         // Factory tier-specific checks
         if (tier != null) {
-            // Check mekanism_extras: ULTIMATE (ordinal 3) through INFINITE (ordinal 10)
-            if (tier.ordinal() >= CuttingMachineFactoryTier.ULTIMATE.ordinal() && tier.ordinal() <= CuttingMachineFactoryTier.INFINITE.ordinal()) {
+            // MekExtras 的四个档位：ABSOLUTE(4) ~ INFINITE(7)。
+            // ⚠️ 下界必须用「严格大于 ULTIMATE(3)」而不是「大于等于」：
+            // ULTIMATE 是 **Mekanism 原生**档（不需要 MekExtras），
+            // 而文案写的是「终极**以上**等级的工厂需要安装通用机械：拓展」——
+            // 原来的 {@code >=} 会让 ULTIMATE 也弹这条提示，与文案自相矛盾。
+            if (tier.ordinal() > CuttingMachineFactoryTier.ULTIMATE.ordinal()
+                    && tier.ordinal() <= CuttingMachineFactoryTier.INFINITE.ordinal()) {
                 if (!ModList.get().isLoaded("mekanism_extras")) {
                     tooltip.add(Component.literal("终极以上等级的工厂需要安装通用机械：拓展以添加合成表")
                             .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
                 }
             }
 
-            // Check avaritia and avaritia_delight: INFINITE (ordinal 10) through SINGULARITY (ordinal 13)
-            if (tier.ordinal() >= CuttingMachineFactoryTier.INFINITE.ordinal()) {
+            // 无尽贪婪 + 无尽乐事联动的档位：BLAZE(8) ~ SINGULARITY(11)。
+            // ⚠️ 下界必须用「严格大于 INFINITE(7)」而不是「大于等于」：
+            // 文案写的是「悖论无限**以上**等级的工厂需要安装无尽贪婪与无尽乐事」，
+            // 而原来的 {@code >=} 让 INFINITE（悖论无限本身）也弹这条提示，与文案矛盾。
+            // （这两个档位正是并行数 >17 的四个：25 / 36 / 49 / 81。）
+            if (tier.ordinal() > CuttingMachineFactoryTier.INFINITE.ordinal()) {
                 boolean hasAvaritia = ModList.get().isLoaded("avaritia");
                 boolean hasAvaritiaDelight = ModList.get().isLoaded("avaritia_delight");
                 if (!hasAvaritia || !hasAvaritiaDelight) {

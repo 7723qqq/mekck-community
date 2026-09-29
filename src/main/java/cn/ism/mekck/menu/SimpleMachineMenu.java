@@ -61,6 +61,22 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
     private final UpgradeSlot energyUpgradeSlot;
     private final UpgradeSlot creativeUpgradeSlot;
 
+    // ── 升级 / 能源 / 果汁槽的「菜单下标」（不是 handler 下标）──────────────
+    //
+    // 本菜单的 addSlot 顺序随机器类型变化：扩展输入槽机器（搅拌机 / 智能烤炉）把
+    // handler 10..13 插在输入与输出之间，于是输出/升级/能源槽的**菜单下标整体比
+    // handler 下标大 4**；陈酿机又在末尾追加果汁/返还/流体三格。
+    // 因此 **不能用 handler 常量当菜单下标** 传给 moveItemStackTo：在扩展槽机器上
+    // SLOT_SPEED_UPGRADE(=6) 落在菜单 6 = 扩展输入槽、SLOT_POWER(=9) 落在菜单 9 = 输出槽，
+    // 两者的 mayPlace 都拒绝 ⇒ shift-click 静默失效（无提示、物品不动）。
+    // 一律用构造期 slots.size() 现场捕获，三种布局自动正确。
+    private final int speedSlotIndex;
+    private final int energySlotIndex;
+    private final int creativeSlotIndex;
+    private final int powerSlotIndex;
+    /** 陈酿机专用果汁格（handler 索引 JUICE_SLOT）的菜单下标；非陈酿机保持 -1。 */
+    private int juiceSlotIndex = -1;
+
     public SimpleMachineMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
                 (SimpleMachineBlockEntity) inventory.player.level().getBlockEntity(buffer.readBlockPos()),
@@ -105,17 +121,21 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
         // 在真实坐标处画出两个裸露的原版槽框（之前“两个错误的原版格子”即来源于此）。
         // 升级弹窗内由 GuiUpgradeWindow.selectedSlot.updateVirtualSlot → IVirtualSlot.updatePosition 把 actualX/Y 重定位到窗口内，
         // 渲染与点击命中均走 actualX/Y（与这里的 x/y 无关），故不影响升级功能。
+        this.speedSlotIndex = slots.size();
         this.speedUpgradeSlot = new UpgradeSlot(machine.getItems(), SimpleMachineBlockEntity.SLOT_SPEED_UPGRADE, -1000, -1000, this);
         addSlot(this.speedUpgradeSlot);
+        this.energySlotIndex = slots.size();
         this.energyUpgradeSlot = new UpgradeSlot(machine.getItems(), SimpleMachineBlockEntity.SLOT_ENERGY_UPGRADE, -1000, -1000, this);
         addSlot(this.energyUpgradeSlot);
 
         // 创造升级槽：与速度/能量升级槽完全一致——主界面不常显，坐标放屏外，仅升级页选中时由 selectedSlot 重定位绘制；不可取出，靠升级页卸载按钮卸下。
+        this.creativeSlotIndex = slots.size();
         this.creativeUpgradeSlot = new UpgradeSlot(machine.getItems(), SimpleMachineBlockEntity.SLOT_CREATIVE_UPGRADE, -1000, -1000, this);
         addSlot(this.creativeUpgradeSlot);
 
         // 能源槽（能量物品）：坐标与 SimpleMachineScreen 的 GuiVirtualSlot 完全一致（见 WV_POWER_* 注释），
         // 否则主界面会在旧位 (7,13) 残留一个裸露的原版空槽框。
+        this.powerSlotIndex = slots.size();
         addSlot(new PowerSlot(machine.getItems(), SimpleMachineBlockEntity.SLOT_POWER,
                 wl ? WV_POWER_X : 6, wl ? WV_POWER_Y : 12));
 
@@ -123,6 +143,7 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
         // 因为 AbstractContainerScreen 的点击命中按 Slot.x/y 判定（GuiVirtualSlot 只负责画图标），坐标错一者就点不到。
         if (isWinery()) {
             // 果汁格（瓶装→液位 ∪ 流体桶→inputTank，共用一格）：vinery 对位 (39,17)，否则沿用通用第二行首格
+            this.juiceSlotIndex = slots.size();
             addSlot(new InputSlot(machine.getItems(), SimpleMachineBlockEntity.JUICE_SLOT,
                     wl ? WV_JUICE_X : INPUT_X, wl ? WV_JUICE_Y : INPUT_Y + 18));
             // 返还槽（只出不进）：vinery 对位放配料行左侧，否则产物正下方
@@ -170,14 +191,16 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
         if (index < machineSlotCount) {
             if (!moveItemStackTo(stack, machineSlotCount, slots.size(), true)) return ItemStack.EMPTY;
         } else {
+            // 四个目标一律用构造期捕获的**菜单下标**：扩展槽机器上 handler 下标整体偏移 +4，
+            // 用常量会把升级卡/能源物品指向扩展输入槽或输出槽 ⇒ shift-click 静默无效。
             if (SimpleMachineBlockEntity.isUsablePowerItem(stack)) {
-                if (!moveItemStackTo(stack, SimpleMachineBlockEntity.SLOT_POWER, SimpleMachineBlockEntity.SLOT_POWER + 1, false)) return ItemStack.EMPTY;
+                if (!moveItemStackTo(stack, powerSlotIndex, powerSlotIndex + 1, false)) return ItemStack.EMPTY;
             } else if (cn.ism.mekck.util.UpgradeHelper.isSpeedUpgrade(stack)) {
-                if (!moveItemStackTo(stack, SimpleMachineBlockEntity.SLOT_SPEED_UPGRADE, SimpleMachineBlockEntity.SLOT_SPEED_UPGRADE + 1, false)) return ItemStack.EMPTY;
+                if (!moveItemStackTo(stack, speedSlotIndex, speedSlotIndex + 1, false)) return ItemStack.EMPTY;
             } else if (cn.ism.mekck.util.UpgradeHelper.isEnergyUpgrade(stack)) {
-                if (!moveItemStackTo(stack, SimpleMachineBlockEntity.SLOT_ENERGY_UPGRADE, SimpleMachineBlockEntity.SLOT_ENERGY_UPGRADE + 1, false)) return ItemStack.EMPTY;
+                if (!moveItemStackTo(stack, energySlotIndex, energySlotIndex + 1, false)) return ItemStack.EMPTY;
             } else if (cn.ism.mekck.util.UpgradeHelper.isCreativeUpgrade(stack)) {
-                if (!moveItemStackTo(stack, SimpleMachineBlockEntity.SLOT_CREATIVE_UPGRADE, SimpleMachineBlockEntity.SLOT_CREATIVE_UPGRADE + 1, false)) return ItemStack.EMPTY;
+                if (!moveItemStackTo(stack, creativeSlotIndex, creativeSlotIndex + 1, false)) return ItemStack.EMPTY;
             } else if (usesExtendedSlots() && MekCkTransfer.moveItemStackTo(stack, slots,
                     0, SimpleMachineBlockEntity.INPUT_COUNT, false)) {
                 // 启用扩展槽的机器：先试常规输入槽（slots 里的位置 0..4，与 handler 索引一致）
@@ -191,9 +214,9 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
                 // 常规输入槽 0..4；陈酿机再补试专用果汁格与流体物品输入格
                 boolean placed = MekCkTransfer.moveItemStackTo(stack, slots, 0, SimpleMachineBlockEntity.INPUT_COUNT, false);
                 if (!placed && isWinery()) {
-                    // 果汁格在陈酿机上位置与 handler 索引都是 10（它前面没有扩展槽），两者天然对齐
+                    // 果汁格走构造期捕获的菜单下标（陈酿机上恰好等于 handler 索引 10，但不写死）
                     placed = MekCkTransfer.moveItemStackTo(stack, slots,
-                            SimpleMachineBlockEntity.JUICE_SLOT, SimpleMachineBlockEntity.JUICE_SLOT + 1, false);
+                            juiceSlotIndex, juiceSlotIndex + 1, false);
                 }
                 // 流体桶已与果汁格（JUICE_SLOT）共用一格，不再单独 shift-click 到已废弃的 FLUID_ITEM_SLOT（否则会被隐形槽吞掉）。
                 if (!placed) return ItemStack.EMPTY;

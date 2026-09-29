@@ -387,7 +387,26 @@ public class TestMekCkSlotNbt {
      * <p>为什么测不到行为：真 tile 在裸 JVM 里造不出来（见类注释）。
      * 为什么这条必须钉死：{@code super.load} 会让 Mek 按 byte 下标把 {@code Items}
      * 灌进槽位——第 128 号起的那些被整条跳过。我们随后要靠 int 下标那份<b>覆盖</b>回来；
-     * 顺序反了就等于没写这一层，症状与修复前<b>完全一致</b>：静默丢槽位，没有任何日志。
+     * 顺序反了就等于没写这一层，症状与修复前<b>完全一致</b>：静默丢槽位，没有任何日志。</p>
+     *
+     * <h3>为什么断言分成两段（阶段 3 Task 5 之后的结构）</h3>
+     * 读取动作已抽进 {@code readMekckPersistentState(CompoundTag)}，由两条路径共用：
+     * {@code load}（方块实体读档）与 {@code ISustainedData.readSustainedData}
+     * （掉落物再放置）。所以「顺序」钉在 {@code load} 的方法体上（调 {@code super.load} 之后
+     * 才调它），「真的读了 int 下标槽位」钉在那段共用方法体上。两段合起来与旧断言等价，
+     * <b>没有放宽</b>：少了任何一段都还是失败。
+     *
+     * <h3>两条实测的调用点次序（为什么「最后落地」这件事在两处都成立）</h3>
+     * <ul>
+     *   <li>读档：{@code TileEntityMekanism.load} 里 {@code loadGeneralPersistentData}
+     *       （偏移 59 → {@code readSustainedData} 钩子）<b>早于</b>
+     *       {@code DataHandlerUtils.readContainers}（偏移 90，Mek 的 byte 下标 Items）。
+     *       也就是说钩子那一次跑完，0..127 号槽还会被 Mek 用同一批值再覆盖一遍
+     *       —— 所以 {@code load} 尾部那次显式调用<b>不能省</b>，它就是权威那一次。</li>
+     *   <li>再放置：{@code BlockMekanism.setPlacedBy} 偏移 299~361 先读
+     *       {@code SubstanceType} 容器（同样是 byte 下标），偏移 364~391 才调
+     *       {@code readSustainedData(mekData)} ⇒ 我们的 int 下标读取最后落地。</li>
+     * </ul>
      *
      * <p>与 {@code TestLegacyMachineNbtMigration#legacyUpgradesAreInstalledAfterSuperLoad}
      * 同一手法、同一理由（{@code TileComponentUpgrade.read} 的第一件事是
@@ -403,10 +422,19 @@ public class TestMekCkSlotNbt {
         String body = source.substring(bodyStart, bodyEnd);
 
         int superLoad = body.indexOf("super.load(tag);");
-        int slotRead = body.indexOf("MekCkSlotNbt.read(");
-        assertTrue("应当有两处调用", superLoad > 0 && slotRead > 0);
-        assertTrue("MekCkSlotNbt.read 必须排在 super.load 之后，否则 MekCK 的 int 下标存档被 byte 那份盖掉",
-                slotRead > superLoad);
+        int stateRead = body.indexOf("readMekckPersistentState(tag);");
+        assertTrue("load 必须显式调 super.load 与 readMekckPersistentState", superLoad > 0 && stateRead > 0);
+        assertTrue("MekCK 专属状态的读取必须排在 super.load 之后，"
+                        + "否则 MekCK 的 int 下标存档会被 Mek 那份 byte 存档盖掉",
+                stateRead > superLoad);
+
+        // 第二段：共用的读取方法体内必须真的读 int 下标槽位存档——只留壳不算。
+        int stateStart = source.indexOf("private void readMekckPersistentState(CompoundTag tag) {");
+        assertTrue("应当找得到 readMekckPersistentState", stateStart > 0);
+        int stateEnd = source.indexOf("\n    }", stateStart);
+        String stateBody = source.substring(stateStart, stateEnd);
+        assertTrue("readMekckPersistentState 里必须调 MekCkSlotNbt.read(",
+                stateBody.contains("MekCkSlotNbt.read("));
     }
 
     private static int countNonEmpty(List<IInventorySlot> slots) {
