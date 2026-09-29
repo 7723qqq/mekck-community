@@ -6,9 +6,12 @@ import cn.ism.mekck.factory.MekCkFactoryTier;
 import cn.ism.mekck.factory.MekCkFactoryType;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.upgrade.MekCkUpgradeTypes;
+import mekanism.api.Action;
+import mekanism.api.AutomationType;
 import mekanism.api.IContentsListener;
 import mekanism.api.Upgrade;
 import mekanism.api.inventory.IInventorySlot;
+import mekanism.api.math.FloatingLong;
 import mekanism.api.providers.IBlockProvider;
 import mekanism.common.capabilities.energy.MachineEnergyContainer;
 import mekanism.common.capabilities.holder.energy.EnergyContainerHelper;
@@ -21,7 +24,9 @@ import mekanism.common.inventory.slot.OutputInventorySlot;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.component.TileComponentConfig;
 import mekanism.common.tile.component.TileComponentEjector;
+import mekanism.common.tile.interfaces.IRedstoneControl;
 import mekanism.common.tile.prefab.TileEntityConfigurableMachine;
+import mekanism.common.util.MekanismUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.state.BlockState;
@@ -118,6 +123,8 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
     private static final String TAG_EXECUTOR = "mekckExecutor";
     /** NBT：本 tile 由 Mek 原生基类承载的存档格式版本。 */
     private static final String TAG_NATIVE_VERSION = "MekCkNative";
+    /** NBT：进度条已走的 tick 数。 */
+    private static final String TAG_WORK_PROGRESS = "MekCkWorkProgress";
     /** 当前存档格式版本。v1 是首个 Mek 原生版本，没有需要迁移的旧格式。 */
     private static final int NATIVE_VERSION = 1;
 
@@ -396,22 +403,192 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         return result;
     }
 
-    /** 本机是否正在工作（GUI 进度条与 AE2 忙碌态的统一口径）。 */
+    /**
+     * 本机是否正在工作（GUI 进度条与 AE2 忙碌态的统一口径）。
+     *
+     * <p><b>为什么不用 {@code executor().isBusy()}</b>：执行器只在「一个批次走完」的那一 tick
+     * 被调用（见 {@link #onUpdateServer}），它内部的 {@code busy} 标志在那一 tick 置位后
+     * 一直保持到下一次调用。若拿它当忙碌态，机器跑完第一批之后就会永远显示「在忙」。
+     * 进度条是逐 tick 更新的，天然没有这种陈旧问题。</p>
+     */
     public boolean isBusy() {
-        return executor().isBusy();
+        return workProgress > 0;
+    }
+
+    // ── 能量闸门与进度条 ────────────────────────────────────────────────
+    //
+    // 这里是旧 serverTick 的「红石 → 能量 → 干活」三段式在 Mek 体系下的落点。
+    // 执行器只负责「本 tick 尽可能多地加工」，不判断该不该加工，也不碰能量与进度条。
+
+    /** 进度条已走的 tick 数（一个批次内单调递增）。 */
+    private int workProgress;
+    /** PULSE 锁存：收到上升沿后一直放行，直到跑完一个完整批次。 */
+    private boolean pulseLatched;
+
+    /**
+     * 完成一个批次需要累计多少 tick —— 进度条长度。
+     *
+     * <p>默认 1 = 没有进度条，每 tick 就是一个批次。家族基率不同（切菜 200 / 速度升级），
+     * 由子类覆写。</p>
+     */
+    protected int ticksPerWorkCycle() {
+        return 1;
     }
 
     /**
-     * 每 tick 驱动执行器。
+     * 本 tick 应扣多少能量 —— <b>已含并行槽数与存储卡倍增</b>的最终值。
+     *
+     * <p>默认 0 = 不耗电。旧实现里这条公式是切菜专属的（速度倍率要平方），
+     * 因此留给子类算，基类只负责「够不够 → 扣多少 → 扣」这三步动作。</p>
+     */
+    protected int energyPerWorkTick() {
+        return 0;
+    }
+
+    /**
+     * 本 tick 算作「在干活」的槽数。
+     *
+     * <p>默认取<b>非空输入槽</b>数。选它而不是「有配方的槽数」是有意的：
+     * 各家族的输入槽在放置时就已按本家族的可加工物过滤（旧切菜机器的
+     * {@code isItemValid} 就是 {@code RecipeInputMatcher.matchesCutting}），
+     * 所以「非空」≈「有配方」，而「有配方」需要执行器的缓存才知道，
+     * 那是调用执行器之后才能得到的结论——用它来给「要不要调执行器」做前置判断会自相矛盾。</p>
+     */
+    protected int activeWorkSlots() {
+        if (inputSlots == null) {
+            return 0;
+        }
+        int active = 0;
+        for (IInventorySlot slot : inputSlots) {
+            if (!slot.isEmpty()) {
+                active++;
+            }
+        }
+        return active;
+    }
+
+    /**
+     * 本 tick 是否<b>有活可干</b>（与红石、能量无关的第三条独立条件）。
+     *
+     * <p>默认「有非空输入槽」。这一条是旧实现里 {@code anyValid} 的位置：旧
+     * {@code serverTick} 的三条件是 {@code canOperate && anyValid && 能量够}，
+     * 少一条就把进度条清零。<b>漏掉它会怎样</b>：玩家在进度条走到一半时把原料取走，
+     * 机器仍会继续把进度条填满、最后跑一次空转批次，而旧实现是立刻清零重来。
+     * 那不是「慢一点」，是进度条语义变了——玩家看到的进度不再代表任何真实工作。</p>
+     */
+    protected boolean hasWorkToDo() {
+        return activeWorkSlots() > 0;
+    }
+
+    /**
+     * 本 tick 是否允许推进工作。
+     *
+     * <p>DISABLED / HIGH / LOW 三档直接用 Mek 自己的
+     * {@link MekanismUtils#canFunction}，语义与旧实现的 {@code RedstoneControl.canFunction}
+     * （{@link cn.ism.mekck.RedstoneControl} 的注释里写明「与 MekanismUtils.canFunction 相同」）
+     * 逐档一致。</p>
+     *
+     * <h3>⚠️ PULSE 单独处理：旧语义是「跑完一整个批次」，不是「跑 1 tick」</h3>
+     * {@code MekanismUtils.canFunction} 对 PULSE 的实现是
+     * {@code isPowered() && !wasPowered()}（实测字节码：case 4 → isPowered，false 分支跳 104，
+     * true 分支再判 wasPowered 为 true 则返回 false），也就是上升沿那一 tick 放行、其余全禁。
+     * 本模组的旧实现是<b>锁存</b>的：收到上升沿后 {@code pulseRunning = true}，
+     * 一直放到 {@code progress >= effectiveProcessTime} 那一批做完才复位。
+     * 若直接用 Mek 的口径，一次脉冲只能推进 1/200 的进度条，等于 PULSE 功能作废。
+     * 这里保留旧语义：{@link #workCycle} 跑完一整批时清锁存。</p>
+     */
+    protected boolean allowsWork() {
+        if (getControlType() == IRedstoneControl.RedstoneControl.PULSE) {
+            if (pulseLatched) {
+                return true;
+            }
+            if (isPowered() && !wasPowered()) {
+                pulseLatched = true;
+                return true;
+            }
+            return false;
+        }
+        return MekanismUtils.canFunction(this);
+    }
+
+    /**
+     * 每 tick 驱动执行器 —— <b>能量闸门在这里</b>。
      *
      * <p>{@code onUpdateServer} 由静态 {@code TileEntityMekanism.tickServer} 在
      * {@code upgradeComponent.tickServer()} <b>之后</b>无条件调用（实测偏移 18 → 97），
      * 所以本 tick 刚装好的存储卡能立刻影响本 tick 的并行数。</p>
+     *
+     * <p>三段式与旧 {@code CuttingMachineFactoryBlockEntity.serverTick} 同序：
+     * <ol>
+     *   <li>能量物品补能（{@code fillContainerOrConvert}，Mek 自己的
+     *       {@code TileEntityFactory.onUpdateServer} 偏移 8 处也是这一句）；</li>
+     *   <li>红石放行 + 有活可干 + 能量够 → 扣能量 → 进度条 +1；</li>
+     *   <li>进度条满一个批次才调执行器，否则把进度清零并顺带释放 PULSE 锁存。</li>
+     * </ol>
+     * 任一条件不满足时进度条清零——与旧实现 {@code else { if (progress != 0) progress = 0; } } 逐字一致。</p>
+     *
+     * <p>红石读数为什么是当 tick 的新值：{@code TileEntityMekanism.tickServer} 在偏移 97
+     * 调 {@code onUpdateServer()}，而在偏移 184~206 才做
+     * {@code if (supportsRedstone()) redstoneLastTick = redstone}。
+     * 也就是说 {@link #isPowered()} / {@link #wasPowered()} 在本方法里读到的确实是
+     * 「本 tick / 上一 tick」两值，PULSE 的上升沿判定成立。</p>
      */
     @Override
     protected void onUpdateServer() {
         super.onUpdateServer();
-        executor().tick(this, inputSlots.size());
+        if (energySlot != null) {
+            energySlot.fillContainerOrConvert();
+        }
+        workCycle();
+    }
+
+    /** 闸门 + 进度条 + 执行器调度。拆出来只为让 {@link #onUpdateServer} 保持一屏可读。 */
+    private void workCycle() {
+        int cycle = Math.max(1, ticksPerWorkCycle());
+        int cost = energyPerWorkTick();
+        // 三个条件与旧 serverTick 的 canOperate && anyValid && 能量够 一一对应，
+        // 次序也照旧：红石先判（最便宜），再判有没有活干，最后才去看能量。
+        boolean allowed = allowsWork() && hasWorkToDo() && hasEnergyFor(cost);
+        if (allowed) {
+            if (cost > 0) {
+                // AutomationType.EXTERNAL 在这里不承担语义：MachineEnergyContainer.input
+                // 把 canExtract 建成 alwaysTrue（实测其 input() 字节码偏移 20~22：
+                // 第三个参数 notExternal 给 canInsert，第四个参数 alwaysTrue 给 canExtract），
+                // 所以无论传 EXTERNAL / INTERNAL / MANUAL 都会被放行。
+                // 真正被 canExtract 拦的是 internal(...) 建的容器（internalOnly 谓词），本类不用。
+                energyContainer.extract(FloatingLong.create(cost), Action.EXECUTE, AutomationType.EXTERNAL);
+            }
+            if (++workProgress >= cycle) {
+                workProgress = 0;
+                executor().tick(this, inputSlots.size());
+                // PULSE：跑完一整个批次才解除锁存（allowsWork 的锁存语义见其注释）。
+                pulseLatched = false;
+            }
+        } else {
+            if (workProgress != 0) {
+                workProgress = 0;
+            }
+            if (pulseLatched) {
+                pulseLatched = false;
+            }
+        }
+        // active 口径与旧实现逐字一致：旧代码在 serverTick 末尾算 isActive = progress > 0，
+        // 而那时 progress 刚被清零，所以「刚跑完一批」的那一 tick 机器就是不 active 的。
+        setActive(workProgress > 0);
+    }
+
+    private boolean hasEnergyFor(int cost) {
+        return cost <= 0 || energyContainer.getEnergy().compareTo(FloatingLong.create(cost)) >= 0;
+    }
+
+    /** 进度条已走的 tick 数（GUI 用）。 */
+    public int getWorkProgress() {
+        return workProgress;
+    }
+
+    /** 完成一个批次需要的 tick 数（GUI 画进度条分母用）。 */
+    public int getTicksPerWorkCycle() {
+        return Math.max(1, ticksPerWorkCycle());
     }
 
     // ── 持久化 ──────────────────────────────────────────────────────────
@@ -419,7 +596,7 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
     /**
      * {@inheritDoc}
      *
-     * <p>只写执行器自有状态与格式版本：槽位、能量、侧配、升级、频率全部由
+     * <p>只写执行器自有状态、进度条与格式版本：槽位、能量、侧配、升级、频率全部由
      * {@code TileEntityMekanism} 自己的 {@code saveAdditional} 写，重复写会互相覆盖。</p>
      */
     @Override
@@ -428,6 +605,7 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         CompoundTag executorTag = new CompoundTag();
         executor().save(executorTag);
         tag.put(TAG_EXECUTOR, executorTag);
+        tag.putInt(TAG_WORK_PROGRESS, workProgress);
         tag.putInt(TAG_NATIVE_VERSION, NATIVE_VERSION);
     }
 
@@ -438,7 +616,11 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
      *
      * <p>{@code getCompound} 对缺失键返回<b>空标签而非 null</b>，正好落在
      * {@link MekCkRecipeExecutor#load} 的「旧存档无此键时保持默认态」契约上，
-     * 因此不需要额外的 {@code contains} 分支。</p>
+     * 因此不需要额外的 {@code contains} 分支。进度条同理：
+     * {@code getInt} 对缺失键返回 0，等价于「刚放下的机器从 0 开始」。</p>
+     *
+     * <p><b>红石模式不在这里读</b>：{@code controlType} 是 {@code TileEntityMekanism} 的
+     * 私有字段，由它自己的 {@code loadGeneralPersistentData} 负责，本类重复读会互相覆盖。</p>
      */
     @Override
     public void load(CompoundTag tag) {
@@ -448,6 +630,7 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
             LOGGER.warn("工厂方块 {} 的存档格式版本为 {}，高于本版本 MekCK 支持的 {}，"
                             + "该机器的执行器进度可能不完整。", getBlockType(), version, NATIVE_VERSION);
         }
+        workProgress = Math.max(0, tag.getInt(TAG_WORK_PROGRESS));
         executor().load(tag.getCompound(TAG_EXECUTOR));
     }
 }

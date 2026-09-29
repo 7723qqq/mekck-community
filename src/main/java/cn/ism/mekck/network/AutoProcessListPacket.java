@@ -1,6 +1,5 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.client.CuttingMachineFactoryScreen;
 import cn.ism.mekck.client.GrillFactoryScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -45,10 +44,10 @@ public class AutoProcessListPacket {
     public static void handle(AutoProcessListPacket packet, Supplier<NetworkEvent.Context> context) {
         context.get().enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.screen instanceof CuttingMachineFactoryScreen screen
-                    && screen.getMenu().getBlockPos().equals(packet.pos)) {
-                screen.setAutoProcessData(packet.availableIds, packet.selectedIds);
-            } else if (mc.screen instanceof GrillFactoryScreen screen
+            // 阶段 2 Task 4 起切菜工厂的界面走 Mek 的 GuiConfigurableTile，ME 自动处理面板
+            // （依赖旧 tile 上的 autoSelectedItems）连同旧 CuttingMachineFactoryScreen 一起退场，
+            // 切菜分支因此不可达，在这里一并删掉，而不是留一个永远不匹配的空 if。
+            if (mc.screen instanceof GrillFactoryScreen screen
                     && screen.getMenu().getBlockPos().equals(packet.pos)) {
                 screen.setAutoProcessData(packet.availableIds, packet.selectedIds);
             }

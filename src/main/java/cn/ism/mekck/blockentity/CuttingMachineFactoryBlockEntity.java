@@ -469,12 +469,14 @@ public final class CuttingMachineFactoryBlockEntity extends BlockEntity implemen
         // Update block state active property for sound synchronization
         boolean isActive = machine.progress > 0;
         if (wasActive != isActive) {
-            level.setBlock(pos, state.setValue(CuttingMachineFactoryBlock.ACTIVE, isActive), 3);
+            // 阶段 2 Task 4：切菜方块已换成 Mek 的 BlockTile，active 属性改由
+            // Attributes.ACTIVE 挂上，本类不再持有 BooleanProperty 常量。
+            level.setBlock(pos, mekanism.common.block.attribute.Attribute.setActive(state, isActive), 3);
         }
     }
 
     public static void clientTick(Level level, BlockPos pos, BlockState state, CuttingMachineFactoryBlockEntity machine) {
-        if (state.getValue(CuttingMachineFactoryBlock.ACTIVE)) {
+        if (mekanism.common.block.attribute.Attribute.isActive(state)) {
             SoundHandler.startTileSound(MekanismSounds.PRECISION_SAWMILL.get(), net.minecraft.sounds.SoundSource.BLOCKS, 1.0F, level.random, pos);
         } else {
             SoundHandler.stopTileSound(pos);
@@ -1084,7 +1086,13 @@ public final class CuttingMachineFactoryBlockEntity extends BlockEntity implemen
     @Nullable
     @Override
     public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player player) {
-        return new CuttingMachineFactoryMenu(containerId, inventory, this, data);
+        throw new UnsupportedOperationException("CuttingMachineFactoryBlockEntity 已于阶段 2 Task 4 退役，请改用 cn.ism.mekck.machine.cutting.CuttingFactoryTile");
+        // 阶段 2 Task 4 起本方法不可达：mekck:<tier>_cutting_factory 的 BlockEntityType
+        // 已经指向 cn.ism.mekck.machine.cutting.CuttingFactoryTile（容器也随之改成
+        // MekanismTileContainer，构造器只收 CuttingFactoryTile），本类既不再被注册也再也构造不出容器。
+        // 显式抛异常好过返回 null：返回 null 会在 NetworkHooks 那边以「菜单类型为 null」的形式炸，
+        // 报错点离真正的原因十万八千里。Task 5 会连本类一起删掉。
+        // Task 5 会连本类一起删掉；在此之前保留它是为了让对照旧实现仍然可能。
     }
 
     public void dropContents(Level level, BlockPos pos) {

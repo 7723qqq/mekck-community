@@ -105,6 +105,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -142,6 +143,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
 @Mod(UniversalCuttingMachine.MOD_ID)
 public final class UniversalCuttingMachine {
@@ -741,8 +743,26 @@ public final class UniversalCuttingMachine {
     public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> SINGULARITY_SKEWERING_FACTORY_BLOCK_ENTITY;
 
     // Factory blocks, items, and block entities
+    //
+    // ⚠️ 切菜工厂的**实际注册**在下面 CUTTING_FACTORY_*_REG 那一组（Mek 的 BlockDeferredRegister /
+    //    TileEntityTypeDeferredRegister / ContainerTypeDeferredRegister），注册 ID 不变
+    //    （仍是 mekck:<tier>_cutting_factory），因此旧存档里已放置的方块不会变成空气。
+    //    下面这三个 map/字段保留旧类型不变，是**给本任务之外的文件用的兼容面**：
+    //    TierInstallerHandler 按 Map<..., RegistryObject<Block>> 读 FACTORY_BLOCKS，
+    //    JEIPlugin 按 .get() 读 BASIC_FACTORY_BLOCK 等。它们现在装的是
+    //    registryView(...) 造出来的同名注册项视图，语义与原来完全一致。
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Block>> FACTORY_BLOCKS = new LinkedHashMap<>();
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Item>> FACTORY_ITEMS = new LinkedHashMap<>();
+
+    /**
+     * 旧切菜 tile 类型的注册表。<b>阶段 2 Task 4 起不再填充</b>：
+     * {@code mekck:<tier>_cutting_factory} 这个注册名现在属于 {@link cn.ism.mekck.machine.cutting.CuttingFactoryTile}，
+     * 一个注册名不能同时挂两个 {@code BlockEntityType}。
+     *
+     * <p>之所以还留着这个空 map 而不删：{@code blockentity/CuttingMachineFactoryBlockEntity}
+     * （Task 5 整体删除）仍在静态引用它，删掉会让编译断。Task 5 删掉那个类时，
+     * 本字段与它下面那 11 个 {@code *_FACTORY_BLOCK_ENTITY} 一并删除。</p>
+     */
     public static final Map<CuttingMachineFactoryTier, RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>>> FACTORY_BLOCK_ENTITIES = new LinkedHashMap<>();
 
     public static final RegistryObject<Block> BASIC_FACTORY_BLOCK;
@@ -791,6 +811,50 @@ public final class UniversalCuttingMachine {
 
     public static final RegistryObject<MenuType<CuttingMachineFactoryMenu>> FACTORY_MENU;
 
+    // ── 切菜工厂的 Mek 原生注册（阶段 2 Task 4）──────────────────────────
+    //
+    // 为什么单独一组注册而不是复用 Mekck 自己的 DeferredRegister：
+    //   * BlockDeferredRegister 会自动挂一个 BlockItem，而切菜工厂的方块物品是
+    //     MekCkBlockItem（带等级 tooltip 与 saveToItem），走 register(id, supplier, itemFn) 覆盖；
+    //   * TileEntityTypeDeferredRegister 建的是 TileEntityMekanism 的注册对象，
+    //     CUTTING_FACTORY_TILES 供 BlockType 的延迟 Supplier 回查；
+    //   * ContainerTypeDeferredRegister 注册进同一个 MENU_TYPES 注册表，
+    //     所以下面 registryView("factory") 造出来的 FACTORY_MENU 视图指向的就是它，
+    //     注册名 mekck:factory 与旧实现逐字相同。
+
+    public static final mekanism.common.registration.impl.BlockDeferredRegister CUTTING_FACTORY_BLOCKS_REG =
+            new mekanism.common.registration.impl.BlockDeferredRegister(MOD_ID);
+    public static final mekanism.common.registration.impl.TileEntityTypeDeferredRegister CUTTING_FACTORY_TILES_REG =
+            new mekanism.common.registration.impl.TileEntityTypeDeferredRegister(MOD_ID);
+    public static final mekanism.common.registration.impl.ContainerTypeDeferredRegister CUTTING_FACTORY_CONTAINERS_REG =
+            new mekanism.common.registration.impl.ContainerTypeDeferredRegister(MOD_ID);
+
+    /** 已注册的切菜方块（按等级索引），Mek 体系下的真实句柄。 */
+    public static final Map<CuttingMachineFactoryTier,
+            mekanism.common.registration.impl.BlockRegistryObject<CuttingMachineFactoryBlock, MekCkBlockItem>> CUTTING_FACTORY_HANDLES =
+            new LinkedHashMap<>();
+    /** 已注册的切菜 tile 类型（按等级索引），供 BlockType 的延迟 Supplier 回查。 */
+    public static final Map<CuttingMachineFactoryTier,
+            mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cutting.CuttingFactoryTile>> CUTTING_FACTORY_TILES =
+            new LinkedHashMap<>();
+
+    /** 12 个等级共用一个容器类型（与旧的 {@code mekck:factory} 同名）。 */
+    public static final mekanism.common.registration.impl.ContainerTypeRegistryObject<CuttingMachineFactoryMenu> FACTORY_CONTAINER;
+
+    /**
+     * 切菜方块的属性微调。
+     *
+     * <p>{@code BlockTile} 的构造器已经铺好了
+     * {@code Properties.of().strength(3.5F, 16.0F).requiresCorrectToolForDrops()}
+     * （实测 {@code BlockTile} 构造器字节码偏移 3~16），因此这里只需补回旧实现独有的一项
+     * {@code sound(METAL)}——丢失它会让挖/放的声音变成默认的石头声。</p>
+     *
+     * <p><b>必须声明在下方 static 块之前</b>：静态字段初始化器与 static 块按<b>文本顺序</b>执行，
+     * 在 static 块里引用一个声明在它之后的 static final 字段会编译报「非法前向引用」。</p>
+     */
+    private static final UnaryOperator<BlockBehaviour.Properties> CUTTING_FACTORY_PROPERTIES =
+            props -> props.sound(net.minecraft.world.level.block.SoundType.METAL);
+
     // Grinding Factory blocks, items, and block entities
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Block>> GRINDING_FACTORY_BLOCKS = new LinkedHashMap<>();
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Item>> GRINDING_FACTORY_ITEMS = new LinkedHashMap<>();
@@ -817,25 +881,43 @@ public final class UniversalCuttingMachine {
 
     static {
         // Register all factory blocks
+        //
+        // 切菜工厂（阶段 2 Task 4）：方块/物品/tile/容器全部走 Mek 的注册器，
+        // **注册名一字不改**（仍是 mekck:<tier>_cutting_factory），旧存档里已放置的方块因此不会变空气。
+        FACTORY_CONTAINER = CUTTING_FACTORY_CONTAINERS_REG.register(
+                "factory", cn.ism.mekck.machine.cutting.CuttingFactoryTile.class, CuttingMachineFactoryMenu::new);
         for (CuttingMachineFactoryTier tier : CuttingMachineFactoryTier.values()) {
             String id = tier.getBlockId();
-            RegistryObject<Block> block = BLOCKS.register(id, () -> new CuttingMachineFactoryBlock(tier));
-            RegistryObject<Item> item = ITEMS.register(id, () -> {
-                Component description = switch (tier) {
-                    case NEBULA -> Component.translatable("tooltip.mekck.nebula_cutting_factory");
-                    case BLAZE -> Component.translatable("tooltip.mekck.blaze_cutting_factory");
-                    case SINGULARITY -> Component.translatable("tooltip.mekck.singularity_cutting_factory");
-                    default -> null;
-                };
-                return new MekCkBlockItem(block.get(), new Item.Properties(), description, tier, false);
-            });
-            RegistryObject<BlockEntityType<CuttingMachineFactoryBlockEntity>> be = BLOCK_ENTITIES.register(
-                    id, () -> BlockEntityType.Builder.of(
-                            (pos, state) -> new CuttingMachineFactoryBlockEntity(tier, pos, state),
-                            block.get()).build(null));
-            FACTORY_BLOCKS.put(tier, block);
-            FACTORY_ITEMS.put(tier, item);
-            FACTORY_BLOCK_ENTITIES.put(tier, be);
+            Component description = switch (tier) {
+                case NEBULA -> Component.translatable("tooltip.mekck.nebula_cutting_factory");
+                case BLAZE -> Component.translatable("tooltip.mekck.blaze_cutting_factory");
+                case SINGULARITY -> Component.translatable("tooltip.mekck.singularity_cutting_factory");
+                default -> null;
+            };
+            // BlockType 需要 tile 与容器，但两者都必须先有方块 —— 用延迟 Supplier 破这个环。
+            // 三个 Supplier 都只在 Mek 真正求值的时刻（放置 / 开 GUI）才被调用，那时注册早已完成。
+            mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.cutting.CuttingFactoryTile> blockType =
+                    CuttingMachineFactoryBlock.blockTypeFor(tier, () -> FACTORY_CONTAINER, () -> findCuttingFactoryTile(tier));
+
+            mekanism.common.registration.impl.BlockRegistryObject<CuttingMachineFactoryBlock, MekCkBlockItem> handle =
+                    CUTTING_FACTORY_BLOCKS_REG.register(id,
+                            () -> new CuttingMachineFactoryBlock(blockType, tier, CUTTING_FACTORY_PROPERTIES),
+                            block -> new MekCkBlockItem(block, new Item.Properties(), description, tier, false));
+            CUTTING_FACTORY_HANDLES.put(tier, handle);
+            // 两个 ticker 都必须显式给：TileEntityTypeRegistryObject.getTicker(boolean) 只是
+            // 原样返回存进去的那个，没有任何兜底（实测字节码：ifeq 取 serverTicker / else 取
+            // clientTicker，直接 areturn）。不填就是 null，而 Level 只在 ticker 非 null 时才
+            // 驱动方块实体 —— 机器会「放置成功、界面能开、就是不干活」。
+            // 也正因为如此，mekckfactory 那套实验注册（TILE_ENTITIES.register(block, supplier) 两参版）
+            // 至今不 tick；那是那套自己的问题，不在本任务范围。
+            CUTTING_FACTORY_TILES.put(tier, CUTTING_FACTORY_TILES_REG.register(handle,
+                    (pos, state) -> new cn.ism.mekck.machine.cutting.CuttingFactoryTile(handle, pos, state),
+                    (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickClient(level, pos, state, tile),
+                    (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickServer(level, pos, state, tile)));
+
+            // 兼容面：本任务之外的文件（TierInstallerHandler / JEIPlugin）按旧类型读这两个 map。
+            FACTORY_BLOCKS.put(tier, registryView(id, ForgeRegistries.BLOCKS));
+            FACTORY_ITEMS.put(tier, registryView(id, ForgeRegistries.ITEMS));
         }
 
         // Assign specific references
@@ -882,6 +964,12 @@ public final class UniversalCuttingMachine {
         SINGULARITY_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.SINGULARITY);
         SINGULARITY_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.SINGULARITY);
         SINGULARITY_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.SINGULARITY);
+
+        // 11 个 *_FACTORY_BLOCK_ENTITY 现在恒为 null：旧的 BlockEntityType 已被 CuttingFactoryTile 顶替，
+        // 而同一个注册名不能挂两个类型。实测这三个字段在本仓库内除本类之外**无任何读取点**
+        // （唯一的历史读取点是 blockentity/CuttingMachineFactoryBlockEntity.getTileType，
+        //  Task 5 随该类整体删除），所以置 null 不会让任何运行期路径踩空。
+        // 活的 tile 类型句柄在 CUTTING_FACTORY_TILES。
 
         // Register all cooking factory blocks
         for (CuttingMachineFactoryTier tier : CuttingMachineFactoryTier.values()) {
@@ -1113,7 +1201,55 @@ public final class UniversalCuttingMachine {
         SINGULARITY_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.SINGULARITY);
 
         // Shared menu type for all factories
-        FACTORY_MENU = MENUS.register("factory", () -> IForgeMenuType.create(CuttingMachineFactoryMenu::new));
+        //
+        // Task 4 起容器由 Mek 的 ContainerTypeDeferredRegister 注册（同样落在 MENU_TYPES 注册表、
+        // 同样叫 mekck:factory）。这里只造一个指向同一注册项的 RegistryObject 视图，
+        // 让 ClientEvents 里的 MenuScreens.register(FACTORY_MENU.get(), ...) 照旧能写。
+        FACTORY_MENU = registryView("factory", ForgeRegistries.MENU_TYPES);
+    }
+
+    /**
+     * 造一个指向<b>已由别人注册</b>的注册项的 {@link RegistryObject} 视图。
+     *
+     * <h3>为什么需要它</h3>
+     * 切菜工厂现在走 Mek 的 {@code BlockDeferredRegister} / {@code ContainerTypeDeferredRegister}，
+     * 它们返回的是 {@code BlockRegistryObject} / {@code ContainerTypeRegistryObject}，
+     * 而这两个类<b>不是</b> Forge 的 {@code RegistryObject}
+     * （{@code WrappedRegistryObject} 只实现 {@code Supplier}；{@code RegistryObject} 本身是 final class，
+     * 无法用适配器糊过去）。
+     *
+     * <p>但 {@code FACTORY_BLOCKS} / {@code FACTORY_ITEMS} / {@code FACTORY_MENU} 是本类的公开 API，
+     * 本任务<b>之外</b>还有三个文件按原类型读它们：
+     * {@code util/TierInstallerHandler}（两个 private 辅助方法，参数类型写死
+     * {@code Map<..., RegistryObject<Block>>}）、{@code integration/jei/JEIPlugin}、
+     * {@code ClientEvents}。改这三个字段的类型会波及任务清单之外的文件。
+     *
+     * <p>{@link RegistryObject#create} 正是为此存在的公开工厂：它按注册名订阅注册表，
+     * 在注册事件里填充值，语义与 {@code DeferredRegister} 返回的那个一模一样，
+     * 且类型就是 {@code RegistryObject<T>}。</p>
+     *
+     * @param id       不含命名空间的注册名
+     * @param registry 目标注册表
+     */
+    private static <T, U extends T> RegistryObject<U> registryView(String id, net.minecraftforge.registries.IForgeRegistry<T> registry) {
+        return RegistryObject.create(new ResourceLocation(MOD_ID, id), registry);
+    }
+    /**
+     * 按等级取回已注册的切菜 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
+     *
+     * <p>必须延迟：{@code TILE_ENTITIES.register(block, ...)} 要求先有方块，而方块的
+     * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。这里照
+     * {@code factory/MekCkFactoryRegistration#findTile} 的写法破环。</p>
+     */
+    private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cutting.CuttingFactoryTile> findCuttingFactoryTile(
+            CuttingMachineFactoryTier tier) {
+        mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cutting.CuttingFactoryTile> found =
+                CUTTING_FACTORY_TILES.get(tier);
+        if (found == null) {
+            throw new IllegalStateException("切菜工厂 tile 尚未注册：tier=" + tier
+                    + "（BlockTypeTile 的 Supplier 被过早求值）");
+        }
+        return found;
     }
 
     private static boolean firstPlayerJoined = false;
@@ -1135,6 +1271,13 @@ public final class UniversalCuttingMachine {
         // Mek 体系版工厂（新套，命名空间 mekckfactory）：与上面的自研套并列共存，
         // 走 Mek 的机器注册/容器/GUI 体系，用于 tab 布局与 Mek 完全对齐。
         cn.ism.mekck.factory.MekCkFactoryRegistration.register(bus);
+        // 切菜工厂（阶段 2 Task 4）：注册名仍是 mekck:<tier>_cutting_factory，
+        // 但注册器换成 Mek 的——方块因此带上 AttributeGui / AttributeEnergy /
+        // AttributeStateFacing / AttributeUpgradeSupport，tile 也就顺理成章地
+        // 变成 TileEntityMekanism 家族的一员。
+        CUTTING_FACTORY_BLOCKS_REG.register(bus);
+        CUTTING_FACTORY_TILES_REG.register(bus);
+        CUTTING_FACTORY_CONTAINERS_REG.register(bus);
         bus.addListener(this::addCreativeTabContents);
         bus.addListener(this::onCommonSetup);
         // 配置文件生成到 config/mekck/mekck-common.toml（与 planting 等配置文件同目录）
