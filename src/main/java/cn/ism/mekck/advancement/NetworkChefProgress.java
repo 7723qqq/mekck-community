@@ -2,7 +2,6 @@ package cn.ism.mekck.advancement;
 
 import cn.ism.mekck.ae2.INetworkPullable;
 import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
-import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity;
 import cn.ism.mekck.machine.ports.IMekCkPorted;
 import net.minecraft.advancements.Advancement;
@@ -44,7 +43,6 @@ public final class NetworkChefProgress {
                 // 端口声明型机器（阶段 2 Task 4.6 起：切菜工厂已换成 CuttingFactoryTile）。
                 // 放在 INetworkPullable 之前只是阅读顺序，instanceof 之间互不影响。
                 || be instanceof IMekCkPorted
-                || be instanceof GrillFactoryBlockEntity
                 || be instanceof INetworkPullable;
     }
 

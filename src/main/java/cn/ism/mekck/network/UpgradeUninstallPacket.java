@@ -63,8 +63,6 @@ public final class UpgradeUninstallPacket {
                 machine.uninstallUpgrade(mode, slot);
             } else if (be instanceof cn.ism.mekck.blockentity.CookingFactoryBlockEntity machine) {
                 machine.uninstallUpgrade(mode, slot);
-            } else if (be instanceof cn.ism.mekck.blockentity.GrillFactoryBlockEntity machine) {
-                machine.uninstallUpgrade(mode, slot);
             } else if (be instanceof cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity machine) {
                 machine.uninstallUpgrade(mode, slot);
             } else if (be instanceof cn.ism.mekck.blockentity.IceFactoryBlockEntity machine) {

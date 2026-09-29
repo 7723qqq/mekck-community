@@ -30,10 +30,10 @@ import net.minecraft.world.entity.player.Inventory;
  *
  * <h3>本界面没有的三个面板（不是取舍，是 tile 换人的必然结果）</h3>
  * <ul>
- *   <li><b>自动分配</b>（{@code AutoDistributePacket}）。服务端处理器只认
- *       {@code GrillFactoryBlockEntity} 与 {@code PlantingCuttingFactoryBlockEntity}，
- *       研磨这一档已被排除（AE2 自动化的正主是 AE2 自己的网格，机器侧只提供
- *       {@code eject / side / config} 三个导出设置）。</li>
+ *   <li><b>自动分配</b>（{@code AutoDistributePacket}）。这个 MekCK 自研状态已随旧 BE
+ *       一起删除（切菜在阶段 2 Task 4.6、烧烤在阶段 3 Task 3），Mek 自己的
+ *       {@code TileComponentEjector} + 弹出配置接管这件事，界面上没有对应按钮。
+ *       所以本界面不建这个开关；{@code AutoDistributePacket} 也已无任何有效目标。</li>
  *   <li><b>ME 自动处理面板</b>同理不建。但服务端这一侧的通道是通的——
  *       {@code MekckAe2} 按 {@link cn.ism.mekck.machine.ports.IMekCkPorted} 判定，
  *       再转交 {@code AE2Compat}（阶段 2 Task 4.6 接的）。</li>

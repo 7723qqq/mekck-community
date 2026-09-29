@@ -26,7 +26,6 @@ import appeng.api.storage.MEStorage;
 import appeng.api.util.AECableType;
 import appeng.capabilities.Capabilities;
 import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
-import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity;
 import cn.ism.mekck.machine.MekCkFactoryType;
 import cn.ism.mekck.machine.MekCkMachineTile;
@@ -960,13 +959,11 @@ public final class MekckAe2 {
      */
     public static List<String> getSelectedAutoItems(BlockEntity be) {
         if (be instanceof IMekCkPorted) return getSelectedAutoItemsGeneric(be);
-        if (be instanceof GrillFactoryBlockEntity g) return g.getAutoSelectedItems();
         return List.of();
     }
 
     public static void toggleAutoItem(BlockEntity be, String itemId) {
         if (be instanceof IMekCkPorted) toggleAutoItemGeneric(be, itemId);
-        else if (be instanceof GrillFactoryBlockEntity g) g.toggleAutoSelectedItem(itemId);
     }
 
     // ----- 自动处理辅助 -----
@@ -974,22 +971,16 @@ public final class MekckAe2 {
     /**
      * 取这台机器的「输入 + 产物」窗口；不支持自动处理时返回 null。
      *
-     * <p>切菜工厂（阶段 2 Task 4.6）与研磨工厂（阶段 3 Task 1）走
-     * {@link IMekCkPorted}，烧烤工厂仍走旧 {@code ItemStackHandler}。烧烤分支刻意只判这一个类：
-     * 其余 3 个家族不参与 ME 自动处理，判宽了会让「自动补料」误作用到
-     * 不该参与的机器上。新增家族时同理：先在 {@code portedFamily} 里登记，
-     * 再来这里看是否需要补分支。</p>
+     * <p>已迁的四个家族（切菜 / 研磨 / 种植切配 / 烧烤）全部走 {@link IMekCkPorted}。
+     * 家族闸门 {@link #portedFamily} 不能省：放行到「所有端口声明型机器」的话，
+     * 一台还没定配方族的机器会照着玩家勾选的清单往输入槽里塞物品——
+     * 那是凭空造料，不是拉料。新增家族时同理：先在 {@code portedFamily} 里登记，
+     * 再看 {@code canProcess} / {@code expectedAutoProducts} 是否要补分支。</p>
      */
     private static MekPortWindow autoWindow(BlockEntity be) {
         if (be instanceof IMekCkPorted ported) {
-            // 家族闸门不能省：目前只有切菜与研磨认自动处理。若放行到「所有端口声明型机器」，
-            // 一台还没定配方族的机器会照着玩家勾选的清单往输入槽里塞物品——
-            // 那是凭空造料，不是拉料。
             if (portedFamily(be) == null) return null;
             return MekPortWindow.ofPorted(ported);
-        }
-        if (be instanceof GrillFactoryBlockEntity g) {
-            return MekPortWindow.ofLegacyFactory(g.getItems(), g.getInputSlots());
         }
         return null;
     }
@@ -1008,11 +999,13 @@ public final class MekckAe2 {
             return null;
         }
         MekCkFactoryType type = tile.getFactoryType();
-        // 切菜（阶段 2 Task 4.6）与研磨（阶段 3 Task 1）是目前两个已接线的家族。
-        // 其余四个仍返回 null：它们会走自己的旧方块实体，该分支正在迁移中。
+        // 已接线的家族：切菜（阶段 2 Task 4.6）、研磨（阶段 3 Task 1）、
+        // 种植切配与烧烤（阶段 3 Task 2 / Task 3）。
+        // 其余三个（烹饪 / 穿串 / 制冰）仍返回 null：它们还是旧方块实体，分支正在迁移中。
         return (type == MekCkFactoryType.CUTTING
                 || type == MekCkFactoryType.GRINDING
-                || type == MekCkFactoryType.PLANTING_CUTTING) ? type : null;
+                || type == MekCkFactoryType.PLANTING_CUTTING
+                || type == MekCkFactoryType.GRILLING) ? type : null;
     }
 
     /**
@@ -1060,7 +1053,7 @@ public final class MekckAe2 {
         if (family == MekCkFactoryType.GRINDING) {
             return grindingIngredientMatches(level, stack);
         }
-        if (be instanceof GrillFactoryBlockEntity) {
+        if (family == MekCkFactoryType.GRILLING) {
             RecipeType<?> grillingType = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("barbequesdelight", "grilling"));
             if (grillingType != null) {
                 for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, grillingType)) {
@@ -1118,7 +1111,7 @@ public final class MekckAe2 {
                     }
                 }
             }
-        } else if (be instanceof GrillFactoryBlockEntity) {
+        } else if (family == MekCkFactoryType.GRILLING) {
             RecipeType<?> grillingType = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("barbequesdelight", "grilling"));
             if (grillingType != null) {
                 for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, grillingType)) {
@@ -1617,8 +1610,9 @@ public final class MekckAe2 {
                 // 分支不能并进上面那条：那条写死了切菜配方，不拆开的话研磨机器会在 ME 终端里
                 // 展示切菜配方、并按切菜结果给物品。
                 entries = buildGrindingPatterns(level, avail);
-            } else if (owner instanceof GrillFactoryBlockEntity) {
-                // 烧烤工厂：BBQ grilling 配方（终端下单后由 startOrder 设订单，机器按订单加工）
+            } else if (owner instanceof MekCkMachineTile && portedFamily(owner) == MekCkFactoryType.GRILLING) {
+                // 烧烤工厂（阶段 3 Task 3 起是端口声明型）：BBQ grilling 配方
+                // （终端下单后由下面的 setOrder 设订单，机器按订单加工）
                 entries = buildGrillingPatterns(level, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.IceFactoryBlockEntity) {
                 // 制冰工厂：mekck:ice_make（机器无需订单，材料推入即自动加工）
@@ -1799,7 +1793,7 @@ public final class MekckAe2 {
                 ice.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity cannon) {
                 cannon.setOrder(entry.recipeId, 1);
-            } else if (owner instanceof cn.ism.mekck.blockentity.GrillFactoryBlockEntity gfac) {
+            } else if (owner instanceof cn.ism.mekck.machine.grill.GrillFactoryTile gfac) {
                 // 烧烤工厂的加工有订单门禁（无订单不自动加工），必须显式设订单
                 gfac.setOrder(entry.recipeId, 1, null); // 第三参为调味（终端下单不带调味）
             } else if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity kitchen) {

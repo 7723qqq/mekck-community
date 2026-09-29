@@ -1,6 +1,6 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
+import cn.ism.mekck.machine.grill.GrillFactoryTile;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -31,7 +31,7 @@ public class GrillSeasoningTogglePacket {
     public static void handle(GrillSeasoningTogglePacket packet, Supplier<NetworkEvent.Context> context) {
         context.get().enqueueWork(() -> {
             ServerPlayer player = context.get().getSender();
-            if (PacketGuard.target(player, packet.pos) instanceof GrillFactoryBlockEntity machine) {
+            if (PacketGuard.target(player, packet.pos) instanceof GrillFactoryTile machine) {
                 machine.toggleSeasoningEnabled(packet.index);
             }
         });

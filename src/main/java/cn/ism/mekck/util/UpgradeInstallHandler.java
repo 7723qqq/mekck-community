@@ -5,7 +5,6 @@ import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
 import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
 import cn.ism.mekck.blockentity.GrillBlockEntity;
-import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
@@ -34,6 +33,12 @@ import net.minecraft.server.level.ServerLevel;
  * Forge 的 {@code RightClickBlock} 事件在原版跳过逻辑之前触发，此处统一拦截：
  * 潜行 + 手持升级模块 + 命中本模组机器 → 取消事件（不打开 GUI）并调用各机器自己的
  * {@code addUpgradesFromHand}（冷萃/费列罗等专属升级由各机器内部路由，不支持的升级返回 0 并提示）。
+ * </p>
+ * <p>
+ * <b>已迁到 Mek 原生 tile 的家族不在分发链里</b>（切菜 / 研磨 / 种植切配 / 烧烤，阶段 2~3）：
+ * 它们的升级槽由 {@code TileComponentUpgrade} 提供， Mek 升级 tab 直接可用，
+ * 而 Mek 的 {@code BlockTile} 走的是 {@code AttributeGui} 而非本类这条 Forge 事件捷径。
+ * 留着旧分支只会让包「到达但无事发生」。
  * </p>
  */
 @Mod.EventBusSubscriber(modid = UniversalCuttingMachine.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
@@ -123,8 +128,6 @@ public final class UpgradeInstallHandler {
         } else if (be instanceof SkeweringFactoryBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof GrillBlockEntity m) {
-            added = m.addUpgradesFromHand(held);
-        } else if (be instanceof GrillFactoryBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity m) {
             // §F25 修法 A：SimpleMachine 家族（陈酿/榨汁/发酵/凝乳…凡借祖本注册的基础机器）

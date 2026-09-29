@@ -1,0 +1,719 @@
+package cn.ism.mekck.machine.grill;
+
+import cn.ism.mekck.CuttingMachineFactoryTier;
+import cn.ism.mekck.config.MekckConfig;
+import cn.ism.mekck.machine.MekCkBatchPacking;
+import cn.ism.mekck.machine.MekCkMachineTile;
+import cn.ism.mekck.machine.MekCkRecipeExecutor;
+import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
+import cn.ism.mekck.upgrade.MekCkUpgradeTypes;
+import cn.ism.mekck.util.BarbequesDelightCompat;
+import cn.ism.mekck.util.CountMath;
+import cn.ism.mekck.util.KaleidoscopeGrillingCompat;
+import cn.ism.mekck.util.RecipeCache;
+import mekanism.api.Upgrade;
+import mekanism.api.inventory.IInventorySlot;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.level.Level;
+import net.minecraftforge.registries.ForgeRegistries;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
+/**
+ * 烧烤工厂的执行器 —— 烤制配方匹配、订单推进、调味料应用、并行数。
+ *
+ * <h3>与研磨执行器的三处<b>本质</b>差别</h3>
+ * <ol>
+ *   <li><b>调味料是订单级状态，会改写产物本身。</b>它写进产物的 NBT
+ *       （{@code BarbequesDelightCompat.applySeasoning}）并按产出个数<b>消耗调味料耐久</b>。
+ *       因此容量判定必须用「已调味」的预览栈——NBT 不同就是不同物品，
+ *       用未调味的栈判容量会判少。</li>
+ *   <li><b>调味料槽有启用开关</b>（位标志 {@code SeasoningEnabled}），
+ *       默认模式下在启用的槽里挑剩余次数最多的那个用。</li>
+ *   <li><b>工作模式</b>（{@code DEFAULT} / {@code ORDER}）：
+ *       {@code DEFAULT} 自动调味，{@code ORDER} 只在订单指定了调味时才用。</li>
+ * </ol>
+ */
+public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
+
+    /** 调味料槽数。与旧实现同名常量同值。 */
+    public static final int SEASONING_SLOTS = 3;
+
+    /** 与旧存档<b>逐字同名</b>的键：{@code MekCkLegacyMachineNbt} 只换位置不改名。 */
+    public static final String TAG_ORDER_RECIPE = "OrderRecipeId";
+    public static final String TAG_ORDER_QUANTITY = "OrderQuantity";
+    public static final String TAG_ORDER_COMPLETED = "OrderCompleted";
+    public static final String TAG_ORDER_SEASONING = "OrderSeasoning";
+    public static final String TAG_WORK_MODE = "WorkMode";
+    public static final String TAG_SEASONING_ENABLED = "SeasoningEnabled";
+
+    /** 工作模式。与旧 {@code GrillFactoryBlockEntity.WorkMode} 同名同序。 */
+    public enum WorkMode {
+        DEFAULT, ORDER;
+
+        public static WorkMode byOrdinal(int ordinal) {
+            WorkMode[] all = values();
+            return ordinal >= 0 && ordinal < all.length ? all[ordinal] : DEFAULT;
+        }
+    }
+
+    // ── 执行器自有状态 ──────────────────────────────────────────────────
+
+    private ResourceLocation orderRecipeId;
+    private int orderQuantity;
+    private int orderCompleted;
+    private String orderSeasoning;
+    private WorkMode workMode = WorkMode.DEFAULT;
+    private final boolean[] seasoningEnabled = new boolean[SEASONING_SLOTS];
+
+    // ── 配方缓存 ────────────────────────────────────────────────────────
+
+    private long[] slotRecipeKey;
+    private Recipe<?>[] slotRecipeValue;
+    private boolean[] slotRecipeValid;
+
+    private MekCkMachineTile tile;
+    private GrillFactoryTile owner;
+    private boolean busy;
+
+    // ── MekCkRecipeExecutor ─────────────────────────────────────────────
+
+    @Override
+    public void tick(MekCkMachineTile tile, int slotCount) {
+        this.tile = tile;
+        this.owner = tile instanceof GrillFactoryTile g ? g : null;
+        this.busy = false;
+
+        Level level = tile == null ? null : tile.getLevel();
+        List<IInventorySlot> inputs = tile == null ? null : tile.getInputSlots();
+        List<IInventorySlot> outputs = tile == null ? null : tile.getOutputSlots();
+        if (level == null || inputs == null || outputs == null || outputs.isEmpty()) {
+            return;
+        }
+        int slots = Math.min(slotCount, inputs.size());
+        if (slots <= 0) {
+            return;
+        }
+
+        int budget = effectiveProcessCount(tile);
+        if (budget <= 0) {
+            return;
+        }
+        for (int i = 0; i < slots; i++) {
+            ItemStack input = inputs.get(i).getStack();
+            if (input.isEmpty()) {
+                continue;
+            }
+            Optional<Recipe<?>> found = findRecipe(i);
+            if (found.isEmpty()) {
+                continue;
+            }
+            completeRecipe(i, found.get(), budget);
+            this.busy = true;
+        }
+    }
+
+    @Override
+    public boolean isBusy() {
+        return busy;
+    }
+
+    @Override
+    public void save(CompoundTag tag) {
+        if (orderRecipeId != null) {
+            tag.putString(TAG_ORDER_RECIPE, orderRecipeId.toString());
+            tag.putInt(TAG_ORDER_QUANTITY, orderQuantity);
+            tag.putInt(TAG_ORDER_COMPLETED, orderCompleted);
+        }
+        if (orderSeasoning != null && !orderSeasoning.isEmpty()) {
+            tag.putString(TAG_ORDER_SEASONING, orderSeasoning);
+        }
+        tag.putInt(TAG_WORK_MODE, workMode.ordinal());
+        tag.putInt(TAG_SEASONING_ENABLED, seasoningFlags());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p><b>键不存在时把订单整体清空</b>，与研磨/种植切配同款理由：
+     * 执行器与方块实体同寿，只在 {@code contains} 为真时赋值会留下无法取消的幽灵订单。
+     * 但 {@code WorkMode} 与 {@code SeasoningEnabled} 是<b>常驻状态</b>而非订单的一部分，
+     * 缺失时按默认值重建，不清空。
+     * </p>
+     */
+    @Override
+    public void load(CompoundTag tag) {
+        invalidateCache();
+        if (tag != null && tag.contains(TAG_ORDER_RECIPE, Tag.TAG_STRING)) {
+            ResourceLocation parsed = ResourceLocation.tryParse(tag.getString(TAG_ORDER_RECIPE));
+            if (parsed != null) {
+                orderRecipeId = parsed;
+                orderQuantity = Math.max(0, tag.getInt(TAG_ORDER_QUANTITY));
+                orderCompleted = Math.max(0, tag.getInt(TAG_ORDER_COMPLETED));
+            } else {
+                clearOrder();
+            }
+        } else {
+            clearOrder();
+        }
+        if (tag != null) {
+            orderSeasoning = tag.contains(TAG_ORDER_SEASONING, Tag.TAG_STRING)
+                    ? tag.getString(TAG_ORDER_SEASONING) : null;
+            if (orderSeasoning != null && orderSeasoning.isEmpty()) {
+                orderSeasoning = null;
+            }
+            workMode = WorkMode.byOrdinal(tag.getInt(TAG_WORK_MODE));
+            int flags = tag.getInt(TAG_SEASONING_ENABLED);
+            for (int i = 0; i < SEASONING_SLOTS; i++) {
+                seasoningEnabled[i] = (flags & (1 << i)) != 0;
+            }
+        }
+    }
+
+    // ── 订单 ────────────────────────────────────────────────────────────
+
+    public ResourceLocation getOrderRecipeId() {
+        return orderRecipeId;
+    }
+
+    public int getOrderQuantity() {
+        return orderRecipeId == null ? 0 : orderQuantity;
+    }
+
+    public int getOrderCompleted() {
+        return orderCompleted;
+    }
+
+    /** 订单指定的调味料 id；{@code null} / 空串表示不指定。 */
+    public String getOrderSeasoning() {
+        return orderSeasoning;
+    }
+
+    /**
+     * 设订单。
+     *
+     * <p><b>逐字对齐旧 {@code GrillFactoryBlockEntity.setOrder}</b>：数量下界取
+     * {@code max(0, …)} 而不是 {@code max(1, …)}，且 {@code recipeId == null}（取消订单）
+     * 时把调味料一并清空。取消按钮发的正是 {@code (null, 0, null)}，
+     * 用 {@code max(1, …)} 会让「无订单」状态残留一份调味料。
+     * 读数侧另有兜底：{@link #getOrderQuantity()} 对 {@code orderRecipeId == null} 直接返 0。</p>
+     *
+     * @param seasoningId 调味料 id；{@code null} / 空串表示不指定（随后按工作模式决定）
+     */
+    public void setOrder(ResourceLocation recipeId, int quantity, String seasoningId) {
+        this.orderRecipeId = recipeId;
+        this.orderQuantity = Math.max(0, quantity);
+        this.orderCompleted = 0;
+        this.orderSeasoning = (recipeId == null || seasoningId == null || seasoningId.isEmpty())
+                ? null : seasoningId;
+    }
+
+    public void clearOrder() {
+        this.orderRecipeId = null;
+        this.orderQuantity = 0;
+        this.orderCompleted = 0;
+    }
+
+    /**
+     * 完成一份订单后的推进 —— 抽成静态纯函数。
+     *
+     * <p>「先自增再比」：与旧实现尾部 {@code orderCompleted++; if (>= quantity) 清空} 同序。
+     * 差一位会导致最后一份做完订单还挂着，机器再也不接新料。加法走 {@code long}，
+     * 否则份数配成 {@link Integer#MAX_VALUE} 且真跑满时 int 绕成负数，订单永远完不成。
+     * </p>
+     */
+    static boolean advanceOrder(int completed, int quantity) {
+        return (long) completed + 1 >= Math.max(1, quantity);
+    }
+
+    // ── 工作模式与调味料开关 ────────────────────────────────────────────
+
+    public WorkMode getWorkMode() {
+        return workMode;
+    }
+
+    /** 切换工作模式：默认（自动调味）↔ 订单（只按订单指定的调味）。 */
+    public void toggleWorkMode() {
+        this.workMode = workMode == WorkMode.DEFAULT ? WorkMode.ORDER : WorkMode.DEFAULT;
+    }
+
+    public boolean isSeasoningEnabled(int index) {
+        return index >= 0 && index < SEASONING_SLOTS && seasoningEnabled[index];
+    }
+
+    public void toggleSeasoningEnabled(int index) {
+        if (index >= 0 && index < SEASONING_SLOTS) {
+            seasoningEnabled[index] = !seasoningEnabled[index];
+        }
+    }
+
+    /** 打包成位标志。与旧实现的 {@code seasoningFlags()} 同款。 */
+    int seasoningFlags() {
+        int flags = 0;
+        for (int i = 0; i < SEASONING_SLOTS; i++) {
+            if (seasoningEnabled[i]) {
+                flags |= 1 << i;
+            }
+        }
+        return flags;
+    }
+
+    // ── 配方匹配 ────────────────────────────────────────────────────────
+
+    void invalidateCache() {
+        slotRecipeKey = null;
+        slotRecipeValue = null;
+        slotRecipeValid = null;
+    }
+
+    private static long stackKey(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return 0L;
+        }
+        ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
+        long h = (id == null ? 0 : id.hashCode());
+        h = h * 31L + (stack.getTag() == null ? 0 : stack.getTag().hashCode());
+        return h == 0L ? 1L : h;
+    }
+
+    private Optional<Recipe<?>> findRecipe(int inputSlot) {
+        Level level = tile == null ? null : tile.getLevel();
+        List<IInventorySlot> inputs = tile == null ? null : tile.getInputSlots();
+        if (level == null || inputs == null || inputSlot >= inputs.size()) {
+            return Optional.empty();
+        }
+        ItemStack input = inputs.get(inputSlot).getStack();
+        if (input.isEmpty()) {
+            return Optional.empty();
+        }
+        if (slotRecipeValid == null) {
+            int n = Math.max(1, inputs.size());
+            slotRecipeKey = new long[n];
+            slotRecipeValue = new Recipe<?>[n];
+            slotRecipeValid = new boolean[n];
+        }
+        Optional<Recipe<?>> found;
+        if (inputSlot < slotRecipeValid.length) {
+            long key = stackKey(input);
+            if (slotRecipeValid[inputSlot] && slotRecipeKey[inputSlot] == key) {
+                found = Optional.ofNullable(slotRecipeValue[inputSlot]);
+            } else {
+                found = lookup(level, input);
+                slotRecipeValid[inputSlot] = true;
+                slotRecipeKey[inputSlot] = key;
+                slotRecipeValue[inputSlot] = found.orElse(null);
+            }
+        } else {
+            found = lookup(level, input);
+        }
+        if (orderRecipeId != null && (found.isEmpty() || !orderRecipeId.equals(found.get().getId()))) {
+            return Optional.empty();
+        }
+        return found;
+    }
+
+    /**
+     * 烧烤配方类型。
+     *
+     * <p>两个来源都查：本体是 {@code mekck:grilling}，Barbeque's Delight 另有
+     * {@code barbequesdelight:grilling}。<b>自有优先</b>，外部那条未安装时为 null。
+     * 未安装不是故障，不抛异常也不打日志。</p>
+     */
+    private static RecipeType<?> recipeType() {
+        RecipeType<?> own = RecipeCache.type("mekck", "grilling");
+        return own != null ? own : RecipeCache.type("barbequesdelight", "grilling");
+    }
+
+    /**
+     * 单槽配方查找，**两个来源按优先级逐个试**。
+     *
+     * <p>走 {@link RecipeCache#singleSlotQueryUntyped} 而不是
+     * {@code RecipeCache.singleSlotQuery}：后者的类型参数绑死在
+     * {@code Recipe<RecipeWrapper>}，而外部那条 {@code barbequesdelight:grilling}
+     * 拿到手是 {@code RecipeType<?>}，类型推断直接失败。
+     * 强转的前提是「两源都是 1 格容器配方」——由
+     * {@code MekCkGrillingRecipe} 与 Barbeque's Delight 的实现保证；
+     * 若将来第三源的容器类型不同，这里会 {@code ClassCastException} 而不是静默错配。</p>
+     */
+    private static Optional<Recipe<?>> lookup(Level level, ItemStack input) {
+        return RecipeCache.singleSlotQueryUntyped(level, recipeType(), input);
+    }
+
+    // ── 批量执行 ────────────────────────────────────────────────────────
+
+    /**
+     * 执行一次烤制。
+     *
+     * <p>逐字对应旧 {@code completeRecipe}：<b>容量判定用「已调味」的预览栈</b>——
+     * 调味写的是产物 NBT，NBT 不同就是不同物品，用未调味的栈判会判少，
+     * 表现为「预演说装得下、真落槽时只塞一半」。这条与阶段 2 切菜踩过的
+     * 「预演说装得下、落槽只塞一部分」是同一类故障，只是这里的成因是调味。
+     * </p>
+     */
+    private void completeRecipe(int inputSlot, Recipe<?> recipe, int consumeCount) {
+        List<IInventorySlot> inputs = tile.getInputSlots();
+        List<IInventorySlot> outputs = tile.getOutputSlots();
+        Level level = tile.getLevel();
+        if (inputSlot < 0 || inputSlot >= inputs.size() || level == null) {
+            return;
+        }
+        ItemStack input = inputs.get(inputSlot).getStack();
+        if (input.isEmpty()) {
+            return;
+        }
+        consumeCount = Math.min(consumeCount, input.getCount());
+        if (consumeCount <= 0) {
+            return;
+        }
+        ItemStack result = recipe.getResultItem(level.registryAccess());
+        if (result.isEmpty()) {
+            return;
+        }
+
+        String seasoning = currentSeasoningFor(result);
+        ItemStack preview = result.copy();
+        if (seasoning != null) {
+            BarbequesDelightCompat.applySeasoning(preview, seasoning);
+        }
+        if (!canFitAll(outputs, preview, consumeCount)) {
+            return;
+        }
+
+        // 扣原料
+        if (input.getCount() <= consumeCount) {
+            inputs.get(inputSlot).setStack(ItemStack.EMPTY);
+        } else {
+            ItemStack remaining = input.copy();
+            remaining.setCount(input.getCount() - consumeCount);
+            inputs.get(inputSlot).setStack(remaining);
+        }
+
+        long outputCountLong = (long) result.getCount() * consumeCount;
+        int outputCount = outputCountLong > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) outputCountLong;
+        ItemStack multiplied = result.copy();
+        multiplied.setCount(outputCount);
+
+        if (seasoning != null && outputCount > 0) {
+            if (seasoning.startsWith(KaleidoscopeGrillingCompat.MOD_ID)) {
+                KaleidoscopeGrillingCompat.applySeasoningToSkewer(multiplied, seasoning);
+            } else {
+                BarbequesDelightCompat.applySeasoning(multiplied, seasoning);
+            }
+            consumeSeasoningUses(seasoning, outputCount, orderSeasoning == null || orderSeasoning.isEmpty());
+        }
+
+        MekCkBatchPacking.insertOutput(outputs, multiplied);
+
+        if (orderRecipeId != null) {
+            orderCompleted++;
+            if (advanceOrder(orderCompleted, orderQuantity)) {
+                clearOrder();
+            }
+        }
+    }
+
+    /** 单份产出的容量判定。传的是<b>已调味</b>的栈。 */
+    static boolean canFitAll(List<IInventorySlot> outputs, ItemStack seasoned, int multiplier) {
+        return MekCkBatchPacking.canFitAll(outputs, List.of(seasoned), multiplier);
+    }
+
+    // ── 调味料 ──────────────────────────────────────────────────────────
+
+    /**
+     * 该产物当前应使用的调味料 id。
+     *
+     * <p>逐字取自旧 {@code currentSeasoningFor}：产物不可调味 ⇒ 永远 null；
+     * 订单指定了调味 ⇒ 用订单的；否则 {@code DEFAULT} 模式下自动挑一个已启用的，
+     * {@code ORDER} 模式下不自动挑。</p>
+     */
+    private String currentSeasoningFor(ItemStack result) {
+        if (owner == null || !BarbequesDelightCompat.isSeasonable(result)) {
+            return null;
+        }
+        if (orderSeasoning != null && !orderSeasoning.isEmpty()) {
+            return orderSeasoning;
+        }
+        if (workMode == WorkMode.DEFAULT) {
+            return pickDefaultSeasoning();
+        }
+        return null;
+    }
+
+    /**
+     * 默认模式下在启用的槽里挑剩余次数最多的调味料。
+     *
+     * <p>并列时取<b>下标更小</b>的（严格大于才替换），于是多个启用时会
+     * 自然均匀消耗而不是先把一个用光——与旧实现逐字同款。</p>
+     */
+    String pickDefaultSeasoning() {
+        if (owner == null) {
+            return null;
+        }
+        String bestId = null;
+        int bestUses = 0;
+        for (int i = 0; i < SEASONING_SLOTS; i++) {
+            if (!seasoningEnabled[i]) {
+                continue;
+            }
+            ItemStack stack = owner.getSeasoningSlotStack(i);
+            if (stack.isEmpty()) {
+                continue;
+            }
+            String id = seasoningIdOf(stack);
+            if (id == null) {
+                continue;
+            }
+            int uses = seasoningUsesOf(stack);
+            if (uses > bestUses) {
+                bestUses = uses;
+                bestId = id;
+            }
+        }
+        return bestId;
+    }
+
+    /** 该调味料当前还剩多少次可用。{@code enabledOnly} 为真时只统计已启用的槽。 */
+    public int availableSeasoningUses(String seasoningId, boolean enabledOnly) {
+        if (owner == null || seasoningId == null) {
+            return 0;
+        }
+        int total = 0;
+        for (int i = 0; i < SEASONING_SLOTS; i++) {
+            if (enabledOnly && !seasoningEnabled[i]) {
+                continue;
+            }
+            ItemStack stack = owner.getSeasoningSlotStack(i);
+            if (stack.isEmpty()) {
+                continue;
+            }
+            String id = seasoningIdOf(stack);
+            if (seasoningId.equals(id)) {
+                total += seasoningUsesOf(stack);
+            }
+        }
+        return total;
+    }
+
+    public int availableSeasoningUses(String seasoningId) {
+        return availableSeasoningUses(seasoningId, false);
+    }
+
+    /**
+     * 消耗调味料耐久。
+     *
+     * <p>逐字取自旧实现：两个兼容门面各写各的消耗方法
+     * （Barbeque's Delight 改堆叠数、Kaleidoscope 改单件 NBT），
+     * 所以这里也分派而不合并。</p>
+     */
+    private void consumeSeasoningUses(String seasoningId, int uses, boolean enabledOnly) {
+        if (owner == null || seasoningId == null || uses <= 0) {
+            return;
+        }
+        int remaining = uses;
+        for (int i = 0; i < SEASONING_SLOTS && remaining > 0; i++) {
+            if (enabledOnly && !seasoningEnabled[i]) {
+                continue;
+            }
+            ItemStack stack = owner.getSeasoningSlotStack(i);
+            if (stack.isEmpty()) {
+                continue;
+            }
+            if (!seasoningId.equals(seasoningIdOf(stack))) {
+                continue;
+            }
+            remaining -= applySeasoningConsumption(i, stack, remaining);
+        }
+    }
+
+    /**
+     * 消耗一个槽的调味料耐久，返回实际消耗次数。
+     *
+     * <p>两个兼容门面的消耗方式不同：Barbeque's Delight 改堆叠数，
+     * Kaleidoscope Grilling 改单件 NBT。抽成方法只为能单测这两个分支。
+     * </p>
+     *
+     * @return 实际消耗次数，上限为该槽剩余次数
+     */
+    int applySeasoningConsumption(int index, ItemStack stack, int want) {
+        if (KaleidoscopeGrillingCompat.isSeasoningBottle(stack)) {
+            int available = KaleidoscopeGrillingCompat.getSeasoningUses(stack);
+            int take = Math.max(0, Math.min(want, available));
+            for (int i = 0; i < take; i++) {
+                // 森罗的消耗是「用一次掉一格」，签名只吃一个栈
+                KaleidoscopeGrillingCompat.consumeSeasoningUse(stack);
+            }
+            owner.writeSeasoningSlot(index, stack);
+            return take;
+        }
+        // Barbeque's Delight 走耐久值：累加 damage，够到 maxDamage 就清空该槽
+        int maxDamage = stack.getMaxDamage();
+        if (maxDamage <= 0) {
+            return 0;
+        }
+        int available = maxDamage - stack.getDamageValue();
+        int take = Math.max(0, Math.min(want, available));
+        if (take <= 0) {
+            return 0;
+        }
+        int newDamage = stack.getDamageValue() + take;
+        if (newDamage >= maxDamage) {
+            owner.clearSeasoningSlot(index);
+        } else {
+            stack.setDamageValue(newDamage);
+            owner.writeSeasoningSlot(index, stack);
+        }
+        return take;
+    }
+
+    /**
+     * 该栈的调味料 id —— 两个兼容门面分派。
+     *
+     * <p>逐字取自旧 {@code seasoningIdOf}：先问森罗的瓶子，
+     * 是就用它；否则问 Barbeque's Delight。<b>顺序不能反</b>——
+     * 森罗的瓶子同时也可能带 Barbeque's Delight 的 NBT，反了会取错 id。</p>
+     */
+    static String seasoningIdOf(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return null;
+        }
+        if (KaleidoscopeGrillingCompat.isSeasoningBottle(stack)) {
+            return KaleidoscopeGrillingCompat.getSeasoningId(stack);
+        }
+        return BarbequesDelightCompat.getSeasoningId(stack);
+    }
+
+    /**
+     * 该栈的调味料剩余可用次数。
+     *
+     * <p>逐字取自旧 {@code seasoningUsesOf}：森罗瓶子问它自己的；
+     * Barbeque's Delight 的调味料是耐久物品，用 {@code maxDamage - damageValue} 自己算，
+     * 耐久为 0（不可损坏）返回 0 表示「不消耗」。</p>
+     */
+    static int seasoningUsesOf(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return 0;
+        }
+        if (KaleidoscopeGrillingCompat.isSeasoningBottle(stack)) {
+            return KaleidoscopeGrillingCompat.getSeasoningUses(stack);
+        }
+        int maxDamage = stack.getMaxDamage();
+        return maxDamage <= 0 ? 0 : Math.max(0, maxDamage - stack.getDamageValue());
+    }
+
+    // ── 本机下单的配方清单 ─────────────────────────────────────────────
+
+    public List<Recipe<?>> getAvailableRecipes(Level level) {
+        if (level == null || tile == null) {
+            return List.of();
+        }
+        RecipeType<?> type = recipeType();
+        if (type == null) {
+            return List.of();
+        }
+        List<IInventorySlot> inputs = tile.getInputSlots();
+        if (inputs == null) {
+            return List.of();
+        }
+        Set<ResourceLocation> seen = new HashSet<>();
+        List<Recipe<?>> out = new ArrayList<>();
+        for (IInventorySlot slot : inputs) {
+            ItemStack input = slot.getStack();
+            if (input.isEmpty()) {
+                continue;
+            }
+            for (Recipe<?> recipe : RecipeCache.all(level, type)) {
+                if (matchesAnyInput(recipe, input) && seen.add(recipe.getId())) {
+                    out.add(recipe);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 「本机下单」面板的 Max 按钮：当前这些材料能支撑几份。
+     *
+     * <p>逐字取自旧实现的约定：需求为空时返回 {@code 0} 而不是
+     * {@link Integer#MAX_VALUE}。</p>
+     */
+    public int getMaxConsumableCountForOrder(Recipe<?> recipe) {
+        if (recipe == null || tile == null) {
+            return 0;
+        }
+        List<IInventorySlot> inputs = tile.getInputSlots();
+        if (inputs == null) {
+            return 0;
+        }
+        try {
+            int max = Integer.MAX_VALUE;
+            for (Ingredient ingredient : recipe.getIngredients()) {
+                if (ingredient == null || ingredient.isEmpty()) {
+                    continue;
+                }
+                int have = 0;
+                for (IInventorySlot slot : inputs) {
+                    ItemStack stack = slot.getStack();
+                    if (stack != null && !stack.isEmpty() && ingredient.test(stack)) {
+                        have += stack.getCount();
+                    }
+                }
+                max = Math.min(max, have);
+                if (max <= 0) {
+                    return 0;
+                }
+            }
+            return max == Integer.MAX_VALUE ? 0 : max;
+        } catch (Throwable ignored) {
+            return 0;
+        }
+    }
+
+    static boolean matchesAnyInput(Recipe<?> recipe, ItemStack input) {
+        if (recipe == null || input == null || input.isEmpty()) {
+            return false;
+        }
+        try {
+            for (Ingredient ingredient : recipe.getIngredients()) {
+                if (ingredient != null && !ingredient.isEmpty() && ingredient.test(input)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    // ── 并行数 ──────────────────────────────────────────────────────────
+
+    /**
+     * 本 tick 单槽能吃下的最大数量。
+     *
+     * <p>上限走 {@link MekCkUpgradeTypes#capOf}：它先过 {@code isSupportedBy} 准入闸门，
+     * 而读档路径（{@code TileComponentUpgrade} 的 {@code clear + putAll}）中间
+     * <b>没有任何 supports 检查</b>，不裁剪等于让手改存档直接决定倍增倍数。</p>
+     */
+    private int effectiveProcessCount(MekCkMachineTile tile) {
+        CuttingMachineFactoryTier tier = tile.getTier();
+        if (tier == null) {
+            return 1;
+        }
+        int base = MekckConfig.getMultithreadedBase(tier);
+        int maxParallel = MekckConfig.getMultithreadedMax(tier);
+        Upgrade storage = MekCkUpgradeRefs.storage();
+        int installed = tile.getComponent() == null ? 0 : tile.getComponent().getUpgrades(storage);
+        int cap = MekCkUpgradeTypes.capOf(storage, tier);
+        return CountMath.mulClamp(Integer.MAX_VALUE, base,
+                MekCkUpgradeTypes.stackMultiplier(installed, cap, base, maxParallel));
+    }
+}

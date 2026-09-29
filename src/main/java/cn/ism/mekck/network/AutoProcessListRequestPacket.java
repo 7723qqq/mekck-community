@@ -1,6 +1,5 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.machine.ports.IMekCkPorted;
 import cn.ism.mekck.util.AE2Compat;
 import net.minecraft.core.BlockPos;
@@ -33,9 +32,10 @@ public class AutoProcessListRequestPacket {
         context.get().enqueueWork(() -> {
             ServerPlayer player = context.get().getSender();
             BlockEntity be = PacketGuard.target(player, packet.pos);
-            // 切菜工厂在阶段 2 Task 4.6 起按端口声明判定（IMekCkPorted）；
-            // 烧烤工厂仍是旧 BE。两者都要留：判窄了界面会收不到回包而一直转圈。
-            if (be instanceof IMekCkPorted || be instanceof GrillFactoryBlockEntity) {
+            // 判据只有 IMekCkPorted：四个已迁家族（切菜 / 研磨 / 种植切配 / 烧烤）
+            // 全部按端口声明判定，烧烤这一档在阶段 3 Task 3 删掉旧 BE 分支后也归到这里。
+            // 判窄了界面会收不到回包而一直转圈。
+            if (be instanceof IMekCkPorted) {
                 List<String> available = AE2Compat.getAutoProcessableItems(be);
                 List<String> selected = AE2Compat.getSelectedAutoItems(be);
                 ModMessages.sendToPlayer(new AutoProcessListPacket(packet.pos, available, selected), player);

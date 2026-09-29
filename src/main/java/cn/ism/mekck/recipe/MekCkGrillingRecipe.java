@@ -30,8 +30,10 @@ import javax.annotation.Nullable;
  * 已经产出 {@code cooked_beef} 等；若本类型也产出同一种物品，它与烟熏炉完全重复，
  * 等于什么都没加。烤制变体是刻意与"水煮/烟熏"区分开的产物线。</p>
  *
- * <p><b>字段名与可见性是硬约束</b>：{@code GrillFactoryBlockEntity.matchesInput} 用
- * {@code recipe.getClass().getField("ingredient")} 反射——{@code getField} <b>只找
+ * <p><b>字段名与可见性是硬约束</b>：读配料的代码用
+ * {@code recipe.getClass().getField("ingredient")} 反射（现存的调用方有
+ * {@code MekckAe2#grillIngredientMatches} / {@code grillIngredient} 与
+ * {@code GrillBlockEntity#matchesInput}）——{@code getField} <b>只找
  * public 字段</b>，私有字段会抛 {@code NoSuchFieldException} 并落到
  * {@code getIngredients().get(0)} 的兜底分支。{@code ingredient} 因此必须 public：
  * 那条兜底是靠抛异常走的，而它在每 tick 每槽的热路径上。改可见性前先读那段代码。</p>

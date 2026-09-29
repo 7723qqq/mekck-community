@@ -16,7 +16,6 @@ import cn.ism.mekck.block.GrindingFactoryBlock;
 import cn.ism.mekck.block.UniversalCuttingMachineBlock;
 import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.GrillBlockEntity;
-import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.blockentity.BioreactorBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
@@ -677,10 +676,35 @@ public final class UniversalCuttingMachine {
     public static final RegistryObject<MenuType<SkeweringFactoryMenu>> SKEWERING_FACTORY_MENU;
 
     // Grill Factory blocks, items, and block entities
+    // 阶段 3 Task 3：改走 Mek 的注册器，**注册名一字不改**（仍是 mekck:<tier>_grill_factory），
+    // 旧存档里已放置的方块因此不会变空气。
+    public static final mekanism.common.registration.impl.BlockDeferredRegister GRILL_FACTORY_BLOCKS_REG =
+            new mekanism.common.registration.impl.BlockDeferredRegister(MOD_ID);
+    public static final mekanism.common.registration.impl.TileEntityTypeDeferredRegister GRILL_FACTORY_TILES_REG =
+            new mekanism.common.registration.impl.TileEntityTypeDeferredRegister(MOD_ID);
+    public static final mekanism.common.registration.impl.ContainerTypeDeferredRegister GRILL_FACTORY_CONTAINERS_REG =
+            new mekanism.common.registration.impl.ContainerTypeDeferredRegister(MOD_ID);
+
+    /** 已注册的烧烤方块（按等级索引），Mek 体系下的真实句柄。 */
+    public static final Map<CuttingMachineFactoryTier,
+            mekanism.common.registration.impl.BlockRegistryObject<GrillFactoryBlock, MekCkBlockItem>> GRILL_FACTORY_HANDLES =
+            new LinkedHashMap<>();
+    /** 已注册的 tile 类型（按等级索引），供 BlockType 的延迟 Supplier 回查。 */
+    public static final Map<CuttingMachineFactoryTier,
+            mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.grill.GrillFactoryTile>> GRILL_FACTORY_TILES =
+            new LinkedHashMap<>();
+    /**
+     * 兼容面：本任务之外的文件按旧类型 {@code RegistryObject} 读这两个 map，
+     * {@code registryView} 让外部一行都不用改。
+     */
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Block>> GRILL_FACTORY_BLOCKS = new LinkedHashMap<>();
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Item>> GRILL_FACTORY_ITEMS = new LinkedHashMap<>();
-    public static final Map<CuttingMachineFactoryTier, RegistryObject<BlockEntityType<GrillFactoryBlockEntity>>> GRILL_FACTORY_BLOCK_ENTITIES = new LinkedHashMap<>();
-    public static final RegistryObject<MenuType<GrillFactoryMenu>> GRILL_FACTORY_MENU;
+
+    /** 12 个等级共用一个容器类型（注册名与旧的 mekck:grill_factory 逐字相同）。 */
+    public static final mekanism.common.registration.impl.ContainerTypeRegistryObject<GrillFactoryMenu> GRILL_FACTORY_CONTAINER;
+
+    private static final UnaryOperator<BlockBehaviour.Properties> GRILL_FACTORY_PROPERTIES =
+            props -> props.sound(net.minecraft.world.level.block.SoundType.METAL);
 
     // Planting & Cutting Factory blocks, items, and block entities
     public static final mekanism.common.registration.impl.BlockDeferredRegister PLANTING_CUTTING_FACTORY_BLOCKS_REG =
@@ -731,17 +755,9 @@ public final class UniversalCuttingMachine {
     public static final RegistryObject<BlockEntityType<CookingFactoryBlockEntity>> SINGULARITY_COOKING_FACTORY_BLOCK_ENTITY;
 
     // Grill Factory block entity references
-    public static final RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> BASIC_GRILL_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> ADVANCED_GRILL_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> ELITE_GRILL_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> ULTIMATE_GRILL_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> ABSOLUTE_GRILL_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> SUPREME_GRILL_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> COSMIC_GRILL_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> INFINITE_GRILL_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> CRYSTAL_MATRIX_GRILL_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> NEBULA_GRILL_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> SINGULARITY_GRILL_FACTORY_BLOCK_ENTITY;
+    // 旧的 11 个 *_GRILL_FACTORY_BLOCK_ENTITY 字段与 GRILL_FACTORY_BLOCK_ENTITIES 已删
+    // （阶段 3 Task 3）：它们强绑已删的 GrillFactoryBlockEntity，同一个注册名只能挂一个
+    // BlockEntityType。活的 tile 句柄在 GRILL_FACTORY_TILES。
 
     // Skewering Factory block entity references
     public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> BASIC_SKEWERING_FACTORY_BLOCK_ENTITY;
@@ -1027,28 +1043,42 @@ public final class UniversalCuttingMachine {
         }
         SKEWERING_FACTORY_MENU = MENUS.register("skewering_factory", () -> IForgeMenuType.create(SkeweringFactoryMenu::new));
 
-        // Register all grill factory blocks
+        // 烧烤工厂（阶段 3 Task 3）：方块/物品/tile/容器全部走 Mek 的注册器，
+        // **注册名一字不改**（仍是 mekck:<tier>_grill_factory），
+        // 旧存档里已放置的方块因此不会变空气。
+        GRILL_FACTORY_CONTAINER = GRILL_FACTORY_CONTAINERS_REG.register(
+                "grill_factory", cn.ism.mekck.machine.grill.GrillFactoryTile.class, GrillFactoryMenu::new);
         for (CuttingMachineFactoryTier tier : CuttingMachineFactoryTier.values()) {
             String id = tier.getGrillingBlockId();
-            RegistryObject<Block> block = BLOCKS.register(id, () -> new GrillFactoryBlock(tier));
-            RegistryObject<Item> item = ITEMS.register(id, () -> {
-                Component description = switch (tier) {
-                    case NEBULA -> Component.translatable("tooltip.mekck.nebula_grill_factory");
-                    case BLAZE -> Component.translatable("tooltip.mekck.blaze_grill_factory");
-                    case SINGULARITY -> Component.translatable("tooltip.mekck.singularity_grill_factory");
-                    default -> null;
-                };
-                return new MekCkBlockItem(block.get(), new Item.Properties(), description, tier, false);
-            });
-            RegistryObject<BlockEntityType<GrillFactoryBlockEntity>> be = BLOCK_ENTITIES.register(
-                    id, () -> BlockEntityType.Builder.of(
-                            (pos, state) -> new GrillFactoryBlockEntity(tier, pos, state),
-                            block.get()).build(null));
-            GRILL_FACTORY_BLOCKS.put(tier, block);
-            GRILL_FACTORY_ITEMS.put(tier, item);
-            GRILL_FACTORY_BLOCK_ENTITIES.put(tier, be);
+            Component description = switch (tier) {
+                case NEBULA -> Component.translatable("tooltip.mekck.nebula_grill_factory");
+                case BLAZE -> Component.translatable("tooltip.mekck.blaze_grill_factory");
+                case SINGULARITY -> Component.translatable("tooltip.mekck.singularity_grill_factory");
+                default -> null;
+            };
+            // BlockType 需要 tile 与容器，但两者都必须先有方块 —— 用延迟 Supplier 破这个环。
+            mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.grill.GrillFactoryTile> blockType =
+                    GrillFactoryBlock.blockTypeFor(tier, () -> GRILL_FACTORY_CONTAINER,
+                            () -> findGrillFactoryTile(tier));
+
+            mekanism.common.registration.impl.BlockRegistryObject<GrillFactoryBlock, MekCkBlockItem> handle =
+                    GRILL_FACTORY_BLOCKS_REG.register(id,
+                            () -> new GrillFactoryBlock(blockType, tier, GRILL_FACTORY_PROPERTIES),
+                            block -> new MekCkBlockItem(block, new Item.Properties(), description, tier, false));
+            GRILL_FACTORY_HANDLES.put(tier, handle);
+            // 两个 ticker 都必须显式给：TileEntityTypeRegistryObject.getTicker(boolean) 只是
+            // 原样返回存进去的那个，没有任何兜底。不填就是 null，而 Level 只在 ticker 非 null 时
+            // 才驱动方块实体 —— 机器会「放置成功、界面能开、就是不干活」。
+            GRILL_FACTORY_TILES.put(tier, GRILL_FACTORY_TILES_REG.register(handle,
+                    (pos, state) -> new cn.ism.mekck.machine.grill.GrillFactoryTile(handle, pos, state),
+                    (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickClient(level, pos, state, tile),
+                    (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickServer(level, pos, state, tile)));
+
+            // 兼容面：本任务之外的文件（TierInstallerHandler / JEIPlugin / MekckAe2）
+            // 按旧类型读这两个 map。
+            GRILL_FACTORY_BLOCKS.put(tier, registryView(id, ForgeRegistries.BLOCKS));
+            GRILL_FACTORY_ITEMS.put(tier, registryView(id, ForgeRegistries.ITEMS));
         }
-        GRILL_FACTORY_MENU = MENUS.register("grill_factory", () -> IForgeMenuType.create(GrillFactoryMenu::new));
 
         // 种植切配工厂（阶段 3 Task 2）：方块/物品/tile/容器全部走 Mek 的注册器，
         // **注册名一字不改**（仍是 mekck:<tier>_planting_cutting_factory），
@@ -1187,18 +1217,9 @@ public final class UniversalCuttingMachine {
         NEBULA_COOKING_FACTORY_BLOCK_ENTITY = COOKING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.NEBULA);
         SINGULARITY_COOKING_FACTORY_BLOCK_ENTITY = COOKING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.SINGULARITY);
 
-        // Assign specific grill factory references
-        BASIC_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.BASIC);
-        ADVANCED_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ADVANCED);
-        ELITE_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ELITE);
-        ULTIMATE_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ULTIMATE);
-        ABSOLUTE_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ABSOLUTE);
-        SUPREME_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.SUPREME);
-        COSMIC_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.COSMIC);
-        INFINITE_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.INFINITE);
-        CRYSTAL_MATRIX_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.CRYSTAL_MATRIX);
-        NEBULA_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.NEBULA);
-        SINGULARITY_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.SINGULARITY);
+        // 烧烤各档的 tile 句柄在 GRILL_FACTORY_TILES（见上面的注册循环）。
+        // 原先这里还有 11 行 BASIC_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(...)，
+        // 因目标 map 恒空而恒为 null，已随阶段 3 Task 3 一并删除。
 
         // Assign specific skewering factory references
         BASIC_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.BASIC);
@@ -1269,6 +1290,24 @@ public final class UniversalCuttingMachine {
         return found;
     }
 
+    /**
+     * 按等级取回已注册的烧烤 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
+     *
+     * <p>必须延迟：{@code TILE_ENTITIES.register(block, ...)} 要求先有方块，而方块的
+     * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。理由同
+     * {@link #findPlantingCuttingFactoryTile}。</p>
+     */
+    private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.grill.GrillFactoryTile> findGrillFactoryTile(
+            CuttingMachineFactoryTier tier) {
+        mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.grill.GrillFactoryTile> found =
+                GRILL_FACTORY_TILES.get(tier);
+        if (found == null) {
+            throw new IllegalStateException("烧烤工厂 tile 尚未注册：tier=" + tier
+                    + "（BlockTypeTile 的 Supplier 被过早求值）");
+        }
+        return found;
+    }
+
     private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cutting.CuttingFactoryTile> findCuttingFactoryTile(
             CuttingMachineFactoryTier tier) {
         mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cutting.CuttingFactoryTile> found =
@@ -1324,6 +1363,10 @@ public final class UniversalCuttingMachine {
         GRINDING_FACTORY_BLOCKS_REG.register(bus);
         GRINDING_FACTORY_TILES_REG.register(bus);
         GRINDING_FACTORY_CONTAINERS_REG.register(bus);
+        // 烧烤工厂（阶段 3 Task 3）：与切菜/研磨同模，注册名不变。
+        GRILL_FACTORY_BLOCKS_REG.register(bus);
+        GRILL_FACTORY_TILES_REG.register(bus);
+        GRILL_FACTORY_CONTAINERS_REG.register(bus);
         bus.addListener(this::addCreativeTabContents);
         bus.addListener(this::onCommonSetup);
         // 配置文件生成到 config/mekck/mekck-common.toml（与 planting 等配置文件同目录）
@@ -1955,7 +1998,7 @@ public final class UniversalCuttingMachine {
                 MenuScreens.register(SKEWERING_MACHINE_MENU.get(), SkeweringMachineScreen::new);
                 MenuScreens.register(SKEWERING_FACTORY_MENU.get(), SkeweringFactoryScreen::new);
                 MenuScreens.register(GRILL_MENU.get(), GrillScreen::new);
-                MenuScreens.register(GRILL_FACTORY_MENU.get(), GrillFactoryScreen::new);
+                MenuScreens.register(GRILL_FACTORY_CONTAINER.get(), GrillFactoryScreen::new);
                 MenuScreens.register(PLANTING_CUTTING_CONTAINER.get(), PlantingCuttingFactoryScreen::new);
                 MenuScreens.register(PLANTING_CUTTING_STATION_MENU.get(), PlantingCuttingStationScreen::new);
                 MenuScreens.register(BIOREACTOR_MENU.get(), BioreactorScreen::new);

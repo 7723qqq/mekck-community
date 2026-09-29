@@ -7,7 +7,6 @@ import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
 import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
 import cn.ism.mekck.blockentity.SimpleMachineBlockEntity;
 import cn.ism.mekck.blockentity.GrillBlockEntity;
-import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
@@ -113,8 +112,6 @@ public final class SideConfigPacket {
             } else if (be instanceof SkeweringFactoryBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof GrillBlockEntity machine) {
-                machine.setSideMode(dir, mode);
-            } else if (be instanceof GrillFactoryBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof PlantingCuttingStationBlockEntity machine) {
                 machine.setSideMode(dir, mode);

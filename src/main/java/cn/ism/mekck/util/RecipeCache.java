@@ -161,9 +161,38 @@ public final class RecipeCache {
         }
     }
 
+    /**
+     * {@link #singleSlotQuery} 的无类型边界版本。
+     *
+     * <p><b>为什么需要</b>：烧烤工厂的配方类型是运行期从注册表取的
+     * （{@code mekck:grilling} 或外部的 {@code barbequesdelight:grilling}），
+     * 静态类型就是 {@code RecipeType<?>}。而 {@link #singleSlotQuery} 要求
+     * {@code T extends Recipe<RecipeWrapper>}，传 {@code RecipeType<?>} 推不出
+     * {@code T}——通配符捕获推出来的 {@code T} 就是那个无界的 capture，
+     * 约束 {@code T extends Recipe<RecipeWrapper>} 不成立。这是编译期失败，
+     * 只能在这里开一个收 {@code RecipeType<?>} 的入口。
+     *
+     * <p><b>强转的前提</b>：调用方保证传入的类型其配方都是 1 格容器配方
+     * （实现 {@code Recipe<RecipeWrapper>}）。前提不成立时是
+     * {@code ClassCastException}，不会静默错配——这点由烧烤工厂的注释续写。
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static Optional<Recipe<?>> singleSlotQueryUntyped(Level level, RecipeType<?> type, ItemStack stack) {
+        if (level == null || type == null || stack == null || stack.isEmpty()) {
+            return Optional.empty();
+        }
+        SINGLE[0] = stack;
+        try {
+            return (Optional) level.getRecipeManager().getRecipeFor(
+                    (RecipeType) type, SINGLE_WRAPPER, level);
+        } finally {
+            SINGLE[0] = ItemStack.EMPTY;
+        }
+    }
+
     private static final ItemStack[] SINGLE = {ItemStack.EMPTY};
 
-    /** 复用型单槽容器。只被 {@link #singleSlotQuery} 使用，不对外暴露。 */
+    /** 复用型单槽容器。只被上面两个 singleSlotQuery* 使用，不对外暴露。 */
     private static final RecipeWrapper SINGLE_WRAPPER = new RecipeWrapper(new ItemStackHandler(1) {
         @Override
         public int getSlots() {
