@@ -14,6 +14,11 @@ import mekanism.api.text.APILang;
  *
  * <p>译名 key 用 {@code upgrade.mekck.*} 前缀而非 {@code upgrade.mekanism.*}——
  * 后者需要覆盖 Mekanism 自己的 lang 文件，附属模组不该这么做。
+ *
+ * <p><b>消费方一律调方法（{@code upgradeStorage()}），不要直接读字段。</b>
+ * 同名的静态字段与静态方法只差一个括号，写错时编译器<b>不报错</b>，
+ * 直接读字段拿到的是 {@code null}，错误会推迟到更远的地方才炸；
+ * 走方法至少有 {@link #require} 兜底，能当场抛出指明「Mixin 未生效」的异常。
  */
 public final class MekCkAPILang {
 

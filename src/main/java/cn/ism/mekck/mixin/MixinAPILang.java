@@ -35,22 +35,57 @@ import java.util.Arrays;
  * 去匹配目标构造的（{@code Bytecode.changeDescriptorReturnType(this.method.desc, "V")}），
  * 匹配上之后生成 {@code NEW / DUP / 压参 / INVOKESPECIAL / ARETURN}。
  * 所以参数必须按<b>字节码元数</b>写，不能按源码元数写：
- * 枚举构造的前两个槽位是编译器合成的 {@code (String name, int ordinal)}，
- * {@code javap} 不加 {@code -s} 时看不到它们。实测：
+ * 枚举构造的前两个槽位是编译器合成的 {@code (String name, int ordinal)}。
+ * {@code javap} 不带 {@code -s} 不打印 {@code descriptor:} 行，带了也不打印参数名
+ * （除非另加 {@code -parameters}），所以「源码几参」与「字节码几参」不是一回事。实测输出：
  * <pre>
- *   private APILang(String key);                       // 源码 1 参
- *       descriptor: (Ljava/lang/String;ILjava/lang/String;)V              // 字节码 3 参
- *   private APILang(String type, String path);         // 源码 2 参
- *       descriptor: (Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V  // 字节码 4 参
+ *   $ javap -p -s mekanism.api.text.APILang
+ *     private mekanism.api.text.APILang(java.lang.String, java.lang.String);
+ *       descriptor: (Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V
+ *     private mekanism.api.text.APILang(java.lang.String);
+ *       descriptor: (Ljava/lang/String;ILjava/lang/String;)V
  * </pre>
+ * 两行对应源码层的 {@code (String type, String path)}（4 槽）与 {@code (String key)}（3 槽）。
  * 因此 {@link #mekck$langInitInvoker(String, int, String)} 声明 3 个参数对应单参构造。
  * 传 1 个参数会让 Mixin 去找不存在的 {@code (Ljava/lang/String;)V}，
  * 在 required mixin 下直接抛 {@code InvalidAccessorException} 导致启动失败。
  *
+ * <h3>为什么必须「先构造、后写回数组」——JDK 17 不变式</h3>
+ * {@link #mekck$add(String, String)} 的顺序不能调换：先 {@code NEW} 出新常量，
+ * 再把加长后的数组写回 {@code $VALUES}。这依赖 JDK 17 的 {@code java.lang.Enum(String, int)}
+ * 只做两次字段赋值、不碰共享常量数组。实测（Temurin 17.0.20+8）：
+ * <pre>
+ *   $ javap -c -p java.lang.Enum
+ *     protected java.lang.Enum(java.lang.String, int);
+ *       Code:
+ *          0: aload_0
+ *          1: invokespecial #11   // Method java/lang/Object."&lt;init&gt;":()V
+ *          4: aload_0
+ *          5: aload_1
+ *          6: putfield      #1    // Field name:Ljava/lang/String;
+ *          9: aload_0
+ *         10: iload_2
+ *         11: putfield      #7    // Field ordinal:I
+ *         14: return
+ * </pre>
+ * <b>不要把它「优化」成先写回加长后的数组再构造</b>：一旦目标构造会去按 ordinal 写共享数组
+ * （旧 JDK 的枚举实现有此行为，本机无 JDK 8/11 可实测，此处未验证），
+ * ordinal 就得落在长度为 N 的旧数组之外，直接 {@code ArrayIndexOutOfBoundsException}。
+ * 保持现在的顺序即可。
+ *
  * <h3>为什么 ordinal 取数组长度</h3>
  * {@code ordinal} 必须是常量在 {@code $VALUES} 里的下标。{@code variants} 是加入新常量
- * <i>之前</i>的快照，其长度恰好等于新常量的下标。name 传常量名后，
- * {@code name()} 与 {@code valueOf("UPGRADE_STORAGE")} 也能正常工作。
+ * <i>之前</i>的快照，其长度恰好等于新常量的下标。name 传常量名后 {@code name()} 正常。
+ *
+ * <h3>为什么不能用 {@code APILang.valueOf(...)} 取常量</h3>
+ * 4 个注入常量<b>只能</b>经 {@code MekCkAPILang} 的访问器取，不能靠 {@code valueOf}。
+ * JDK 17 的 {@code Enum.valueOf(Class, String)} 走 {@code Class.enumConstantDirectory()}，
+ * 那是一个建在 {@code transient volatile Map} 字段里的一次性缓存：首次调用时从
+ * {@code getEnumConstantsShared()} 拉一次快照，之后永不刷新；{@code Class.getEnumConstants()}
+ * 同样只是把该缓存克隆一份返回。改写 {@code $VALUES} 不会让任何一处重建它。
+ * 所以只要有谁在注入之前碰过一次 {@code Enum.valueOf} / {@code getEnumConstants()}
+ * （反射扫描、库预热等，顺序不受本 Mixin 控制），这 4 个常量对它就不可见，
+ * 会抛 {@code IllegalArgumentException: No enum constant}。
  *
  * <h3>与其它注入者的共存</h3>
  * {@code @Shadow} 读的是目标类的活字段，所以本 Mixin 看到的是
@@ -64,9 +99,6 @@ public abstract class MixinAPILang {
     @Final
     @Mutable
     private static APILang[] $VALUES;
-
-    public MixinAPILang() {
-    }
 
     /**
      * 调 {@code APILang} 的单参私有构造，字节码上即
