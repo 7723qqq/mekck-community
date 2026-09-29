@@ -7,7 +7,6 @@ import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
 import cn.ism.mekck.blockentity.GrindingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
 import cn.ism.mekck.blockentity.SimpleMachineBlockEntity;
-import cn.ism.mekck.blockentity.CuttingMachineFactoryBlockEntity;
 import cn.ism.mekck.blockentity.GrillBlockEntity;
 import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity;
@@ -104,9 +103,10 @@ public final class SideConfigPacket {
                 kitchen.setItemSideMode(dir, mode);
                 return;
             }
-            if (be instanceof CuttingMachineFactoryBlockEntity machine) {
-                machine.setSideMode(dir, mode);
-            } else if (be instanceof UniversalCuttingMachineBlockEntity machine) {
+            // 切菜工厂分支在阶段 2 Task 4.6 删除：新的 CuttingFactoryTile 是
+            // TileEntityConfigurableMachine，物品侧配由 Mek 自己的 configComponent 持有、
+            // 由 Mek 自己的侧配界面写入，MekCK 这个包对它永远不生效。
+            if (be instanceof UniversalCuttingMachineBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof SmartCookingPotBlockEntity machine) {
                 machine.setSideMode(dir, mode);

@@ -26,9 +26,11 @@ import appeng.api.storage.MEStorage;
 import appeng.api.util.AECableType;
 import appeng.capabilities.Capabilities;
 import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
-import cn.ism.mekck.blockentity.CuttingMachineFactoryBlockEntity;
 import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity;
+import cn.ism.mekck.factory.MekCkFactoryType;
+import cn.ism.mekck.machine.MekCkMachineTile;
+import cn.ism.mekck.machine.ports.IMekCkPorted;
 import cn.ism.mekck.util.KaleidoscopeCompat;
 import cn.ism.mekck.util.KaleidoscopeGrillingCompat;
 import net.minecraft.core.BlockPos;
@@ -852,9 +854,13 @@ public final class MekckAe2 {
     // ==================================================================
 
     public static void autoProcessTick(BlockEntity be) {
-        if (!(be instanceof CuttingMachineFactoryBlockEntity) && !(be instanceof GrillFactoryBlockEntity)) return;
+        // 先问 host 再开窗口：host 是一次 WeakHashMap 查找，窗口要 new 出
+        // 2 个 ArrayList + 2 个 IdentityHashMap。本方法每 tick 每机器都跑，
+        // 离线机器（绝大多数）在 host 这一步就返回，不必付窗口的分配。
         FactoryGridHost host = HOSTS.get(be);
         if (host == null || host.mainNode == null || !host.mainNode.isActive()) return;
+        MekPortWindow window = autoWindow(be);
+        if (window == null) return;
         IGrid grid = host.mainNode.getGrid();
         if (grid == null) return;
         MEStorage storage = grid.getStorageService().getInventory();
@@ -862,18 +868,16 @@ public final class MekckAe2 {
         List<String> selected = getSelectedAutoItems(be);
         if (selected.isEmpty()) return;
         IActionSource src = IActionSource.ofMachine(host);
-        ItemStackHandler items = getAutoItems(be);
-        if (items == null) return;
-        int inputSlots = getAutoInputCount(be);
+        int inputSlots = window.inputCount();
 
         // 1) 补料：每个已勾选物品在网络有货时抽 1 个进输入槽（存量 < 64 才补）
         for (String itemId : selected) {
-            if (countInRange(items, itemId, 0, inputSlots) >= 64) continue;
+            if (countInRange(window, itemId, 0, inputSlots) >= 64) continue;
             AEItemKey key = findItemInStorage(storage, itemId);
             if (key == null) continue;
             long got = storage.extract(key, 1, Actionable.MODULATE, src);
             if (got > 0) {
-                insertIntoRange(be, items, key.toStack((int) got), 0, inputSlots);
+                insertIntoRange(be, window, key.toStack((int) got), 0, inputSlots);
             }
         }
 
@@ -881,17 +885,21 @@ public final class MekckAe2 {
         Set<String> products = expectedAutoProducts(be, selected);
         if (!products.isEmpty()) {
             int outputStart = inputSlots;
-            int outputEnd = 2 * inputSlots;
+            int outputEnd = inputSlots + window.outputCount();
             for (int i = outputStart; i < outputEnd; i++) {
-                ItemStack stack = items.getStackInSlot(i);
+                ItemStack stack = window.getStack(i);
                 if (stack.isEmpty()) continue;
                 String id = registryId(stack);
                 if (id == null || !products.contains(id)) continue;
                 AEItemKey key = AEItemKey.of(stack);
                 long accepted = storage.insert(key, stack.getCount(), Actionable.MODULATE, src);
                 if (accepted > 0) {
-                    stack.shrink((int) accepted);
-                    if (stack.isEmpty()) items.setStackInSlot(i, ItemStack.EMPTY);
+                    // 先 copy 再 shrink 再写回：Mek 槽的 getStack() 返回的是活引用
+                    // （实测 BasicInventorySlot.getStack 只有 getfield current / areturn），
+                    // 直接改它会绕过 slot 的变更回调，区块不会标记为脏。
+                    ItemStack rest = stack.copy();
+                    rest.shrink((int) accepted);
+                    window.setStack(i, rest);
                 }
             }
         }
@@ -899,9 +907,9 @@ public final class MekckAe2 {
 
     /** 网络库存中该机器可处理（cutting / grilling）的材料 id 列表。 */
     public static List<String> getAutoProcessableItems(BlockEntity be) {
-        if (!(be instanceof CuttingMachineFactoryBlockEntity) && !(be instanceof GrillFactoryBlockEntity)) return List.of();
         FactoryGridHost host = HOSTS.get(be);
         if (host == null || host.mainNode == null || !host.mainNode.isActive()) return List.of();
+        if (autoWindow(be) == null) return List.of();
         IGrid grid = host.mainNode.getGrid();
         if (grid == null) return List.of();
         MEStorage storage = grid.getStorageService().getInventory();
@@ -920,27 +928,101 @@ public final class MekckAe2 {
         return out;
     }
 
+    /**
+     * 机器「已勾选自动处理的材料」清单。
+     *
+     * <h3>阶段 2 Task 4.6：Mek 原生 tile 的清单存哪里，为什么</h3>
+     * 旧切菜工厂把清单放在自己的 {@code autoSelectedItems} 字段（NBT 键
+     * {@code AutoSelectedItems}）里。新的 {@code CuttingFactoryTile} 没有这个字段。
+     * 结论是<b>不往 {@link IMekCkPorted} 加方法</b>，而是复用
+     * {@link FactoryGridHost#selectedAutoItems} —— 也就是本文件里
+     * {@code INetworkPullable} 通用补料路径<b>已经在用的那一份</b>
+     * （NBT 键 {@code MekCkAutoSel}，读写走 {@code saveToNBT/loadFromNBT}）。
+     *
+     * <p>三条理由：</p>
+     * <ol>
+     *   <li><b>它不是 AE2 端口。</b>{@link IMekCkPorted} 的 7 个方法逐条对应外部
+     *       Mek Energistics 的 {@code IMePatternAutomationHost}，那套签名只描述
+     *       「样板自动化时哪些槽参与、怎么参与」。往里加一个<b>可变</b>的勾选清单
+     *       会把「用户偏好」混进「端口声明」，等对方接口定稿时反而多一个对不上的方法；
+     *   <li><b>网格宿主本来就是这份数据该住的地方。</b>它已经持久化、已经随节点
+     *       生命周期创建销毁、已经有一套读写 API（{@code getSelectedAutoItems} /
+     *       {@code toggleAutoItem}），而且语义完全相同——「这台机器记住了哪些物品」。
+     *       复用它等于零新状态、零新 NBT 键、零新 getter/setter；</li>
+     *   <li><b>不会有双写。</b>新的 Mek tile 不实现 {@code INetworkPullable}，
+     *       所以通用补料路径（{@code autoProcessTickGeneric}）不会去动同一个清单。</li>
+     * </ol>
+     *
+     * <p>代价要说清楚：旧存档里那批勾选<b>不会</b>自动迁移过来（旧键在 BE 的
+     * {@code AutoSelectedItems}、新键在宿主的 {@code MekCkAutoSel}）。
+     * 旧存档迁移 {@code MekCkLegacyMachineNbt} 已经在做一次整体翻译，
+     * 要把这一项也搬过去属于存档迁移任务的范围，不在本任务。</p>
+     */
     public static List<String> getSelectedAutoItems(BlockEntity be) {
-        if (be instanceof CuttingMachineFactoryBlockEntity c) return c.getAutoSelectedItems();
+        if (be instanceof IMekCkPorted) return getSelectedAutoItemsGeneric(be);
         if (be instanceof GrillFactoryBlockEntity g) return g.getAutoSelectedItems();
         return List.of();
     }
 
     public static void toggleAutoItem(BlockEntity be, String itemId) {
-        if (be instanceof CuttingMachineFactoryBlockEntity c) c.toggleAutoSelectedItem(itemId);
+        if (be instanceof IMekCkPorted) toggleAutoItemGeneric(be, itemId);
         else if (be instanceof GrillFactoryBlockEntity g) g.toggleAutoSelectedItem(itemId);
     }
 
     // ----- 自动处理辅助 -----
 
-    private static boolean canProcess(BlockEntity be, ItemStack stack, Level level) {
-        if (be instanceof CuttingMachineFactoryBlockEntity) {
-            for (CuttingBoardRecipe r : (java.util.List<CuttingBoardRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, ModRecipeTypes.CUTTING.get())) {
-                for (Ingredient ing : r.getIngredients()) {
-                    if (!ing.isEmpty() && ing.test(stack)) return true;
-                }
+    /**
+     * 取这台机器的「输入 + 产物」窗口；不支持自动处理时返回 null。
+     *
+     * <p>切菜工厂走 {@link IMekCkPorted}（阶段 2 Task 4.6 起），烧烤工厂仍走旧
+     * {@code ItemStackHandler}（本阶段只迁了切菜）。烧烤分支刻意只判这一个类：
+     * 其余 5 个家族里只有切菜工厂参与 ME 自动处理，判宽了会让
+     * 「自动补料」误作用到不该参与的机器上。</p>
+     */
+    private static MekPortWindow autoWindow(BlockEntity be) {
+        if (be instanceof IMekCkPorted ported) {
+            // 家族闸门不能省：目前只有切菜认自动处理。若放行到「所有端口声明型机器」，
+            // 一台还没定配方族的机器会照着玩家勾选的清单往输入槽里塞物品——
+            // 那是凭空造料，不是拉料。
+            if (portedFamily(be) == null) return null;
+            return MekPortWindow.ofPorted(ported);
+        }
+        if (be instanceof GrillFactoryBlockEntity g) {
+            return MekPortWindow.ofLegacyFactory(g.getItems(), g.getInputSlots());
+        }
+        return null;
+    }
+
+    /**
+     * 端口声明型机器的工艺类型。
+     *
+     * <p>{@link IMekCkPorted} 只说「哪些槽参与自动化」，不说「这台机器做什么工艺」，
+     * 所以配方族要从 tile 的 {@code MekCkFactoryType} 读。
+     * 只有 {@code CUTTING} 认，其余一律返回 {@code null}，由调用方按
+     * 「不处理任何东西」收口——宁可少补料，也不要拿错的配方族算出错的产物
+     * （后者会把不相干的物品从 ME 网络里抽走）。</p>
+     */
+    private static MekCkFactoryType portedFamily(BlockEntity be) {
+        if (!(be instanceof MekCkMachineTile tile)) {
+            return null;
+        }
+        MekCkFactoryType type = tile.getFactoryType();
+        return type == MekCkFactoryType.CUTTING ? type : null;
+    }
+
+    /** 该物品能否作为切菜配料的任一项（供端口声明型机器判定「网络里的这堆料我吃不吃」）。 */
+    private static boolean cuttingIngredientMatches(Level level, ItemStack stack) {
+        for (CuttingBoardRecipe r : (java.util.List<CuttingBoardRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, ModRecipeTypes.CUTTING.get())) {
+            for (Ingredient ing : r.getIngredients()) {
+                if (!ing.isEmpty() && ing.test(stack)) return true;
             }
-            return false;
+        }
+        return false;
+    }
+
+    private static boolean canProcess(BlockEntity be, ItemStack stack, Level level) {
+        if (portedFamily(be) != null) {
+            return cuttingIngredientMatches(level, stack);
         }
         if (be instanceof GrillFactoryBlockEntity) {
             RecipeType<?> grillingType = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("barbequesdelight", "grilling"));
@@ -973,7 +1055,7 @@ public final class MekckAe2 {
     private static Set<String> expectedAutoProducts(BlockEntity be, List<String> selected) {
         Set<String> out = new HashSet<>();
         Level level = be.getLevel();
-        if (be instanceof CuttingMachineFactoryBlockEntity) {
+        if (portedFamily(be) != null) {
             for (CuttingBoardRecipe r : (java.util.List<CuttingBoardRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, ModRecipeTypes.CUTTING.get())) {
                 for (Ingredient ing : r.getIngredients()) {
                     if (ing.isEmpty()) continue;
@@ -1037,31 +1119,26 @@ public final class MekckAe2 {
         return id == null ? null : id.toString();
     }
 
-    private static ItemStackHandler getAutoItems(BlockEntity be) {
-        if (be instanceof CuttingMachineFactoryBlockEntity c) return c.getItems();
-        if (be instanceof GrillFactoryBlockEntity g) return g.getItems();
-        return null;
-    }
-
-    private static int getAutoInputCount(BlockEntity be) {
-        if (be instanceof CuttingMachineFactoryBlockEntity c) return c.getInputSlots();
-        if (be instanceof GrillFactoryBlockEntity g) return g.getInputSlots();
-        return 0;
-    }
-
-    /** 区间内某物品的总量（<b>long</b>：81 槽 × 21 亿会溢出 int，进而误判"还不够"而反复拉料）。 */
-    private static long countInRange(ItemStackHandler items, String itemId, int start, int end) {
+    /**
+     * 区间内某物品的总量（<b>long</b>：81 槽 × 21 亿会溢出 int，进而误判"还不够"而反复拉料）。
+     *
+     * <p>这里按「一段连续窗口」求和，而不是「一台机器的第一个配料口」——
+     * 切菜工厂声明 {@code meGroupParallelItemInputs() == true}，N 个并行槽对外是
+     * 1 个端口，存量自然也要按组求和。</p>
+     */
+    private static long countInRange(MekPortWindow window, String itemId, int start, int end) {
         long count = 0L;
         for (int i = start; i < end; i++) {
-            ItemStack s = items.getStackInSlot(i);
+            ItemStack s = window.getStack(i);
             if (!s.isEmpty() && itemId.equals(registryId(s))) count += s.getCount();
         }
         return count;
     }
 
-    private static void insertIntoRange(BlockEntity be, ItemStackHandler items, ItemStack stack, int start, int end) {
+    private static void insertIntoRange(BlockEntity be, MekPortWindow window, ItemStack stack,
+                                        int start, int end) {
         for (int i = start; i < end && !stack.isEmpty(); i++) {
-            stack = items.insertItem(i, stack, false);
+            stack = window.insertItem(i, stack);
         }
         if (!stack.isEmpty() && be.getLevel() != null && !be.getLevel().isClientSide) {
             // 大堆叠感知：AE2 拉料余料可能是上亿件，原版分堆会炸实体
@@ -1483,10 +1560,11 @@ public final class MekckAe2 {
                 entries = buildGrindingPatterns(level, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity) {
                 entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "plantcut"), avail);
-            } else if (owner instanceof cn.ism.mekck.blockentity.CuttingMachineFactoryBlockEntity) {
-                // 切菜工厂：FD cutting 配方（与通用切菜机同一批配方，构建器可复用）
+            } else if (owner instanceof MekCkMachineTile && portedFamily(owner) != null) {
+                // 端口声明型工厂（切菜，阶段 2 Task 4.6 起）：FD cutting 配方，
+                // 与通用切菜机同一批配方，构建器可复用
                 entries = buildCuttingPatterns(level, avail);
-            } else if (owner instanceof cn.ism.mekck.blockentity.GrillFactoryBlockEntity) {
+            } else if (owner instanceof GrillFactoryBlockEntity) {
                 // 烧烤工厂：BBQ grilling 配方（终端下单后由 startOrder 设订单，机器按订单加工）
                 entries = buildGrillingPatterns(level, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.IceFactoryBlockEntity) {
@@ -1520,7 +1598,7 @@ public final class MekckAe2 {
                 if (job.remainingOutput <= 0) break;
                 if (out.what() instanceof AEItemKey key) {
                     long want = Math.min(job.remainingOutput, out.amount());
-                    long done = exportFromSlots(storage, key, want, getOutputSlots(), src);
+                    long done = exportFromSlots(storage, key, want, src);
                     job.remainingOutput -= done;
                 }
             }
@@ -1533,11 +1611,28 @@ public final class MekckAe2 {
             }
         }
 
-        private long exportFromSlots(MEStorage storage, AEItemKey key, long want, int[] slots, IActionSource src) {
+        /**
+         * 端口声明型机器的槽窗口；不是端口声明型（或端口为空）时返回 null。
+         *
+         * <p>{@link #getItems()} 对这类机器恒返 null（{@code CuttingFactoryTile} 没有
+         * {@code ItemStackHandler}），所以 {@code pushPattern} 的投料与
+         * {@code processJob} 的产物回写都必须先问这个方法，
+         * 否则前者会把整批材料丢到机器脚下的地上、后者永远导出不到产物，
+         * 于是 {@code job.remainingOutput} 减不下去、机器被 {@code isBusy()} 永久锁死。</p>
+         */
+        private MekPortWindow portWindow() {
+            return owner instanceof IMekCkPorted ported ? MekPortWindow.ofPorted(ported) : null;
+        }
+
+        private long exportFromSlots(MEStorage storage, AEItemKey key, long want, IActionSource src) {
+            MekPortWindow window = portWindow();
+            if (window != null) {
+                return exportFromWindow(storage, key, want, src, window, window.outputIndices());
+            }
             ItemStackHandler items = getItems();
             if (items == null) return 0;
             long done = 0;
-            for (int slot : slots) {
+            for (int slot : getOutputSlots()) {
                 if (want - done <= 0) break;
                 ItemStack stack = items.getStackInSlot(slot);
                 if (stack.isEmpty() || !AEItemKey.matches(key, stack)) continue;
@@ -1546,6 +1641,29 @@ public final class MekckAe2 {
                 if (accepted > 0) {
                     stack.shrink((int) accepted);
                     if (stack.isEmpty()) items.setStackInSlot(slot, ItemStack.EMPTY);
+                    done += accepted;
+                }
+            }
+            if (done > 0) owner.setChanged();
+            return done;
+        }
+
+        private long exportFromWindow(MEStorage storage, AEItemKey key, long want, IActionSource src,
+                                      MekPortWindow window, int[] slots) {
+            long done = 0;
+            for (int slot : slots) {
+                if (want - done <= 0) break;
+                ItemStack stack = window.getStack(slot);
+                if (stack.isEmpty() || !AEItemKey.matches(key, stack)) continue;
+                long take = Math.min(want - done, stack.getCount());
+                long accepted = storage.insert(key, take, Actionable.MODULATE, src);
+                if (accepted > 0) {
+                    // copy → shrink → setStack：Mek 槽的 setStack 会 copy 一份并触发
+                    // onContentsChanged（实测 BasicInventorySlot.setStack 偏移 40-45 / 79-83），
+                    // 直接改 getStack() 返回的活引用会绕过它，区块不会标记为脏。
+                    ItemStack rest = stack.copy();
+                    rest.shrink((int) accepted);
+                    window.setStack(slot, rest);
                     done += accepted;
                 }
             }
@@ -1779,6 +1897,11 @@ public final class MekckAe2 {
         }
 
         private void insertIntoMachine(List<GenericStack> inputs) {
+            MekPortWindow window = portWindow();
+            if (window != null) {
+                insertIntoPortWindow(inputs, window);
+                return;
+            }
             ItemStackHandler items = getItems();
             if (items == null) return;
             int start = getStorageStart();
@@ -1810,6 +1933,33 @@ public final class MekckAe2 {
                 }
                 if (leftover > 0L && owner.getLevel() != null && !owner.getLevel().isClientSide) {
                     // 连扩展槽也装不下才落到世界（原实现会把整批余料都丢出来）
+                    cn.ism.mekck.util.BigStackDrops.dropAbove(owner.getLevel(), owner.getBlockPos(),
+                            ik.toStack((int) Math.min(leftover, Integer.MAX_VALUE)));
+                }
+            }
+            owner.setChanged();
+        }
+
+        /**
+         * 端口声明型机器的投料。
+         *
+         * <p>目标窗口就是<b>整个输入组</b> {@code [0, n)}——这正是
+         * {@code meGroupParallelItemInputs() == true} 在消费方的落点：N 个并行槽
+         * 对 AE2 是 1 个端口，于是「这个端口能装多少」要问整组而不是第一格。
+         * 逐种材料先问 {@link MekPortWindow#bulkSpace} 再按量插，
+         * 与旧 {@code IntHandlerBulkView} 的两遍扫描同构，成本不随数量增长。</p>
+         */
+        private void insertIntoPortWindow(List<GenericStack> inputs, MekPortWindow window) {
+            int count = window.inputCount();
+            for (GenericStack gs : inputs) {
+                if (!(gs.what() instanceof AEItemKey ik)) continue;
+                long amount = gs.amount();
+                if (amount <= 0L) continue;
+                ItemStack proto = ik.toStack(1);
+                long space = window.bulkSpace(proto, 0, count);
+                long moved = space <= 0L ? 0L : window.bulkInsert(proto, Math.min(amount, space), 0, count);
+                long leftover = amount - moved;
+                if (leftover > 0L && owner.getLevel() != null && !owner.getLevel().isClientSide) {
                     cn.ism.mekck.util.BigStackDrops.dropAbove(owner.getLevel(), owner.getBlockPos(),
                             ik.toStack((int) Math.min(leftover, Integer.MAX_VALUE)));
                 }

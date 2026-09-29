@@ -1,7 +1,7 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.blockentity.CuttingMachineFactoryBlockEntity;
 import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
+import cn.ism.mekck.machine.ports.IMekCkPorted;
 import cn.ism.mekck.util.AE2Compat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -37,7 +37,10 @@ public class AutoProcessTogglePacket {
             ServerPlayer player = context.get().getSender();
             if (packet.itemId.isEmpty()) return;
             BlockEntity be = PacketGuard.target(player, packet.pos);
-            if (be instanceof CuttingMachineFactoryBlockEntity || be instanceof GrillFactoryBlockEntity) {
+            // 切菜工厂在阶段 2 Task 4.6 起按端口声明判定（IMekCkPorted）；
+            // 烧烤工厂仍是旧 BE。勾选清单由 MekckAe2 落到各自的存储上
+            // （端口声明型机器走网格宿主，烧烤工厂仍走 BE 自己的字段）。
+            if (be instanceof IMekCkPorted || be instanceof GrillFactoryBlockEntity) {
                 AE2Compat.toggleAutoItem(be, packet.itemId);
                 List<String> available = AE2Compat.getAutoProcessableItems(be);
                 List<String> selected = AE2Compat.getSelectedAutoItems(be);

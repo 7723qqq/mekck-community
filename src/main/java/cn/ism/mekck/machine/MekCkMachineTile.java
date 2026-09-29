@@ -541,6 +541,15 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
             energySlot.fillContainerOrConvert();
         }
         workCycle();
+        // AE2 放在 workCycle() 之后：本 tick 刚产出的物品要先落到产物槽，
+        // MEckAe2 的产物回写才能在同一 tick 看到它们（与旧
+        // CuttingMachineFactoryBlockEntity.serverTick 里「先干活、后
+        // AE2Compat.autoProcessTick」的次序一致）。
+        cn.ism.mekck.util.AE2Compat.serverTick(this, getLevel(), worldPosition);
+        // 「已勾选材料 → 持续补料 + 产物回网」的第二段，与旧 serverTick 里紧跟在
+        // AE2Compat.serverTick 之后的那行逐字对应。没接上这一段的表现是：
+        // 节点在网、样板在终端里看得见，但勾了材料也不会自动补料。
+        cn.ism.mekck.util.AE2Compat.autoProcessTick(this);
     }
 
     /** 闸门 + 进度条 + 执行器调度。拆出来只为让 {@link #onUpdateServer} 保持一屏可读。 */
@@ -623,6 +632,13 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         tag.put(TAG_EXECUTOR, executorTag);
         tag.putInt(TAG_WORK_PROGRESS, workProgress);
         tag.putInt(TAG_NATIVE_VERSION, NATIVE_VERSION);
+        // AE2 网格节点的 NBT 必须与节点一同存活（阶段 2 Task 4.6）：
+        // 节点里存着频道占用与「已勾选的自动处理材料」，不写就等于每次重载
+        // 都换一批频道。AE2Compat 未装时整个方法短路为空操作。
+        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        // 放置者归属（网络厨师学徒）：与旧 BE 的 saveAdditional 逐字同款，
+        // 同样不依赖 AE2 是否安装。
+        cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
     }
 
     /**
@@ -684,6 +700,24 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         }
         workProgress = Math.max(0, tag.getInt(TAG_WORK_PROGRESS));
         executor().load(tag.getCompound(TAG_EXECUTOR));
+        // AE2 网格节点的 NBT（阶段 2 Task 4.6）：必须在 super.load 之后——
+        // 它的 loadFromNBT 只是把整个 tag 缓存成 pendingTag，真正建节点要等
+        // 下一次 serverTick 的 init()，与旧 BE 的调用位置一致。
+        cn.ism.mekck.util.AE2Compat.load(this, tag);
+        cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
+    }
+
+    /**
+     * AE2 网格节点随方块卸载一并销毁（阶段 2 Task 4.6）。
+     *
+     * <p>与旧 {@code CuttingMachineFactoryBlockEntity.setRemoved} 逐字同款：
+     * 不断的话，AE2 侧会一直认为这台机器还占着 8 个频道（主节点 + 7 内部节点），
+     * 表现为拆掉再放一台就接不上网络。</p>
+     */
+    @Override
+    public void setRemoved() {
+        super.setRemoved();
+        cn.ism.mekck.util.AE2Compat.onRemoved(this);
     }
 
     /**

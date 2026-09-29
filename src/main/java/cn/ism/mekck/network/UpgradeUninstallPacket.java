@@ -16,6 +16,10 @@ import java.util.function.Supplier;
  * 升级卸载（升级窗口的「卸载」按钮）：
  * mode 0 = 卸载 1 个；mode 1 = 卸载全部；mode 2 = 卸载指定槽位的升级（用于冷萃 / 费列罗链式槽）。
  * slot 参数仅 mode 2 使用（升级槽的物品槽索引）。
+ *
+ * <p>切菜工厂不在分发链里：新的 {@code CuttingFactoryTile} 用 Mek 自己的
+ * {@code TileComponentUpgrade}，卸载由 Mek 的升级界面直接操作组件，
+ * 不经过本包（阶段 2 Task 4.6 起）。
  */
 public final class UpgradeUninstallPacket {
 
@@ -60,8 +64,6 @@ public final class UpgradeUninstallPacket {
             } else if (be instanceof cn.ism.mekck.blockentity.CookingFactoryBlockEntity machine) {
                 machine.uninstallUpgrade(mode, slot);
             } else if (be instanceof cn.ism.mekck.blockentity.GrillFactoryBlockEntity machine) {
-                machine.uninstallUpgrade(mode, slot);
-            } else if (be instanceof cn.ism.mekck.blockentity.CuttingMachineFactoryBlockEntity machine) {
                 machine.uninstallUpgrade(mode, slot);
             } else if (be instanceof cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity machine) {
                 machine.uninstallUpgrade(mode, slot);

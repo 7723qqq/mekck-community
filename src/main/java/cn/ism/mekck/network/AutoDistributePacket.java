@@ -1,6 +1,5 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.blockentity.CuttingMachineFactoryBlockEntity;
 import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity;
 import net.minecraft.core.BlockPos;
@@ -33,9 +32,11 @@ public final class AutoDistributePacket {
             ServerPlayer player = context.getSender();
             BlockEntity be = PacketGuard.target(player, pos);
             if (be == null) return;
-            if (be instanceof CuttingMachineFactoryBlockEntity machine) {
-                machine.toggleAutoDistribute();
-            } else if (be instanceof GrillFactoryBlockEntity grill) {
+            // 切菜工厂分支在阶段 2 Task 4.6 删除：新的 CuttingFactoryTile 是 Mek 原生 tile，
+            // 自动分配这个 MekCK 自研状态已随旧 BE 一起消失，Mek 自己的
+            // TileComponentEjector + 弹出配置接管这件事，界面上也没有对应按钮。
+            // 保留分支只会让包「到达但无事发生」，且在 Task 5 删掉旧类后直接编译不过。
+            if (be instanceof GrillFactoryBlockEntity grill) {
                 grill.toggleAutoDistribute();
             } else if (be instanceof PlantingCuttingFactoryBlockEntity planting) {
                 planting.toggleAutoDistribute();
