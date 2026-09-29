@@ -13,9 +13,9 @@
 
 ## 内容一览
 
-### 7 大机器系列 × 12 个工厂等级
+### 6 大机器系列 × 12 个工厂等级
 
-每个系列都有一台单方块基础机器，外加 **12 个等级**的工厂（合计 84 个工厂方块）：
+每个系列都有一台单方块基础机器，外加 **12 个等级**的工厂（**合计 72 个工厂方块**）：
 
 | 系列 | 基础机器 | 工厂 |
 |---|---|---|
@@ -25,7 +25,13 @@
 | 穿串 | 智能穿串机 | `mekck:{等级}_skewering_factory` |
 | 烧烤 | 电力烧烤架 | `mekck:{等级}_grill_factory` |
 | 研磨 | 电力研磨机 | `mekck:{等级}_grinding_factory` |
-| 制冰 | 急冻制冰机 | `mekck:{等级}_ice_factory` |
+
+> **制冰工厂 —— 尚未发布。** 第 7 个系列已实现，其基础机器（急冻制冰机）可用，
+> 但 12 个 `mekck:{等级}_ice_factory` 工厂方块被 `UniversalCuttingMachine.ICE_FACTORY_ENABLED = false`
+> 挡住，**完全没有注册**——方块、物品、方块实体、菜单一律没有。
+> 它们的资源（blockstate、模型、语言键、配方）已经在仓库里。
+> 单把该开关改回 `true` 并不够：`data/mekck/loot_tables/blocks/` 下还缺 12 张战利品表，
+> 否则这些方块破坏时什么都不掉。详见 `docs/STATUS.md`。
 
 **等级链**
 
@@ -105,7 +111,7 @@ config/mekck/mekck-common.toml
 ## 仓库结构
 
 ```
-src/main/java/cn/ism/mekck/     Java 源码（279 个文件）
+src/main/java/cn/ism/mekck/     Java 源码
 src/main/resources/             资源、数据、语言文件、游戏内指南
   assets/mekck/mekckguide/      GuideME 指南页（Markdown）
   assets/mekck/textures/block/vendor/   以 MIT 许可再分发的纹理（详见 THIRD-PARTY.md）

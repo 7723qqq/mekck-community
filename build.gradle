@@ -240,6 +240,64 @@ tasks.named('processResources', ProcessResources).configure {
     }
 }
 
+// ── Mixin refmap 的 dev 侧翻译 ────────────────────────────────────────
+//
+// 背景（第三轮审查实测）：mekck.refmap.json 是**手写**的，里面写的是 **SRG 名**
+// （ItemStack.save → m_41739_、ItemStack.of → m_41712_），因为打包产物跑在 SRG 环境。
+// 但 `./gradlew runClient/runServer` 与 ForgeGradle 6 生成的 IDE run config 跑的是
+// **mojmap** jar。Mixin 0.8.5 只有在 `mixin.env.remapRefMap` 为真时才用
+// RemappingReferenceMapper 把 refmap 翻译回 mojmap，否则拿 SRG 名去 mojmap 类里找
+// 目标 —— 找不到，而 mekck.mixins.json 是 "required": true ⇒ **Bootstrap 阶段硬崩**。
+//
+// 实证（同形态的既有案例）：本仓 run/logs/latest.log 里 Farmer's Delight 自己的 SRG
+// refmap 在 dev 环境被逐字使用后的匹配失败记录。
+//
+// 为什么不用 mixingradle 插件：它会顺带接管注解处理器，而 AP 会对 4 个
+// `remap = false` 的 mod 类 mixin 报成员级错误（见 STATUS.md §六.4）—— 那条路已确认走不通。
+//
+// 为什么动态找路径而不是写死：`~/.gradle/caches/forge_gradle/mcp_repo/...` 下带
+// `1.20.1-20230612.114412` 这种**随 MCP 快照变的时间戳**，写死就是 build.gradle:147
+// 明令禁止的「本机 + 本次缓存布局的快照」—— 换机器 / 缓存重建即静默失效。
+// 找不到时**显式失败**，不让 dev 跑出一个看不懂的 Bootstrap 崩溃。
+def resolveSrgToOfficialTsrg = {
+    def mcpConfigDir = new File(gradle.gradleUserHomeDir,
+            'caches/forge_gradle/minecraft_user_repo/de/oceanlabs/mcp/mcp_config')
+    if (!mcpConfigDir.isDirectory()) {
+        return null
+    }
+    // 同一版本可能有多个 MCP 快照目录，取时间戳最大的那个。
+    def candidates = mcpConfigDir.listFiles({ File f -> f.isDirectory() && f.name.startsWith('1.20.1-') } as FileFilter)
+            .collect { new File(it, 'srg_to_official_1.20.1.tsrg') }
+            .findAll { it.isFile() }
+            .sort { it.parentFile.name }
+    return candidates.isEmpty() ? null : candidates.last()
+}
+
+['runClient', 'runServer', 'runGameTestServer'].each { String runTaskName ->
+    tasks.matching { it.name == runTaskName }.configureEach { task ->
+        def tsrg = resolveSrgToOfficialTsrg()
+        if (tsrg == null) {
+            throw new GradleException("""
+======================================================================
+找不到 SRG → mojmap 映射文件（dev 运行 Mixin 需要它）
+
+  在 ${mcpConfigDir} 下找不到 srg_to_official_1.20.1.tsrg。
+
+为什么需要它：src/main/resources/mekck.refmap.json 是手写的、内容是 **SRG 名**
+（打包产物跑 SRG 环境）。而 ${runTaskName} 跑的是 **mojmap** jar，Mixin 必须靠
+mixin.env.remapRefMap 把 refmap 翻译回去，否则 `ItemStack.save → m_41739_`
+在 mojmap 类里找不到目标；mekck.mixins.json 是 "required": true ⇒ Bootstrap 阶段硬崩。
+
+多半是先跑过一次 `./gradlew build`（ForgeGradle 的 setup 任务产出该文件）造成的。
+======================================================================
+""".stripIndent())
+        }
+        // 每次运行都重解析：首次 build 之前 configure 阶段可能还找不到。
+        task.jvmArgs "-Dmixin.env.remapRefMap=true",
+                "-Dmixin.env.refMapRemappingFile=${tsrg.absolutePath}".toString()
+    }
+}
+
 // Example for how to get properties into the manifest for reading at runtime.
 tasks.named('jar', Jar).configure {
     // 发布 jar 不包含 GameTest 类与结构模板（与 mekckf 的 jar 排除规则保持一致）。

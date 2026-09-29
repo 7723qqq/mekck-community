@@ -4,6 +4,7 @@ import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.machine.MekCkBatchPacking;
 import cn.ism.mekck.machine.MekCkMachineTile;
+import cn.ism.mekck.machine.MekCkOrderState;
 import cn.ism.mekck.machine.MekCkRecipeExecutor;
 import cn.ism.mekck.recipe.PlantingCuttingRecipe;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
@@ -54,15 +55,14 @@ public final class PlantingCuttingFactoryExecutor implements MekCkRecipeExecutor
     public static final long NUTRIENT_MB_PER_SLOT = 100;
 
     /** 与旧存档同名：{@code MekCkLegacyMachineNbt} 只把根标签换成子标签，不改键名。 */
-    public static final String TAG_ORDER_RECIPE = "OrderRecipeId";
-    public static final String TAG_ORDER_QUANTITY = "OrderQuantity";
-    public static final String TAG_ORDER_COMPLETED = "OrderCompleted";
+    public static final String TAG_ORDER_RECIPE = MekCkOrderState.TAG_ORDER_RECIPE;
+    public static final String TAG_ORDER_QUANTITY = MekCkOrderState.TAG_ORDER_QUANTITY;
+    public static final String TAG_ORDER_COMPLETED = MekCkOrderState.TAG_ORDER_COMPLETED;
 
     // ── 执行器自有状态：订单 ────────────────────────────────────────────
 
-    private ResourceLocation orderRecipeId;
-    private int orderQuantity;
-    private int orderCompleted;
+    /** 订单状态。唯一的持有者。统一契约见 {@link MekCkOrderState}。 */
+    private final MekCkOrderState order = new MekCkOrderState();
 
     // ── 配方缓存 ────────────────────────────────────────────────────────
 
@@ -146,10 +146,8 @@ public final class PlantingCuttingFactoryExecutor implements MekCkRecipeExecutor
 
     @Override
     public void save(CompoundTag tag) {
-        if (orderRecipeId != null) {
-            tag.putString(TAG_ORDER_RECIPE, orderRecipeId.toString());
-            tag.putInt(TAG_ORDER_QUANTITY, orderQuantity);
-            tag.putInt(TAG_ORDER_COMPLETED, orderCompleted);
+        if (order.isActive()) {
+            order.save(tag);
         }
     }
 
@@ -163,58 +161,39 @@ public final class PlantingCuttingFactoryExecutor implements MekCkRecipeExecutor
     @Override
     public void load(CompoundTag tag) {
         invalidateCache();
-        if (tag != null && tag.contains(TAG_ORDER_RECIPE, Tag.TAG_STRING)) {
-            ResourceLocation parsed = ResourceLocation.tryParse(tag.getString(TAG_ORDER_RECIPE));
-            if (parsed != null) {
-                orderRecipeId = parsed;
-                orderQuantity = Math.max(0, tag.getInt(TAG_ORDER_QUANTITY));
-                orderCompleted = Math.max(0, tag.getInt(TAG_ORDER_COMPLETED));
-                return;
-            }
-        }
-        clearOrder();
+        order.load(tag);
     }
 
     // ── 订单 ────────────────────────────────────────────────────────────
 
     public ResourceLocation getOrderRecipeId() {
-        return orderRecipeId;
+        return order.getRecipeId();
     }
 
     public int getOrderQuantity() {
-        return orderRecipeId == null ? 0 : orderQuantity;
+        return order.getQuantity();
     }
 
     public int getOrderCompleted() {
-        return orderCompleted;
+        return order.getCompleted();
     }
 
+    /** 下单。{@code recipeId == null} 等价于 {@link #clearOrder()}（不留残留字段）。 */
     public void setOrder(ResourceLocation recipeId, int quantity) {
-        this.orderRecipeId = recipeId;
-        this.orderQuantity = Math.max(1, quantity);
-        this.orderCompleted = 0;
+        order.setOrder(recipeId, quantity);
     }
 
     public void clearOrder() {
-        this.orderRecipeId = null;
-        this.orderQuantity = 0;
-        this.orderCompleted = 0;
+        order.clear();
     }
 
     /**
-     * 完成一份订单后的推进 —— 抽成静态纯函数，因为它��订单语义里唯一有分支的部分。
+     * 完成一份订单后的推进判定 —— 纯函数形态，供裸 JVM 断言用。
      *
-     * <p>「先自增再比」而不是「先比再自增」：与旧实现尾部的
-     * {@code orderCompleted++; if (>= quantity) 清空} 同序。差一位就会导致
-     * 最后一份做完订单还挂着，机器再也不接新料。</p>
-     *
-     * <p>加法走 {@code long}：订单份数被配成 {@link Integer#MAX_VALUE} 且真跑满时
-     * int 会绕成负数，判「未满」的那一支永远为真 ⇒ 订单永远完不成。</p>
-     *
-     * @return 订单是否已满（满则调用方应 {@link #clearOrder()}）
+     * @see MekCkOrderState#advancedTo(int, int, int)
      */
     static boolean advanceOrder(int completed, int quantity) {
-        return (long) completed + 1 >= Math.max(1, quantity);
+        return MekCkOrderState.advancedTo(completed, quantity, 1);
     }
 
     // ── 配方匹配 ────────────────────────────────────────────────────────
@@ -280,10 +259,8 @@ public final class PlantingCuttingFactoryExecutor implements MekCkRecipeExecutor
         } else {
             found = lookup(level, type, seed);
         }
-        if (orderRecipeId != null) {
-            if (found.isEmpty() || !orderRecipeId.equals(found.get().getId())) {
-                return Optional.empty();
-            }
+        if (order.isActive() && (!found.isPresent() || !order.getRecipeId().equals(found.get().getId()))) {
+            return Optional.empty();
         }
         return found;
     }
@@ -369,11 +346,11 @@ public final class PlantingCuttingFactoryExecutor implements MekCkRecipeExecutor
                 MekCkBatchPacking.insertOutput(outputs, scaled(result, consumeCount));
             }
         }
-        if (orderRecipeId != null) {
-            orderCompleted++;
-            if (advanceOrder(orderCompleted, orderQuantity)) {
-                clearOrder();
-            }
+        if (order.isActive() && order.advance(1)) {
+            // 推进与判定都在 MekCkOrderState 里。修复前这里是 `orderCompleted++`（int 自增）：
+            // 份数配成 Integer.MAX_VALUE 且真跑满时先绕成 MIN_VALUE，advanceOrder 的 long
+            // 转换太晚 ⇒ 订单永远完不成、机器永远只认这一张配方，且不报任何错。
+            order.clear();
         }
     }
 

@@ -388,8 +388,19 @@ public class TestMekCkPersistedSlotCoverage {
             String familySource = source(family);
             assertTrue(family + " 必须覆写家族读取钩子",
                     familySource.contains("protected void readExtraSustainedData("));
-            assertTrue(family + " 的 load 必须走同一个入口（否则两条路径会漂移）",
-                    familySource.contains("readExtraSustainedData(tag);"));
+            // ⚠️ 家族 tile **不得**再覆写 load()。第三轮审查前两个家族都覆写了、各自再调一次
+            // readExtraSustainedData(tag)，看着无害，实际有两个问题：
+            //   ① 传进去的是**未经迁移的原始 tag**——基类在旧存档路径上会把 tag 换绑成
+            //      迁移后的新标签，而子类 load 拿到的仍是调用方给的那一份。今天
+            //      FluidTanks / GasTank 键名没被迁移器碰过所以两次读结果相同；只要迁移器
+            //      将来开始处理这个键，子类这次读就会**用旧值覆盖掉迁移结果**，静默且难查。
+            //   ② 多一次反序列化（烹饪 3 罐、种植切配 1 罐，每 tick 读档都多做一遍）。
+            // 单一入口（基类 load → readMekckPersistentState → readExtraSustainedData）
+            // 同时覆盖读档与「掉落物再放置」两条路径，且用的是正确的 tag。
+            assertFalse(family + " 不得覆写 load()：基类已用正确的（可能已迁移的）tag 调过家族钩子，"
+                            + "子类再调一次会用未经迁移的旧值覆盖迁移结果",
+                    familySource.contains("public void load(CompoundTag tag)")
+                            || familySource.contains("public void load(net.minecraft.nbt.CompoundTag tag)"));
         }
     }
 

@@ -315,20 +315,24 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
         }
     }
 
-    @Override
-    public void load(CompoundTag tag) {
-        super.load(tag);
-        // 父类读档链里 ISustainedData 钩子也会调本方法（见 MekCkMachineTile 的键契约注释），
-        // 这里再调一次是幂等的；两条路径共用同一段读取，不会漂移。
-        readExtraSustainedData(tag);
-    }
-
     /**
      * 读三个流体罐 —— 读档与「掉落物再放置」共用的唯一入口。
      *
      * <p>键名 {@code FluidTanks}（内含 {@code Tanks} 列表 + {@code Count}）与旧实现逐字相同，
      * 旧存档与战利品表 {@code copy_nbt} 都零转换；罐数不匹配时按 {@code min} 截断，
      * 不会因为档位/版本变化而抛异常。</p>
+     *
+     * <p><b>本类刻意不再覆写 {@code load}</b>。基类 {@code MekCkMachineTile.load} 会在
+     * {@code super.load} 之后调 {@code readMekckPersistentState(tag)}，而后者第一步就是
+     * {@code readExtraSustainedData(tag)}——次序已经正确（家族自有状态排在
+     * {@code TileComponentUpgrade.read} 的 {@code upgrades.clear()} 之后）。</p>
+     *
+     * <p>此前这里额外覆写了一次 {@code load} 并再调一遍 {@code readExtraSustainedData}，
+     * 看着无害，实际有两个问题：① 传进去的是<b>未经迁移的原始 tag</b>——基类在旧存档路径上
+     * 会把 {@code tag} 换绑成迁移后的新标签，而子类的 {@code load} 拿到的仍是调用方给的那一份。
+     * 今天 {@code FluidTanks} 键名没被迁移器碰过，所以两次读结果相同、看不出问题；
+     * 但只要迁移器将来开始处理这个键，子类这次读就会<b>用旧值覆盖掉迁移结果</b>。
+     * ② 多一次反序列化。删掉覆写后两条路径（读档 / 掉落物再放置）都由基类那一次统一负责。</p>
      */
     @Override
     protected void readExtraSustainedData(CompoundTag tag) {

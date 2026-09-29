@@ -298,24 +298,16 @@ public class PlantingCuttingFactoryTile extends MekCkMachineTile implements IMek
     }
 
     /**
-     * {@inheritDoc}
-     *
-     * <p>在 {@code super.load} 之后读营养液罐。父类的 {@code TileComponentUpgrade.read}
-     * 第一件事是 {@code upgrades.clear()}，所以家族自有状态一律排在它后面读。</p>
-     */
-    @Override
-    public void load(net.minecraft.nbt.CompoundTag tag) {
-        super.load(tag);
-        // 父类读档链里 ISustainedData 钩子也会调本方法（见 MekCkMachineTile 的键契约注释），
-        // 这里再调一次是幂等的；两条路径共用同一段读取，不会漂移。
-        readExtraSustainedData(tag);
-    }
-
-    /**
      * 读营养液罐 —— 读档与「掉落物再放置」共用的唯一入口。
      *
      * <p>罐在父类构造期由 {@code getInitialGasTanks} 创建，这里取同一份而不是缓存字段。
      * 键名 {@code GasTank} 与旧实现逐字相同，所以旧存档与战利品表 {@code copy_nbt} 都零转换。</p>
+     *
+     * <p><b>本类刻意不再覆写 {@code load}</b>，理由与 {@code CookingFactoryTile} 逐条相同：
+     * 基类 {@code MekCkMachineTile.load} 在 {@code super.load}（它内部会先
+     * {@code upgrades.clear()}）之后，经 {@code readMekckPersistentState} 调本方法，
+     * 次序已经正确；此前额外覆写的那次传的是<b>未经迁移的原始 tag</b>，是「用旧值覆盖迁移结果」
+     * 的隐患，外加一次多余的反序列化。</p>
      */
     @Override
     protected void readExtraSustainedData(net.minecraft.nbt.CompoundTag tag) {

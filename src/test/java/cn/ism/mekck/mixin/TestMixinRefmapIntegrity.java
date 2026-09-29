@@ -50,6 +50,7 @@ public class TestMixinRefmapIntegrity {
     private static final String MIXIN_DIR = "src/main/java/cn/ism/mekck/mixin";
     private static final String CONFIG = "src/main/resources/mekck.mixins.json";
     private static final String REFMAP = "src/main/resources/mekck.refmap.json";
+    private static final String BUILD_GRADLE = "build.gradle";
 
     private static String read(String path) throws IOException {
         return Files.readString(Path.of(path), StandardCharsets.UTF_8);
@@ -66,6 +67,47 @@ public class TestMixinRefmapIntegrity {
                 config.contains("mekck.refmap.json"));
         assertTrue("src/main/resources/mekck.refmap.json 必须存在（它会被打进 jar 根目录）",
                 Files.exists(Path.of(REFMAP)));
+    }
+
+    /**
+     * <b>dev 运行必须打开 refmap 的运行期翻译</b>，否则手写的 SRG refmap 会把开发环境打崩。
+     *
+     * <h3>这条护栏守的是与 {@link #configDeclaresTheRefmapWeShip} <b>相反</b>方向的故障</h3>
+     * 上一条守「生产环境」：没有 refmap 就没有 SRG 名，{@code @Inject} 匹配不到原版方法。
+     * 本条守「开发环境」：refmap <b>在</b>，可它里面写的是 <b>SRG 名</b>（{@code m_41739_}），
+     * 而 {@code runClient} / {@code runServer} / {@code runGameTestServer} 与 ForgeGradle 6
+     * 生成的 IDE run config 跑的是 <b>mojmap</b> jar。Mixin 0.8.5 只有在
+     * {@code mixin.env.remapRefMap} 为真时才用 {@code RemappingReferenceMapper} 把 refmap
+     * 翻译回 mojmap；否则拿 SRG 名去 mojmap 类里找目标 —— 找不到，
+     * 而 {@code mekck.mixins.json} 是 {@code "required": true} ⇒ <b>Bootstrap 阶段硬崩</b>。
+     *
+     * <p>同形态的既有实证：本仓 {@code run/logs/latest.log} 里 Farmer's Delight 自己的
+     * SRG refmap 在 dev 环境被逐字使用后的匹配失败记录。</p>
+     *
+     * <p>为什么不能用 mixingradle 插件兜：它会顺带接管注解处理器，而 AP 会对 4 个
+     * {@code remap = false} 的 mod 类 mixin 报成员级错误（见 {@code STATUS.md} §六.4），
+     * 那条路已确认走不通。所以这两条 {@code jvmArgs} 是唯一的环节，必须钉住。</p>
+     */
+    @Test
+    public void devRunsRemapTheRefmapBackToMojmap() throws IOException {
+        String gradle = read(BUILD_GRADLE);
+        assertTrue("build.gradle 必须给 dev 运行传 -Dmixin.env.remapRefMap=true："
+                        + "手写 refmap 里是 SRG 名，而 runClient/runServer 跑的是 mojmap jar，"
+                        + "不翻译则 @Inject 匹配不到原版方法 ⇒ Bootstrap 阶段硬崩",
+                gradle.contains("mixin.env.remapRefMap=true"));
+        assertTrue("build.gradle 必须给 dev 运行传 -Dmixin.env.refMapRemappingFile=<SRG→mojmap 的 tsrg>",
+                gradle.contains("mixin.env.refMapRemappingFile"));
+        // 三个 run 任务都要接上：只接 runClient 的话 runServer / runGameTestServer 照样崩。
+        for (String task : new String[]{"runClient", "runServer", "runGameTestServer"}) {
+            assertTrue("build.gradle 的 refmap 翻译段落必须覆盖 " + task
+                            + "；漏掉任何一个 run 任务都会在 Bootstrap 阶段崩",
+                    gradle.contains("'" + task + "'"));
+        }
+        // 路径必须动态解析：FG 缓存里的 mcp_config 目录名带 MCP 快照时间戳，
+        // 写死就是 build.gradle 自己注释里禁止的「本机 + 本次缓存布局的快照」。
+        assertTrue("SRG→mojmap 映射文件必须动态定位（含 '1.20.1-' 快照目录名的匹配），"
+                        + "不能写死 ~/.gradle/caches 下的具体路径",
+                gradle.contains("srg_to_official_1.20.1.tsrg") && gradle.contains("1.20.1-"));
     }
 
     /**

@@ -1,7 +1,6 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.client.CookingFactoryScreen;
-import net.minecraft.client.Minecraft;
+import cn.ism.mekck.util.ClientPacketBridge;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.network.NetworkEvent;
@@ -55,17 +54,14 @@ public class NetworkRecipeListPacket {
     }
 
     public static void handle(NetworkRecipeListPacket packet, Supplier<NetworkEvent.Context> context) {
-        context.get().enqueueWork(() -> {
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.screen instanceof cn.ism.mekck.client.NetworkOrderHost host) {
-                // 其余屏幕（智能穿串机 / 智能厨锅 / 中央厨房下单窗…）：共用面板。
-                // 烧烤 / 穿串 / 烹饪工厂在阶段 3 Task 3/5/7 换 Mek 体系界面后不再实现
-                // NetworkOrderHost（订单面板等 GuiConfigurableTile 的 tab 布局定稿再统一接），
-                // 所以本分支打不到它们——ME 侧改走 IMekCkPorted 自动化。
-                cn.ism.mekck.client.NetworkOrderPanel panel = host.networkOrderPanel();
-                if (panel != null) panel.setData(packet.pos, packet.recipeIds, packet.maxCraftable);
-            }
-        });
-        context.get().setPacketHandled(true);
+        NetworkEvent.Context ctx = context.get();
+        // ⚠️ 这里**不能**直接写 Minecraft.getInstance() 或引用 cn.ism.mekck.client.*。
+        // 本包在 FMLCommonSetupEvent（双端都触发）里统一注册，所以本类在专用服务端
+        // 也要被链接，而服务端 classpath 上没有 net.minecraft.client.*。
+        // 客户端逻辑全部关在 ClientPacketBridgeImpl（@OnlyIn(CLIENT)，由门面反射加载）。
+        // 背景与同类事故见 util/ClientPacketBridge 的类注释。
+        ctx.enqueueWork(() -> ClientPacketBridge.applyRecipeList(
+                packet.pos, packet.recipeIds, packet.maxCraftable));
+        ctx.setPacketHandled(true);
     }
 }

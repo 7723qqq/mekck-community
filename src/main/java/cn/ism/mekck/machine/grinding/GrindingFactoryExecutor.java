@@ -4,6 +4,7 @@ import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.machine.MekCkBatchPacking;
 import cn.ism.mekck.machine.MekCkMachineTile;
+import cn.ism.mekck.machine.MekCkOrderState;
 import cn.ism.mekck.machine.MekCkRecipeExecutor;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.upgrade.MekCkUpgradeTypes;
@@ -71,27 +72,27 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
 
     // ── 执行器自有状态：订单 ────────────────────────────────────────────
     //
-    // 只在「有订单」时写出（旧实现逐字同款）。没有订单的机器不该在存档里
-    // 多挂三个 0 值键——那会让「这台机器下过单」与「这三个键是 0」再也分不开。
+    // 状态与契约统一由 {@link MekCkOrderState} 提供（第三轮审查：6 份手写订单实现
+    // 已漂移成 3 套 null 约定 + 2 套数量下界）。本类只保留公开方法名不变，
+    // 让 {@code MekckAe2} 与下单包一行都不用改。
 
-    /** 订单配方 id（无订单为 {@code null}）。非空时只加工这张配方。 */
-    private ResourceLocation orderRecipeId;
-    /** 订单份数（{@code orderRecipeId == null} 时无意义）。 */
-    private int orderQuantity;
-    /** 订单已完成份数。 */
-    private int orderCompleted;
+    /** 订单状态。唯一的持有者。 */
+    private final MekCkOrderState order = new MekCkOrderState();
 
     /**
      * 新格式的订单键。
      *
      * <p><b>与旧存档逐字同名</b>：{@code MekCkLegacyMachineNbt} 对这三个键做的是
      * <b>换位置</b>（根标签 → {@code mekckExecutor} 子标签）而不是换名字。两个标签本身已经在
-     * 不同的命名空间里，同名不会造成歧义；而一只改一个键的名字、留两个不改，
+     * 不同的命名空间里，同名不会造成歧义；一只改一个键的名字、留两个不改，
      * 才是真的混淆。</p>
+     *
+     * <p>值的定义处已收进 {@link MekCkOrderState}；这里保留公开别名是因为
+     * {@code MekCkLegacyMachineNbt} 直接引用这三个常量。</p>
      */
-    public static final String TAG_ORDER_RECIPE = "OrderRecipeId";
-    public static final String TAG_ORDER_QUANTITY = "OrderQuantity";
-    public static final String TAG_ORDER_COMPLETED = "OrderCompleted";
+    public static final String TAG_ORDER_RECIPE = MekCkOrderState.TAG_ORDER_RECIPE;
+    public static final String TAG_ORDER_QUANTITY = MekCkOrderState.TAG_ORDER_QUANTITY;
+    public static final String TAG_ORDER_COMPLETED = MekCkOrderState.TAG_ORDER_COMPLETED;
 
     // ── 配方缓存 ────────────────────────────────────────────────────────
 
@@ -163,91 +164,60 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
      */
     @Override
     public void save(CompoundTag tag) {
-        if (orderRecipeId != null) {
-            tag.putString(TAG_ORDER_RECIPE, orderRecipeId.toString());
-            tag.putInt(TAG_ORDER_QUANTITY, orderQuantity);
-            tag.putInt(TAG_ORDER_COMPLETED, orderCompleted);
-        }
+        order.save(tag);
     }
 
     /**
      * {@inheritDoc}
      *
-     * <p><b>键不存在时把订单整体清空</b>，而不是「什么都不做」：执行器与方块实体
-     * 同寿，一次读档之后它还活着，而订单字段非 {@code null} 就会一直卡着
-     * 「只加工这一张配方」。旧 {@code GrindingFactoryBlockEntity.load} 正是漏了这一步
-     * （只在 {@code contains} 为真时赋值），同一次会话里重载一次就会留下一个
-     * 无法取消的幽灵订单——玩家唯一能摆脱它的办法是拆了重放。</p>
-     *
-     * <p>顺带丢配方缓存，理由见类注释。</p>
+     * <p>顺带丢配方缓存，理由见类注释。订单的「键不存在即无订单」语义收在
+     * {@link MekCkOrderState#load} 里，六个家族同一份。</p>
      */
     @Override
     public void load(CompoundTag tag) {
         invalidateCache();
-        if (tag != null && tag.contains(TAG_ORDER_RECIPE, Tag.TAG_STRING)) {
-            ResourceLocation parsed = ResourceLocation.tryParse(tag.getString(TAG_ORDER_RECIPE));
-            if (parsed != null) {
-                orderRecipeId = parsed;
-                orderQuantity = Math.max(0, tag.getInt(TAG_ORDER_QUANTITY));
-                orderCompleted = Math.max(0, tag.getInt(TAG_ORDER_COMPLETED));
-                return;
-            }
-        }
-        clearOrder();
+        order.load(tag);
     }
 
     // ── 订单 ────────────────────────────────────────────────────────────
 
-    /** 当前订单配方 id；{@code null} 表示无订单（此时机器按投进来的料自由加工）。 */
+    /** 当前订单配方 id；{@code null} 表示无固定配方单（此时机器按投进来的料自由加工）。 */
     public ResourceLocation getOrderRecipeId() {
-        return orderRecipeId;
+        return order.getRecipeId();
     }
 
     /** 当前订单剩余份数（无订单时为 0）。 */
     public int getOrderQuantity() {
-        return orderRecipeId == null ? 0 : orderQuantity;
+        return order.getQuantity();
     }
 
     /** 当前订单已完成份数（无订单时为 0）。 */
     public int getOrderCompleted() {
-        return orderCompleted;
+        return order.getCompleted();
     }
 
     /**
      * 下一个订单。
      *
-     * @param recipeId 配方 id；{@code null} 表示取消订单
+     * @param recipeId 配方 id；{@code null} 等价于 {@link #clearOrder()}（不留残留字段）
      * @param quantity 份数，夹到 {@code [1, MAX_VALUE]}（{@code <= 0} 视为 1，与旧实现同）
      */
     public void setOrder(ResourceLocation recipeId, int quantity) {
-        this.orderRecipeId = recipeId;
-        this.orderQuantity = Math.max(1, quantity);
-        this.orderCompleted = 0;
+        order.setOrder(recipeId, quantity);
     }
 
     /** 取消订单。 */
     public void clearOrder() {
-        this.orderRecipeId = null;
-        this.orderQuantity = 0;
-        this.orderCompleted = 0;
+        order.clear();
     }
 
     /**
-     * 完成一份订单后的推进 —— 抽成静态纯函数，因为它是订单语义里唯一有分支的部分。
+     * 完成一份订单后的推进判定 —— 纯函数形态，供裸 JVM 断言用。
      *
-     * <p>「先自增再比」而不是「先比再自增」：与旧
-     * {@code completeRecipe} 尾部的 {@code orderCompleted++; if (>= quantity) 清空} 同序。
-     * 差一位就会导致最后一份做完订单还挂着，机器再也不接新料。</p>
-     *
-     * <p>加法走 {@code long}：旧实现直接 {@code orderCompleted++}，
-     * 订单份数被配成 {@link Integer#MAX_VALUE} 且真跑满时 int 会绕成负数，
-     * 判「未满」的那一支永远为真 ⇒ 订单永远完不成、机器永远只认这一张配方。
-     * 对所有可达输入结果与旧实现逐位相同，只把那条溢出路径改成可达之外。</p>
-     *
-     * @return 订单是否已满（满则调用方应 {@link #clearOrder()}）
+     * @see MekCkOrderState#advancedTo(int, int, int)
      */
     static boolean advanceOrder(int completed, int quantity) {
-        return (long) completed + 1 >= Math.max(1, quantity);
+        return MekCkOrderState.advancedTo(completed, quantity, 1);
     }
 
     // ── 配方匹配 ────────────────────────────────────────────────────────
@@ -313,10 +283,8 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
         } else {
             found = KaleidoscopeCompat.findMillstoneRecipe(level, stack);
         }
-        if (orderRecipeId != null) {
-            if (found.isEmpty() || !orderRecipeId.equals(found.get().getId())) {
-                return Optional.empty();
-            }
+        if (order.isActive() && (!found.isPresent() || !order.getRecipeId().equals(found.get().getId()))) {
+            return Optional.empty();
         }
         return found;
     }
@@ -376,11 +344,13 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
         } else {
             rollByExpectation(outputs, rolls, consumeCount);
         }
-        if (orderRecipeId != null) {
-            orderCompleted++;
-            if (advanceOrder(orderCompleted, orderQuantity)) {
-                clearOrder();
-            }
+        if (order.isActive() && order.advance(1)) {
+            // 推进与「是否已满」都由 MekCkOrderState 一处判定。
+            // 修复前这里是 `orderCompleted++; if (advanceOrder(...))`：
+            // ++ 是 int 自增，份数配成 Integer.MAX_VALUE 且真跑满时先绕成 MIN_VALUE，
+            // 随后 advanceOrder 里的 (long) 转换已经太晚 ⇒ 订单永远完不成、机器永远
+            // 只认这一张配方，且不报任何错。详见 MekCkOrderState#advance。
+            order.clear();
         }
     }
 

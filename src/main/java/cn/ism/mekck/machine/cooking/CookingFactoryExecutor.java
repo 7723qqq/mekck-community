@@ -3,6 +3,7 @@ package cn.ism.mekck.machine.cooking;
 import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.machine.MekCkBatchPacking;
 import cn.ism.mekck.machine.MekCkMachineTile;
+import cn.ism.mekck.machine.MekCkOrderState;
 import cn.ism.mekck.machine.MekCkRecipeExecutor;
 import cn.ism.mekck.util.CountMath;
 import cn.ism.mekck.util.FluidIngredientHelper;
@@ -63,17 +64,25 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
 
     /**
      * 与旧存档<b>逐字同名</b>的键：{@code MekCkLegacyMachineNbt} 只换位置不改名。
+     * 值的定义处已收进 {@link MekCkOrderState}；这里保留公开别名是为了外部引用。
      */
-    public static final String TAG_ORDER_RECIPE = "OrderRecipeId";
-    public static final String TAG_ORDER_QUANTITY = "OrderQuantity";
-    public static final String TAG_ORDER_COMPLETED = "OrderCompleted";
+    public static final String TAG_ORDER_RECIPE = MekCkOrderState.TAG_ORDER_RECIPE;
+    public static final String TAG_ORDER_QUANTITY = MekCkOrderState.TAG_ORDER_QUANTITY;
+    public static final String TAG_ORDER_COMPLETED = MekCkOrderState.TAG_ORDER_COMPLETED;
 
     private CookingFactoryTile owner;
     private boolean busy;
 
-    private ResourceLocation orderRecipeId;
-    private int orderQuantity;
-    private int orderCompleted;
+    /**
+     * 订单状态。唯一的持有者。
+     *
+     * <p>统一契约见 {@link MekCkOrderState}。本类此前有三处与其它家族不一致的行为，
+     * 其中一处是真缺陷：{@code load} 用 {@code Math.max(0, …)} 读份数，旧存档里
+     * quantity=0 的订单会落成「有配方、无份数」，而 {@code tick} 里
+     * {@code batch = Math.min(batch, orderQuantity - orderCompleted)} 夹出 0 ⇒
+     * 机器<b>永远不再开工</b>，而玩家除了重下一单没有任何办法解除。</p>
+     */
+    private final MekCkOrderState order = new MekCkOrderState();
 
     // ── MekCkRecipeExecutor ─────────────────────────────────────────────
 
@@ -92,7 +101,7 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
         }
         List<IInventorySlot> scan = owner.ingredientSlots();
         int batch = batchSize(recipe, scan);
-        batch = Math.min(batch, orderQuantity - orderCompleted);
+        batch = order.remainingOrUnlimited(batch);
         if (batch <= 0) {
             return;
         }
@@ -106,37 +115,22 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
 
     @Override
     public void save(CompoundTag tag) {
-        if (orderRecipeId != null) {
-            tag.putString(TAG_ORDER_RECIPE, orderRecipeId.toString());
-            tag.putInt(TAG_ORDER_QUANTITY, orderQuantity);
-            tag.putInt(TAG_ORDER_COMPLETED, orderCompleted);
-        }
+        order.save(tag);
     }
 
     @Override
     public void load(CompoundTag tag) {
-        orderRecipeId = null;
-        orderQuantity = 0;
-        orderCompleted = 0;
-        String raw = tag.getString(TAG_ORDER_RECIPE);
-        if (!raw.isEmpty()) {
-            ResourceLocation parsed = ResourceLocation.tryParse(raw);
-            if (parsed != null) {
-                orderRecipeId = parsed;
-                orderQuantity = Math.max(0, tag.getInt(TAG_ORDER_QUANTITY));
-                orderCompleted = Math.max(0, tag.getInt(TAG_ORDER_COMPLETED));
-            }
-        }
+        order.load(tag);
     }
 
     // ── 订单 ────────────────────────────────────────────────────────────
 
     private Recipe<?> findRecipe(Level level) {
-        if (orderRecipeId == null) {
+        if (!order.hasRecipe()) {
             return null;
         }
         for (Recipe<?> recipe : availableRecipes(level, owner == null ? null : owner.getTier())) {
-            if (orderRecipeId.equals(recipe.getId())) {
+            if (order.getRecipeId().equals(recipe.getId())) {
                 return recipe;
             }
         }
@@ -211,36 +205,28 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
     }
 
     public boolean hasOrder() {
-        return orderRecipeId != null;
+        return order.isActive();
     }
 
     public ResourceLocation getOrderRecipeId() {
-        return orderRecipeId;
+        return order.getRecipeId();
     }
 
     public int getOrderQuantity() {
-        return orderRecipeId == null ? 0 : orderQuantity;
+        return order.getQuantity();
     }
 
     public int getOrderCompleted() {
-        return orderCompleted;
+        return order.getCompleted();
     }
 
     /** 下单。{@code recipeId == null} 等价于 {@link #clearOrder()}。 */
     public void setOrder(ResourceLocation recipeId, int quantity) {
-        if (recipeId == null) {
-            clearOrder();
-            return;
-        }
-        orderRecipeId = recipeId;
-        orderQuantity = Math.max(1, quantity);
-        orderCompleted = 0;
+        order.setOrder(recipeId, quantity);
     }
 
     public void clearOrder() {
-        orderRecipeId = null;
-        orderQuantity = 0;
-        orderCompleted = 0;
+        order.clear();
     }
 
     // ── 批量算量 ────────────────────────────────────────────────────────
@@ -512,9 +498,10 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
 
         MekCkBatchPacking.insertOutput(outputs, produced);
         busy = true;
-        orderCompleted = (int) Math.min(Integer.MAX_VALUE, (long) orderCompleted + batch);
-        if ((long) orderCompleted >= Math.max(1, orderQuantity)) {
-            clearOrder();
+        // 推进与判定都在 MekCkOrderState 里（加法整体走 long，不会像 `orderCompleted++`
+        // 那样先在 int 上溢出）。批量语义是「本批做掉 batch 份」。
+        if (order.advance(batch)) {
+            order.clear();
         }
     }
 

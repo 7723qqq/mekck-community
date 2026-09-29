@@ -149,7 +149,20 @@ public class TestGrindingOrderEngine {
         assertEquals(0, executor.getOrderQuantity());
     }
 
-    /** 负的份数 / 完成数按 0 读，不允许负数流进比较运算。 */
+    /**
+     * 存档里的负数份数被夹到<b>可完成的最小值</b>（1），而不是 0。
+     *
+     * <p><b>本断言的期望值在第三轮审查中从 0 改成了 1</b>，理由是 0 本身是个坏状态：
+     * {@code CookingFactoryExecutor.tick} 里有
+     * {@code batch = Math.min(batch, orderQuantity - orderCompleted)}，
+     * 份数为 0 会把 batch 夹成 0 ⇒ {@code if (batch <= 0) return;} ⇒
+     * 机器<b>永远不再开工</b>，而玩家除了重下一单没有任何办法解除（订单也永远不会自然完成，
+     * 因为「完成 0 份」这个条件恒不成立）。旧实现按家族各自为政：研磨靠
+     * {@code advanceOrder} 的 {@code max(1, quantity)} 侥幸自愈，烹饪则彻底卡死。
+     * 统一到 {@link MekCkOrderState} 之后，两家都是「读档时夹到 ≥ 1」这一种行为。
+     *
+     * <p>已完成为负数同样夹到 0（那个方向没有上面的问题：0 表示「一份都没做」）。</p>
+     */
     @Test
     public void negativeOrderNumbersAreClampedToZero() {
         CompoundTag tag = new CompoundTag();
@@ -159,8 +172,30 @@ public class TestGrindingOrderEngine {
 
         GrindingFactoryExecutor executor = executor();
         executor.load(tag);
-        assertEquals(0, executor.getOrderQuantity());
+        assertEquals(1, executor.getOrderQuantity());
         assertEquals(0, executor.getOrderCompleted());
+    }
+
+    /**
+     * 0 份的旧存档同样被抬到 1 —— 这正是上面那条要防的「永久卡死」。
+     *
+     * <p>它是这条护栏真正针对的输入：{@code quantity = 0} 是旧实现真实会写出来的值
+     * （旧 {@code load} 写的是 {@code Math.max(0, tag.getInt(...))}），
+     * 而不是只存在于测试里的假想值。</p>
+     */
+    @Test
+    public void zeroQuantityInAnOldSaveIsLiftedToOne() {
+        CompoundTag tag = new CompoundTag();
+        tag.putString(GrindingFactoryExecutor.TAG_ORDER_RECIPE, "mekck:grinding");
+        tag.putInt(GrindingFactoryExecutor.TAG_ORDER_QUANTITY, 0);
+        tag.putInt(GrindingFactoryExecutor.TAG_ORDER_COMPLETED, 0);
+
+        GrindingFactoryExecutor executor = executor();
+        executor.load(tag);
+        assertEquals("0 份订单会让 batch 夹成 0 而永久卡死，必须抬到 1",
+                1, executor.getOrderQuantity());
+        assertTrue("抬到 1 之后第一份做完就应清单",
+                GrindingFactoryExecutor.advanceOrder(0, executor.getOrderQuantity()));
     }
 
     // ── 推进 ────────────────────────────────────────────────────────────

@@ -112,21 +112,26 @@ public final class PlantingRecipeGenerator {
       Path botanyPotsRecipeDir = datapackDir.resolve("data/botanypots/recipes");
       LOGGER.info("PlantingRecipeGenerator.generate() called. Server: {}", server);
 
-      try {
-         Path markerPath = server.getWorldPath(LevelResource.ROOT).resolve("planting_generator_test.txt");
-         Files.writeString(markerPath, "PlantingRecipeGenerator.generate() was called at " + System.currentTimeMillis());
-         LOGGER.info("Marker file written to: {}", markerPath);
-      } catch (Exception var23) {
-         LOGGER.error("Failed to write marker file", var23);
-      }
+      // 注：此处原先有一段调试插桩，每次服务器启动都往**世界存档根目录**写
+      // planting_generator_test.txt 并打两条 INFO 日志。它既污染玩家存档（与本功能
+      // 生成的 datapack 混在一起），又是同步磁盘写 + 无条件日志。已删除。
 
-      if (Files.exists(datapackDir)) {
-         LOGGER.info("Deleting old planting recipes datapack for fresh regeneration...");
-
-         try {
-            deleteDirectoryRecursively(datapackDir);
-         } catch (IOException var22) {
-            LOGGER.error("Failed to delete old datapack directory, will try to overwrite", var22);
+      // 清旧内容：只清本方法自己写的那 4 个配方目录，不动 datapack 根。
+      //
+      // 为什么不是「递归删掉整个 datapacks/mekck_planting」（原实现）：那个目录在玩家的
+      // 世界存档里是**可见且可编辑的**（就在 saves/<世界>/datapacks/ 下），玩家完全可能
+      // 往里丢自己的补充配方或说明文件。整棵删掉 = 每次启动静默清空他们的东西，没有任何提示。
+      //
+      // 为什么这 4 个目录可以整棵删：它们全部由本方法在下面 createDirectories 创建、
+      // 且只由本方法写入（逐文件 Files.writeString），不存在外部内容。
+      // pack.mcmeta 本来每次也会重写，删不删无差别，所以不删。
+      for (Path owned : new Path[]{recipeDir, clocheRecipeDir, plantcutRecipeDir, botanyPotsRecipeDir}) {
+         if (Files.exists(owned)) {
+            try {
+               deleteDirectoryRecursively(owned);
+            } catch (IOException e) {
+               LOGGER.error("Failed to delete stale generated recipes at {}; will overwrite in place", owned, e);
+            }
          }
       }
 

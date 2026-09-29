@@ -42,7 +42,7 @@ public class GuiMekCkSideConfiguration extends GuiWindow {
         interactionStrategy = InteractionStrategy.ALL;
 
         // 配置类型切换（物品 / 流体 / 气体）：标题栏左侧按钮
-        // 注意：arrow_selection 位于 mekanism:gui/，**不在** mekanism:gui/button/ ——���
+        // 注意：arrow_selection 位于 mekanism:gui/，**不在** mekanism:gui/button/ ——
         // 用 GuiElement#getButtonLocation 会去找 gui/button/arrow_selection.png 而落空，
         // 渲染成粉黑缺纹理棋盘格（2026-09-27 实机截图实证）。故此处显式用 ResourceType.GUI。
         addChild(new MekanismImageButton(gui, relativeX + 4, relativeY + 3, 12,

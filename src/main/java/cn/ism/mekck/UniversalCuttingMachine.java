@@ -327,8 +327,26 @@ public final class UniversalCuttingMachine {
     public static final RegistryObject<MenuType<cn.ism.mekck.menu.SandwichAssemblerMenu>> SANDWICH_ASSEMBLER_MENU = MENUS.register(
             "sandwich_assembler", () -> IForgeMenuType.create(cn.ism.mekck.menu.SandwichAssemblerMenu::new));
 
-    /** 制冰工厂总开关：false = 禁用 11 级制冰工厂（仅保留急冻制冰机基础机器）。
-     *  相关代码全部保留，改回 true 即恢复注册（方块/物品/方块实体/菜单/创造栏/客户端屏幕全部重新生效）。 */
+    /**
+     * 制冰工厂总开关：{@code false} = <b>12 档制冰工厂全部不注册</b>（仅保留急冻制冰机基础机器）。
+     *
+     * <p><b>改回 {@code true} 并不足以恢复</b>——本条注释此前写的是「改回 true 即恢复注册
+     * （方块/物品/方块实体/菜单/创造栏/客户端屏幕全部重新生效）」，那是错的，漏了两件事：</p>
+     * <ol>
+     *   <li><b>缺 12 张战利品表</b>。迁到 Mek 的 {@code BlockTile} 之后，破坏走战利品表、
+     *       而 Mek 的 {@code BlockMekanism.onRemove} 本身<b>不产生任何掉落</b>。
+     *       {@code data/mekck/loot_tables/blocks/} 下现在只有 6 个家族 × 12 档 = 72 张，
+     *       <b>没有一张 {@code *_ice_factory.json}</b>。开了开关就是 12 个方块破坏后什么都不掉。</li>
+     *   <li><b>缺 int 下标槽位存档的验收</b>。制冰工厂还没迁到 {@code MekCkMachineTile}，
+     *       走的是遗留 BE + 旧 {@code BigStackItemHandler}；那条路径没有
+     *       {@code MekCkSlotNbt} 那层兜底，高并行档的 byte 下标上限问题会原样复发。</li>
+     * </ol>
+     * 资源侧（blockstate / 模型 / 语言键 / 配方）已经在仓库里，缺的是上面前两项。
+     * 恢复顺序：补 12 张战利品表 → 迁到 {@code MekCkMachineTile} → 才把本开关改回 {@code true}。
+     *
+     * @see cn.ism.mekck.machine.MekCkMachineTile#getInitialInventory
+     * @see docs/audit/2026-09-30-details/legacy-conservation.md
+     */
     public static final boolean ICE_FACTORY_ENABLED = false;
 
     // Chocolate Cannon (巧克力大炮：费列罗巧克力加工 + 攻击机器，无工厂版本)

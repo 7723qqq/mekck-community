@@ -101,6 +101,10 @@ public final class MekCkMultiblock {
     public static void placeBoundingBlocks(Level level, BlockPos orig, BlockState state,
                                            TriConsumer<BlockPos, BlockState, Stream.Builder<BlockPos>> shape, Block boundingBlock) {
         List<BlockPos> positions = getBoundingPositions(orig, state, shape);
+        // 服务端才有 tick 队列可派发重试；客户端方块实体的坐标由收到的包决定，不需要也排不了。
+        // 顺带把 getServer() 的 null 面收在这里：原实现直接在循环里调 level.getServer().getTickCount()，
+        // 换成先取一次局部变量，客户端/非服务器上下文下直接短路而不是在循环里 NPE。
+        net.minecraft.server.MinecraftServer server = level.isClientSide ? null : level.getServer();
         int placed = 0;
         for (BlockPos p : positions) {
             // 与 Mekanism AttributeHasBounding.placeBoundingBlocks 一致：用 getStateForPlacement 取得绑定块放置态
@@ -117,28 +121,47 @@ public final class MekCkMultiblock {
                     // 而客户端此前已通过同类型包创建了方块实体，重复到达时会再次 handleUpdateTag 覆盖坐标，确保必达。
                     level.sendBlockUpdated(p, newState, newState, Block.UPDATE_CLIENTS);
                     // 兜底 2：在接下来若干 tick 持续重发，覆盖网络/分块加载延迟，客户端建好方块实体后必能收到。
-                    final BlockPos fp = p;
-                    final Level lvl = level;
-                    final int base = level.getServer().getTickCount();
-                    for (int d : new int[]{1, 2, 3, 5, 8, 12, 20}) {
-                        final int delay = d;
-                        level.getServer().tell(new net.minecraft.server.TickTask(base + delay, () -> {
-                            TileEntityBoundingBlock t = WorldUtils.getTileEntity(TileEntityBoundingBlock.class, lvl, fp);
-                            if (t != null) {
-                                t.setMainLocation(orig);
-                                level.sendBlockUpdated(fp, newState, newState, Block.UPDATE_CLIENTS);
-                            }
-                        }));
+                    //
+                    // 关于这个梯子（1/2/3/5/8/12/20，共 7 次/方块）不是性能问题：3×3×2 的生物反应堆
+                    // 一次放置 = 17×7 = 119 条 TickTask，且全部在 20 tick 内被消费掉。TickTask 是
+                    // MinecraftServer 每 tick 常规排空的短命队列，119 条远在正常量级内。
+                    // 刻意不缩短它——这条重发梯子是为覆盖「客户端方块实体尚未创建」这个
+                    // 真实竞态兜底的，缩短会把它变回间歇性打不开 GUI 的老问题。
+                    if (server != null) {
+                        final BlockPos fp = p;
+                        final Level lvl = level;
+                        final int base = server.getTickCount();
+                        for (int d : RETRY_DELAYS) {
+                            final int delay = d;
+                            server.tell(new net.minecraft.server.TickTask(base + delay, () -> {
+                                TileEntityBoundingBlock t = WorldUtils.getTileEntity(TileEntityBoundingBlock.class, lvl, fp);
+                                if (t != null) {
+                                    t.setMainLocation(orig);
+                                    lvl.sendBlockUpdated(fp, newState, newState, Block.UPDATE_CLIENTS);
+                                }
+                            }));
+                        }
                     }
                 } else if (set) {
                     LOGGER.warn("[mekck-bb] 在 {} 放置绑定块成功但找不到其 TileEntity（setBlock={}）", p, set);
                 }
             }
         }
-        if (!level.isClientSide) {
-            LOGGER.info("[mekck-bb] placeBoundingBlocks @{} 尝试 {} 个，成功放置 {}", orig, positions.size(), placed);
+        if (!level.isClientSide && LOGGER.isDebugEnabled()) {
+            // 原为无条件 LOGGER.info：生产日志默认开 INFO，于是每放一台多方块机器
+            // （生物反应堆 18 次、种植切配 2 次）就刷一行。降为 DEBUG。
+            LOGGER.debug("[mekck-bb] placeBoundingBlocks @{} 尝试 {} 个，成功放置 {}", orig, positions.size(), placed);
         }
     }
+
+    /**
+     * 绑定块主坐标的重发延迟阶梯（tick）。
+     *
+     * <p>覆盖「客户端方块实体还没建好」这一竞态所需的完整窗口：跨度覆盖
+     * 分块加载 + 网络往返。抽成常量是为了让「为什么是这 7 个数」有一处可查的说明，
+     * 见 {@link #placeBoundingBlocks} 里兜底 2 的注释。</p>
+     */
+    private static final int[] RETRY_DELAYS = {1, 2, 3, 5, 8, 12, 20};
 
     public static void removeBoundingBlocks(Level level, BlockPos orig, BlockState state,
                                             TriConsumer<BlockPos, BlockState, Stream.Builder<BlockPos>> shape) {

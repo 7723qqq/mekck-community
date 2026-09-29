@@ -13,10 +13,10 @@ into a **Mekanism-style factory system** — and lets you burn the leftovers for
 
 ## Features
 
-### 7 machine families × 12 factory tiers
+### 6 machine families × 12 factory tiers
 
 Every family ships a single-block base machine plus **12 tiers** of factory
-(84 factory blocks in total):
+(**72 factory blocks in total**):
 
 | Family | Base machine | Factory |
 |---|---|---|
@@ -26,7 +26,15 @@ Every family ships a single-block base machine plus **12 tiers** of factory
 | Skewering | Smart Skewering Machine | `mekck:{tier}_skewering_factory` |
 | Grilling | Electric Grill | `mekck:{tier}_grill_factory` |
 | Grinding | Electric Grinding Machine | `mekck:{tier}_grinding_factory` |
-| Ice | Ice Maker | `mekck:{tier}_ice_factory` |
+
+> **Ice factory — not released yet.** The 7th family is implemented and its
+> base machine (急冻制冰机 / Ice Maker) works, but the 12 `mekck:{tier}_ice_factory`
+> blocks are gated behind `UniversalCuttingMachine.ICE_FACTORY_ENABLED = false`
+> and are **not registered at all** — no block, no item, no block entity, no menu.
+> Their assets (blockstates, models, lang keys, recipes) are already in the repo.
+> Flipping the flag back to `true` is *not* sufficient on its own: the 12 loot
+> tables under `data/mekck/loot_tables/blocks/` still have to be authored, or
+> breaking the blocks will drop nothing. See `docs/STATUS.md`.
 
 **Tier chain**
 
@@ -113,7 +121,7 @@ Notable options:
 ## Repository layout
 
 ```
-src/main/java/cn/ism/mekck/     Java sources (279 files)
+src/main/java/cn/ism/mekck/     Java sources
 src/main/resources/             assets, data, lang, in-game guide
   assets/mekck/mekckguide/      GuideME pages (Markdown)
   assets/mekck/textures/block/vendor/   textures redistributed under MIT (see THIRD-PARTY.md)

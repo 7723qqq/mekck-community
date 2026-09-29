@@ -1,8 +1,6 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.client.NetworkOrderHost;
-import cn.ism.mekck.client.NetworkOrderPanel;
-import net.minecraft.client.Minecraft;
+import cn.ism.mekck.util.ClientPacketBridge;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.network.NetworkEvent;
@@ -39,19 +37,11 @@ public class NetworkMissingPacket {
     }
 
     public static void handle(NetworkMissingPacket packet, Supplier<NetworkEvent.Context> context) {
-        context.get().enqueueWork(() -> {
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.screen instanceof NetworkOrderHost host) {
-                NetworkOrderPanel panel = host.networkOrderPanel();
-                if (panel != null) {
-                    // 共用面板的屏幕
-                    panel.setMissing(packet.pos, packet.recipeId, packet.quantity, packet.text);
-                } else {
-                    // 自绘 ME 面板的屏幕（烹饪 / 穿串工厂）
-                    host.setNetworkMissing(packet.pos, packet.recipeId, packet.quantity, packet.text);
-                }
-            }
-        });
-        context.get().setPacketHandled(true);
+        NetworkEvent.Context ctx = context.get();
+        // ⚠️ 同 NetworkRecipeListPacket：本类在双端都要链接，客户端符号必须隔离。
+        // 背景与同类事故见 util/ClientPacketBridge 的类注释。
+        ctx.enqueueWork(() -> ClientPacketBridge.applyMissing(
+                packet.pos, packet.recipeId, packet.quantity, packet.text));
+        ctx.setPacketHandled(true);
     }
 }
