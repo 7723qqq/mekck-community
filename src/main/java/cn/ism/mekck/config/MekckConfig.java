@@ -1,6 +1,7 @@
 package cn.ism.mekck.config;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
+import mekanism.api.Upgrade;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraftforge.common.ForgeConfigSpec;
@@ -65,11 +66,8 @@ public final class MekckConfig {
     // Upgrade slot limits
     // ──────────────────────────────────────────────
 
-    // Basic machines (e.g. UniversalCuttingMachine, PlantingCuttingStation)
     /** 见 auto_pull 段：每种物品的 ME 自动补料上限。 */
     private static final ForgeConfigSpec.IntValue AUTO_PULL_STACK_LIMIT;
-    private static final ForgeConfigSpec.IntValue BASIC_SPEED_MAX;
-    private static final ForgeConfigSpec.IntValue BASIC_ENERGY_MAX;
 
     // ──────────────────────────────────────────────
     // Ice Maker (急冻制冰机 / 制冰工厂) settings
@@ -111,7 +109,6 @@ public final class MekckConfig {
 
 
     // Factory per-tier values
-    private static final Map<CuttingMachineFactoryTier, ForgeConfigSpec.IntValue> FACTORY_SPEED_ENERGY_MAX = new EnumMap<>(CuttingMachineFactoryTier.class);
     private static final Map<CuttingMachineFactoryTier, ForgeConfigSpec.IntValue> FACTORY_STACK_MAX  = new EnumMap<>(CuttingMachineFactoryTier.class);
 
     /**
@@ -169,28 +166,17 @@ public final class MekckConfig {
 
         // ─── Upgrade slot limits ──────────────────
         BUILDER.comment("所有机器的升级槽上限。",
-                "basic_speed_max / basic_energy_max：基础机器（通用切菜机、种植切配站）的速度/能量升级上限。",
-                "factory_speed_energy_max：各等级工厂的速度/能量升级上限（一项同时控制两者）。",
-                "factory_stack_max：各等级工厂的堆叠升级上限（0 = 不支持）。")
+                "factory_stack_max：各等级工厂的堆叠升级上限（0 = 不支持）。",
+                "注意：**速度/能量升级上限不是配置项**——它由 Mekanism 枚举的 getMax() 固定为 8。",
+                "配置得再高也装不上去：安装进度与实际装入数量两处都被 TileComponentUpgrade 卡在 getMax()，",
+                "所以旧版本 *_speed_energy_max / basic_speed_max / basic_energy_max 已删除。")
                 .push("upgrade_limits");
-
-        // Basic machine limits
-        BASIC_SPEED_MAX = BUILDER
-                .comment("基础机器最大速度升级数（默认：8）")
-                .defineInRange("basic_speed_max", 8, 0, 64);
-        BASIC_ENERGY_MAX = BUILDER
-                .comment("基础机器最大能量升级数（默认：8）")
-                .defineInRange("basic_energy_max", 8, 0, 64);
 
         // Factory per-tier limits
         for (CuttingMachineFactoryTier tier : CuttingMachineFactoryTier.values()) {
             String name = tier.name;
             String cnName = tierCnName(tier);
-            int[] speedEnergyDefaults = getSpeedEnergyUpgradeDefaults(tier);
             int stackDefault = getStackUpgradeDefault(tier);
-            FACTORY_SPEED_ENERGY_MAX.put(tier, BUILDER
-                    .comment(cnName + " 最大速度/能量升级数（一项同时控制两者）")
-                    .defineInRange(name + "_speed_energy_max", speedEnergyDefaults[0], 0, 64));
             FACTORY_STACK_MAX.put(tier, BUILDER
                     .comment(cnName + " 最大堆叠升级数（0 = 不支持）。每级使并行倍率翻倍，上界 "
                             + STACK_UPGRADE_MAX + " 级 = ×" + (1 << STACK_UPGRADE_MAX) + "。")
@@ -534,16 +520,6 @@ public final class MekckConfig {
 
     // ── Upgrade limit defaults ─────────────────────────────────────────
 
-    private static int[] getSpeedEnergyUpgradeDefaults(CuttingMachineFactoryTier tier) {
-        return switch (tier) {
-            case BASIC, ADVANCED, ELITE, ULTIMATE, ABSOLUTE, SUPREME, COSMIC, INFINITE -> new int[]{8, 8};
-            case BLAZE -> new int[]{12, 12};
-            case CRYSTAL_MATRIX -> new int[]{16, 16};
-            case NEBULA -> new int[]{20, 20};
-            case SINGULARITY -> new int[]{32, 32};
-        };
-    }
-
     private static int getStackUpgradeDefault(CuttingMachineFactoryTier tier) {
         // 是否支持堆叠升级由枚举的 supportsStackUpgrade() 单独定义，此处不再复述该规则。
         return tier.supportsStackUpgrade() ? STACK_UPGRADE_MAX : 0;
@@ -563,14 +539,14 @@ public final class MekckConfig {
 
     // ── Upgrade limit accessors ────────────────────────────────────────
 
-    /** Max speed upgrades for basic machines (UniversalCuttingMachine, PlantingCuttingStation). */
+    /** 基础机器（通用切菜机、种植切配站等）的速度升级上限：同 {@link #getFactorySpeedUpgradeMax}，固定取枚举自带值。 */
     public static int getBasicSpeedUpgradeMax() {
-        return BASIC_SPEED_MAX.get();
+        return Upgrade.SPEED.getMax();
     }
 
-    /** Max energy upgrades for basic machines (UniversalCuttingMachine, PlantingCuttingStation). */
+    /** 基础机器的能量升级上限：同 {@link #getFactorySpeedUpgradeMax}，固定取枚举自带值。 */
     public static int getBasicEnergyUpgradeMax() {
-        return BASIC_ENERGY_MAX.get();
+        return Upgrade.ENERGY.getMax();
     }
 
     /** 启动与 /reload 时是否自动生成装盘（融合机）配方。 */
@@ -652,16 +628,25 @@ public final class MekckConfig {
         return CREATIVE_UPGRADE_FOOD_HINT == null || CREATIVE_UPGRADE_FOOD_HINT.get();
     }
 
-    /** Max speed upgrades for a factory tier (shared with energy, one config entry). */
+    /**
+     * 速度升级上限：固定为 Mekanism 枚举自带值，<b>不可配置</b>。
+     *
+     * <p>{@code Upgrade.SPEED.getMax()} 是编译期常量 8。曾经的
+     * {@code <tier>_speed_energy_max} 配置项（12 档默认 8/12/16/20/32、范围 0..64）
+     * 在引入 Mekanism 升级组件后已失效——安装时会被
+     * {@code TileComponentUpgrade} 卡在 {@code getMax()}，
+     * 超出的部分永远装不进去，属于「配置能改但没效果」的静默失效，故删除。
+     *
+     * <p>本方法保留是因为仍有多个调用方（方块实体与菜单的上限显示）；
+     * 那些调用点在机器体系迁移完成后会被一并移除。
+     */
     public static int getFactorySpeedUpgradeMax(CuttingMachineFactoryTier tier) {
-        ForgeConfigSpec.IntValue val = FACTORY_SPEED_ENERGY_MAX.get(tier);
-        return val != null ? val.get() : getSpeedEnergyUpgradeDefaults(tier)[0];
+        return Upgrade.SPEED.getMax();
     }
 
-    /** Max energy upgrades for a factory tier (shared with speed, one config entry). */
+    /** 能量升级上限：同 {@link #getFactorySpeedUpgradeMax}，固定取枚举自带值。 */
     public static int getFactoryEnergyUpgradeMax(CuttingMachineFactoryTier tier) {
-        ForgeConfigSpec.IntValue val = FACTORY_SPEED_ENERGY_MAX.get(tier);
-        return val != null ? val.get() : getSpeedEnergyUpgradeDefaults(tier)[1];
+        return Upgrade.ENERGY.getMax();
     }
 
     /** Max stack upgrades for a factory tier (0 = not supported). */

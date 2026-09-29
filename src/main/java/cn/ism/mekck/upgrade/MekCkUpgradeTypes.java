@@ -66,6 +66,17 @@ import java.util.Optional;
  * <p>读档路径上 Mek 自己还有第三处裁剪：{@code Upgrade.buildMap} 对每个条目做
  * {@code Mth.clamp(getInt("amount"), 0, maxStack)}，同样以 {@code getMax()} 为上界。
  * 也就是说本类的 {@code capOf} 裁剪与 Mek 的行为同构，而不是在它之外另加一道闸。
+ *
+ * <h3>准入闸门为什么落在 {@code capOf}</h3>
+ * 读档路径上没有 {@code TileComponentUpgrade.supports()} 关卡，
+ * {@code decode} 的结果就是最终生效值——所以准入必须在这里做，
+ * 否则手改存档能把任意 Upgrade 塞进机器。
+ * <p><b>「保留未知条目」与「准入过滤」是两件事</b>：
+ * 前者（{@code unknownRaw}）针对<b>解析不出常量</b>的注入者缺席情形，
+ * 后者针对<b>能解析但本机不接受</b>的类型。
+ * 两者分别由 {@link MekCkUpgradeCodec} 与 {@link #capOf(Upgrade, CuttingMachineFactoryTier)}
+ * 承担，不要互相顶替：把 FILTER / GAS / ANCHOR 之类判成「未知条目」会让它们在存档里
+ * 长期残留并被原样回写，把它们判成「已知且为 0」才是本机的真实语义。
  */
 public final class MekCkUpgradeTypes {
 
@@ -205,45 +216,49 @@ public final class MekCkUpgradeTypes {
     }
 
     /**
-     * 无等级概念的场合用：直接取枚举自带上限。
+     * 无等级概念的场合用：等价于 {@code capOf(type, null)}，仍走准入闸门。
      *
-     * <p>没有配置值可裁时，{@code getMax()} 就是「{@code min(配置值, getMax())}」
-     * 在缺配置那一侧的取值，仍然满足不超过 {@code getMax()} 的不变式。
+     * <p>{@code tier == null} 时 {@link #isSupportedBy} 对存储卡判 {@code false}
+     * （缺依据即不放行），其余按 {@code getMax()} 返回。
      */
     public static int capOf(Upgrade type) {
-        return type.getMax();
+        return capOf(type, null);
     }
 
     /**
      * 某升级类型在某等级的安装上限。
      *
-     * @return 永远在 {@code [0, type.getMax()]} 区间——这是 Mek 那两处检查不被触发的条件
+     * <p><b>先过准入闸门，再谈数量</b>：{@link #isSupportedBy} 不接受的类型一律返回 0。
+     * 原因是读档路径（{@code TileComponentUpgrade} 的
+     * {@code lambda$read$1} = {@code upgrades.clear(); upgrades.putAll(decode 结果)}）
+     * 中间没有任何 {@code supports()} 检查，{@link #decode} 的结果就是最终生效值。
+     * 若这里直接落进「取 {@code getMax()}」的分支，FILTER / GAS / ANCHOR /
+     * STONE_GENERATOR 这些本机不接受的类型会被手改存档原样装进 EnumMap，
+     * 绕开「避免装上无效果的卡」这个设计意图。
+     *
+     * @return 0（不接受），否则永远在 {@code [1, type.getMax()]} 区间——
+     *         这是 Mek 那两处 {@code getMax()} 检查不被触发的条件
      */
     public static int capOf(Upgrade type, CuttingMachineFactoryTier tier) {
-        if (tier == null) {
-            return type.getMax();
+        if (!isSupportedBy(type, tier)) {
+            return 0;
         }
-        int configured;
         if (type == MekCkUpgradeRefs.storage()) {
-            configured = MekckConfig.getFactoryStackUpgradeMax(tier);
-        } else if (type == Upgrade.SPEED) {
-            configured = MekckConfig.getFactorySpeedUpgradeMax(tier);
-        } else if (type == Upgrade.ENERGY) {
-            configured = MekckConfig.getFactoryEnergyUpgradeMax(tier);
-        } else {
-            return type.getMax();
+            return Math.max(0, Math.min(MekckConfig.getFactoryStackUpgradeMax(tier), type.getMax()));
         }
-        return Math.max(0, Math.min(configured, type.getMax()));
+        return type.getMax();
     }
 
     /**
-     * 解码，<b>不</b>按 MekCK 配置裁剪，只按 {@link Upgrade#getMax()} 裁。
+     * 解码：<b>不</b>按 MekCK 的按等级配置裁剪，只走准入闸门 + {@link Upgrade#getMax()}。
      *
      * <p>等价于 {@code decode(tag, null)}。仅供「确实没有档位概念」的场合使用；
      * <b>凡是能拿到档位的地方（方块实体读档）一律用
-     * {@link #decode(CompoundTag, CuttingMachineFactoryTier)}</b>，
-     * 否则不支持倍增的档位会把存档里的存储卡数量读成 {@code getMax()}（6），
-     * 而不是它在 MekCK 配置里真正的上限。
+     * {@link #decode(CompoundTag, CuttingMachineFactoryTier)}</b>：
+     * {@code tier == null} 时 {@link #isSupportedBy} 对存储卡判 {@code false}
+     * （缺依据即不放行），存档里的存储卡会被整条丢弃；
+     * 拿得到档位时它才会按 {@link #capOf(Upgrade, CuttingMachineFactoryTier)}
+     * 读到该档位的真实上限。
      */
     public static MekCkUpgradeCodec.Decoded<Upgrade> decode(CompoundTag tag) {
         return decode(tag, null);
