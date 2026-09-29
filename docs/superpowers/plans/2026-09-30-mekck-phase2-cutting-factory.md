@@ -478,7 +478,83 @@ MSYS_NO_PATHCONV=1 git commit -m "切菜工厂：旧存档 NBT 迁移"
 
 ---
 
+## Task 4.8: 基类自存 int 下标槽位数据（修 SINGULARITY 丢槽）
+
+**前提已独立确认**（`javap -c mekanism.api.DataHandlerUtils`，注意包名是 `mekanism.api` 不是
+`mekanism.common.util`）：
+
+```
+writeContents:  invokevirtual  CompoundTag.putByte:(Ljava/lang/String;B)V
+readContents:   invokevirtual  CompoundTag.getByte:(Ljava/lang/String;)B
+                37: iflt 64          ← 负值直接跳过
+```
+
+Mek 用 **byte** 存取槽位下标，读到负数**静默跳过**。
+`2N ≤ 127` 即 `N ≤ 63` 才安全——CRYSTAL_MATRIX(36)、NEBULA(49) 没问题，
+**SINGULARITY(81 → 2N=162) 每次存读档丢 34 个输出槽与能源槽**。
+这不是迁移引入的（新建的 81 并行机器照样丢），但必须修。
+
+**为什么不用第 5 个 Mixin**：`DataHandlerUtils.writeContents/readContents` 是
+`static` 且**只接槽位列表、没有 tile 上下文**，无法按 tile 收窄——
+重定向会改掉整个整合包所有 Mekanism 机器（含 Mek 自带的）的存档格式，
+导致「装了 MekCK 存的档，没装 MekCK 打开时 Mek 自己的机器读不出来」。
+
+**做法**：MekCK 的机器自己写一份 **int 下标**的槽位数据，放在 MekCK 专属键下。
+Mek 原生那份（byte）照写不误，只是对 MekCK 的机器**不再是权威来源**。
+
+- [ ] **Step 1: 在 `MekCkMachineTile` 加读写**
+
+```java
+// 键名与 Mek 的 "componentUpgrade"/"Items" 刻意不同，避免任何交叉污染
+private static final String KEY_MEKCKK_ITEMS = "MekCkCkItems";   // 实际命名按仓库风格定
+```
+
+- `saveAdditional(CompoundTag)`：先 `super.saveAdditional(tag)`（Mek 照常写它那份），
+  **再**用 int 下标把自己的槽位数据写进专属键
+- `load(CompoundTag)`：先 `super.load(tag)`（Mek 按 byte 读，128+ 已丢），
+  **再**从专属键读 int 版本并**覆盖**槽位内容
+- ⚠️ **覆盖必须在 `super.load` 之后**——`TileComponentUpgrade.read` 第一件事是
+  `upgrades.clear()`（这条已被 `TestLegacyMachineNbtMigration` 的源码不变量测试钉住，同理适用）
+
+- [ ] **Step 2: 兼容「只有旧 byte 格式」的档**
+
+若专属键不存在（MekCK 装之前存的、或只有 Mek 那份），回落到读 Mek 的 byte 格式——
+即**退化到当前行为**，不报错。
+
+- [ ] **Step 3: 测试**
+
+- 81 并行下，第 128 号与第 161 号槽的物品在「存 → 读」后**仍然存在**（这是核心断言）
+- 旧格式档（只有 Mek 那份 byte）能正常读入
+- 新格式档读两次结果相同（幂等）
+- 低端位（< 128）行为不变
+
+- [ ] **Step 4: 提交**
+
+```bash
+cd /d/mc/mod/mekck && ./gradlew test --console=plain
+MSYS_NO_PATHCONV=1 git add src/main/java/cn/ism/mekck/machine/ src/test/
+MSYS_NO_PATHCONV=1 git commit -m "基类自存 int 下标槽位数据，修 SINGULARITY 每次存读档丢 34 槽"
+```
+
+**顺带**：把 `TestLegacyMachineNbtMigration` 里那个"钉住已知限制"的测试改成断言**修复后**的行为，
+并把它的注释更新为「已修复 + 修复方式 + 为什么不走 Mixin」——
+留着一个钉住 bug 的测试会误导后人。
+
+---
+
 ## Task 4.6: AE2 自动化层改消费 `IMekCkPorted`
+
+**为什么**：`ae2/MekckAe2.java`（2358 行）与 `network/` 的三个包**仍然指向旧的
+`CuttingMachineFactoryBlockEntity`**。Task 5 一删旧 BE，这些 `instanceof` 永远不匹配 →
+网络拉料按钮、自动处理、ME 下单**静默失效**（不崩，就是没反应）。
+
+已核实的断链点：
+
+```
+network/AutoDistributePacket.java:36          if (be instanceof CuttingMachineFactoryBlockEntity machine)
+network/AutoProcessListRequestPacket.java:36  if (be instanceof CuttingMachineFactoryBlockEntity || ...)
+network/AutoProcessListPacket.java:48         // 依赖旧 tile 的 autoSelectedItems
+```
 
 **为什么**：`ae2/MekckAe2.java`（2358 行）与 `network/` 的三个包**仍然指向旧的
 `CuttingMachineFactoryBlockEntity`**。Task 5 一删旧 BE，这些 `instanceof` 永远不匹配 →
