@@ -67,6 +67,26 @@ basic_planting_cutting_factory_from_cutting_factory.json  （不依赖 mekmm） 
 我估算的 44/84 是**下界**（只看了同名升级配方，没展开 tag 和跨工艺路径）。
 真实数字必须由可达性分析得出，我之前的数字不要采信。
 
+> **⚠️ 2026-09-29 降级（经同伴指正）**
+>
+> 上面这套可达性分析**不是条件配方的前置条件**，我原先把它当成前置是错的。
+> 二者的区别：
+>
+> | | 需要可达性分析 | 需要知道"已装 mod 集合" |
+> |---|---|---|
+> | 条件化**方块**（隐藏） | 是 | 是 ← 前置卡点在此 |
+> | 条件化**配方**（§4 的 `forge:conditional`） | **否** | **否** |
+>
+> 条件配方把判断**推迟到运行期**，Forge 对每个配方独立判定其 `conditions`，
+> 正确性与"最终哪些方块能造出来"无关。也就是说，逐配方加条件本身
+> 就是「对任意 mod 组合都安全」这个判据，因此**不需要任何环境信息**。
+>
+> 我原先"手上没有完整 mod 清单所以做不了"这个理由，只在可达性分析那条路上
+> 成立；换成条件配方后前提消失。**本节降级为独立的后续线**：
+> 用途仅是"给玩家提示哪些方块当前造不出来"（JEI/清单灰显），
+> 排在阶段 1 与条件配方之后，**不要作为前置阻塞任何工作**。
+
+
 ---
 
 ## 4. 建议的实现形态
@@ -106,17 +126,33 @@ mekck 的 `mekckfactory` 命名空间方块若未进过正式存档，可接受�
 - `block/BioreactorBlock.java`、`blockentity/CentralKitchenBlockEntity.java`
   ——审查发现的三个静默丢数据缺陷，与本项目无关
 
-我**建议由你来做**可达性分析与条件加载，理由：
+### 5.1 条件配方：由**我**做（已确认分工）
 
-1. 你的阶段 1 本来就在改 `MekCkUpgradeTypes` / `TileComponentUpgrade`，
-   同属升级与配方这条线
-2. 我手上没有实例环境的**完整 mod 清单**（实例只有 14 个 mod，
-   真实整合包可能有几十个），可达性分析需要准确的已装 mod 集合
-3. 上面 §3 的方法论问题需要**先验证再实施**，我不想在你已经推进的分支上
-   引入一个未经可达性验证的静态表
+条件加载的批量改造（924 个引用外部 mod 的配方，加 `forge:mod_loaded`）由我执行。
 
-如果你更希望我接手，请告诉我，我会**只新建 `MekCkAvailability.java`**，
-不改 `MekCkFactoryRegistration` / `MekCkFactoryTier` 的现有契约。
+理由：纯 JSON 批量改，与你的 Mixin 注入零耦合；你阶段 1 是 7 任务 37 步，
+Task 1–3 才刚落地，不再加负担。
+
+**文件边界（已与你对齐）**：
+
+```
+我只碰   src/main/resources/data/mekck/recipes/**
+          例外：creative_upgrade_from_49_foods.json ← 你的 Task 8 要改，我避开
+我不碰   src/main/java/cn/ism/mekck/factory/**      ← MekCkFactoryRegistration / MekCkFactoryTier
+          src/main/java/cn/ism/mekck/upgrade/**
+          src/main/java/cn/ism/mekck/mixin/**
+          src/main/resources/{assets,data}/mekck/ 的非配方部分
+```
+
+**执行前先实测**：`ConditionalRecipe` 自身的 `type` 值（推测 `forge:conditional`）
+`javap` 未取到。我会先拿**一个**配方改动 → 启动实例 → 看日志确认无
+`Parsing error`，再批量跑。**不会拿 924 个文件赌一个未验证字符串。**
+
+### 5.2 可达性分析：独立后续线，不阻塞任何人
+
+用途仅是"给玩家提示哪些方块当前造不出来"（JEI 灰显 / 清单标注），
+需要"已装 mod 集合"作为输入。排在阶段 1 与条件配方之后，**不作为前置**。
+
 
 ---
 
