@@ -23,7 +23,7 @@ import javax.annotation.Nullable;
 /**
  * 串烧工厂专属配方 {@code mekck:skewering}：签子(载体) + 主料 + 辅料 → 串烧物。
  *
- * <p>字段名<b>必须</b>与 {@code SkeweringFactoryBlockEntity} 的反射契约一致——
+ * <p>字段名<b>必须</b>与 {@code SkeweringFactoryExecutor} 的反射契约一致——
  * 该类用 {@code getIngredientField(recipe, "tool"/"ingredient"/"side")} 与
  * {@code getCountField(recipe, "ingredientCount"/"sideCount")} 读取本类型，
  * 字段名或类型不匹配会静默停产（反射失败返回 null，匹配退化为「恒不匹配」）。

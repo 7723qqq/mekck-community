@@ -61,11 +61,11 @@ public class NetworkRecipeListPacket {
             if (mc.screen instanceof CookingFactoryScreen screen
                     && screen.getMenu().getBlockPos().equals(packet.pos)) {
                 screen.setNetworkOrderData(packet.recipeIds, packet.maxCraftable);
-            } else if (mc.screen instanceof cn.ism.mekck.client.SkeweringFactoryScreen screen
-                    && screen.getMenu().getBlockPos().equals(packet.pos)) {
-                screen.setNetworkOrderData(packet.recipeIds, packet.maxCraftable);
             } else if (mc.screen instanceof cn.ism.mekck.client.NetworkOrderHost host) {
-                // 其余屏幕（烧烤工厂 / 智能穿串机 / 智能厨锅 / 中央厨房下单窗…）：共用面板
+                // 其余屏幕（智能穿串机 / 智能厨锅 / 中央厨房下单窗…）：共用面板。
+                // 烧烤与穿串工厂在阶段 3 Task 3/5 换 Mek 体系界面后不再实现
+                // NetworkOrderHost（订单面板等 GuiConfigurableTile 的 tab 布局定稿再统一接），
+                // 所以本分支打不到它们——ME 侧改走 IMekCkPorted 自动化。
                 cn.ism.mekck.client.NetworkOrderPanel panel = host.networkOrderPanel();
                 if (panel != null) panel.setData(packet.pos, packet.recipeIds, packet.maxCraftable);
             }

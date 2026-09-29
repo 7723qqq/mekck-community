@@ -2,7 +2,6 @@ package cn.ism.mekck.advancement;
 
 import cn.ism.mekck.ae2.INetworkPullable;
 import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
-import cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity;
 import cn.ism.mekck.machine.ports.IMekCkPorted;
 import net.minecraft.advancements.Advancement;
 import net.minecraft.server.level.ServerLevel;
@@ -39,7 +38,6 @@ public final class NetworkChefProgress {
     /** 是否为接入 ME 网络的 mekck 机器（与 MekckAe2.attachCapabilities 判定一致，但无 AE2 类依赖）。 */
     public static boolean isAe2Machine(BlockEntity be) {
         return be instanceof CookingFactoryBlockEntity
-                || be instanceof SkeweringFactoryBlockEntity
                 // 端口声明型机器（阶段 2 Task 4.6 起：切菜工厂已换成 CuttingFactoryTile）。
                 // 放在 INetworkPullable 之前只是阅读顺序，instanceof 之间互不影响。
                 || be instanceof IMekCkPorted

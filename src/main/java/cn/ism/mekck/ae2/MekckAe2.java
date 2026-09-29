@@ -26,10 +26,10 @@ import appeng.api.storage.MEStorage;
 import appeng.api.util.AECableType;
 import appeng.capabilities.Capabilities;
 import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
-import cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity;
 import cn.ism.mekck.machine.MekCkFactoryType;
 import cn.ism.mekck.machine.MekCkMachineTile;
 import cn.ism.mekck.machine.ports.IMekCkPorted;
+import cn.ism.mekck.machine.skewering.SkeweringFactoryExecutor;
 import cn.ism.mekck.util.KaleidoscopeCompat;
 import cn.ism.mekck.util.KaleidoscopeGrillingCompat;
 import net.minecraft.core.BlockPos;
@@ -167,10 +167,21 @@ public final class MekckAe2 {
     /**
      * 面板 ME 下单数据：{@code recipeId → 网络库存可做份数}（一次算全表，供列表请求批量使用）。
      *
-     * <p>烹饪工厂 / 穿串工厂沿用各自既有的配方来源（与已验收行为一致）；
+     * <p><b>只有烹饪工厂沿用自己既有的配方来源</b>（与已验收行为一致）；
      * <b>其余机器走通用分支</b>：直接复用该机器注册到 ME 终端的样板
      * （{@code refreshPatterns} 的产物），因此「终端能做的，面板就能下单」，
      * 不需要为每台机器再写一套配方来源。</p>
+     *
+     * <p><b>阶段 3 Task 5 起穿串工厂也走通用分支</b>。旧行为：这里有一条
+     * {@code instanceof SkeweringFactoryBlockEntity} 的专用分支，自己遍历
+     * {@link #allSkeweringRecipes} + {@link #skeweringInputs} 逐条算份数，
+     * 并按产物去重（同款串只留一个可下单选项）。新行为：删掉该分支，
+     * 穿串工厂与切菜 / 研磨 / 种植切配 / 烧烤同款，读
+     * {@code refreshPatterns} 里 SKEWERING 分支（{@code buildSkeweringPatterns}）
+     * 注册的那批样板。份数算法随之从「按 InputSpec 逐项取 min」换成
+     * 「按样板输入项取 min」，两者对同一份可用库存、同一批已解析出的物品 key
+     * 结果一致；可观察的差别只有一条：<b>面板不再按产物去重</b>，
+     * 会像 ME 终端一样把每一条配方都列出来。</p>
      */
     public static Map<String, Integer> getNetworkCraftableMap(BlockEntity be) {
         Map<String, Integer> out = new LinkedHashMap<>();
@@ -197,28 +208,7 @@ public final class MekckAe2 {
             }
             return out;
         }
-        if (be instanceof SkeweringFactoryBlockEntity skew) {
-            Map<AEKey, Long> avail = getNetworkAvail(skew);
-            if (avail == null) return out;
-            Set<String> resultSeen = new HashSet<>();
-            for (Recipe<?> recipe : allSkeweringRecipes(skew.getLevel())) {
-                try {
-                    List<InputSpec> specs = skeweringInputs(recipe);
-                    if (specs.isEmpty()) continue;
-                    if (resolveInputs(specs, avail) == null) continue;
-                    ItemStack result = recipe.getResultItem(skew.getLevel().registryAccess());
-                    ResourceLocation itemId = result.isEmpty() ? null : ForgeRegistries.ITEMS.getKey(result.getItem());
-                    String key = itemId == null ? recipe.getId().toString()
-                            : itemId.toString() + (result.getTag() == null ? "" : "#" + result.getTag());
-                    if (resultSeen.add(key)) {
-                        out.put(recipe.getId().toString(), maxCraftable(specs, avail));
-                    }
-                } catch (Throwable ignored) {
-                }
-            }
-            return out;
-        }
-        // 通用分支：与 ME 终端同一批样板（烧烤工厂 / 智能厨锅 / 智能穿串机 / 中央厨房 / 联动机器…）
+        // 通用分支：与 ME 终端同一批样板（穿串工厂 / 烧烤工厂 / 智能厨锅 / 智能穿串机 / 中央厨房 / 联动机器…）
         Map<AEKey, Long> avail = getNetworkAvail(be);
         if (avail == null) return out;
         for (PatternEntry entry : panelEntries(be)) {
@@ -384,9 +374,14 @@ public final class MekckAe2 {
         if (be instanceof CookingFactoryBlockEntity cook) {
             return pullCookingIngredients(cook, recipeId, quantity);
         }
-        if (be instanceof SkeweringFactoryBlockEntity skew) {
-            return pullSkeweringIngredients(skew, recipeId, quantity);
-        }
+        // 阶段 3 Task 5 起：这里原本还有一条 instanceof SkeweringFactoryBlockEntity 的
+        // 专用分支（pullSkeweringIngredients），现整条删除。理由与切菜 / 研磨 /
+        // 种植切配 / 烧烤一致——那四个家族各自迁到 Mek 原生 tile 时都删掉了同款分支。
+        // 【行为变化，如实记在这里】穿串工厂的面板 ME 下单因此不再可用：
+        // 下面 pullGenericIngredients 的入口条件是 INetworkPullable，而新 tile 不实现它，
+        // 于是走到这里必然返回 false（切菜 / 研磨 / 种植切配 / 烧烤四个家族今天也是这个结果）。
+        // 机器的自动化改由 ME 终端那条路承担：pushPattern → insertIntoMachine →
+        // portWindow / MekPortWindow 投料 → startOrder 设订单，端口声明型机器全都走这条。
         // 通用分支：任何"可下单 + 已接入网络"的机器都支持面板 ME 下单。
         // 与终端路径同构：抽料 → 插入机器 → 建 AeJob（记录产物回网量）→ setOrder(recipeId, quantity)，
         // 只是这里由玩家在面板里指定数量，**不需要 AE2 合成 CPU、也不受 CPU 字节限制**。
@@ -483,30 +478,10 @@ public final class MekckAe2 {
         return true;
     }
 
-    private static boolean pullSkeweringIngredients(SkeweringFactoryBlockEntity skew, String recipeId, int quantity) {
-        FactoryGridHost host = HOSTS.get(skew);
-        if (host == null || host.mainNode == null || !host.mainNode.isActive()) return false;
-        IGrid grid = host.mainNode.getGrid();
-        if (grid == null) return false;
-        MEStorage storage = grid.getStorageService().getInventory();
-        if (storage == null) return false;
-        Recipe<?> recipe = findSkeweringRecipe(skew.getLevel(), recipeId);
-        if (recipe == null) return false;
-        List<InputSpec> specs = skeweringInputs(recipe);
-        if (specs.isEmpty()) return false;
-        ItemStack result = recipe.getResultItem(skew.getLevel().registryAccess());
-        if (result.isEmpty()) return false;
-
-        IActionSource src = IActionSource.ofMachine(host);
-        List<GenericStack> extracted = extractAll(storage, specs, quantity, src);
-        if (extracted == null) return false;
-        host.insertIntoMachine(extracted);
-        long total = (long) result.getCount() * quantity;
-        host.job = new AeJob(new PatternEntry(null, recipe.getId(),
-                new GenericStack[]{new GenericStack(AEItemKey.of(result), total)}));
-        skew.setOrder(recipe.getId(), quantity);
-        return true;
-    }
+    // 阶段 3 Task 5：pullSkeweringIngredients 随旧 SkeweringFactoryBlockEntity 一起删除。
+    // 它是「面板 ME 下单」对穿串工厂的专用实现（抽料 → 插机器 → 建 AeJob → setOrder），
+    // 而新 tile 不实现 INetworkPullable、不再有 ItemStackHandler 存储区，
+    // 这条路已经没有落点；与切菜 / 研磨 / 种植切配 / 烧烤的处理一致。
 
     // ==================================================================
     //  通用"网络拉料"（INetworkPullable 机器）
@@ -837,14 +812,8 @@ public final class MekckAe2 {
         return list;
     }
 
-    private static Recipe<?> findSkeweringRecipe(Level level, String recipeId) {
-        ResourceLocation id = ResourceLocation.tryParse(recipeId);
-        if (id == null) return null;
-        for (Recipe<?> recipe : allSkeweringRecipes(level)) {
-            if (recipe.getId().equals(id)) return recipe;
-        }
-        return null;
-    }
+    // 阶段 3 Task 5：findSkeweringRecipe 随 pullSkeweringIngredients 一起删除
+    // （唯一调用点已删，留在这里就是死代码）。
 
     // ==================================================================
     //  ME 自动处理（切菜工厂 / 烧烤工厂）
@@ -971,7 +940,7 @@ public final class MekckAe2 {
     /**
      * 取这台机器的「输入 + 产物」窗口；不支持自动处理时返回 null。
      *
-     * <p>已迁的四个家族（切菜 / 研磨 / 种植切配 / 烧烤）全部走 {@link IMekCkPorted}。
+     * <p>已迁的五个家族（切菜 / 研磨 / 种植切配 / 烧烤 / 穿串）全部走 {@link IMekCkPorted}。
      * 家族闸门 {@link #portedFamily} 不能省：放行到「所有端口声明型机器」的话，
      * 一台还没定配方族的机器会照着玩家勾选的清单往输入槽里塞物品——
      * 那是凭空造料，不是拉料。新增家族时同理：先在 {@code portedFamily} 里登记，
@@ -990,7 +959,7 @@ public final class MekckAe2 {
      *
      * <p>{@link IMekCkPorted} 只说「哪些槽参与自动化」，不说「这台机器做什么工艺」，
      * 所以配方族要从 tile 的 {@code MekCkFactoryType} 读。
-     * 只有 {@code CUTTING} 认，其余一律返回 {@code null}，由调用方按
+     * 只有下面白名单里的家族认，其余一律返回 {@code null}，由调用方按
      * 「不处理任何东西」收口——宁可少补料，也不要拿错的配方族算出错的产物
      * （后者会把不相干的物品从 ME 网络里抽走）。</p>
      */
@@ -1000,12 +969,13 @@ public final class MekckAe2 {
         }
         MekCkFactoryType type = tile.getFactoryType();
         // 已接线的家族：切菜（阶段 2 Task 4.6）、研磨（阶段 3 Task 1）、
-        // 种植切配与烧烤（阶段 3 Task 2 / Task 3）。
-        // 其余三个（烹饪 / 穿串 / 制冰）仍返回 null：它们还是旧方块实体，分支正在迁移中。
+        // 种植切配与烧烤（阶段 3 Task 2 / Task 3）、穿串（阶段 3 Task 5）。
+        // 其余两个（烹饪 / 制冰）仍返回 null：它们还是旧方块实体，分支正在迁移中。
         return (type == MekCkFactoryType.CUTTING
                 || type == MekCkFactoryType.GRINDING
                 || type == MekCkFactoryType.PLANTING_CUTTING
-                || type == MekCkFactoryType.GRILLING) ? type : null;
+                || type == MekCkFactoryType.GRILLING
+                || type == MekCkFactoryType.SKEWERING) ? type : null;
     }
 
     /**
@@ -1045,6 +1015,23 @@ public final class MekckAe2 {
         return false;
     }
 
+    /**
+     * 穿串配方的三种料（签 / 主料 / 辅料），读不出来的那一种给 {@link Ingredient#EMPTY}。
+     *
+     * <p>刻意走 {@link SkeweringFactoryExecutor} 的三个 {@code *Of} 而不是自己反射：
+     * 机器匹配配方时读的就是这三个方法，两边不共用一套读法的话，
+     * 终端展示的配方与机器实际会做的会漂移（三种来源的配方形状还不一样：
+     * 自有配方字段 private、BBQ Delight 那张表形状未知、森罗的 virtual 配方字段全 public）。
+     * 三种字段一个都读不出来的配方类型，三个 {@code *Of} 全返 EMPTY，
+     * 于是这里自然给出「什么都不吃」，等价于把它跳过。</p>
+     */
+    private static List<Ingredient> skeweringIngredients(Recipe<?> recipe) {
+        return List.of(
+                SkeweringFactoryExecutor.toolOf(recipe),
+                SkeweringFactoryExecutor.mainOf(recipe),
+                SkeweringFactoryExecutor.sideOf(recipe));
+    }
+
     private static boolean canProcess(BlockEntity be, ItemStack stack, Level level) {
         MekCkFactoryType family = portedFamily(be);
         if (family == MekCkFactoryType.CUTTING) {
@@ -1063,6 +1050,19 @@ public final class MekckAe2 {
             if (KaleidoscopeGrillingCompat.isLoaded()) {
                 for (KaleidoscopeGrillingCompat.GrillingPair pair : KaleidoscopeGrillingCompat.getGrillingPairs()) {
                     if (ItemStack.isSameItem(pair.input(), stack)) return true;
+                }
+            }
+            return false;
+        }
+        if (family == MekCkFactoryType.SKEWERING) {
+            // 阶段 3 Task 5 新增。旧行为：穿串工厂根本不在 autoWindow 的放行范围内
+            // （那时它还是旧方块实体、没实现 IMekCkPorted），ME 自动补料对它完全无效。
+            // 新行为：登记进 portedFamily 后按窗口补料，因此这里必须给出「吃不吃这堆料」的判据，
+            // 否则要么把 ME 网络里与穿串无关的物品也塞进 84 格输入区（凭空造料），
+            // 要么一件都塞不进去。判据 = 能否被任一张穿串配方当作签 / 主料 / 辅料。
+            for (Recipe<?> r : allSkeweringRecipes(level)) {
+                for (Ingredient ing : skeweringIngredients(r)) {
+                    if (!ing.isEmpty() && ing.test(stack)) return true;
                 }
             }
             return false;
@@ -1132,6 +1132,23 @@ public final class MekckAe2 {
                     if (inputId != null && selected.contains(inputId)) {
                         String outputId = registryId(pair.output());
                         if (outputId != null) out.add(outputId);
+                    }
+                }
+            }
+        } else if (family == MekCkFactoryType.SKEWERING) {
+            // 阶段 3 Task 5 新增，与上面 GRILLING 分支同款：勾选的物品出现在某张配方的
+            // 签 / 主料 / 辅料任一项上，就把这张配方的产物放进「允许回网」的白名单。
+            // 白名单只放产物、不放返还槽里的签子：签子是机器内部循环物，
+            // 混进白名单等于把机器自用的料抽走。
+            for (Recipe<?> r : allSkeweringRecipes(level)) {
+                for (Ingredient ing : skeweringIngredients(r)) {
+                    if (ing == null || ing.isEmpty()) continue;
+                    for (String sel : selected) {
+                        if (ingredientContainsId(ing, sel)) {
+                            ItemStack res = r.getResultItem(level.registryAccess());
+                            String id = registryId(res);
+                            if (id != null) out.add(id);
+                        }
                     }
                 }
             }
@@ -1578,8 +1595,6 @@ public final class MekckAe2 {
             List<PatternEntry> entries;
             if (owner instanceof CookingFactoryBlockEntity cook) {
                 entries = buildCookingPatterns(cook, avail);
-            } else if (owner instanceof SkeweringFactoryBlockEntity) {
-                entries = buildSkeweringPatterns(level, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) {
                 entries = buildSimpleMachinePatterns(sm, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity) {
@@ -1614,6 +1629,12 @@ public final class MekckAe2 {
                 // 烧烤工厂（阶段 3 Task 3 起是端口声明型）：BBQ grilling 配方
                 // （终端下单后由下面的 setOrder 设订单，机器按订单加工）
                 entries = buildGrillingPatterns(level, avail);
+            } else if (owner instanceof MekCkMachineTile && portedFamily(owner) == MekCkFactoryType.SKEWERING) {
+                // 穿串工厂（阶段 3 Task 5 起是端口声明型）：构建器与迁移前完全同一个
+                // buildSkeweringPatterns，配方来源（barbequesdelight:skewering + 森罗 virtual）
+                // 一字未改，只是判机器的方式从旧方块实体换成了 portedFamily。
+                // 与「智能穿串机」那条分支共用一个构建器：两者用的是同一批配方。
+                entries = buildSkeweringPatterns(level, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.IceFactoryBlockEntity) {
                 // 制冰工厂：mekck:ice_make（机器无需订单，材料推入即自动加工）
                 entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "ice_make"), avail);
@@ -1773,7 +1794,10 @@ public final class MekckAe2 {
         private void startOrder(PatternEntry entry) {
             if (owner instanceof CookingFactoryBlockEntity c) {
                 c.setOrder(entry.recipeId, 1);
-            } else if (owner instanceof SkeweringFactoryBlockEntity s) {
+            } else if (owner instanceof cn.ism.mekck.machine.skewering.SkeweringFactoryTile s) {
+                // 阶段 3 Task 5：类型从旧 SkeweringFactoryBlockEntity 换成新 tile，
+                // setOrder 仍是两参（穿串没有「调味」概念，与烧烤工厂的三参不同）。
+                // 必须显式设订单：这台机器无订单不加工。
                 s.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) {
                 sm.setOrder(entry.recipeId, 1);
@@ -1805,7 +1829,9 @@ public final class MekckAe2 {
 
         private ItemStackHandler getItems() {
             if (owner instanceof CookingFactoryBlockEntity c) return c.items;
-            if (owner instanceof SkeweringFactoryBlockEntity s) return s.items;
+            // 阶段 3 Task 5：删掉穿串工厂那行（return s.items）。Mek 原生 tile 没有
+            // ItemStackHandler，槽位由 portWindow() / MekPortWindow 提供——与切菜、研磨、
+            // 种植切配、烧烤迁完时的处理完全一致（那四家当年也是各删一行）。
             if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) return sm.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity cut) return cut.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.SkeweringMachineBlockEntity sk) return sk.getItems();
@@ -1827,9 +1853,6 @@ public final class MekckAe2 {
                     slots[i] = CookingFactoryBlockEntity.OUTPUT_SLOT_START + i;
                 }
                 return slots;
-            }
-            if (owner instanceof SkeweringFactoryBlockEntity s) {
-                return new int[]{s.getOutputSlot()};
             }
             if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) {
                 return new int[]{sm.OUTPUT_SLOT};
@@ -1879,17 +1902,22 @@ public final class MekckAe2 {
                 }
                 return slots;
             }
-            if (owner instanceof SkeweringFactoryBlockEntity s) {
-                return new int[]{s.getReturnSlot()};
-            }
+            // 阶段 3 Task 5：删掉穿串工厂那条 {s.getReturnSlot()}。
+            // 【行为变化，尚未补回】旧行为：一单做完、产物回网之后，返还槽里的签子
+            // 会被 exportReturnSlots 一并塞回 ME 网络；新行为：新 tile 不是
+            // ItemStackHandler 机器，getItems() 返 null，exportReturnSlots 直接早退，
+            // 签子留在机器的返还槽里不再回网。
+            // 【为什么先这么改】返还槽不是 IMekCkPorted 里的概念（端口只声明
+            // mePatternItemInputs / mePatternItemOutputs），而前面四个家族迁完时
+            // 同样没有保留任何返还槽回写——烧烤的调味料槽至今也是留在机器里。
+            // 要补的话落点在 exportReturnSlots 里对 SkeweringFactoryTile.returnSlot()
+            // 单独开一条分支，与 Mek Energistics 侧的配置对不齐，属于另一个任务。
             return new int[0];
         }
 
         private int getStorageStart() {
-            // 烹饪工厂：水瓶/奶瓶等必须进存储槽（6+），才能被 convertStoredFluidContainers 转为流体；
-            // 穿串工厂：优先输入槽 0-2，使签子/工具可被 completeRecipe 回收到返回槽并回写网络。
+            // 烹饪工厂：水瓶/奶瓶等必须进存储槽（6+），才能被 convertStoredFluidContainers 转为流体。
             if (owner instanceof CookingFactoryBlockEntity) return CookingFactoryBlockEntity.INPUT_SLOTS;
-            if (owner instanceof SkeweringFactoryBlockEntity) return 0;
             if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity) return 0;
             if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity) {
                 return cn.ism.mekck.blockentity.CentralKitchenBlockEntity.STORAGE_START;
@@ -1907,7 +1935,9 @@ public final class MekckAe2 {
 
         private int getStorageEnd() {
             if (owner instanceof CookingFactoryBlockEntity) return CookingFactoryBlockEntity.OUTPUT_SLOT_START;
-            if (owner instanceof SkeweringFactoryBlockEntity s) return s.getStorageSlotStart() + s.getStorageSlots();
+            // 阶段 3 Task 5：删掉穿串工厂那条 getStorageSlotStart() + getStorageSlots()——
+            // 新 tile 的 81 格存储没有 ItemStackHandler 下标，insertIntoMachine 对端口声明型
+            // 机器走 insertIntoPortWindow（按 MekPortWindow 的输入段插），压根不问这两个值。
             if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) return sm.INPUT_COUNT;
             if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity) {
                 return cn.ism.mekck.blockentity.CentralKitchenBlockEntity.OUTPUT_START;
@@ -2416,21 +2446,45 @@ public final class MekckAe2 {
         return specs;
     }
 
+    /**
+     * 穿串配方的 AE2 投入清单：签 / 主料 / 辅料。
+     *
+     * <p>字段读取全部改走 {@link SkeweringFactoryExecutor} 的四个 public static 读取口
+     * （旧代码调的是已删的 {@code SkeweringFactoryBlockEntity.getIngredientField /
+     * getCountField}）。两边必须共用同一套读法：三种来源的配方形状不同
+     * （自有配方字段 private、BBQ Delight 那张表形状未知、森罗 virtual 配方字段全 public），
+     * 各写各的反射迟早会让终端展示的配方与机器实际做的漂移。</p>
+     *
+     * <h3>数量为什么仍然套 {@code Math.max(1, …)}（与机器的批量口径不是同一件事）</h3>
+     * 机器侧读 {@code ingredientCount} 的口径是「<b>每个串消耗几个签子</b>」，
+     * 0 = 不消耗、只要求存在（见 {@code SkeweringFactoryExecutor.batchForMaterial}）。
+     * 而这里算的是「<b>AE2 样板里这一项写几个</b>」——那是 <b>投入量</b>，不是消耗量。
+     * 两件事在「0」这个取值上<b>必须有不同解释</b>：
+     * <ul>
+     *   <li>消耗量 0：机器不扣签子，签子原样留在机器里（自有 8 条配方的口径）。</li>
+     *   <li>投入量 0：AE2 会把这一项编码成「0 个」的样板输入，等于永远不满足条件，
+     *       机器端 {@code availableCount == 0} 判「材料不够」不开工。
+     *       症状是「订了单不动」，而拉料/匹配失败这条路上没有任何日志。</li>
+     * </ul>
+     * 所以「不消耗但需要」在 AE2 侧的正确表达恰恰是 <b>投 1 个</b>：
+     * 投进去满足配方的存在性判定，机器不扣它（消耗量仍是 0）。
+     * 曾经一度按「与机器口径统一」把这里的 {@code Math.max(1, …)} 去掉，
+     * 结果是外部模组（BBQ Delight）那种「有 tool 字段、ingredientCount 缺省 0」
+     * 的配方会生成 0 数量投入项——那条路已回滚，理由记在这里。</p>
+     */
     private static List<InputSpec> skeweringInputs(Recipe<?> recipe) {
         List<InputSpec> specs = new ArrayList<>();
-        Ingredient tool = SkeweringFactoryBlockEntity.getIngredientField(recipe, "tool");
-        if (tool != null && !tool.isEmpty()) {
-            int count = Math.max(1, SkeweringFactoryBlockEntity.getCountField(recipe, "ingredientCount"));
-            specs.add(new InputSpec(tool, count));
+        Ingredient tool = SkeweringFactoryExecutor.toolOf(recipe);
+        if (!tool.isEmpty()) {
+            specs.add(new InputSpec(tool, Math.max(1, SkeweringFactoryExecutor.toolCountOf(recipe))));
         }
-        Ingredient main = SkeweringFactoryBlockEntity.getIngredientField(recipe, "ingredient");
-        if (main != null && !main.isEmpty()) {
+        Ingredient main = SkeweringFactoryExecutor.mainOf(recipe);
+        if (!main.isEmpty()) {
             specs.add(new InputSpec(main, 1));
         }
-        Ingredient side = SkeweringFactoryBlockEntity.getIngredientField(recipe, "side");
-        if (side != null && !side.isEmpty()) {
-            int count = Math.max(1, SkeweringFactoryBlockEntity.getCountField(recipe, "sideCount"));
-            specs.add(new InputSpec(side, count));
+        Ingredient side = SkeweringFactoryExecutor.sideOf(recipe);
+        if (!side.isEmpty()) {
+            specs.add(new InputSpec(side, Math.max(1, SkeweringFactoryExecutor.sideCountOf(recipe))));
         }
         return specs;
     }

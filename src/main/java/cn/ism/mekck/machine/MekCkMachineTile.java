@@ -283,22 +283,81 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
                     + "子类必须覆写它并从自己的方块类型读出等级（参考 CuttingFactoryTile）。");
         }
 
-        inputSlots = new ArrayList<>(tier.processes);
-        outputSlots = new ArrayList<>(tier.processes);
+        int inputCount = inputSlotCount(tier);
+        int inputColumns = inputSlotColumns(inputCount);
+        int outputCount = outputSlotCount(tier);
+        int outputColumns = outputSlotColumns(outputCount);
+        // 列数是 0 会让 addSlotGrid 里的 (i / columns) 除零，而这里的除零只会在放置时炸一次、
+        // 报错信息里完全看不出是哪个家族给的 0。这里提前拦并点名。
+        if (inputCount <= 0 || inputColumns <= 0 || outputCount <= 0 || outputColumns <= 0) {
+            throw new IllegalStateException("工厂方块 " + getBlockType() + " 的槽位布局非法："
+                    + "输入 " + inputCount + " 槽 / " + inputColumns + " 列，"
+                    + "输出 " + outputCount + " 槽 / " + outputColumns + " 列（四者都必须 ≥ 1）。");
+        }
+
+        inputSlots = new ArrayList<>(inputCount);
+        outputSlots = new ArrayList<>(outputCount);
 
         InventorySlotHelper builder = InventorySlotHelper.forSideWithConfig(this::getDirection, this::getConfig);
-        int count = tier.processes;
-        int columns = (int) Math.ceil(Math.sqrt(count));
         int slotLimit = slotLimitPerSlot(tier);
-        // 输入方阵在左、输出方阵右移「输入方阵宽度 + 间隔」，与旧实现一致。
-        addSlotGrid(builder, listener, INPUT_START_X, count, columns, slotLimit, true);
-        addSlotGrid(builder, listener, INPUT_START_X + columns * SLOT_STEP + GRID_GAP, count, columns,
-                slotLimit, false);
+        // 输入方阵在左、输出方阵右移「**输入**方阵宽度 + 间隔」，与旧实现一致。
+        // 间隔按输入宽度算而不是各自宽度：并行方阵两者相等，穿串工厂的
+        // 「3 宽输入 + 1 宽输出」也正好是旧版 38/130 的间距。
+        addSlotGrid(builder, listener, INPUT_START_X, inputCount, inputColumns, slotLimit, true);
+        addSlotGrid(builder, listener, INPUT_START_X + inputColumns * SLOT_STEP + GRID_GAP,
+                outputCount, outputColumns, slotLimit, false);
         energySlot = EnergyInventorySlot.fillOrConvert(energyContainer, this::getLevel, listener,
                 ENERGY_SLOT_X, ENERGY_SLOT_Y);
         builder.addSlot(energySlot);
         appendExtraSlots(builder, listener);
         return builder.build();
+    }
+
+    // ── 槽位布局（阶段 3 Task 4 引入：穿串工厂触发）────────────────────
+    //
+    // 并行方阵家族的四个值都取默认；「固定输入 + 存储缓冲」家族（穿串 / 烹饪）
+    // 覆写其中一两个即可，不必整体重写 getInitialInventory。
+    // 加钩子而不是整体覆写，理由与 appendExtraSlots 相同：
+    // 已迁的四个家族必须一行都不用改。
+
+    /**
+     * 本等级的输入槽总数。
+     *
+     * <p>默认 {@code tier.processes}——并行方阵家族的老口径。穿串工厂返回 {@code 3}
+     * （签 / 主料 / 辅料），它的槽数<b>与并行数无关</b>：一个周期把三个输入槽
+     * <b>一起</b>消费掉做出一批串，不是「一槽一批」。</p>
+     */
+    protected int inputSlotCount(CuttingMachineFactoryTier tier) {
+        return tier.processes;
+    }
+
+    /**
+     * 输入槽的列数。
+     *
+     * <p>默认 {@code ⌈√N⌉}，即排成尽量方正的方阵。穿串工厂返回 {@code 3}（一行三格），
+     * 与旧 GUI 的 {@code x = 38 + (i%3)*18, y = 41} 逐像素一致。</p>
+     */
+    protected int inputSlotColumns(int count) {
+        return (int) Math.ceil(Math.sqrt(count));
+    }
+
+    /**
+     * 本等级的输出槽总数。
+     *
+     * <p>默认与输入同数（并行方阵：第 i 个输入槽的第 i 个输出槽是一对）。
+     * 穿串工厂返回 {@code 2}——产物槽与<b>返还槽</b>（签子复制回去）竖着叠一列。</p>
+     */
+    protected int outputSlotCount(CuttingMachineFactoryTier tier) {
+        return inputSlotCount(tier);
+    }
+
+    /**
+     * 输出槽的列数。
+     *
+     * <p>默认 {@code ⌈√N⌉}。穿串工厂返回 {@code 1}（一列两格）。</p>
+     */
+    protected int outputSlotColumns(int count) {
+        return (int) Math.ceil(Math.sqrt(count));
     }
 
     /**
@@ -912,9 +971,35 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
      * 顺序反了等于没写这一层——而这正是本缺陷的形态：静默丢数据、没有任何日志。
      * 另有 {@code TestMekCkSlotNbt#mekckSlotReadIsAppliedAfterSuperLoad} 把这条顺序钉死。</p>
      */
+    /**
+     * 本机是否接受旧格式存档的自动迁移 —— 默认是。
+     *
+     * <h3>为什么需要这个开关</h3>
+     * {@link MekCkLegacyMachineNbt#migrate} 是<b>按并行方阵的槽位下标</b>推算的：
+     * 它用 {@code inputSlotCount * 2} 划出「输入 + 输出」那一段，把紧随其后的
+     * 几格当成升级卡槽、把最后一格当成能源槽。穿串工厂的排布不是这样：
+     * <pre>
+     *   [0, 3)   输入（签 / 主料 / 辅料）
+     *   [3, 5)   输出（产物 + 返还）
+     *   [5, 9)   速度 / 能量 / 堆叠 / 创造 升级卡（有没有堆叠看档位）
+     *   [9, 88)  存储 81 格
+     *   Size-1   能源槽
+     * </pre>
+     * 拿 {@code 3 * 2 = 6} 当机器段末端，<b>第 5 号格（速度升级卡）会被当成普通机器槽
+     * 灌进新 tile 的能源槽</b>。这不是「迁移得不完美」，是静默把内容放错格子。
+     *
+     * <p>因此家族形态与并行方阵不同时必须覆写成本方法返回 {@code false}：
+     * 旧存档的内容不搬（机器读档后是空的），比放错格子安全。
+     * 与 {@code mekckfactory} 那 84 个死命名空间方块同款——它们本来就没有兜底，
+     * 留到阶段 4 统一处理。</p>
+     */
+    protected boolean migratesLegacyNbt() {
+        return true;
+    }
+
     @Override
     public void load(CompoundTag tag) {
-        CompoundTag legacyTag = MekCkLegacyMachineNbt.isLegacy(tag) ? tag : null;
+        CompoundTag legacyTag = migratesLegacyNbt() && MekCkLegacyMachineNbt.isLegacy(tag) ? tag : null;
         if (legacyTag != null) {
             // 档位为 null 时按「无机器槽位」处理：正常情况下构造器早就抛了
             // IllegalStateException，真到这里说明方块被换成了非工厂方块。

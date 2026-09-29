@@ -1,6 +1,6 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity;
+import cn.ism.mekck.machine.skewering.SkeweringFactoryTile;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -59,9 +59,31 @@ public class SkewerThreadingOrderPacket {
     public static void handle(SkewerThreadingOrderPacket packet, Supplier<NetworkEvent.Context> context) {
         context.get().enqueueWork(() -> {
             ServerPlayer player = context.get().getSender();
-            if (PacketGuard.target(player, packet.pos) instanceof SkeweringFactoryBlockEntity machine) {
-                machine.setOrder(packet.recipeId, packet.quantity,
-                        packet.customIngredients.isEmpty() ? null : packet.customIngredients);
+            if (PacketGuard.target(player, packet.pos) instanceof SkeweringFactoryTile machine) {
+                // 自选组合与固定配方是<b>两条互斥的路</b>（见执行器的 findRecipe）：
+                // 自选组合现场拼一张虚拟配方，固定配方按 id 查。
+                // 因此这里按「有没有自选材料」分流，不做「先设固定再被自选覆盖」。
+                if (packet.customIngredients.isEmpty()) {
+                    if (packet.recipeId == null) {
+                        machine.clearOrder();
+                    } else {
+                        machine.setOrder(packet.recipeId, packet.quantity);
+                    }
+                } else {
+                    List<String> ids = new ArrayList<>(packet.customIngredients.size());
+                    for (ItemStack stack : packet.customIngredients) {
+                        // 只存物品 id、每项恒 1 个：与旧存档的 OrderCustomIngredients 逐字同款。
+                        // 数量在 orderQuantity 里，不在材料表里。
+                        if (stack.isEmpty()) {
+                            continue;
+                        }
+                        ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
+                        if (id != null) {
+                            ids.add(id.toString());
+                        }
+                    }
+                    machine.setCustomOrder(ids, packet.quantity);
+                }
             }
         });
         context.get().setPacketHandled(true);

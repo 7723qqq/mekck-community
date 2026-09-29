@@ -975,7 +975,7 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
         }
         tag.putByteArray("SideConfig", sideBytes);
         // 红石控制：两个键必须在无订单时也写出，否则重载后被 load 的 contains 判定跳过，
-        // 玩家的红石设置静默归零（同族 SkeweringFactoryBlockEntity 一直是对的）。
+        // 玩家的红石设置静默归零（同族穿串工厂一直是对的）。
         tag.putInt("RedstoneControl", redstoneControl.ordinal());
         tag.putBoolean("RedstonePowered", redstonePowered);
         // Save order data

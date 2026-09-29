@@ -19,7 +19,6 @@ import cn.ism.mekck.blockentity.GrillBlockEntity;
 import cn.ism.mekck.blockentity.BioreactorBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
-import cn.ism.mekck.blockentity.SkeweringFactoryBlockEntity;
 import cn.ism.mekck.blockentity.SmartCookingPotBlockEntity;
 import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
 import cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity;
@@ -670,10 +669,32 @@ public final class UniversalCuttingMachine {
     public static final RegistryObject<MenuType<CookingFactoryMenu>> COOKING_FACTORY_MENU;
 
     // Skewering Factory blocks, items, and block entities
+    // Skewering Factory：阶段 3 Task 5 改走 Mek 的注册器，
+    // **注册名一字不改**（仍是 mekck:<tier>_skewering_factory）。
+    public static final mekanism.common.registration.impl.BlockDeferredRegister SKEWERING_FACTORY_BLOCKS_REG =
+            new mekanism.common.registration.impl.BlockDeferredRegister(MOD_ID);
+    public static final mekanism.common.registration.impl.TileEntityTypeDeferredRegister SKEWERING_FACTORY_TILES_REG =
+            new mekanism.common.registration.impl.TileEntityTypeDeferredRegister(MOD_ID);
+    public static final mekanism.common.registration.impl.ContainerTypeDeferredRegister SKEWERING_FACTORY_CONTAINERS_REG =
+            new mekanism.common.registration.impl.ContainerTypeDeferredRegister(MOD_ID);
+
+    /** 已注册的穿串方块（按等级索引），Mek 体系下的真实句柄。 */
+    public static final Map<CuttingMachineFactoryTier,
+            mekanism.common.registration.impl.BlockRegistryObject<SkeweringFactoryBlock, MekCkBlockItem>> SKEWERING_FACTORY_HANDLES =
+            new LinkedHashMap<>();
+    /** 已注册的 tile 类型（按等级索引），供 BlockType 的延迟 Supplier 回查。 */
+    public static final Map<CuttingMachineFactoryTier,
+            mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.skewering.SkeweringFactoryTile>> SKEWERING_FACTORY_TILES =
+            new LinkedHashMap<>();
+    /** 兼容面：外部文件按旧类型读这两个 map，{@code registryView} 让它们一行都不用改。 */
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Block>> SKEWERING_FACTORY_BLOCKS = new LinkedHashMap<>();
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Item>> SKEWERING_FACTORY_ITEMS = new LinkedHashMap<>();
-    public static final Map<CuttingMachineFactoryTier, RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>>> SKEWERING_FACTORY_BLOCK_ENTITIES = new LinkedHashMap<>();
-    public static final RegistryObject<MenuType<SkeweringFactoryMenu>> SKEWERING_FACTORY_MENU;
+
+    /** 12 个等级共用一个容器类型（注册名与旧的 mekck:skewering_factory 逐字相同）。 */
+    public static final mekanism.common.registration.impl.ContainerTypeRegistryObject<SkeweringFactoryMenu> SKEWERING_FACTORY_CONTAINER;
+
+    private static final UnaryOperator<BlockBehaviour.Properties> SKEWERING_FACTORY_PROPERTIES =
+            props -> props.sound(net.minecraft.world.level.block.SoundType.METAL);
 
     // Grill Factory blocks, items, and block entities
     // 阶段 3 Task 3：改走 Mek 的注册器，**注册名一字不改**（仍是 mekck:<tier>_grill_factory），
@@ -760,17 +781,9 @@ public final class UniversalCuttingMachine {
     // BlockEntityType。活的 tile 句柄在 GRILL_FACTORY_TILES。
 
     // Skewering Factory block entity references
-    public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> BASIC_SKEWERING_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> ADVANCED_SKEWERING_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> ELITE_SKEWERING_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> ULTIMATE_SKEWERING_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> ABSOLUTE_SKEWERING_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> SUPREME_SKEWERING_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> COSMIC_SKEWERING_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> INFINITE_SKEWERING_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> CRYSTAL_MATRIX_SKEWERING_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> NEBULA_SKEWERING_FACTORY_BLOCK_ENTITY;
-    public static final RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> SINGULARITY_SKEWERING_FACTORY_BLOCK_ENTITY;
+    // 穿串工厂的旧 BE 字段与 SKEWERING_FACTORY_BLOCK_ENTITIES 已删（阶段 3 Task 5）：
+    // 它们强绑已删的 SkeweringFactoryBlockEntity，同一个注册名只能挂一个 BlockEntityType。
+    // 活的 tile 句柄在 SKEWERING_FACTORY_TILES。
 
     // Factory blocks, items, and block entities
     //
@@ -1020,28 +1033,41 @@ public final class UniversalCuttingMachine {
         }
         COOKING_FACTORY_MENU = MENUS.register("cooking_factory", () -> IForgeMenuType.create(CookingFactoryMenu::new));
 
-        // Register all skewering factory blocks
+        // 穿串工厂（阶段 3 Task 5）：方块/物品/tile/容器全部走 Mek 的注册器，
+        // **注册名一字不改**（仍是 mekck:<tier>_skewering_factory）。
+        SKEWERING_FACTORY_CONTAINER = SKEWERING_FACTORY_CONTAINERS_REG.register(
+                "skewering_factory", cn.ism.mekck.machine.skewering.SkeweringFactoryTile.class,
+                SkeweringFactoryMenu::new);
         for (CuttingMachineFactoryTier tier : CuttingMachineFactoryTier.values()) {
             String id = tier.getSkeweringBlockId();
-            RegistryObject<Block> block = BLOCKS.register(id, () -> new SkeweringFactoryBlock(tier));
-            RegistryObject<Item> item = ITEMS.register(id, () -> {
-                Component desc = switch (tier) {
-                    case NEBULA -> Component.translatable("tooltip.mekck.nebula_skewering_factory");
-                    case BLAZE -> Component.translatable("tooltip.mekck.blaze_skewering_factory");
-                    case SINGULARITY -> Component.translatable("tooltip.mekck.singularity_skewering_factory");
-                    default -> null;
-                };
-                return new MekCkBlockItem(block.get(), new Item.Properties(), desc, tier, true);
-            });
-            RegistryObject<BlockEntityType<SkeweringFactoryBlockEntity>> be = BLOCK_ENTITIES.register(
-                    id, () -> BlockEntityType.Builder.of(
-                            (pos, state) -> new SkeweringFactoryBlockEntity(tier, pos, state),
-                            block.get()).build(null));
-            SKEWERING_FACTORY_BLOCKS.put(tier, block);
-            SKEWERING_FACTORY_ITEMS.put(tier, item);
-            SKEWERING_FACTORY_BLOCK_ENTITIES.put(tier, be);
+            Component desc = switch (tier) {
+                case NEBULA -> Component.translatable("tooltip.mekck.nebula_skewering_factory");
+                case BLAZE -> Component.translatable("tooltip.mekck.blaze_skewering_factory");
+                case SINGULARITY -> Component.translatable("tooltip.mekck.singularity_skewering_factory");
+                default -> null;
+            };
+            // BlockType 需要 tile 与容器，但两者都必须先有方块 —— 用延迟 Supplier 破这个环。
+            mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.skewering.SkeweringFactoryTile> blockType =
+                    SkeweringFactoryBlock.blockTypeFor(tier, () -> SKEWERING_FACTORY_CONTAINER,
+                            () -> findSkeweringFactoryTile(tier));
+
+            // 末位 true = MekCkBlockItem 的 isCooking 标志（tooltip 用），旧实现同款。
+            mekanism.common.registration.impl.BlockRegistryObject<SkeweringFactoryBlock, MekCkBlockItem> handle =
+                    SKEWERING_FACTORY_BLOCKS_REG.register(id,
+                            () -> new SkeweringFactoryBlock(blockType, tier, SKEWERING_FACTORY_PROPERTIES),
+                            block -> new MekCkBlockItem(block, new Item.Properties(), desc, tier, true));
+            SKEWERING_FACTORY_HANDLES.put(tier, handle);
+            // 两个 ticker 都必须显式给：TileEntityTypeRegistryObject.getTicker(boolean) 只是
+            // 原样返回存进去的那个，没有任何兜底。不填就是 null，而 Level 只在 ticker 非 null 时
+            // 才驱动方块实体 —— 机器会「放置成功、界面能开、就是不干活」。
+            SKEWERING_FACTORY_TILES.put(tier, SKEWERING_FACTORY_TILES_REG.register(handle,
+                    (pos, state) -> new cn.ism.mekck.machine.skewering.SkeweringFactoryTile(handle, pos, state),
+                    (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickClient(level, pos, state, tile),
+                    (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickServer(level, pos, state, tile)));
+
+            SKEWERING_FACTORY_BLOCKS.put(tier, registryView(id, ForgeRegistries.BLOCKS));
+            SKEWERING_FACTORY_ITEMS.put(tier, registryView(id, ForgeRegistries.ITEMS));
         }
-        SKEWERING_FACTORY_MENU = MENUS.register("skewering_factory", () -> IForgeMenuType.create(SkeweringFactoryMenu::new));
 
         // 烧烤工厂（阶段 3 Task 3）：方块/物品/tile/容器全部走 Mek 的注册器，
         // **注册名一字不改**（仍是 mekck:<tier>_grill_factory），
@@ -1221,18 +1247,9 @@ public final class UniversalCuttingMachine {
         // 原先这里还有 11 行 BASIC_GRILL_FACTORY_BLOCK_ENTITY = GRILL_FACTORY_BLOCK_ENTITIES.get(...)，
         // 因目标 map 恒空而恒为 null，已随阶段 3 Task 3 一并删除。
 
-        // Assign specific skewering factory references
-        BASIC_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.BASIC);
-        ADVANCED_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ADVANCED);
-        ELITE_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ELITE);
-        ULTIMATE_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ULTIMATE);
-        ABSOLUTE_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.ABSOLUTE);
-        SUPREME_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.SUPREME);
-        COSMIC_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.COSMIC);
-        INFINITE_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.INFINITE);
-        CRYSTAL_MATRIX_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.CRYSTAL_MATRIX);
-        NEBULA_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.NEBULA);
-        SINGULARITY_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(CuttingMachineFactoryTier.SINGULARITY);
+        // 穿串各档的 tile 句柄在 SKEWERING_FACTORY_TILES（见上面的注册循环）。
+        // 原先这里还有 11 行 BASIC_SKEWERING_FACTORY_BLOCK_ENTITY = SKEWERING_FACTORY_BLOCK_ENTITIES.get(...)，
+        // 因目标 map 恒空而恒为 null，已随阶段 3 Task 5 一并删除。
 
         // Shared menu type for all factories
         //
@@ -1297,6 +1314,24 @@ public final class UniversalCuttingMachine {
      * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。理由同
      * {@link #findPlantingCuttingFactoryTile}。</p>
      */
+    /**
+     * 按等级取回已注册的穿串 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
+     *
+     * <p>必须延迟：{@code TILE_ENTITIES.register(block, ...)} 要求先有方块，而方块的
+     * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。理由同
+     * {@link #findGrillFactoryTile}。</p>
+     */
+    private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.skewering.SkeweringFactoryTile> findSkeweringFactoryTile(
+            CuttingMachineFactoryTier tier) {
+        mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.skewering.SkeweringFactoryTile> found =
+                SKEWERING_FACTORY_TILES.get(tier);
+        if (found == null) {
+            throw new IllegalStateException("穿串工厂 tile 尚未注册：tier=" + tier
+                    + "（BlockTypeTile 的 Supplier 被过早求值）");
+        }
+        return found;
+    }
+
     private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.grill.GrillFactoryTile> findGrillFactoryTile(
             CuttingMachineFactoryTier tier) {
         mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.grill.GrillFactoryTile> found =
@@ -1367,6 +1402,10 @@ public final class UniversalCuttingMachine {
         GRILL_FACTORY_BLOCKS_REG.register(bus);
         GRILL_FACTORY_TILES_REG.register(bus);
         GRILL_FACTORY_CONTAINERS_REG.register(bus);
+        // 穿串工厂（阶段 3 Task 5）：与切菜/研磨/烧烤同模，注册名不变。
+        SKEWERING_FACTORY_BLOCKS_REG.register(bus);
+        SKEWERING_FACTORY_TILES_REG.register(bus);
+        SKEWERING_FACTORY_CONTAINERS_REG.register(bus);
         bus.addListener(this::addCreativeTabContents);
         bus.addListener(this::onCommonSetup);
         // 配置文件生成到 config/mekck/mekck-common.toml（与 planting 等配置文件同目录）
@@ -1996,7 +2035,7 @@ public final class UniversalCuttingMachine {
                 MenuScreens.register(COOKING_POT_MENU.get(), SmartCookingPotScreen::new);
                 MenuScreens.register(COOKING_FACTORY_MENU.get(), CookingFactoryScreen::new);
                 MenuScreens.register(SKEWERING_MACHINE_MENU.get(), SkeweringMachineScreen::new);
-                MenuScreens.register(SKEWERING_FACTORY_MENU.get(), SkeweringFactoryScreen::new);
+                MenuScreens.register(SKEWERING_FACTORY_CONTAINER.get(), SkeweringFactoryScreen::new);
                 MenuScreens.register(GRILL_MENU.get(), GrillScreen::new);
                 MenuScreens.register(GRILL_FACTORY_CONTAINER.get(), GrillFactoryScreen::new);
                 MenuScreens.register(PLANTING_CUTTING_CONTAINER.get(), PlantingCuttingFactoryScreen::new);
