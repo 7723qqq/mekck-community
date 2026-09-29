@@ -21,7 +21,32 @@
   任何触及 `Upgrade` 的代码都**不得**写进普通 JUnit 测试，只能进 GameTest。
 - **Mixin 一律 `remap = false`**（目标类都不是 Minecraft 映射的类）。配置 `injectors.defaultRequire: 1`，
   注入点失配时**启动即崩**而非静默失效——这是有意的，不要改成 `defaultRequire: 0`。
-- **MekCK 的 Mixin 足迹上限 2 个新类**（枚举注入 + 持久化重定向）。不要为了省事再加。
+- **⚠️ 枚举注入依赖一条 JDK 17 实现细节**：JDK 17 的 `java.lang.Enum(String,int)` 构造体
+  只剩两行字段赋值，**共享常量目录（`values[ordinal] = this`）已搬到 `Class` 里**。
+  因此「先经 invoker 构造新常量、再把加长后的数组写回 `$VALUES`」这个顺序是安全的。
+  在 JDK 8/11 上同样的顺序会因数组越界抛 `ArrayIndexOutOfBoundsException`。
+  **不要「优化」成先写回数组再构造。**（Task 3 实施者已实测：3 常量枚举上以 ordinal=3 构造成功）
+- **不要用 `Enum.valueOf(name)` 找注入的常量。** JDK 17 的 `Class.enumConstantDirectory()`
+  与 `getEnumConstants()` 都是一次性快照缓存，改写 `$VALUES` 不会让它们重建。
+  一律用 `MekCkAPILang` / `MekCkUpgradeRefs` 提供的访问器。
+- **🔴 注入的升级类型会踩 `UpgradeUtils.getStack` 的雷**（Task 5 复审的 C1）。
+  该方法用 `ordinal()` 索引 `UpgradeUtils$1` 的合成 switch 映射表，而该表**只填了 7 个原生常量**：
+  ```
+  getStack(Upgrade,int):
+    0: getstatic     UpgradeUtils$1.$SwitchMap$mekanism$api$Upgrade:[I
+    4: invokevirtual Upgrade.ordinal:()I
+    7: iaload
+    8: tableswitch { 1 to 7 }      ← 注入常量的槽位恒为 0 → 落 default
+  ```
+  → 抛 `IncompatibleClassChangeError`。**不止 `byItem` 一处踩**：
+  `TileComponentUpgrade.removeUpgrade(Upgrade,boolean)` 偏移 28 也调它，
+  而 `removeUpgrade` 的唯一调用者是 **`PacketGuiInteract$GuiInteraction`（服务端收包，玩家可达）**。
+  即：**玩家装上自己的升级卡后，在 Mek 升级界面点「移除」会崩服线程。**
+  → 由 Task 6 的第 4 个 Mixin `MixinUpgradeUtilsGetStack` 兜住（见 Task 6）。
+- **MekCK 的 Mixin 足迹上限 4 个新类**：`MixinAPILang`（`APILang` 也是封闭枚举，必须单独注入一次）、
+  `MixinUpgrade`、`MixinUpgradeUtilsGetStack`（见上一条）、`MixinTileComponentUpgradePersistence`。
+  spec §5.1 初稿只算了 `Upgrade` 一个，漏了 `APILang`；`getStack` 那条是 Task 5 复审才发现的。
+  **不要再加第 5 个。**
 - **不要用 `Upgrade.valueOf(name)` 反查**：注入常量的枚举名是大写（`STACK`），
   而 `getRawName()` 是小写（`stack`），两者不一致。用 `getRawName()`。
 - **不要用 `Upgrade.byIndexStatic()` / `Upgrade.buildMap()` / `Upgrade.saveMap()` 做持久化**：
@@ -68,7 +93,9 @@ spec 的命名可在后续实施时一并对齐，不影响本计划。
 | `TestUpgradeIndexWraparoundArithmetic.java` | 索引回绕算术，4 个用例 ✅ **已交付** |
 
 **资源**：`assets/mekck/lang/{en_us,zh_cn}.json`、`assets/mekck/models/item/upgrade_{storage,randomize}.json`、
-`assets/mekck/textures/item/upgrade_{storage,randomize}.png`、`data/mekck/recipes/upgrade/{storage,randomize}.json`
+`assets/mekck/textures/item/upgrade_{storage,randomize}.png`、
+`data/mekck/recipes/upgrade/storage.json`（新建；随机化卡**复用并修改**已有的
+`data/mekck/recipes/creative_upgrade_from_49_foods.json`，不新建第二个配方文件）
 
 ---
 
@@ -105,9 +132,20 @@ private APILang(String type, String path) {                          // 命名�
 
 **Interfaces:**
 - Consumes: 无
-- Produces: `MekCkAPILang.UPGRADE_STORAGE` / `UPGRADE_STORAGE_DESCRIPTION` /
-  `UPGRADE_RANDOMIZE` / `UPGRADE_RANDOMIZE_DESCRIPTION`，类型均为 `mekanism.api.text.APILang`。
-  任务 4 消费这四个常量。
+- Produces: 4 个**静态方法**（不是字段），类型均为 `mekanism.api.text.APILang`：
+  - `MekCkAPILang.upgradeStorage()`
+  - `MekCkAPILang.upgradeStorageDescription()`
+  - `MekCkAPILang.upgradeRandomize()`
+  - `MekCkAPILang.upgradeRandomizeDescription()`
+
+  任务 4 消费这四个方法。**注意**：底层同名的静态字段（`upgradeStorage` 等）也存在且非 final，
+  但**消费方一律调方法**——方法带 null 兜底与明确异常信息，字段没有。
+  （审查发现：本节初稿误写成字段名 `UPGRADE_STORAGE` 等，会让 Task 4 编译失败。已修正。）
+
+  **不要用 `APILang.valueOf("UPGRADE_STORAGE")` 找这些常量。** JDK 17 的
+  `Class.enumConstantDirectory()` 与 `getEnumConstants()` 都是**一次性快照缓存**，
+  改写 `$VALUES` 不会让它们重建——一旦被别处先填充过，注入的常量对 `valueOf` 永久不可见，
+  抛 `IllegalArgumentException`。一律用上面那四个方法。
 
 - [ ] **Step 1: 建常量持有者**
 
@@ -695,10 +733,16 @@ public void write(CompoundTag);  // 内部：Upgrade.saveMap(this.upgrades, tag)
 **Files:**
 - Create: `src/main/java/cn/ism/mekck/mixin/IMekCkUnknownUpgradeHolder.java`
 - Create: `src/main/java/cn/ism/mekck/mixin/MixinTileComponentUpgradePersistence.java`
+- Create: `src/main/java/cn/ism/mekck/mixin/MixinUpgradeUtilsGetStack.java`（兜底，见 Step 3）
 - Modify: `src/main/resources/mekck.mixins.json`
 
 **Interfaces:**
-- Consumes: `MekCkUpgradeTypes.decode(CompoundTag)` / `encode(Map, List)`（Task 5）
+- Consumes: `MekCkUpgradeTypes.decode(CompoundTag, CuttingMachineFactoryTier)` /
+  `encode(Map, List)`（Task 5）
+  **⚠️ 必须用带 `tier` 的 `decode` 重载**——不带 tier 的重载不做 MekCK 配置裁剪。
+  照抄它会让 BASIC/ADVANCED/ELITE/ULTIMATE/SINGULARITY 五档把存档里的存储卡读成
+  `getMax()`=6，而这五档的 `MekckConfig.getStackUpgradeDefault` 是 0——
+  正是 Task 5 的 R3 要修的 bug 原样复活。
 - Produces: `IMekCkUnknownUpgradeHolder#mekck$unknownRaw()` / `#mekck$setUnknownRaw(List<CompoundTag>)`
 
 - [ ] **Step 1: 建 holder 接口**
@@ -775,6 +819,22 @@ public abstract class MixinTileComponentUpgradePersistence implements IMekCkUnkn
     @Unique
     private List<CompoundTag> mekck$unknownRaw = List.of();
 
+    /**
+     * 本组件所属的机器档位，取自 tile。
+     *
+     * <p>只用于 {@link MekCkUpgradeTypes#decode(CompoundTag, CuttingMachineFactoryTier)}
+     * 的按档位裁剪。tile 不是 MekCK 机器时返回 {@code null}，
+     * 此时 decode 退化为「只按枚举自带 maxStack 裁剪」。
+     */
+    @Unique
+    private CuttingMachineFactoryTier mekck$tier() {
+        Object owner = this.tile;
+        if (owner instanceof MekCkMachineTile machine) {
+            return machine.getTier();
+        }
+        return null;
+    }
+
     @Override
     public List<CompoundTag> mekck$unknownRaw() {
         return mekck$unknownRaw;
@@ -785,13 +845,28 @@ public abstract class MixinTileComponentUpgradePersistence implements IMekCkUnkn
         this.mekck$unknownRaw = entries == null ? List.of() : entries;
     }
 
+    /**
+     * ⚠️ 目标方法是<b>合成 lambda</b>，不是 {@code read} 本身。
+     *
+     * <p>{@code javap -p -c TileComponentUpgrade} 实测：{@code read} 只用
+     * {@code invokedynamic} 造一个 {@code Consumer} 交给
+     * {@code NBTUtils.setCompoundIfPresent}，真正调用 {@code Upgrade.buildMap} 的是
+     * 合成方法 {@code lambda$read$1(CompoundTag)}。把 {@code method} 写成
+     * {@code "read(Lnet/minecraft/nbt/CompoundTag;)V"} 匹配不到任何目标，
+     * 配合 {@code injectors.defaultRequire: 1} 会<b>启动即崩</b>。
+     *
+     * <p>该 lambda 的完整逻辑是：{@code upgrades.clear()} →
+     * {@code putAll(Upgrade.buildMap(tag))}（← 本处重定向）→
+     * 遍历 {@code getSupportedTypes()} 调 {@code recalculateUpgrades} →
+     * 读 {@code "Items"} 槽位。**只有 buildMap 一处被换掉，其余全部走 Mek 原生。**
+     */
     @Redirect(
-            method = "read(Lnet/minecraft/nbt/CompoundTag;)V",
+            method = "lambda$read$1(Lnet/minecraft/nbt/CompoundTag;)V",
             at = @At(value = "INVOKE",
                     target = "Lmekanism/api/Upgrade;buildMap(Lnet/minecraft/nbt/CompoundTag;)"
                             + "Ljava/util/Map;"))
     private Map<Upgrade, Integer> mekck$decode(CompoundTag tag) {
-        MekCkUpgradeCodec.Decoded<Upgrade> decoded = MekCkUpgradeTypes.decode(tag);
+        MekCkUpgradeCodec.Decoded<Upgrade> decoded = MekCkUpgradeTypes.decode(tag, mekck$tier());
         this.mekck$unknownRaw = decoded.unknownRaw();
         return decoded.known();
     }
@@ -806,10 +881,109 @@ public abstract class MixinTileComponentUpgradePersistence implements IMekCkUnkn
 }
 ```
 
-- [ ] **Step 3: 挂进 mixin 配置**
+- [ ] **Step 3: 建 `getStack` 兜底 Mixin（必须，否则玩家点「移除升级」崩服）**
+
+Task 5 复审的 C1：`UpgradeUtils.getStack(Upgrade,int)` 用 `ordinal()` 索引
+`UpgradeUtils$1` 的合成 switch 映射表，而该表只填了 7 个原生常量，
+**对任何注入常量抛 `IncompatibleClassChangeError`**。
+
+不止 `byItem` 一处踩。实测 `javap -p -c`：
+
+```
+TileComponentUpgrade.removeUpgrade(Upgrade, boolean):
+  28: invokestatic  UpgradeUtils.getStack(Upgrade, int)
+```
+
+而 `removeUpgrade` 的唯一调用者是 `mekanism.common.network.to_server.PacketGuiInteract$GuiInteraction`
+（扫全 jar 常量池确认，全 jar 只有它与 `TileComponentUpgrade` 引用 `removeUpgrade`）——
+**服务端收包，玩家点 Mek 升级界面的「移除」即可触达**。后果是崩服线程。
+
+`src/main/java/cn/ism/mekck/mixin/MixinUpgradeUtilsGetStack.java`
+
+```java
+package cn.ism.mekck.mixin;
+
+import mekanism.api.Upgrade;
+import mekanism.common.item.interfaces.IUpgradeItem;
+import mekanism.common.util.UpgradeUtils;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.registries.ForgeRegistries;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+/**
+ * 给 {@link UpgradeUtils#getStack(Upgrade, int)} 补上注入型升级的支持。
+ *
+ * <h3>为什么必须有这个 Mixin</h3>
+ * {@code getStack} 是 javac 生成的 {@code switch(type.ordinal())}：
+ * <pre>
+ *   0: getstatic     UpgradeUtils$1.$SwitchMap$mekanism$api$Upgrade:[I
+ *   4: invokevirtual Upgrade.ordinal:()I
+ *   7: iaload
+ *   8: tableswitch { 1 to 7 }
+ * </pre>
+ * 而 {@code UpgradeUtils$1.<clinit>} 只给 7 个原生常量赋了槽位
+ * （{@code SPEED→1 … STONE_GENERATOR→7}）。注入常量的槽位恒为 0 →
+ * 落 {@code default} → 抛 {@code IncompatibleClassChangeError}。
+ *
+ * <p>触达路径不止一处：{@code TileComponentUpgrade.removeUpgrade(Upgrade,boolean)}
+ * 偏移 28 也调它，而 {@code removeUpgrade} 的唯一调用者是
+ * {@code PacketGuiInteract$GuiInteraction}（服务端收包）。
+ * <b>即玩家装上升级卡后点「移除」会崩服线程。</b>
+ *
+ * <h3>为什么用 HEAD + cancellable 而不是 @Redirect</h3>
+ * 原实现对 7 个原生常量是正确的，只需在<b>它会抛之前</b>拦下注入常量即可，
+ * 不必重写整张表。用 {@code @Redirect} 反而要把 7 个 case 复制一遍。
+ *
+ * <h3>为什么扫注册表而不是只认 MekCK 自己的两张卡</h3>
+ * 同样的雷对<b>所有</b>注入型 mod 都成立（Mekanism Extras 的 STACK 同样中招）。
+ * 按 {@code IUpgradeItem.getUpgradeType} 反查注册表，能让任何遵循 Mek 规矩的
+ * 第三方升级卡也拿到正确物品。
+ */
+@Mixin(UpgradeUtils.class)
+public abstract class MixinUpgradeUtilsGetStack {
+
+    @Inject(method = "getStack(Lmekanism/api/Upgrade;I)Lnet/minecraft/world/item/ItemStack;",
+            at = @At("HEAD"), cancellable = true)
+    private static void mekck$handleInjectedUpgrades(Upgrade type, int count,
+                                                    CallbackInfoReturnable<ItemStack> cir) {
+        if (type == null || count <= 0) {
+            return;
+        }
+        // 7 个原生常量交给原实现——它是对的
+        if (type.ordinal() <= Upgrade.STONE_GENERATOR.ordinal()) {
+            return;
+        }
+        Item item = findItemFor(type);
+        if (item != null) {
+            cir.setReturnValue(new ItemStack(item, count));
+        }
+        // 找不到就放行给原实现（它会抛）。不要用空栈掩盖——
+        // 空栈会让 removeUpgrade 静默扣掉数量却不给回物品。
+    }
+
+    /** 按 {@code IUpgradeItem.getUpgradeType} 在物品注册表里反查该升级类型的物品。 */
+    @Unique
+    private static Item findItemFor(Upgrade type) {
+        for (Item item : ForgeRegistries.ITEMS) {
+            if (item instanceof IUpgradeItem upgradeItem
+                    && upgradeItem.getUpgradeType(new ItemStack(item)) == type) {
+                return item;
+            }
+        }
+        return null;
+    }
+}
+```
+
+- [ ] **Step 4: 挂进 mixin 配置**
 
 `src/main/resources/mekck.mixins.json` 的 `mixins` 数组加入
-`"MixinTileComponentUpgradePersistence"`：
+`"MixinTileComponentUpgradePersistence"` 与 `"MixinUpgradeUtilsGetStack"`：
 
 ```json
   "mixins": [
@@ -817,31 +991,44 @@ public abstract class MixinTileComponentUpgradePersistence implements IMekCkUnkn
     "MixinCuttingBoardBlockEntity",
     "MixinExtremeSmithingMenu",
     "MixinTileComponentUpgradePersistence",
-    "MixinUpgrade"
+    "MixinUpgrade",
+    "MixinUpgradeUtilsGetStack"
   ],
 ```
 
-**注意**：`mixins`（非 `client`）里放 `MixinAPILang` / `MixinUpgrade` 是刻意的——
-它们在逻辑端也必须生效（`EnumColor` / 界面文本两端都要用）。不要挪进 `client` 段。
+**注意**：`mixins`（非 `client`）里放 `MixinAPILang` / `MixinUpgrade` /
+`MixinUpgradeUtilsGetStack` 是刻意的——`getStack` 在**服务端收包路径**上被调用，
+放 `client` 段就只在客户端生效，崩的会是客户端而不是修复它。
 
-- [ ] **Step 4: 核对注入点签名**
+- [ ] **Step 5: 核对注入点签名**
 
 Run:
 ```
 javap -p -c -cp "<jar>" mekanism.common.tile.component.TileComponentUpgrade
 ```
-确认两点，与 Step 2 的代码对齐：
-- `read` 里确实调用 `mekanism/api/Upgrade.buildMap(Lnet/minecraft/nbt/CompoundTag;)Ljava/util/Map;`
-- `write` 里确实调用 `mekanism/api/Upgrade.saveMap(Ljava/util/Map;Lnet/minecraft/nbt/CompoundTag;)V`
 
-若签名不符，**改 `@At(target=...)` 里的描述符**，不要改 `MekCkUpgradeTypes`。
+必须逐条核对下面 4 点，与 Step 2 的代码对齐（**预检已确认，但改代码时仍要自己核一遍**）：
 
-- [ ] **Step 5: 编译验证**
+| 调用 | 所在方法 | 结论 |
+|---|---|---|
+| `Upgrade.buildMap(CompoundTag)Map` | `lambda$read$1(CompoundTag)` | ⚠️ **不是 `read`**。`read` 只用 `invokedynamic` 造 Consumer |
+| `Upgrade.saveMap(Map,CompoundTag)void` | `write(CompoundTag)` | ✅ 直接在 `write` 方法体内 |
+| 描述符全名 | — | `Lmekanism/api/Upgrade;buildMap(Lnet/minecraft/nbt/CompoundTag;)Ljava/util/Map;` |
+| 描述符全名 | — | `Lmekanism/api/Upgrade;saveMap(Ljava/util/Map;Lnet/minecraft/nbt/CompoundTag;)V` |
+
+若签名不符，**改 `@At(target=...)` 里的描述符或 `method` 名**，
+不要改 `MekCkUpgradeTypes` 的逻辑。
+
+**注意**：`buildMap` 那一处重定向若匹配不到，`injectors.defaultRequire: 1`
+会让游戏**启动即崩**（`InvalidInjectionException`），不是静默失效——
+这是有意的设计，别改成 `defaultRequire: 0`。
+
+- [ ] **Step 6: 编译验证**
 
 Run: `./gradlew compileJava --console=plain`
 Expected: `BUILD SUCCESSFUL`
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 7: 提交**
 
 ```bash
 git add src/main/java/cn/ism/mekck/mixin/IMekCkUnknownUpgradeHolder.java \
@@ -1086,19 +1273,40 @@ PY
 
 - [ ] **Step 4: 改随机化卡的现有配方产物**
 
-仓库里已存在 `src/main/resources/data/mekck/recipes/creative_upgrade_from_49_foods.json`
-（`avaritia:shapeless_table` 收 49 个 `mekck:cuf_*` tag），产物目前是
-**`mekanism_extras:upgrade_creative`**——这是全仓库最后一处对 Mek Extras 的硬引用，
+仓库里已存在 `src/main/resources/data/mekck/recipes/creative_upgrade_from_49_foods.json`，
+产物目前是 **`mekanism_extras:upgrade_creative`**——这是全仓库最后一处对 Mek Extras 的硬引用，
 不改的话 MekCK 自己的随机化卡无法合成，旧的还能合成，§2.4 的 bug 就没修掉。
 
-只改 `result` 一行，其余（49 个 tag、tier、show_notification）原样保留：
+该配方的 `type` 是 `avaritia:shapeless_table`，而 `avaritia` **不在 `mods.toml` 的依赖列表里**
+（只有 forge / minecraft / farmersdelight / mekanism / ae2）——没装无尽贪婪时这条配方会直接报错。
+并行负责条件加载的同伴已把本文件划为他们的例外（他们只碰
+`data/mekck/recipes/**` 的其余部分），所以**本步骤顺带把 avaritia 条件一并加上**，
+避免留缺口。
+
+改成 `forge:conditional` 包裹 + 自有产物：
 
 ```json
-  "result": {
-    "item": "mekck:upgrade_randomize",
-    "count": 1
+{
+  "type": "forge:conditional",
+  "conditions": [
+    { "type": "forge:mod_loaded", "modid": "avaritia" }
+  ],
+  "recipe": {
+    "type": "avaritia:shapeless_table",
+    "category": "misc",
+    "tier": 4,
+    "show_notification": true,
+    "ingredients": [ ...49 个 mekck:cuf_* tag 原样保留... ],
+    "result": {
+      "item": "mekck:upgrade_randomize",
+      "count": 1
+    }
   }
+}
 ```
+
+⚠️ `forge:conditional` 的 type 字面量**必须先实测确认**（改一个配方启动一次看日志）。
+若实测结果不是 `forge:conditional`，以实测值为准——**不要拿这个文件赌未验证的字符串**。
 
 - [ ] **Step 5: 确认没有残留的 Mek Extras 引用**
 

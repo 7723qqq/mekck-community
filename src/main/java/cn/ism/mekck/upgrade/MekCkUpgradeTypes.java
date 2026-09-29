@@ -60,8 +60,8 @@ import java.util.Optional;
  * 因为它们的 {@code maxStack} 由 Task 4 自己指定。
  *
  * <p><b>注意</b>：MekCK 的 {@link #isSupportedBy} 与 Mek 的
- * {@code TileComponentUpgrade#supports(Set&lt;Upgrade&gt;)} 是两套独立的准入判断，
- * 本类不参与后者——后者是 Task 6 的 Mixin 要接的线。
+ * {@code TileComponentUpgrade#supports(Upgrade)}（单参版，实测无 {@code Set} 重载）
+ * 是两套独立的准入判断，本类不参与后者——后者是 Task 6 的 Mixin 要接的线。
  *
  * <p>读档路径上 Mek 自己还有第三处裁剪：{@code Upgrade.buildMap} 对每个条目做
  * {@code Mth.clamp(getInt("amount"), 0, maxStack)}，同样以 {@code getMax()} 为上界。
