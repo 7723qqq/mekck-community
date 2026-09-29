@@ -73,6 +73,14 @@ import static org.junit.Assert.fail;
  * 迁移前它住在 {@code blockentity/CuttingMachineFactoryBlockEntity.java}，
  * 那个文件已随阶段 2 Task 5 删除，所以这里曾有的「新旧二选一」回落分支也一并去掉了——
  * 留着只会指向一个永远不存在的路径，给人「旧实现还在」的错觉。
+ *
+ * <h3>阶段 3 Task 1：两条断言的落点换了文件</h3>
+ * 研磨工厂（第二个家族）需要同样的两段算术，于是它们被拆去了共享位置：
+ * 「并行数倍增」→ {@code upgrade/MekCkUpgradeTypes.stackMultiplier}，
+ * 「产物装箱」→ {@code machine/MekCkBatchPacking}。
+ * 断言 6 与断言 7 相应改读新落点，<b>断言内容一字未改</b>——
+ * 它们盯的是「移位量有没有被 min 钳住」与「判定过程有没有拷 ItemStack」，
+ * 与这段算术住在哪个类里无关。
  */
 public class TestCuttingRecipeInvariants {
 
@@ -80,11 +88,20 @@ public class TestCuttingRecipeInvariants {
     private static final Path EXECUTOR = Path.of("src", "main", "java", "cn", "ism", "mekck",
             "machine", "cutting", "CuttingFactoryExecutor.java");
 
+    private static final Path BATCH_PACKING = Path.of("src", "main", "java", "cn", "ism", "mekck",
+            "machine", "MekCkBatchPacking.java");
+    private static final Path UPGRADE_TYPES = Path.of("src", "main", "java", "cn", "ism", "mekck",
+            "upgrade", "MekCkUpgradeTypes.java");
+
     private static String readLogic() throws IOException {
-        if (!Files.exists(EXECUTOR)) {
-            fail("找不到切菜配方逻辑的源文件（测试需在项目根目录运行）：" + EXECUTOR.toAbsolutePath());
+        return readSource(EXECUTOR);
+    }
+
+    private static String readSource(Path file) throws IOException {
+        if (!Files.exists(file)) {
+            fail("找不到被测源文件（测试需在项目根目录运行）：" + file.toAbsolutePath());
         }
-        return stripComments(Files.readString(EXECUTOR, StandardCharsets.UTF_8));
+        return stripComments(Files.readString(file, StandardCharsets.UTF_8));
     }
 
     /**
@@ -122,9 +139,13 @@ public class TestCuttingRecipeInvariants {
      * 参数里的括号骗过去。</p>
      */
     private static String methodBody(String source, Pattern signature) {
+        return methodBody(source, signature, EXECUTOR);
+    }
+
+    private static String methodBody(String source, Pattern signature, Path file) {
         Matcher m = signature.matcher(source);
         if (!m.find()) {
-            fail("在 " + EXECUTOR.getFileName() + " 里找不到方法签名 " + signature.pattern());
+            fail("在 " + file.getFileName() + " 里找不到方法签名 " + signature.pattern());
         }
         int open = source.indexOf('{', m.end());
         if (open < 0) {
@@ -223,7 +244,7 @@ public class TestCuttingRecipeInvariants {
     /** 断言 6：并行数的移位量必须先过 min 钳制。 */
     @Test
     public void stackMultiplierShiftAmountIsClamped() throws IOException {
-        String source = readLogic();
+        String source = readSource(UPGRADE_TYPES);
         assertTrue("并行数必须写成 1 << Math.min(已安装数, 上限)："
                         + "直接 1 << 已安装数 会在读档路径上（无 capOf 准入闸门）失控",
                 source.matches("(?s).*1\\s*<<\\s*Math\\s*\\.\\s*min\\s*\\(.*"));
@@ -232,7 +253,7 @@ public class TestCuttingRecipeInvariants {
     /** 断言 7：产出容量判定过程不得拷贝 ItemStack。 */
     @Test
     public void capacityCheckDoesNotCopyItemStacks() throws IOException {
-        String body = methodBody(readLogic(), CAN_FIT_ALL);
+        String body = methodBody(readSource(BATCH_PACKING), CAN_FIT_ALL, BATCH_PACKING);
         assertTrue("canFitAll 判定过程里出现了 .copy()："
                         + "旧 BE 第 641 行注释记的优化（只记槽内物品引用 + 数量）被回退了，"
                         + "81 并行工厂每 tick 又是上万次分配",

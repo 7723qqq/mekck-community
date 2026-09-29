@@ -127,8 +127,15 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
     private static final int ENERGY_SLOT_X = 7;
     private static final int ENERGY_SLOT_Y = 13;
 
-    /** NBT：执行器自有状态的子标签。 */
-    private static final String TAG_EXECUTOR = "mekckExecutor";
+    /**
+     * NBT：执行器自有状态的子标签。
+     *
+     * <p><b>包级可见是为了让 {@link MekCkLegacyMachineNbt} 往里写</b>
+     * （阶段 3 Task 1）：旧存档把订单状态写在根标签上，而新格式的订单状态归执行器所有。
+     * 迁移必须落在同一个子标签里，否则 {@code executor().load(tag.getCompound(TAG_EXECUTOR))}
+     * 永远看不到它——订单会在换机器的那一刻静默消失，而旧存档里明明写着单。</p>
+     */
+    static final String TAG_EXECUTOR = "mekckExecutor";
     /** NBT：本 tile 由 Mek 原生基类承载的存档格式版本。 */
     static final String TAG_NATIVE_VERSION = "MekCkNative";
     /** NBT：进度条已走的 tick 数。 */

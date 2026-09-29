@@ -2,6 +2,7 @@ package cn.ism.mekck.machine;
 
 import cn.ism.mekck.RedstoneControl;
 import cn.ism.mekck.SideMode;
+import cn.ism.mekck.machine.grinding.GrindingFactoryExecutor;
 import cn.ism.mekck.util.BigStackItemHandler;
 import mekanism.api.RelativeSide;
 import mekanism.api.math.FloatingLong;
@@ -58,10 +59,15 @@ import java.util.Map;
  * 不能直接复制字节。翻译走 {@link RelativeSide#getDirection(Direction)} 反查，
  * 不自己写「FRONT 就是 facing」之类的映射表——那正是会悄悄写错的一个面。
  *
- * <h3>本类刻意不碰的两个旧键</h3>
+ * <h3>本类刻意不碰的三个旧键</h3>
  * {@code AutoDistribute} / {@code AutoSelectedItems} 属于 AE2 自动化层
  * （阶段 2 Task 4.6 的范围）。迁移时原样留在标签里，Task 4.6 接上对应存储后即可直接读到，
  * 期间本类不读也不写它们。
+ * {@code MeOrderEnabled} 同理：它只被
+ * {@code INetworkPullable.isMeOrderEnabled()} 读，而换到 Mek 原生 tile
+ * 之后那条读法已经不存在（阶段 3 Task 1 与切菜一致）。
+ * 留着的唯一代价是存档里多一个没人读的键；
+ * 删掉则要等新存储定稿后再补一轮迁移。
  */
 public final class MekCkLegacyMachineNbt {
 
@@ -91,10 +97,30 @@ public final class MekCkLegacyMachineNbt {
             "SpeedUpgradeTracker", "EnergyUpgradeTracker", "StackUpgradeTracker", "CreativeUpgradeTracker"
     };
 
+    /**
+     * 旧订单系统的三个键，<b>只有研磨工厂写过</b>（旧
+     * {@code GrindingFactoryBlockEntity.saveAdditional}）。
+     *
+     * <p>切菜工厂的旧存档没有这几个键（可对照 Task 5 前的
+     * {@code CuttingMachineFactoryBlockEntity.saveAdditional}），所以这里是
+     * 「某个家族可能写过」的键而不是「所有工厂都写过」的键——迁移时按
+     * {@code contains} 判，不存在就什么都不做。</p>
+     */
+    public static final String LEGACY_ORDER_RECIPE = "OrderRecipeId";
+    public static final String LEGACY_ORDER_QUANTITY = "OrderQuantity";
+    public static final String LEGACY_ORDER_COMPLETED = "OrderCompleted";
+
     /** 旧升级计数器内部的计数键（{@code MekCkUpgradeTracker.save()} 写的）。 */
     public static final String LEGACY_TRACKER_INSTALLED = "Installed";
 
     // ── 新键（与 TileEntityMekanism / MekCkMachineTile 写出的逐字一致）──
+
+    /**
+     * 新格式里执行器自有状态的子标签名（即 {@code MekCkMachineTile.TAG_EXECUTOR}）。
+     *
+     * <p>在这里重开一个公开名，是为了让归属测试不必为了读一个包级常量而越过包边界。</p>
+     */
+    public static final String NATIVE_EXECUTOR_TAG = MekCkMachineTile.TAG_EXECUTOR;
 
     /** Mek 槽位列表的下标键：{@code DataHandlerUtils.getTagByType} 对 {@code IInventorySlot} 返回它。 */
     public static final String NATIVE_SLOT_INDEX = "Slot";
@@ -166,6 +192,7 @@ public final class MekCkLegacyMachineNbt {
         migrateRedstone(legacy, out);
         migrateSideConfig(legacy, out, facing);
         migrateProgress(legacy, out);
+        migrateExecutorState(legacy, out);
         dropLegacyKeys(out);
         return out;
     }
@@ -423,6 +450,40 @@ public final class MekCkLegacyMachineNbt {
         }
     }
 
+    // ── 执行器自有状态（旧订单系统）────────────────────────────────────
+
+    /**
+     * 旧订单三键（根标签）→ 新执行器子标签 {@code mekckExecutor}。
+     *
+     * <h3>为什么要绕这一圈</h3>
+     * 新格式里订单归 {@code MekCkRecipeExecutor} 所有，而基类只把
+     * {@code tag.getCompound("mekckExecutor")} 交给执行器——根标签它根本不看。
+     * 于是不搬的话，玩家在旧存档里下的那一单会在「换机器」那一刻静默消失：
+     * 机器照常加工（订单门禁失效），但玩家以为自己还锁着配方。
+     * 这是典型的「数据在、但没有代码去读」形态，<b>不报错、不留日志</b>。
+     *
+     * <p><b>三个键名逐字沿用旧键</b>，本步只换位置不换名字。理由：根标签与
+     * {@code mekckExecutor} 子标签本身就是两个不同的命名空间，同名不会造成歧义；
+     * 反而只改一个键的名字、留两个不改，才是真的混淆——三个名字不同的键会让
+     * 人误以为它们同属一套词表。</p>
+     *
+     * <p>旧存档没有这三个键时（切菜工厂、以及没下过单的研磨机器）整个方法空转，
+     * <b>不创建空的子标签</b>——凭空造一个空 CompoundTag 会让
+     * 「这台机器下过单」与「这个键是空」再也分不开。</p>
+     */
+    private static void migrateExecutorState(CompoundTag legacy, CompoundTag out) {
+        if (!legacy.contains(LEGACY_ORDER_RECIPE, Tag.TAG_STRING)) {
+            return;
+        }
+        CompoundTag executor = out.getCompound(MekCkMachineTile.TAG_EXECUTOR);
+        executor.putString(GrindingFactoryExecutor.TAG_ORDER_RECIPE, legacy.getString(LEGACY_ORDER_RECIPE));
+        executor.putInt(GrindingFactoryExecutor.TAG_ORDER_QUANTITY,
+                Math.max(0, legacy.getInt(LEGACY_ORDER_QUANTITY)));
+        executor.putInt(GrindingFactoryExecutor.TAG_ORDER_COMPLETED,
+                Math.max(0, legacy.getInt(LEGACY_ORDER_COMPLETED)));
+        out.put(MekCkMachineTile.TAG_EXECUTOR, executor);
+    }
+
     // ── 升级计数 ────────────────────────────────────────────────────────
 
     /**
@@ -479,6 +540,9 @@ public final class MekCkLegacyMachineNbt {
         out.remove(LEGACY_SIDE_CONFIG);
         out.remove(LEGACY_REDSTONE_CONTROL);
         out.remove(LEGACY_REDSTONE_POWERED);
+        out.remove(LEGACY_ORDER_RECIPE);
+        out.remove(LEGACY_ORDER_QUANTITY);
+        out.remove(LEGACY_ORDER_COMPLETED);
         for (String key : LEGACY_TRACKER_KEYS) {
             out.remove(key);
         }

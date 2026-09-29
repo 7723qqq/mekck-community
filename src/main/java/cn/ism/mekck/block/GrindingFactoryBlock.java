@@ -1,162 +1,154 @@
 package cn.ism.mekck.block;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
-import cn.ism.mekck.blockentity.GrindingFactoryBlockEntity;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.Containers;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.context.BlockPlaceContext;
-import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.BaseEntityBlock;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Mirror;
-import net.minecraft.world.level.block.RenderShape;
-import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.block.SoundType;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityTicker;
-import net.minecraft.world.level.block.entity.BlockEntityType;
+import cn.ism.mekck.machine.grinding.GrindingFactoryTile;
+import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
+import mekanism.api.math.FloatingLong;
+import mekanism.api.text.ILangEntry;
+import mekanism.common.block.attribute.AttributeEnergy;
+import mekanism.common.block.attribute.AttributeStateFacing;
+import mekanism.common.block.attribute.Attributes;
+import mekanism.common.block.prefab.BlockTile;
+import mekanism.common.content.blocktype.BlockTypeTile;
+import mekanism.common.registries.MekanismSounds;
+import mekanism.common.registration.impl.ContainerTypeRegistryObject;
+import mekanism.common.registration.impl.TileEntityTypeRegistryObject;
 import net.minecraft.world.level.block.state.BlockBehaviour;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
-import net.minecraft.world.level.block.state.properties.DirectionProperty;
-import net.minecraft.world.level.storage.loot.LootParams;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraftforge.network.NetworkHooks;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
+import java.util.Set;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
-public final class GrindingFactoryBlock extends BaseEntityBlock {
-    public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    public static final BooleanProperty ACTIVE = BooleanProperty.create("active");
+/**
+ * 研磨工厂方块（Mek 体系版）—— 阶段 3 Task 1 把它从自研 {@code BaseEntityBlock}
+ * 换成 Mek 的 {@link BlockTile}。
+ *
+ * <h3>换掉之后哪些行为由 Mek 接管</h3>
+ * 与切菜工厂同一份清单（那边有逐条的字节码依据，这里不重复）：
+ * 朝向/运行状态属性、破坏掉落、右键开界面、比较器、安全、
+ * 能量与侧配能力，全部改由 {@code TileEntityMekanism} 按方块属性自动开通。
+ *
+ * <p><b>注册名一个字没改</b>（仍是 {@code mekck:<tier>_grinding_factory}），
+ * 所以旧存档里已放置的方块不会变成空气；变的是它挂的
+ * {@code BlockEntityType} 的实现类，而旧内容由
+ * {@code MekCkLegacyMachineNbt} 在读档时整体翻译。
+ *
+ * <h3>随旧实现一起作废的三样东西</h3>
+ * <ul>
+ *   <li>「潜行 + 手持升级模块直接装进对应槽」快捷键（{@code addUpgradesFromHand}）——
+ *       由 Mek 升级 tab 取代；</li>
+ *   <li>方块侧的 {@code SideMode} 枚举——由 {@code ISideConfiguration} 取代；</li>
+ *   <li>{@code onRemove} 里「saveToItem 后手动掉实体」与配套的空
+ *       {@code getDrops}——由 Mek 的 {@code BlockMekanism.onRemove} 与
+ *       {@code data/mekck/loot_tables/blocks/<id>.json} 接管。</li>
+ * </ul>
+ */
+public final class GrindingFactoryBlock extends BlockTile<GrindingFactoryTile, BlockTypeTile<GrindingFactoryTile>> {
+
     private final CuttingMachineFactoryTier tier;
 
-    public GrindingFactoryBlock(CuttingMachineFactoryTier tier) {
-        super(BlockBehaviour.Properties.of().strength(3.5F).sound(SoundType.METAL).requiresCorrectToolForDrops());
+    public GrindingFactoryBlock(BlockTypeTile<GrindingFactoryTile> type,
+                                CuttingMachineFactoryTier tier,
+                                UnaryOperator<BlockBehaviour.Properties> propertyModifier) {
+        super(type, propertyModifier);
         this.tier = tier;
-        this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(ACTIVE, false));
     }
 
-    @Override
-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING, ACTIVE);
-    }
-
-    @Nullable
-    @Override
-    public BlockState getStateForPlacement(BlockPlaceContext context) {
-        return this.defaultBlockState().setValue(FACING, context.getHorizontalDirection());
-    }
-
-    @Override
-    public BlockState rotate(BlockState state, Rotation rotation) {
-        return state.setValue(FACING, rotation.rotate(state.getValue(FACING)));
-    }
-
-    @Override
-    public BlockState mirror(BlockState state, Mirror mirror) {
-        return state.rotate(mirror.getRotation(state.getValue(FACING)));
-    }
-
+    /**
+     * 本方块的等级。
+     *
+     * <p>{@code GrindingFactoryTile} 在构造期就靠它反查档位（基类注释的
+     * 「构造期顺序陷阱」），所以它必须由构造参数带进来、不能事后从别处读。</p>
+     */
     public CuttingMachineFactoryTier getTier() {
         return tier;
     }
 
-    @Override
-    public RenderShape getRenderShape(BlockState state) {
-        return RenderShape.MODEL;
+    // ── 方块类型描述 ────────────────────────────────────────────────────
+
+    /**
+     * 构造本等级研磨工厂的方块类型描述。
+     *
+     * <p>四个属性一个都不能少（各自的缺失症状见
+     * {@code CuttingMachineFactoryBlock.blockTypeFor} 的注释）：
+     * {@code withGui} / {@code withEnergyConfig} / {@code withSupportedUpgrades} /
+     * {@link AttributeStateFacing}。
+     *
+     * @param containerRef 延迟引用：容器要等 tile/block 建好之后才能注册
+     * @param tileRef      同理，{@code BlockTypeTile} 构造时就要 tile 的 Supplier
+     */
+    public static BlockTypeTile<GrindingFactoryTile> blockTypeFor(
+            CuttingMachineFactoryTier tier,
+            Supplier<ContainerTypeRegistryObject<? extends mekanism.common.inventory.container.MekanismContainer>> containerRef,
+            Supplier<TileEntityTypeRegistryObject<GrindingFactoryTile>> tileRef) {
+
+        BlockTypeTile.BlockTileBuilder<BlockTypeTile<GrindingFactoryTile>, GrindingFactoryTile, ?> builder =
+                BlockTypeTile.BlockTileBuilder.createBlock(tileRef, new GrindingFactoryLangEntry(tier));
+
+        builder.withGui(containerRef);
+
+        // AttributeEnergy 的参数是 (usage, storage)（先用后容）。
+        // 用 lambda 延迟取值，使 /reload 改 MekckConfig 后立即生效。
+        builder.withEnergyConfig(
+                () -> FloatingLong.create(tier.energyPerTick),
+                () -> FloatingLong.create(tier.energyCapacity));
+
+        builder.withSupportedUpgrades(supportedUpgrades());
+
+        // 运行音效：旧实现在 clientTick 里手写 SoundHandler.startTileSound(CRUSHER, ...)，
+        // 换成 Mek 基类后那段代码没有了，播放改由 TileEntityMekanism 按方块的
+        // AttributeSound 驱动——不挂 withSound 就没有 soundEvent，机器工作时彻底静音。
+        builder.withSound(MekanismSounds.CRUSHER);
+
+        builder.with(new AttributeStateFacing());
+        builder.with(Attributes.ACTIVE);
+        builder.with(Attributes.REDSTONE);
+        builder.with(Attributes.SECURITY);
+        builder.with(Attributes.INVENTORY);
+
+        return builder.build();
     }
 
-    @Override
-    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (!level.isClientSide && player instanceof ServerPlayer serverPlayer
-                && level.getBlockEntity(pos) instanceof GrindingFactoryBlockEntity machine) {
-            // 潜行 + 手持升级模块：直接安装到机器对应升级槽并消耗手持物品
-            if (player.isShiftKeyDown()) {
-                ItemStack held = player.getItemInHand(hand);
-                if (!held.isEmpty() && cn.ism.mekck.util.UpgradeHelper.isUpgrade(held)) {
-                    String upgradeName = held.getHoverName().getString();
-                    int added = machine.addUpgradesFromHand(held);
-                    if (added > 0) {
-                        held.shrink(added);
-                        player.setItemInHand(hand, held);
-                        player.displayClientMessage(net.minecraft.network.chat.Component.literal("§a已安装升级：§f" + upgradeName), true);
-                        return InteractionResult.sidedSuccess(false);
-                    }
-                    player.displayClientMessage(net.minecraft.network.chat.Component.literal("§c无法安装升级：对应槽位已满或本机器不支持该升级"), true);
-                    return InteractionResult.sidedSuccess(false);
-                }
-            }
-            NetworkHooks.openScreen(serverPlayer, machine, pos);
+    /**
+     * 本模组允许装进研磨工厂的升级类型。
+     *
+     * <p>与 {@code MekCkMachineTile#getSupportedUpgrade()} 是<b>两道不同的闸门</b>：
+     * 这里决定方块属性 {@code AttributeUpgradeSupport}（进而决定
+     * {@code supportsUpgrades()} 与升级槽/升级 tab 是否出现），
+     * 那个方法决定 {@code TileComponentUpgrade} 收哪几种卡。缺任何一道都会表现为
+     * 「升级槽能看见但什么都装不进去」或反之。</p>
+     *
+     * <p><b>写成方法而不是 {@code static final} 常量</b>：常量会在本类
+     * {@code <clinit>} 求值，而 {@link MekCkUpgradeRefs#storage()} 读的是
+     * {@code MixinUpgrade} 在 {@code Upgrade.<clinit>} 的 TAIL 才赋值的字段。
+     * 放进方法里，异常至少会带着「正在建升级清单」的调用栈出现。</p>
+     */
+    private static Set<mekanism.api.Upgrade> supportedUpgrades() {
+        return Set.of(
+                mekanism.api.Upgrade.SPEED,
+                mekanism.api.Upgrade.ENERGY,
+                MekCkUpgradeRefs.storage(),
+                MekCkUpgradeRefs.randomize());
+    }
+
+    /**
+     * 逐等级的方块译名。
+     *
+     * <p>本模组的 lang key 是 {@code block.mekck.<tier>_grinding_factory}（每个等级一条），
+     * 而 {@code MekCkFactoryType.GRINDING} 的译名 key 是
+     * {@code block.mekck.grinding_factory}——不带等级，对不上。
+     * 所以这里自带一个按等级拼的 lang entry。</p>
+     */
+    private static final class GrindingFactoryLangEntry implements ILangEntry {
+        private final CuttingMachineFactoryTier tier;
+
+        GrindingFactoryLangEntry(CuttingMachineFactoryTier tier) {
+            this.tier = tier;
         }
-        return InteractionResult.sidedSuccess(level.isClientSide);
-    }
 
-    @Override
-    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
-        if (stack.hasCustomHoverName() && level.getBlockEntity(pos) instanceof GrindingFactoryBlockEntity machine) {
-            machine.setCustomName(stack.getHoverName());
+        @Override
+        public String getTranslationKey() {
+            return "block.mekck." + tier.getGrindingBlockId();
         }
-    }
-
-    @Override
-    public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof GrindingFactoryBlockEntity machine) {
-            // Save block entity data (including inventory) to the item stack and drop it
-            ItemStack stack = new ItemStack(this);
-            machine.saveToItem(stack);
-            Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
-            level.updateNeighbourForOutputSignal(pos, this);
-        }
-        super.onRemove(state, level, pos, newState, movedByPiston);
-    }
-
-    @Override
-    public List<ItemStack> getDrops(BlockState state, LootParams.Builder builder) {
-        // Prevent the default block drop; inventory is handled by onRemove
-        return List.of();
-    }
-
-    @Nullable
-    @Override
-    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new GrindingFactoryBlockEntity(tier, pos, state);
-    }
-
-    @Nullable
-    @Override
-    @SuppressWarnings("unchecked")
-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
-        BlockEntityType<?> expectedType = getExpectedTileType();
-        if (expectedType == null) return null;
-        if (type != expectedType) return null;
-        if (level.isClientSide) {
-            BlockEntityTicker<GrindingFactoryBlockEntity> ticker = GrindingFactoryBlockEntity::clientTick;
-            return (BlockEntityTicker<T>) (BlockEntityTicker<?>) ticker;
-        }
-        BlockEntityTicker<GrindingFactoryBlockEntity> ticker = GrindingFactoryBlockEntity::serverTick;
-        return (BlockEntityTicker<T>) (BlockEntityTicker<?>) ticker;
-    }
-
-    private BlockEntityType<?> getExpectedTileType() {
-        // 直接查注册表，不再逐个 case 列等级。
-        // 原先的 switch 只列了 11 个等级、**漏了 BLAZE** ⇒ 烈焰等级工厂的 ticker
-        // 取不到类型，同样会在放置时抛 IllegalArgumentException（2026-09-16 修复）。
-        return cn.ism.mekck.UniversalCuttingMachine.GRINDING_FACTORY_BLOCK_ENTITIES.get(tier).get();
-    }
-
-    @Override
-    public int getLightEmission(BlockState state, BlockGetter level, BlockPos pos) {
-        return 0;
     }
 }

@@ -974,14 +974,15 @@ public final class MekckAe2 {
     /**
      * 取这台机器的「输入 + 产物」窗口；不支持自动处理时返回 null。
      *
-     * <p>切菜工厂走 {@link IMekCkPorted}（阶段 2 Task 4.6 起），烧烤工厂仍走旧
-     * {@code ItemStackHandler}（本阶段只迁了切菜）。烧烤分支刻意只判这一个类：
-     * 其余 5 个家族里只有切菜工厂参与 ME 自动处理，判宽了会让
-     * 「自动补料」误作用到不该参与的机器上。</p>
+     * <p>切菜工厂（阶段 2 Task 4.6）与研磨工厂（阶段 3 Task 1）走
+     * {@link IMekCkPorted}，烧烤工厂仍走旧 {@code ItemStackHandler}。烧烤分支刻意只判这一个类：
+     * 其余 4 个家族不参与 ME 自动处理，判宽了会让「自动补料」误作用到
+     * 不该参与的机器上。新增家族时同理：先在 {@code portedFamily} 里登记，
+     * 再来这里看是否需要补分支。</p>
      */
     private static MekPortWindow autoWindow(BlockEntity be) {
         if (be instanceof IMekCkPorted ported) {
-            // 家族闸门不能省：目前只有切菜认自动处理。若放行到「所有端口声明型机器」，
+            // 家族闸门不能省：目前只有切菜与研磨认自动处理。若放行到「所有端口声明型机器」，
             // 一台还没定配方族的机器会照着玩家勾选的清单往输入槽里塞物品——
             // 那是凭空造料，不是拉料。
             if (portedFamily(be) == null) return null;
@@ -1007,7 +1008,36 @@ public final class MekckAe2 {
             return null;
         }
         MekCkFactoryType type = tile.getFactoryType();
-        return type == MekCkFactoryType.CUTTING ? type : null;
+        // 切菜（阶段 2 Task 4.6）与研磨（阶段 3 Task 1）是目前两个已接线的家族。
+        // 其余四个仍返回 null：它们会走自己的旧方块实体，该分支正在迁移中。
+        return (type == MekCkFactoryType.CUTTING || type == MekCkFactoryType.GRINDING) ? type : null;
+    }
+
+    /**
+     * 研磨家族的配料判定：能被任一张石磨配方当作配料。
+     *
+     * <p>只认森罗的 millstone（{@code KaleidoscopeCompat.findMillstoneRecipe} 那一批），
+     * <b>不认 {@code buildGrindingPatterns} 里列的四个类型</b>。它们是给「电力研磨机」与
+     * ME 终端拿来做配方展示的，但研磨工厂自己只认石磨（旧 {@code findRecipe} 只调
+     * {@code KaleidoscopeCompat.findMillstoneRecipe}）。放宽了就是拉不来的料被投进去永远不加。</p>
+     */
+    private static boolean grindingIngredientMatches(Level level, ItemStack stack) {
+        if (!cn.ism.mekck.util.KaleidoscopeCompat.isLoaded()) return false;
+        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, "kaleidoscope_cookery", "millstone")) {
+            for (Ingredient ing : r.getIngredients()) {
+                if (ing != null && !ing.isEmpty() && ing.test(stack)) return true;
+            }
+        }
+        return false;
+    }
+
+    /** 研磨某张石磨配方的所有可能产出（带概率，不抽样）——产物回网的白名单按「全都可能」给。 */
+    private static void addGrindingProducts(Recipe<?> recipe, Set<String> out) {
+        for (cn.ism.mekck.util.KaleidoscopeCompat.MillstoneOutput o
+                : cn.ism.mekck.util.KaleidoscopeCompat.getMillstoneOutputs(recipe)) {
+            String id = registryId(o.stack());
+            if (id != null) out.add(id);
+        }
     }
 
     /** 该物品能否作为切菜配料的任一项（供端口声明型机器判定「网络里的这堆料我吃不吃」）。 */
@@ -1021,8 +1051,12 @@ public final class MekckAe2 {
     }
 
     private static boolean canProcess(BlockEntity be, ItemStack stack, Level level) {
-        if (portedFamily(be) != null) {
+        MekCkFactoryType family = portedFamily(be);
+        if (family == MekCkFactoryType.CUTTING) {
             return cuttingIngredientMatches(level, stack);
+        }
+        if (family == MekCkFactoryType.GRINDING) {
+            return grindingIngredientMatches(level, stack);
         }
         if (be instanceof GrillFactoryBlockEntity) {
             RecipeType<?> grillingType = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("barbequesdelight", "grilling"));
@@ -1055,7 +1089,20 @@ public final class MekckAe2 {
     private static Set<String> expectedAutoProducts(BlockEntity be, List<String> selected) {
         Set<String> out = new HashSet<>();
         Level level = be.getLevel();
-        if (portedFamily(be) != null) {
+        MekCkFactoryType family = portedFamily(be);
+        if (family == MekCkFactoryType.GRINDING) {
+            for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, "kaleidoscope_cookery", "millstone")) {
+                for (Ingredient ing : r.getIngredients()) {
+                    if (ing == null || ing.isEmpty()) continue;
+                    for (String sel : selected) {
+                        if (ingredientContainsId(ing, sel)) {
+                            addGrindingProducts(r, out);
+                            break;
+                        }
+                    }
+                }
+            }
+        } else if (family == MekCkFactoryType.CUTTING) {
             for (CuttingBoardRecipe r : (java.util.List<CuttingBoardRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, ModRecipeTypes.CUTTING.get())) {
                 for (Ingredient ing : r.getIngredients()) {
                     if (ing.isEmpty()) continue;
@@ -1556,14 +1603,17 @@ public final class MekckAe2 {
                 entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "ice_make"), avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity) {
                 entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "ferrero"), avail);
-            } else if (owner instanceof cn.ism.mekck.blockentity.GrindingFactoryBlockEntity) {
-                entries = buildGrindingPatterns(level, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity) {
                 entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "plantcut"), avail);
-            } else if (owner instanceof MekCkMachineTile && portedFamily(owner) != null) {
+            } else if (owner instanceof MekCkMachineTile && portedFamily(owner) == MekCkFactoryType.CUTTING) {
                 // 端口声明型工厂（切菜，阶段 2 Task 4.6 起）：FD cutting 配方，
                 // 与通用切菜机同一批配方，构建器可复用
                 entries = buildCuttingPatterns(level, avail);
+            } else if (owner instanceof MekCkMachineTile && portedFamily(owner) == MekCkFactoryType.GRINDING) {
+                // 研磨工厂（阶段 3 Task 1 起）：与电力研磨机同一批配方，构建器可复用。
+                // 分支不能并进上面那条：那条写死了切菜配方，不拆开的话研磨机器会在 ME 终端里
+                // 展示切菜配方、并按切菜结果给物品。
+                entries = buildGrindingPatterns(level, avail);
             } else if (owner instanceof GrillFactoryBlockEntity) {
                 // 烧烤工厂：BBQ grilling 配方（终端下单后由 startOrder 设订单，机器按订单加工）
                 entries = buildGrillingPatterns(level, avail);
@@ -1746,8 +1796,6 @@ public final class MekckAe2 {
                 ice.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity cannon) {
                 cannon.setOrder(entry.recipeId, 1);
-            } else if (owner instanceof cn.ism.mekck.blockentity.GrindingFactoryBlockEntity gf) {
-                gf.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity pf) {
                 pf.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.GrillFactoryBlockEntity gfac) {
@@ -1772,7 +1820,6 @@ public final class MekckAe2 {
             if (owner instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity roaster) return roaster.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity ice) return ice.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity cannon) return cannon.getItems();
-            if (owner instanceof cn.ism.mekck.blockentity.GrindingFactoryBlockEntity gf) return gf.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity pf) return pf.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity kitchen) return kitchen.items;
             if (owner instanceof cn.ism.mekck.blockentity.SandwichAssemblerBlockEntity asm) return asm.items;
@@ -1817,13 +1864,9 @@ public final class MekckAe2 {
             if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity) {
                 return new int[]{cn.ism.mekck.blockentity.ChocolateCannonBlockEntity.OUTPUT_SLOT};
             }
-            // 研磨工厂 / 种植切配工厂：输出槽区 = [inputSlots, 2 * inputSlots)
-            if (owner instanceof cn.ism.mekck.blockentity.GrindingFactoryBlockEntity gf) {
-                int n = gf.getInputSlots();
-                int[] slots = new int[n];
-                for (int i = 0; i < n; i++) slots[i] = n + i;
-                return slots;
-            }
+            // 种植切配工厂：输出槽区 = [inputSlots, 2 * inputSlots)
+            // （研磨工厂的同一段已在阶段 3 Task 1 删掉：它走 MekCkMachineTile + IMekCkPorted，
+            //   槽位由 portWindow() 提供，不再需要手算下标。）
             if (owner instanceof cn.ism.mekck.blockentity.PlantingCuttingFactoryBlockEntity pf) {
                 int n = pf.getInputSlots();
                 int[] slots = new int[n];

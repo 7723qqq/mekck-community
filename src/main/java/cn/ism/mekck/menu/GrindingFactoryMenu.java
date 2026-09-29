@@ -1,392 +1,95 @@
 package cn.ism.mekck.menu;
 
-import cn.ism.mekck.CuttingMachineFactoryTier;
-import cn.ism.mekck.SideMode;
 import cn.ism.mekck.UniversalCuttingMachine;
-import cn.ism.mekck.config.MekckConfig;
-import cn.ism.mekck.blockentity.GrindingFactoryBlockEntity;
-import cn.ism.mekck.util.MekCkTransfer;
-import mekanism.common.inventory.container.IGUIWindow;
-import mekanism.common.inventory.container.slot.IVirtualSlot;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.network.FriendlyByteBuf;
+import cn.ism.mekck.machine.grinding.GrindingFactoryTile;
+import mekanism.common.inventory.container.tile.MekanismTileContainer;
+import mekanism.common.registration.impl.ContainerTypeRegistryObject;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ContainerData;
-import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.Level;
-import net.minecraftforge.items.ItemStackHandler;
-import net.minecraftforge.items.SlotItemHandler;
 
-import java.util.function.IntSupplier;
+/**
+ * 研磨工厂容器（Mek 体系版）—— 阶段 3 Task 1。
+ *
+ * <h3>为什么整个类只剩一个构造器</h3>
+ * {@code MekanismTileContainer.addSlots()} 已经把全部槽位装配做完：
+ * 玩家背包 / 快捷栏 / 副手 → 升级槽与升级输出槽 → 遍历
+ * {@code tile.getInventorySlots(null)} 逐个 {@code createContainerSlot()}。
+ * 槽位数量与坐标全由 tile 侧的 {@code getInitialInventory} 决定，
+ * 所以本类一行槽位代码都不该有。
+ *
+ * <h3>被删掉的那一大截下标逻辑</h3>
+ * 旧实现靠 {@code speedUpgradeSlot = 2 * inputSlots} 这类<b>手写下标</b>拼槽位，
+ * 并在 {@link #quickMoveStack} 里重复同样的算术（还与真正的处理器槽数各算一遍）。
+ * 换成 {@code IInventorySlot} 对象引用之后，下标本身消失了：
+ * 想遍历输入槽就 {@code tile.getInputSlots()}，不会因为排布不连续而漏算。
+ *
+ * <h3>三个构造器变一个</h3>
+ * 旧类有 {@code (int, Inventory, FriendlyByteBuf)} / {@code (int, Inventory, BE)} /
+ * {@code (int, Inventory, BE, ContainerData)} 三个入口，以及一整页
+ * {@code ContainerData} 索引常量（11 项）。现在没有 {@code FriendlyByteBuf} 入口——
+ * Mek 的容器工厂是 {@code (int, Inventory, TILE)}；
+ * 也没有 {@code ContainerData}——进度/能量/红石/升级数不再走同步整数，
+ * 客户端直接读 tile 的网络同步状态。
+ */
+public final class GrindingFactoryMenu extends MekanismTileContainer<GrindingFactoryTile> {
 
-public final class GrindingFactoryMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
-    private final GrindingFactoryBlockEntity machine;
-    private final ContainerData data;
-    private final CuttingMachineFactoryTier tier;
-    private final boolean hasStackUpgrade;
-    private boolean upgradePageActive = false;
-
-    private final UpgradeSlot speedUpgradeSlot;
-    private final UpgradeSlot energyUpgradeSlot;
-    private final UpgradeSlot stackUpgradeSlot;
-
-    public GrindingFactoryMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
-        this(containerId, inventory,
-                (GrindingFactoryBlockEntity) inventory.player.level().getBlockEntity(buffer.readBlockPos()));
+    /**
+     * 构造器签名必须与 Mek 的容器工厂一致：{@code (int, Inventory, TILE)}。
+     *
+     * <p>父类<b>要求</b>容器类型非空（{@code MekanismContainer} 用它做
+     * {@code IContainerTracker} 的身份标识），所以这里从注册表取回。
+     * 12 个等级共用一个容器类型 {@code mekck:grinding_factory}——与旧实现一致，
+     * 也让 {@link #resolveContainer} 不必按等级分叉。</p>
+     */
+    public GrindingFactoryMenu(int containerId, Inventory inventory, GrindingFactoryTile tile) {
+        super(resolveContainer(tile), containerId, inventory, tile);
     }
 
-    public GrindingFactoryMenu(int containerId, Inventory inventory, GrindingFactoryBlockEntity machine) {
-        this(containerId, inventory, machine, machine.getData());
-    }
-
-    public GrindingFactoryMenu(int containerId, Inventory inventory, GrindingFactoryBlockEntity machine, ContainerData data) {
-        super(UniversalCuttingMachine.GRINDING_FACTORY_MENU.get(), containerId);
-        this.machine = machine;
-        this.data = data;
-        this.tier = machine.getTier();
-        this.hasStackUpgrade = machine.hasStackUpgradeSlot();
-
-        int inputSlots = tier.processes;
-        int cols = (int) Math.ceil(Math.sqrt(inputSlots));
-        int rows = (int) Math.ceil((double) inputSlots / cols);
-
-        // Input slots (tightly packed grid, 18px spacing like output slots)
-        int inputStartX = 38;
-        int inputStartY = 41;
-        for (int i = 0; i < inputSlots; i++) {
-            int col = i % cols;
-            int row = i / cols;
-            addSlot(new InputSlot(machine.getItems(), i, inputStartX + col * 18, inputStartY + row * 18));
+    private static ContainerTypeRegistryObject<GrindingFactoryMenu> resolveContainer(GrindingFactoryTile tile) {
+        if (tile == null) {
+            // 走到这里说明方块的 BlockType 描述没绑对 tile：显式报错好过把 null 传给父类。
+            throw new IllegalStateException(
+                    "研磨工厂容器拿不到 tile：BlockTypeTile 的 tile Supplier 被过早求值，"
+                            + "或方块与 tile 类型不匹配。");
         }
-
-        // Output slots (same square grid layout as input, with 30px gap matching GUI)
-        int gapBetween = 30;
-        int outputBaseX = inputStartX + cols * 18 + gapBetween;
-        int outputBaseY = inputStartY;
-        for (int i = 0; i < inputSlots; i++) {
-            int col = i % cols;
-            int row = i / cols;
-            int slot = inputSlots + i;
-            addSlot(new OutputSlot(machine, slot, outputBaseX + col * 18, outputBaseY + row * 18));
+        ContainerTypeRegistryObject<GrindingFactoryMenu> container = UniversalCuttingMachine.GRINDING_FACTORY_CONTAINER;
+        if (container == null) {
+            throw new IllegalStateException("研磨工厂容器尚未注册（GRINDING_FACTORY_CONTAINER == null）");
         }
+        return container;
+    }
 
-        // Upgrade slots (at normal positions, visible only in upgrade page)
-        int speedUpgradeSlot = 2 * inputSlots;
-        int energyUpgradeSlot = 2 * inputSlots + 1;
-        int stackUpgradeSlot = 2 * inputSlots + 2;
-        this.speedUpgradeSlot = new UpgradeSlot(machine.getItems(), speedUpgradeSlot, 40, 46, this);
-        addSlot(this.speedUpgradeSlot);
-        this.energyUpgradeSlot = new UpgradeSlot(machine.getItems(), energyUpgradeSlot, 40, 72, this);
-        addSlot(this.energyUpgradeSlot);
-        if (hasStackUpgrade) {
-            this.stackUpgradeSlot = new UpgradeSlot(machine.getItems(), stackUpgradeSlot, 40, 98, this);
-            addSlot(this.stackUpgradeSlot);
-        } else {
-            this.stackUpgradeSlot = null;
+    // ── 给 GUI 读的转发 ──────────────────────────────────────────────────
+
+    /**
+     * 进度条：0.0~1.0。
+     *
+     * <p>旧实现是 {@code progress * 24 / max}（把 200 tick 的进度映射到 24 格刻度），
+     * Mek 的 {@code ProgressType.SMALL_RIGHT} 内部按 0~1 的比例画，所以这里直接给比例。
+     * 分母走 {@code tile.getTicksPerWorkCycle()} 而不是写死 200：装速度卡后批次变短，
+     * 进度条必须跟着变短才有正确的「越快越满」手感。</p>
+     */
+    public double getProgressRatio() {
+        GrindingFactoryTile tile = getTileEntity();
+        if (tile == null) {
+            return 0;
         }
-
-        // Power slot (energy items: energy cube / tablet / redstone), at Mekanism ultimate_smelting_factory position (7, 13)
-        int imageWidth = 38 + cols * 18 + gapBetween + cols * 18 + 20;
-        addSlot(new PowerSlot(machine, machine.getPowerSlot(), 7, 13, this));
-
-        // Player inventory slots (centered)
-        int extraHeight = Math.max(0, (rows - 2) * 18);
-        int invTop = 101 + extraHeight;
-        int invLeft = (imageWidth - 162) / 2; // center 9 columns (162px) within GUI
-        for (int row = 0; row < 3; row++) {
-            for (int column = 0; column < 9; column++) {
-                addSlot(new Slot(inventory, column + row * 9 + 9, invLeft + column * 18, invTop + row * 18));
-            }
-        }
-        for (int column = 0; column < 9; column++) {
-            addSlot(new Slot(inventory, column, invLeft + column * 18, invTop + 58));
-        }
-
-        addDataSlots(data);
+        return tile.getWorkProgress() / (double) tile.getTicksPerWorkCycle();
     }
 
-    /** 机器实例（客户端也持有，槽位内容由菜单同步 ⇒ 可用于「本机下单」列表）。 */
-    public cn.ism.mekck.blockentity.GrindingFactoryBlockEntity getMachine() {
-        return machine;
+    public boolean isBusy() {
+        GrindingFactoryTile tile = getTileEntity();
+        return tile != null && tile.isBusy();
     }
 
-    @Override
-    public boolean stillValid(Player player) {
-        Level level = player.level();
-        return level.getBlockEntity(machine.getBlockPos()) == machine
-                && player.distanceToSqr(machine.getBlockPos().getX() + 0.5D, machine.getBlockPos().getY() + 0.5D,
-                machine.getBlockPos().getZ() + 0.5D) <= 64.0D;
+    /** 存量能量（FE）。{@code FloatingLong} 继承 {@code Number}，用 {@code doubleValue()} 取值。 */
+    public double getEnergy() {
+        GrindingFactoryTile tile = getTileEntity();
+        return tile == null ? 0 : tile.getEnergyContainer().getEnergy().doubleValue();
     }
 
-    @Override
-    public ItemStack quickMoveStack(Player player, int index) {
-        Slot slot = slots.get(index);
-        if (!slot.hasItem()) {
-            return ItemStack.EMPTY;
-        }
-        ItemStack stack = slot.getItem();
-        ItemStack copy = stack.copy();
-        int totalMachineSlots = tier.processes * 2 + (hasStackUpgrade ? 3 : 2);
-        int powerSlot = tier.processes * 2 + (hasStackUpgrade ? 4 : 3);
-
-        if (index < totalMachineSlots + 1) {
-            if (!moveItemStackTo(stack, totalMachineSlots + 1, slots.size(), true)) {
-                return ItemStack.EMPTY;
-            }
-        } else {
-            int speedUpgradeSlot = 2 * tier.processes;
-            int energyUpgradeSlot = 2 * tier.processes + 1;
-            int stackUpgradeSlot = 2 * tier.processes + 2;
-            if (GrindingFactoryBlockEntity.isUsablePowerItem(stack)) {
-                if (!moveItemStackTo(stack, powerSlot, powerSlot + 1, false)) {
-                    return ItemStack.EMPTY;
-                }
-            } else if (GrindingFactoryBlockEntity.isSpeedUpgrade(stack)) {
-                if (!moveItemStackTo(stack, speedUpgradeSlot, speedUpgradeSlot + 1, false)) {
-                    return ItemStack.EMPTY;
-                }
-            } else if (GrindingFactoryBlockEntity.isEnergyUpgrade(stack)) {
-                if (!moveItemStackTo(stack, energyUpgradeSlot, energyUpgradeSlot + 1, false)) {
-                    return ItemStack.EMPTY;
-                }
-            } else if (hasStackUpgrade && GrindingFactoryBlockEntity.isStackUpgrade(stack)) {
-                if (!moveItemStackTo(stack, stackUpgradeSlot, stackUpgradeSlot + 1, false)) {
-                    return ItemStack.EMPTY;
-                }
-            } else if (!MekCkTransfer.moveItemStackTo(stack, slots, 0, tier.processes, false)) {
-                return ItemStack.EMPTY;
-            }
-        }
-        if (stack.isEmpty()) {
-            slot.set(ItemStack.EMPTY);
-        } else {
-            slot.setChanged();
-        }
-        return copy;
-    }
-
-    public int getProgress() {
-        int progress = data.get(GrindingFactoryBlockEntity.DATA_PROGRESS);
-        int max = data.get(GrindingFactoryBlockEntity.DATA_PROCESS_TIME);
-        return max == 0 ? 0 : progress * 24 / max;
-    }
-
-    public int getEnergy() {
-        return data.get(GrindingFactoryBlockEntity.DATA_ENERGY);
-    }
-
-    public int getEnergyCapacity() {
-        return data.get(GrindingFactoryBlockEntity.DATA_ENERGY_CAPACITY);
-    }
-
-    public int getEncodedSideConfig() {
-        return data.get(GrindingFactoryBlockEntity.DATA_SIDE_CONFIG);
-    }
-
-    /** 卸载升级（升级界面卸载按钮）。 */
-    @Override
-    public void uninstallUpgrade(byte mode, int slot) {
-        cn.ism.mekck.network.ModMessages.sendToServer(
-                new cn.ism.mekck.network.UpgradeUninstallPacket(machine.getBlockPos(), mode, slot));
-    }
-
-    @Override
-    public boolean supportsUpgradeUninstall() {
-        return true;
-    }
-
-    public int getSpeedUpgradeCount() {
-        return data.get(GrindingFactoryBlockEntity.DATA_SPEED_UPGRADE);
-    }
-
-    public int getEnergyUpgradeCount() {
-        return data.get(GrindingFactoryBlockEntity.DATA_ENERGY_UPGRADE);
-    }
-
-    public int getStackUpgradeCount() {
-        return data.get(GrindingFactoryBlockEntity.DATA_STACK_UPGRADE);
-    }
-
-    public boolean getAutoDistribute() {
-        return data.get(GrindingFactoryBlockEntity.DATA_AUTO_DISTRIBUTE) != 0;
-    }
-
-    public int getRedstoneControl() {
-        return data.get(GrindingFactoryBlockEntity.DATA_REDSTONE_CONTROL);
-    }
-
-    public SideMode getSideMode(Direction direction) {
-        int encoded = getEncodedSideConfig();
-        int ordinal = (encoded >> (direction.ordinal() * 2)) & 0x3;
-        SideMode[] values = SideMode.values();
-        if (ordinal >= 0 && ordinal < values.length) {
-            return values[ordinal];
-        }
-        return SideMode.NONE;
-    }
-
-    public CuttingMachineFactoryTier getTier() {
-        return tier;
-    }
-
-    @Override
-    public int getSpeedUpgradeMax() {
-        return MekckConfig.getFactorySpeedUpgradeMax(tier);
-    }
-
-    @Override
-    public int getEnergyUpgradeMax() {
-        return MekckConfig.getFactoryEnergyUpgradeMax(tier);
-    }
-
-    public BlockPos getBlockPos() {
-        return machine.getBlockPos();
-    }
-
-    public boolean hasStackUpgrade() {
-        return hasStackUpgrade;
-    }
-
-    @Override
-    public Slot getSpeedUpgradeSlot() {
-        return speedUpgradeSlot;
-    }
-
-    @Override
-    public Slot getEnergyUpgradeSlot() {
-        return energyUpgradeSlot;
-    }
-
-    @Override
-    public Slot getStackUpgradeSlot() {
-        return stackUpgradeSlot;
-    }
-
-    public void setUpgradePageActive(boolean active) {
-        this.upgradePageActive = active;
-    }
-
-    public boolean isUpgradePageActive() {
-        return this.upgradePageActive;
-    }
-
-    private static final class PowerSlot extends SlotItemHandler implements IVirtualSlot {
-        private PowerSlot(GrindingFactoryBlockEntity machine, int slot, int x, int y, GrindingFactoryMenu menu) {
-            super(machine.getItems(), slot, x, y);
-        }
-
-        @Override
-        public boolean mayPlace(ItemStack stack) {
-            return GrindingFactoryBlockEntity.isUsablePowerItem(stack);
-        }
-
-        @Override public boolean isActive() { return true; }
-        @Override public IGUIWindow getLinkedWindow() { return null; }
-        @Override public int getActualX() { return x; }
-        @Override public int getActualY() { return y; }
-        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
-        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
-        @Override public ItemStack getStackToRender() { return getItem(); }
-        @Override public boolean shouldDrawOverlay() { return false; }
-        @Override public String getTooltipOverride() { return null; }
-        @Override public Slot getSlot() { return this; }
-    }
-
-    private static final class OutputSlot extends SlotItemHandler implements IVirtualSlot {
-        private OutputSlot(GrindingFactoryBlockEntity machine, int slot, int x, int y) {
-            super(machine.getItems(), slot, x, y);
-        }
-
-        @Override
-        public boolean mayPlace(ItemStack stack) {
-            return false;
-        }
-
-        // IVirtualSlot - prevents vanilla slot background rendering
-        @Override public IGUIWindow getLinkedWindow() { return null; }
-        @Override public int getActualX() { return x; }
-        @Override public int getActualY() { return y; }
-        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
-        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
-        @Override public ItemStack getStackToRender() { return getItem(); }
-        @Override public boolean shouldDrawOverlay() { return false; }
-        @Override public String getTooltipOverride() { return null; }
-        @Override public Slot getSlot() { return this; }
-    }
-
-    private static final class InputSlot extends SlotItemHandler implements IVirtualSlot {
-        private final int slotIndex;
-
-        private InputSlot(ItemStackHandler handler, int slot, int x, int y) {
-            super(handler, slot, x, y);
-            this.slotIndex = slot;
-        }
-
-        @Override
-        public int getMaxStackSize(ItemStack stack) {
-            return getItemHandler().getSlotLimit(slotIndex);
-        }
-
-        // IVirtualSlot - prevents vanilla slot background rendering
-        @Override public IGUIWindow getLinkedWindow() { return null; }
-        @Override public int getActualX() { return x; }
-        @Override public int getActualY() { return y; }
-        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
-        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
-        @Override public ItemStack getStackToRender() { return getItem(); }
-        @Override public boolean shouldDrawOverlay() { return false; }
-        @Override public String getTooltipOverride() { return null; }
-        @Override public Slot getSlot() { return this; }
-    }
-
-    private static final class UpgradeSlot extends SlotItemHandler implements IVirtualSlot {
-        /** 升级窗口未打开时把渲染位置移出屏幕：主屏便既不绘制、也命中不到它
-         *  （Mek 的 VirtualSlotContainerScreen 渲染与 isMouseOverSlot 都走 getActualX/Y）。
-         *  刻意<b>不改 isActive()</b> —— 那是槽的语义标志（服务端 mayPlace/转移逻辑依赖它），
-         *  为了纯视觉的布局问题去改写它风险过大。 */
-        private static final int HIDDEN_POS = -9999;
-
-        private final GrindingFactoryMenu menu;
-        private IGUIWindow linkedWindow;
-        private int actualX, actualY;
-        private ItemStack stackToRender = ItemStack.EMPTY;
-        private boolean overlay;
-        private String tooltip;
-
-        private UpgradeSlot(ItemStackHandler handler, int slot, int x, int y, GrindingFactoryMenu menu) {
-            super(handler, slot, x, y);
-            this.menu = menu;
-            this.actualX = x;
-            this.actualY = y;
-        }
-
-        @Override
-        public boolean mayPickup(Player player) {
-            return false;
-        }
-
-        @Override public boolean isActive() { return true; }
-
-        @Override public IGUIWindow getLinkedWindow() { return linkedWindow; }
-        @Override public int getActualX() { return linkedWindow == null ? HIDDEN_POS : actualX; }
-        @Override public int getActualY() { return linkedWindow == null ? HIDDEN_POS : actualY; }
-        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {
-            linkedWindow = window;
-            actualX = xSupplier.getAsInt();
-            actualY = ySupplier.getAsInt();
-        }
-        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {
-            this.stackToRender = stack;
-            this.overlay = overlay;
-            this.tooltip = tooltip;
-        }
-        @Override public ItemStack getStackToRender() { return stackToRender; }
-        @Override public boolean shouldDrawOverlay() { return overlay; }
-        @Override public String getTooltipOverride() { return tooltip; }
-        @Override public Slot getSlot() { return this; }
+    /** 容量上限（FE）。 */
+    public double getMaxEnergy() {
+        GrindingFactoryTile tile = getTileEntity();
+        return tile == null ? 0 : tile.getEnergyContainer().getMaxEnergy().doubleValue();
     }
 }

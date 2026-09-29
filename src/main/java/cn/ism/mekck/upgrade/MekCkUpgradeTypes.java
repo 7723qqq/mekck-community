@@ -94,6 +94,42 @@ public final class MekCkUpgradeTypes {
     }
 
     /**
+     * 存储卡倍增系数 = {@code 2^min(已安装数, 本档上限)}，再被
+     * 「基础并行 × 倍增 ≤ 配置允许的最大并行」钳一次。
+     *
+     * <h3>为什么住在升级类里，而不是各家族执行器各写一份</h3>
+     * 阶段 3 Task 1（研磨工厂）是第一个<b>第二个</b>需要它的家族：旧
+     * {@code GrindingFactoryBlockEntity.getStackMultiplier()} 与切菜执行器里那份是
+     * 同一段算术的两份拷贝。两份一旦漂移，表现是「并行数与耗电量对不上」——
+     * 因为耗电公式里也要乘这个系数，而它<b>不报错、不留日志</b>。
+     * 而「存储卡倍增」本来就是升级体系的产物（{@link #capOf} 是它的上限闸门），
+     * 放这里与 {@link #capOf} 同属一处，升级语义不再散落在 6 个家族里。
+     *
+     * <p>抽成<b>纯静态、4 个入参全裸</b>（不接 {@code MekckConfig}）的原因同
+     * {@code MekCkMachineTile#gatedEnergyCost}：{@code MekckConfig} 在裸 JVM 里加载即抛，
+     * 真 tile 也造不出来，所以这段算术必须能被普通 JUnit 直接跑。
+     *
+     * @param installed  已装的存储卡张数（读 {@code TileComponentUpgrade.getUpgrades}）
+     * @param cap        本档安装上限（{@code capOf(storage, tier)}）
+     * @param base       基础并行（{@code MekckConfig.getMultithreadedBase}）
+     * @param maxParallel 配置允许的最大并行（{@code MekckConfig.getMultithreadedMax}）
+     * @return 恒为正；无卡 / 基础并行已追平上限时返回 1
+     */
+    public static int stackMultiplier(int installed, int cap, int base, int maxParallel) {
+        if (base <= 0 || base >= maxParallel) {
+            // base 为 0 时下面的 maxParallel / base 会除零；base >= maxParallel 时已经追平上限。
+            return 1;
+        }
+        int maxMult = maxParallel / base;
+        // 上限再钳一道 30：Java 的移位按 mod 32 处理，1<<31 是负数、1<<32 直接绕回 1，
+        // 后者会让「装满卡」静默变成「不倍增」。当前 STORAGE 的 getMax() 是 6，走不到这里，
+        // 但这段算术已经被提成可单测的纯函数，将来上限调大时不会有人记得回来补。
+        int safeCap = Math.min(cap, 30);
+        int raw = 1 << Math.min(installed, safeCap);
+        return Math.min(raw, Math.max(1, maxMult));
+    }
+
+    /**
      * 存档里存的字符串名。
      *
      * <p><b>这是 MekCK 自己的存档键，与 Mek 的升级持久化无关。</b>

@@ -2,6 +2,7 @@ package cn.ism.mekck.machine.cutting;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.config.MekckConfig;
+import cn.ism.mekck.machine.MekCkBatchPacking;
 import cn.ism.mekck.machine.MekCkMachineTile;
 import cn.ism.mekck.machine.MekCkRecipeExecutor;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
@@ -69,8 +70,8 @@ public final class CuttingFactoryExecutor implements MekCkRecipeExecutor {
      * 且 {@code MekCkSlot} 传下去的物品合法性谓词是
      * {@code BasicInventorySlot.alwaysTrue}，所以这里 setStack 不会抛。</p>
      */
-    private static int slotCapacity(IInventorySlot slot, ItemStack stack) {
-        return slot.getLimit(stack);
+    static int slotCapacity(IInventorySlot slot, ItemStack stack) {
+        return MekCkBatchPacking.slotCapacity(slot, stack);
     }
 
     /** 配方匹配的输入栈，通过它把当前槽的栈喂给 {@link #singleSlotWrapper}。 */
@@ -308,79 +309,24 @@ public final class CuttingFactoryExecutor implements MekCkRecipeExecutor {
      * <p>抽成 {@code static} 且只依赖 {@link IInventorySlot} 列表，是为了让它能被
      * 普通 JUnit 直接跑（见 {@code TestCuttingBatchPacking}）——构造一台真的机器
      * 需要 {@code BlockEntityType} 注册表，裸 JVM 里拿不到。</p>
+     *
+     * <p>实现已于阶段 3 Task 1 搬到 {@link MekCkBatchPacking#canFitAll}
+     * （研磨工厂是第二个需要的家族）。本方法保留为薄委托，
+     * 因为 {@code TestCuttingBatchPacking} 直接调它。</p>
      */
     static boolean canFitAll(List<IInventorySlot> outputs, List<ItemStack> results, int multiplier) {
-        int outputSlots = outputs.size();
-        ItemStack[] slotItem = new ItemStack[outputSlots];
-        int[] slotCount = new int[outputSlots];
-        for (int slot = 0; slot < outputSlots; slot++) {
-            ItemStack existing = outputs.get(slot).getStack();
-            slotItem[slot] = existing.isEmpty() ? null : existing;
-            slotCount[slot] = existing.isEmpty() ? 0 : existing.getCount();
-        }
-
-        for (ItemStack result : results) {
-            if (result == null || result.isEmpty()) {
-                continue;
-            }
-            long totalCountLong = (long) result.getCount() * multiplier;
-            if (totalCountLong > Integer.MAX_VALUE) {
-                return false;
-            }
-            int remaining = (int) totalCountLong;
-            for (int slot = 0; slot < outputSlots && remaining > 0; slot++) {
-                ItemStack current = slotItem[slot];
-                // 上限按需问，不提前算：被跳过的槽（装着别的物品）用不到它，
-                // 而 81 并行时这一层循环每 tick 要跑上万次。
-                if (current == null) {
-                    int moved = Math.min(remaining, slotCapacity(outputs.get(slot), result));
-                    slotItem[slot] = result; // 只记引用，不拷贝
-                    slotCount[slot] = moved;
-                    remaining -= moved;
-                } else if (ItemStack.isSameItemSameTags(current, result)) {
-                    int space = slotCapacity(outputs.get(slot), result) - slotCount[slot];
-                    if (space > 0) {
-                        int moved = Math.min(remaining, space);
-                        slotCount[slot] += moved;
-                        remaining -= moved;
-                    }
-                }
-            }
-            if (remaining > 0) {
-                return false;
-            }
-        }
-        return true;
+        return MekCkBatchPacking.canFitAll(outputs, results, multiplier);
     }
 
     /**
      * 把一批产物按「先并入已有的同类槽、再往后找空槽」的顺序塞进产出区。
      *
-     * <p>上限同样取自槽自己的 {@code getLimit}，与 {@link #canFitAll} 同一口径——
-     * 两处一旦漂移，表现就是「预演说装得下、落槽时却只塞进去一部分，剩下凭空消失」，
-     * 而且不报错、不留日志。</p>
+     * <p>实现同 {@link #canFitAll}，已搬到
+     * {@link MekCkBatchPacking#insertOutput}，此处只留委托给
+     * {@code TestCuttingBatchPacking} 调用。</p>
      */
     static void insertOutput(List<IInventorySlot> outputs, ItemStack stack) {
-        for (int slot = 0; slot < outputs.size() && !stack.isEmpty(); slot++) {
-            IInventorySlot outputSlot = outputs.get(slot);
-            ItemStack existing = outputSlot.getStack();
-            int capacity = slotCapacity(outputSlot, stack);
-            if (existing.isEmpty()) {
-                int moved = Math.min(stack.getCount(), capacity);
-                ItemStack inserted = stack.copy();
-                inserted.setCount(moved);
-                outputSlot.setStack(inserted);
-                stack.shrink(moved);
-            } else if (ItemStack.isSameItemSameTags(existing, stack)) {
-                int space = capacity - existing.getCount();
-                if (space > 0) {
-                    int moved = Math.min(stack.getCount(), space);
-                    existing.grow(moved);
-                    outputSlot.setStack(existing);
-                    stack.shrink(moved);
-                }
-            }
-        }
+        MekCkBatchPacking.insertOutput(outputs, stack);
     }
 
     // ── 并行数 ──────────────────────────────────────────────────────────
@@ -415,18 +361,15 @@ public final class CuttingFactoryExecutor implements MekCkRecipeExecutor {
      *
      * <p>抽成纯函数是为了能脱离 {@code MekckUpgradeTypes}（裸 JVM 里
      * {@code MekCkUpgradeRefs.storage()} 必抛）单测这段算术。</p>
+     *
+     * <p>实现已于阶段 3 Task 1 搬到 {@link MekCkUpgradeTypes#stackMultiplier}</p>
+     *
+     * <p>研磨工厂是第二个需要它的家族。两份同源算术留在这个类里只会诱使后来者抄第三份，
+     * 而两份一旦漂移，表现是「并行数与耗电量对不上」——不报错、不留日志。
+     * 本方法保留为薄委托：{@code TestCuttingBatchPacking} 的 8 处断言直接调它，
+     * 而那些断言正是「切菜的并行数与耗电量必须用同一个系数」这条不变量的守卫。</p>
      */
     static int stackMultiplier(int installed, int cap, int base, int maxParallel) {
-        if (base <= 0 || base >= maxParallel) {
-            // base 为 0 时下面的 maxParallel / base 会除零；base >= maxParallel 时已经追平上限。
-            return 1;
-        }
-        int maxMult = maxParallel / base;
-        // 上限再钳一道 30：Java 的移位按 mod 32 处理，1<<31 是负数、1<<32 直接绕回 1，
-        // 后者会让「装满卡」静默变成「不倍增」。当前 STORAGE 的 getMax() 是 6，走不到这里，
-        // 但这段算术已经被提成可单测的纯函数，将来上限调大时不会有人记得回来补。
-        int safeCap = Math.min(cap, 30);
-        int raw = 1 << Math.min(installed, safeCap);
-        return Math.min(raw, Math.max(1, maxMult));
+        return MekCkUpgradeTypes.stackMultiplier(installed, cap, base, maxParallel);
     }
 }

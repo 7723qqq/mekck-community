@@ -4,7 +4,6 @@ import cn.ism.mekck.SideMode;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
 import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
-import cn.ism.mekck.blockentity.GrindingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
 import cn.ism.mekck.blockentity.SimpleMachineBlockEntity;
 import cn.ism.mekck.blockentity.GrillBlockEntity;
@@ -133,8 +132,6 @@ public final class SideConfigPacket {
             } else if (be instanceof ChocolateCannonBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof ElectricGrindingMachineBlockEntity machine) {
-                machine.setSideMode(dir, mode);
-            } else if (be instanceof GrindingFactoryBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof NutRoasterBlockEntity machine) {
                 machine.setSideMode(dir, mode);

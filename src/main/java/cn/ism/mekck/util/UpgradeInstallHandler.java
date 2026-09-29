@@ -6,7 +6,6 @@ import cn.ism.mekck.blockentity.CookingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
 import cn.ism.mekck.blockentity.GrillBlockEntity;
 import cn.ism.mekck.blockentity.GrillFactoryBlockEntity;
-import cn.ism.mekck.blockentity.GrindingFactoryBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
@@ -117,8 +116,6 @@ public final class UpgradeInstallHandler {
         } else if (be instanceof PlantingCuttingFactoryBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof ElectricGrindingMachineBlockEntity m) {
-            added = m.addUpgradesFromHand(held);
-        } else if (be instanceof GrindingFactoryBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof SmartCookingPotBlockEntity m) {
             added = m.addUpgradesFromHand(held);
