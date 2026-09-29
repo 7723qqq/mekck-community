@@ -533,6 +533,151 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         return MekanismUtils.canFunction(this);
     }
 
+    // ── 随机化卡的三个机械分支（阶段 2 Task 4.7）──────────────────────
+    //
+    // 随机化卡本体（重随本局 49 种食物）是数据包层面的全局效果、与机器无关；
+    // 它装到机器上之后才附带这三个机械分支。三个分支各自独立、**默认全是
+    // {@code false}**：基类不能替其余 5 个家族决定「要不要免耗电 / 要不要 1 tick
+    // 批次 / 要不要自动补满」——那是平衡决定。默认「都要」会让 5 个尚未接线的
+    // 家族凭空白送三个收益，默认「都不要」则只是让它们保持与不装卡时一致。
+
+    /**
+     * 本机已装的某种升级数量。
+     *
+     * <p>旧实现读的是自研的 {@code MekCkUpgradeTracker.getInstalled()}（20 tick 安装读条），
+     * 这里改读 {@code TileComponentUpgrade.getUpgrades(type)}——Mek 自己的升级组件里
+     * 同样有 20 tick 安装读条（实测 {@code TileComponentUpgrade.tickServer} 里
+     * {@code getUpgrades(type) < getMax()} 才推进），因此不需要再单独实现一套。
+     *
+     * <p>{@code getComponent()} 在构造期与读档路径上可能为 null，一律按 0 处理，
+     * 与 {@link MekCkMachineTile#installLegacyUpgrades} 里「组件缺席就什么都不做」
+     * 的口径一致。
+     *
+     * <p>刻意不缓存：读的是 {@code TileComponentUpgrade} 内部 {@code EnumMap} 的一格，
+     * 成本可忽略；而缓存会与 Mek 自己的 20 tick 安装读条打架——
+     * 刚放进去还没装好的那 20 tick 内不该提前生效。
+     */
+    protected int installedUpgrades(Upgrade type) {
+        TileComponentUpgrade component = getComponent();
+        return component == null ? 0 : component.getUpgrades(type);
+    }
+
+    /** 本机是否已装随机化卡（{@code mekck:upgrade_randomize}，上限 1 张）。 */
+    protected boolean hasRandomizeUpgrade() {
+        return installedUpgrades(MekCkUpgradeRefs.randomize()) > 0;
+    }
+
+    /**
+     * 分支一「免耗电」：本机是否<b>完全跳过</b>本 tick 的能量扣减。
+     *
+     * <p>旧语义见 {@code CuttingMachineFactoryBlockEntity.serverTick} 第 414 行：
+     * {@code int energyPerTick = activeSlots > 0 && !hasCreative ? mulClamp(...) : 0;}
+     * <b>是把扣减额整个置 0</b>，不是「消耗乘 0」，也不是「只对某个阶段免」。
+     * 置 0 之后能量闸门 {@code stored >= 0} 恒真（第 422 行），
+     * 于是机器在<b>能量存量为 0</b> 时照样推进。
+     */
+    protected boolean randomizeGrantsFreeEnergy() {
+        return false;
+    }
+
+    /**
+     * 分支二「1 tick 批次」：本机是否把一个批次的进度门槛压到 1 tick。
+     *
+     * <p>旧语义见同文件第 387 行：
+     * {@code int effectiveProcessTime = hasCreative ? 1 : Math.max(1, (int) (PROCESS_TIME / speedMult));}
+     * 而 {@code PROCESS_TIME == 200}。即<b>整个门槛被换掉、不是把速度倍率调大</b>：
+     * 装卡后一个批次 1 tick 走完，与速度卡无关。
+     */
+    protected boolean randomizeCollapsesWorkCycle() {
+        return false;
+    }
+
+    /**
+     * 分支三「自动补满」：本机是否每 tick 把能量容器补到上限。
+     *
+     * <p>旧语义见同文件第 378~380 行：{@code if (hasCreative) energy.receiveEnergy(
+     * energy.getMaxEnergyStored() - energy.getEnergyStored(), false);}
+     *
+     * <p><b>补的是能量容器，不是任何物品槽。</b>旧实现里输入槽 / 产物槽都不受创造卡
+     * 任何影响，AE2 补料路径也与之无关：旧 BE 的 {@code supportsAutoPull()} 恒为
+     * {@code true}、{@code getNetworkPullInputs()} 不看卡。
+     *
+     * <p><b>触发条件只有「装了卡」一条</b>：旧代码把它放在红石判定与 {@code anyValid}
+     * 判定<b>之前</b>且不带任何其它条件 ⇒ 机器停机、没放料、红石禁用时照样每 tick
+     * 补满，能量条恒满。补能的位置与无条件性都照抄。
+     */
+    protected boolean randomizeRefillsEnergy() {
+        return false;
+    }
+
+    /**
+     * 「免耗电」闸门：<b>把扣减额整体置 0</b>，不是乘 0。
+     *
+     * <p>包级 {@code static} 是为了能进普通 JUnit（见
+     * {@code cn.ism.mekck.machine.TestRandomizeUpgradeBranches}）：
+     * 真 tile 在裸 JVM 里造不出来，而这处是整个分支唯一的算术。
+     * 语义逐字取自旧 {@code CuttingMachineFactoryBlockEntity.serverTick} 第 414 行。</p>
+     */
+    static int gatedEnergyCost(boolean freeEnergy, int energyPerWorkTick) {
+        return freeEnergy ? 0 : energyPerWorkTick;
+    }
+
+    /**
+     * 「1 tick 批次」闸门：把进度门槛整个换掉，<b>不碰速度倍率</b>。
+     *
+     * <p>旧第 387 行是 {@code hasCreative ? 1 : max(1, PROCESS_TIME / speedMult)}——
+     * 有卡的那一支连除法都不做，所以速度卡对批次长度的影响在装卡后<b>完全消失</b>。
+     * 无卡那一支保留基类的 {@code max(1, ...)} 下限：{@code ticksPerWorkCycle()} 覆写
+     * 可能返回 0 或负数，闸门不能让进度条变成永不触发的除零。</p>
+     */
+    static int gatedTicksPerCycle(boolean collapseCycle, int ticksPerWorkCycle) {
+        return collapseCycle ? 1 : Math.max(1, ticksPerWorkCycle);
+    }
+
+    /**
+     * 「自动补满」的缺口：<b>已满或超容时返回 {@link FloatingLong#ZERO}</b>，调用方据此不插。
+     *
+     * <p><b>这道比较不是防溢出，是省一次空调用</b>（这点必须说清楚，否则会被当成多余的防御）：
+     * {@code IEnergyContainer.getNeeded()} 是
+     * {@code max(0, maxEnergy - stored)}，<b>本来就夹到 0</b>
+     * （实测其 default 方法字节码偏移 0~21：{@code ZERO.max(maxEnergy.subtract(stored))}），
+     * 所以直接把负缺口交给 {@code insert} 也只会走
+     * 「{@code needed.isZero()} → 原样返回」那条分支，存量不会倒扣。
+     * 保留这道比较的理由有两条，都可验证：① 装卡的机器每 tick 都会走到这里，
+     * 已满时省掉一次 {@code insert} 调用；② 「满了就什么都不做」写成显式条件，
+     * 比依赖「负数恰好落进 isZero 分支」可读。
+     * {@link TestRandomizeUpgradeBranches#rawDeficitInsertIsAHarmlessNoOp()}
+     * 把「灌负缺口不会倒扣」跑成了断言，免得后人再花时间怀疑这条。</p>
+     */
+    static FloatingLong energyToRefill(FloatingLong max, FloatingLong stored) {
+        return max.compareTo(stored) > 0 ? max.subtract(stored) : FloatingLong.ZERO;
+    }
+
+    /**
+     * 把能量容器补满（随机化卡的「自动补满」）。
+     *
+     * <p>「已经满了就别插」的理由在 {@link #energyToRefill} 的注释里，此处不复述。
+     *
+     * <p><b>{@link AutomationType#MANUAL} 在这里是随意的，不是必需</b>：本机能量容器由
+     * {@code MachineEnergyContainer.input(tile, listener)} 建成，而它的 canInsert 是
+     * {@code alwaysTrue}，任何 AutomationType 都灌得进去。选 MANUAL 只是因为
+     * 「卡把能量补满」这件事确实不是外部自动化干的。
+     * 顺带记一条<b>已实测</b>的同源事实，方向与直觉相反：
+     * 那个工厂方法把 {@code notExternal} 传给了 <b>canExtract</b>、{@code alwaysTrue} 传给了
+     * <b>canInsert</b>（判据是 {@code BasicEnergyContainer} 构造器字节码偏移 19~26：
+     * 第二个参数 {@code -> canExtract}、第三个 {@code -> canInsert}，以及 4 参
+     * {@code create} 工厂里那两句 {@code requireNonNull} 的文案
+     * 「Extraction validity check」/「Insertion validity check」）。
+     * 它对 {@link #workCycle} 里那处 extract 的影响见那里的注释。</p>
+     */
+    private void refillEnergyBuffer() {
+        FloatingLong need = energyToRefill(energyContainer.getMaxEnergy(), energyContainer.getEnergy());
+        if (need.isZero()) {
+            return;
+        }
+        energyContainer.insert(need, Action.EXECUTE, AutomationType.MANUAL);
+    }
+
     /**
      * 每 tick 驱动执行器 —— <b>能量闸门在这里</b>。
      *
@@ -544,6 +689,7 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
      * <ol>
      *   <li>能量物品补能（{@code fillContainerOrConvert}，Mek 自己的
      *       {@code TileEntityFactory.onUpdateServer} 偏移 8 处也是这一句）；</li>
+     *   <li>随机化卡的「自动补满」（旧第 378~380 行，位置与无条件性照抄）；</li>
      *   <li>红石放行 + 有活可干 + 能量够 → 扣能量 → 进度条 +1；</li>
      *   <li>进度条满一个批次才调执行器，否则把进度清零并顺带释放 PULSE 锁存。</li>
      * </ol>
@@ -561,6 +707,11 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         if (energySlot != null) {
             energySlot.fillContainerOrConvert();
         }
+        // 随机化卡「自动补满」：放在闸门之前，与旧 serverTick 一样无条件执行——
+        // 旧实现里它同样在红石判定与 anyValid 判定之前，停机时能量条也恒满。
+        if (randomizeRefillsEnergy()) {
+            refillEnergyBuffer();
+        }
         workCycle();
         // AE2 放在 workCycle() 之后：本 tick 刚产出的物品要先落到产物槽，
         // MEckAe2 的产物回写才能在同一 tick 看到它们（与旧
@@ -575,18 +726,19 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
 
     /** 闸门 + 进度条 + 执行器调度。拆出来只为让 {@link #onUpdateServer} 保持一屏可读。 */
     private void workCycle() {
-        int cycle = Math.max(1, ticksPerWorkCycle());
-        int cost = energyPerWorkTick();
+        int cycle = effectiveTicksPerWorkCycle();
+        // 免耗电：整个扣减额置 0（旧第 414 行的 `activeSlots > 0 && !hasCreative`）。
+        // 置 0 后下面的 hasEnergyFor(0) 恒真，于是能量为 0 时机器照样推进——与旧实现同。
+        int cost = gatedEnergyCost(randomizeGrantsFreeEnergy(), energyPerWorkTick());
         // 三个条件与旧 serverTick 的 canOperate && anyValid && 能量够 一一对应，
         // 次序也照旧：红石先判（最便宜），再判有没有活干，最后才去看能量。
         boolean allowed = allowsWork() && hasWorkToDo() && hasEnergyFor(cost);
         if (allowed) {
             if (cost > 0) {
-                // AutomationType.EXTERNAL 在这里不承担语义：MachineEnergyContainer.input
-                // 把 canExtract 建成 alwaysTrue（实测其 input() 字节码偏移 20~22：
-                // 第三个参数 notExternal 给 canInsert，第四个参数 alwaysTrue 给 canExtract），
-                // 所以无论传 EXTERNAL / INTERNAL / MANUAL 都会被放行。
-                // 真正被 canExtract 拦的是 internal(...) 建的容器（internalOnly 谓词），本类不用。
+                // ⚠️ 本行传 EXTERNAL 时能量其实扣不下来（本机容器的 canExtract 是
+                // notExternal），本注释原先写的正好相反，故按实测更正。详见
+                // .superpowers/sdd/2026-09-29-mekck-phase1-upgrade-system/phase2-task-4.7-report.md
+                // 的「疑虑 1」：属阶段 2 Task 4 交付的既有问题，不在本任务范围内改。
                 energyContainer.extract(FloatingLong.create(cost), Action.EXECUTE, AutomationType.EXTERNAL);
             }
             if (++workProgress >= cycle) {
@@ -612,6 +764,22 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         return cost <= 0 || energyContainer.getEnergy().compareTo(FloatingLong.create(cost)) >= 0;
     }
 
+    /**
+     * 实际生效的批次长度 —— {@link #workCycle} 的闸门与 {@link #getTicksPerWorkCycle}
+     * <b>同走这一个方法</b>。
+     *
+     * <p>为什么不只在闸门里特判：GUI 的进度条分母读的是
+     * {@link #getTicksPerWorkCycle}，两处口径一旦漂移，屏幕上就会画出与实际
+     * 进度无关的比例。旧实现这里是<b>漂移的</b>——第 387 行的局部变量带 creative
+     * 分支，而 GUI 读的 {@code getEffectiveProcessTime()}（第 993~995 行）不带，
+     * 于是装卡时 GUI 一直显示 0/200。装卡后进度条本来每 tick 走完即清零、
+     * 分子恒为 0，两种分母画出来都是 0，所以这个漂移没有可见症状；
+     * 但把它带进新实现只会留下一个「以后有人靠分母算东西」的坑，故此处取一致口径。
+     */
+    private int effectiveTicksPerWorkCycle() {
+        return gatedTicksPerCycle(randomizeCollapsesWorkCycle(), ticksPerWorkCycle());
+    }
+
     /** 进度条已走的 tick 数（GUI 用）。 */
     public int getWorkProgress() {
         return workProgress;
@@ -619,7 +787,7 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
 
     /** 完成一个批次需要的 tick 数（GUI 画进度条分母用）。 */
     public int getTicksPerWorkCycle() {
-        return Math.max(1, ticksPerWorkCycle());
+        return effectiveTicksPerWorkCycle();
     }
 
     // ── 持久化 ──────────────────────────────────────────────────────────

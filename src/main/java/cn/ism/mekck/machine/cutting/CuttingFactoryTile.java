@@ -94,8 +94,10 @@ public class CuttingFactoryTile extends MekCkMachineTile implements IMekCkPorted
      *
      * <p>旧实现：{@code int effectiveProcessTime = hasCreative ? 1
      * : Math.max(1, (int) (PROCESS_TIME / speedMult));}，且
-     * {@code getEffectiveProcessTime()} 供 GUI 读进度条分母。本类去掉 creative 分支
-     * （见类级报告：creative 升级不在本模组的受支持升级集内，Task 1 已把它排除）。</p>
+     * {@code getEffectiveProcessTime()} 供 GUI 读进度条分母。
+     * 其中 creative 那半支不再写在这里——它由基类的
+     * {@link #randomizeCollapsesWorkCycle()} 统一处理，理由见该方法的注释：
+     * 「1 tick 批次」是随机化卡的机械分支，与本家族无关。</p>
      */
     @Override
     protected int ticksPerWorkCycle() {
@@ -124,7 +126,9 @@ public class CuttingFactoryTile extends MekCkMachineTile implements IMekCkPorted
      *   <li>{@code stackMult} 复用 {@link CuttingFactoryExecutor#stackMultiplier}，
      *       与执行器算并行数用的是<b>同一个纯函数</b>，两边不可能算出不同的倍增系数。</li>
      * </ol>
-     * </p>
+     * <p>旧式子里 {@code activeSlots > 0 && !hasCreative} 那个 {@code !hasCreative}
+     * 不在本方法里：随机化卡的「免耗电」由基类的 {@link #randomizeGrantsFreeEnergy()}
+     * 在闸门上把扣减额整体置 0，本方法因此保持「无卡时的原公式」。</p>
      */
     @Override
     protected int energyPerWorkTick() {
@@ -143,11 +147,35 @@ public class CuttingFactoryTile extends MekCkMachineTile implements IMekCkPorted
         return CountMath.mulClamp(Integer.MAX_VALUE, baseEnergyPerTick, active, stackMultiplier());
     }
 
+    // ── 随机化卡的三个机械分支（阶段 2 Task 4.7）──────────────────────
+    //
+    // 三个分支只在本家族开启：其余家族若哪天也要，靠覆写基类的同名钩子各自决定，
+    // 不会因为「都继承同一个基类」而凭空拿到免耗电。基类默认全 false。
+    // 各自的旧语义与行号见 MekCkMachineTile 里对应钩子的注释。
+
+    /** 「免耗电」：旧 {@code serverTick} 第 414 行 {@code !hasCreative} 那一支。 */
+    @Override
+    protected boolean randomizeGrantsFreeEnergy() {
+        return hasRandomizeUpgrade();
+    }
+
+    /** 「1 tick 批次」：旧 {@code serverTick} 第 387 行 {@code hasCreative ? 1 : ...} 那一支。 */
+    @Override
+    protected boolean randomizeCollapsesWorkCycle() {
+        return hasRandomizeUpgrade();
+    }
+
+    /** 「自动补满」：旧 {@code serverTick} 第 378~380 行每 tick 把能量补到上限。 */
+    @Override
+    protected boolean randomizeRefillsEnergy() {
+        return hasRandomizeUpgrade();
+    }
+
     // ── 速率倍率（旧 getEffectiveXxx 的等价物）────────────────────────────
 
     /** 旧 {@code getEffectiveSpeedMultiplier()}：{@code 10^(已装速度卡 / 8)}。 */
     public double effectiveSpeedMultiplier() {
-        return UpgradeHelper.speedMultiplier(upgradeCount(Upgrade.SPEED));
+        return UpgradeHelper.speedMultiplier(installedUpgrades(Upgrade.SPEED));
     }
 
     /**
@@ -155,7 +183,7 @@ public class CuttingFactoryTile extends MekCkMachineTile implements IMekCkPorted
      * 只影响<b>能耗</b>，不影响容量（容量倍率由 Mek 的能量升级自动处理）。
      */
     public double effectiveEnergyConsumptionMultiplier() {
-        return UpgradeHelper.energyConsumptionMultiplier(upgradeCount(Upgrade.ENERGY));
+        return UpgradeHelper.energyConsumptionMultiplier(installedUpgrades(Upgrade.ENERGY));
     }
 
     /** 旧 {@code getEffectiveProcessTime()}：{@code max(1, 200 / 速度倍率)}。 */
@@ -177,21 +205,9 @@ public class CuttingFactoryTile extends MekCkMachineTile implements IMekCkPorted
         }
         int base = MekckConfig.getMultithreadedBase(tier);
         int maxParallel = MekckConfig.getMultithreadedMax(tier);
-        int installed = upgradeCount(MekCkUpgradeRefs.storage());
+        int installed = installedUpgrades(MekCkUpgradeRefs.storage());
         int cap = MekCkUpgradeTypes.capOf(MekCkUpgradeRefs.storage(), tier);
         return CuttingFactoryExecutor.stackMultiplier(installed, cap, base, maxParallel);
-    }
-
-    /**
-     * 已装升级数。
-     *
-     * <p>旧实现读的是 {@code MekCkUpgradeTracker.getInstalled()}（自研 20 tick 读条），
-     * 现在读 {@code TileComponentUpgrade.getUpgrades(type)}——Mek 自己的升级组件里
-     * 同样有 20 tick 安装读条（实测 {@code TileComponentUpgrade.tickServer} 里
-     * {@code getUpgrades(type) < getMax()} 才推进），因此不需要再单独实现一套。</p>
-     */
-    private int upgradeCount(Upgrade type) {
-        return getComponent() == null ? 0 : getComponent().getUpgrades(type);
     }
 
     // ── IMekCkPorted：AE2 端口声明 ──────────────────────────────────────
