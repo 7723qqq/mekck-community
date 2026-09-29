@@ -597,12 +597,27 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
     /**
      * {@inheritDoc}
      *
-     * <p>只写执行器自有状态、进度条与格式版本：槽位、能量、侧配、升级、频率全部由
-     * {@code TileEntityMekanism} 自己的 {@code saveAdditional} 写，重复写会互相覆盖。</p>
+     * <p>只写执行器自有状态、进度条、格式版本与<b>专属的 int 下标槽位数据</b>：
+     * 能量、侧配、升级、频率仍然由 {@code TileEntityMekanism} 自己的
+     * {@code saveAdditional} 写，重复写会互相覆盖。</p>
+     *
+     * <h3>为什么槽位要再写一份（MekCK 权威，阶段 2 Task 4.8）</h3>
+     * Mek 的 {@code mekanism.api.DataHandlerUtils.writeContents} 用 {@code putByte} 存槽位下标，
+     * 而 {@code readContents} 的 {@code getByte} 遇负值直接跳过（实测字节码
+     * {@code writeContents} 偏移 50~53 {@code i2b; putByte}、
+     * {@code readContents} 偏移 35~37 {@code iflt}）。{@code byte} 上限 127，
+     * 于是 {@code SINGULARITY}（81 并行 ⇒ 2N = 162）的第 128~161 号那 34 个输出槽
+     * 与第 162 号的能量槽<b>每次存读档静默丢失，无任何日志</b>。
+     *
+     * <p>因此这里在 {@code super.saveAdditional} <b>之后</b>把同一组槽位按 int 下标
+     * 写进 {@link MekCkSlotNbt#TAG_SLOTS} 专属键。Mek 那份 byte 存档照写不误
+     * （不破坏任何 Mek 自己的读档路径），只是对 MekCK 的机器不再是权威来源。
+     * 为什么不用 Mixin 改 {@code DataHandlerUtils}，见 {@link MekCkSlotNbt} 的类注释。</p>
      */
     @Override
     public void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
+        tag.put(MekCkSlotNbt.TAG_SLOTS, MekCkSlotNbt.write(mekckPersistedSlots()));
         CompoundTag executorTag = new CompoundTag();
         executor().save(executorTag);
         tag.put(TAG_EXECUTOR, executorTag);
@@ -638,6 +653,12 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
      * {@code TileComponentUpgrade.read} 的第一件事就是
      * {@code upgrades.clear(); upgrades.putAll(buildMap(tag))}（实测其
      * {@code lambda$read$1} 偏移 0~17），先灌后读会被这一次 clear 抹掉。</p>
+     *
+     * <h3>专属槽位数据同样必须在 {@code super.load} 之后（阶段 2 Task 4.8）</h3>
+     * {@code super.load} 会让 Mek 按 byte 下标把 {@code Items} 灌进槽位，
+     * 第 128 号起的那些被它整条跳过。我们随后用 int 下标的那份<b>覆盖</b>回来。
+     * 顺序反了等于没写这一层——而这正是本缺陷的形态：静默丢数据、没有任何日志。
+     * 另有 {@code TestMekCkSlotNbt#mekckSlotReadIsAppliedAfterSuperLoad} 把这条顺序钉死。</p>
      */
     @Override
     public void load(CompoundTag tag) {
@@ -650,6 +671,9 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
             tag = MekCkLegacyMachineNbt.migrate(legacyTag, getDirection(), tier == null ? 0 : tier.processes);
         }
         super.load(tag);
+        // 专属键不存在时 read 返回 false、什么都不做：那种档只有 Mek 那份 byte 存档，
+        // 退化到修复前的行为（低端位照常读、高端位照常丢），而不是报错或清空。
+        MekCkSlotNbt.read(tag, mekckPersistedSlots());
         if (legacyTag != null) {
             installLegacyUpgrades(legacyTag);
         }
@@ -660,6 +684,26 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         }
         workProgress = Math.max(0, tag.getInt(TAG_WORK_PROGRESS));
         executor().load(tag.getCompound(TAG_EXECUTOR));
+    }
+
+    /**
+     * 参与 MekCK 专属 int 下标存档的槽位组，顺序与 {@link #getInitialInventory} 里
+     * 往 builder 加槽的顺序<b>逐位一致</b>：{@code [0,N) 输入、[N,2N) 输出、[2N] 能量槽}。
+     *
+     * <p>下标必须与 Mek 的 byte 下标指向同一个槽，所以这里不能自行重排、
+     * 也不能漏掉能量槽——{@code 2N} 号那格正是随 {@code SINGULARITY} 一起越界的那一格。
+     * 另注：{@code componentUpgrade} 的两张升级卡槽由 Mek 自己存（只有 2 格，
+     * byte 下标绰绰有余），不在本列表内。</p>
+     *
+     * <p>每次都新建列表而不是缓存：一次 {@code ArrayList} 分配在存档路径上
+     * 相对 NBT 序列化本身可以忽略，换来的是不可能有人往这个列表里塞脏数据的保证。</p>
+     */
+    private List<IInventorySlot> mekckPersistedSlots() {
+        List<IInventorySlot> all = new ArrayList<>(2 * inputSlots.size() + 1);
+        all.addAll(inputSlots);
+        all.addAll(outputSlots);
+        all.add(energySlot);
+        return all;
     }
 
     /**

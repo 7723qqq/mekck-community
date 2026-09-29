@@ -2,8 +2,12 @@ package cn.ism.mekck.machine;
 
 import cn.ism.mekck.SideMode;
 import cn.ism.mekck.util.BigStackItemHandler;
+import mekanism.api.DataHandlerUtils;
 import mekanism.api.RelativeSide;
+import mekanism.api.inventory.IInventorySlot;
 import mekanism.api.math.FloatingLong;
+import mekanism.common.inventory.slot.InputInventorySlot;
+import mekanism.common.inventory.slot.OutputInventorySlot;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.component.config.DataType;
 import mekanism.common.tile.interfaces.IRedstoneControl;
@@ -11,6 +15,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.junit.BeforeClass;
@@ -20,7 +25,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -134,6 +141,38 @@ public class TestLegacyMachineNbtMigration {
 
     private static ItemStack itemOf(CompoundTag nativeEntry) {
         return ItemStack.of(nativeEntry.getCompound("Item"));
+    }
+
+    /**
+     * 与 {@code MekCkMachineTile.getInitialInventory} 同排布的空机器槽位组：
+     * {@code [0,N) 输入 + [N,2N) 输出 + [2N] 能量槽}。
+     *
+     * <p>用真 {@code InputInventorySlot}/{@code OutputInventorySlot} 而不是自造的实现，
+     * 这样 {@code DataHandlerUtils} 走的是它自己的序列化路径、槽位读回的是 Mek 自己的
+     * {@code deserializeNBT}——测的是真行为而不是复刻。能量槽用
+     * {@link InputInventorySlot} 顶替：真 {@code EnergyInventorySlot} 需要一个
+     * {@code IEnergyContainer}，与本测试要验的「下标能不能寻址」无关。</p>
+     */
+    private static List<IInventorySlot> mekckTestSlots(int parallelCount) {
+        List<IInventorySlot> all = new ArrayList<>(2 * parallelCount + 1);
+        for (int i = 0; i < parallelCount; i++) {
+            all.add(InputInventorySlot.at(() -> {
+            }, 38 + i * 18, 41));
+        }
+        for (int i = 0; i < parallelCount; i++) {
+            all.add(OutputInventorySlot.at(() -> {
+            }, 38 + i * 18, 41));
+        }
+        all.add(InputInventorySlot.at(() -> {
+        }, 7, 13));
+        return all;
+    }
+
+    private static void assertHolds(List<IInventorySlot> slots, int index, Item item, int count) {
+        ItemStack actual = slots.get(index).getStack();
+        assertFalse("第 " + index + " 号槽读回来是空的", actual.isEmpty());
+        assertEquals("第 " + index + " 号槽的物品", item, actual.getItem());
+        assertEquals("第 " + index + " 号槽的数量", count, actual.getCount());
     }
 
     // ── 格式判据 ────────────────────────────────────────────────────────
@@ -587,39 +626,116 @@ public class TestLegacyMachineNbtMigration {
         }
     }
 
-    // ── 已知限制：Mek 的槽位下标是 byte ─────────────────────────────────
+    // ── 高并行档的尾段槽位：已修复（阶段 2 Task 4.8）────────────────────
 
     /**
-     * <b>这条不是断言「行为正确」，而是把一个已知的格式上限钉在测试里。</b>
+     * <b>已修复。</b>81 并行档的第 128 号与第 161 号槽，存 → 读之后仍然存在。
      *
-     * <p>{@code DataHandlerUtils.writeContents} 写下标用的是
-     * {@code putByte}，{@code readContents} 读的是 {@code getByte} 且遇负值直接跳过。
-     * 最高档 {@code SINGULARITY} 有 81 并行 ⇒ {@code 2N = 162}，
-     * 于是第 128 号起的槽位在<b>新格式里就寻址不到</b>（旧格式的 {@code Slot} 是 int，
-     * 存得下）。迁移会忠实地把这些槽位写成负 byte，于是读回来时那 34 个输出槽
-     * 与能源物品都没了。</p>
+     * <p><b>缺陷是什么</b>：Mek 用 <b>byte</b> 存取槽位下标。
+     * {@code javap -c mekanism.api.DataHandlerUtils} 实测
+     * （注意包名是 {@code mekanism.api}，不是 {@code mekanism.common.util}）：
+     * <pre>
+     *   writeContents:  50: iload_3  51: iload_3  52: i2b
+     *                   53: invokevirtual CompoundTag.putByte:(Ljava/lang/String;B)V
+     *   readContents:   30: invokevirtual CompoundTag.getByte:(Ljava/lang/String;)B
+     *                   35: iload 6   36: iflt ... 37: iflt 64   // 负值整条跳过，不报错
+     * </pre>
+     * {@code byte} 上限 127 ⇒ {@code 2N ≤ 127} 即 {@code N ≤ 63} 并行才安全。
+     * {@code CRYSTAL_MATRIX(36)}、{@code NEBULA(49)} 没问题，
+     * {@code SINGULARITY(81 ⇒ 2N = 162)} 每次存读档丢第 128~161 号共 34 个输出槽与能源槽。
+     * 这不是迁移引入的——新建的 81 并行机器照样丢。</p>
      *
-     * <p>这不是迁移引入的缺陷——新建的 81 并行机器每次存读档都会丢同样的东西。
-     * 修法在基类（换掉槽位持久化方式），属于 Task 4.7 / Task 6 的范围。
-     * 本测试的作用是：有人调高并行度或换持久化实现时，这里会先炸出来。</p>
+     * <p><b>怎么修的</b>：{@code MekCkMachineTile} 在 {@code saveAdditional} 里
+     * {@code super.saveAdditional} <b>之后</b>，把同一组槽位按 <b>int 下标</b>写进
+     * {@link MekCkSlotNbt#TAG_SLOTS} 专属键；{@code load} 里 {@code super.load} <b>之后</b>
+     * 再从专属键读回来覆盖。迁移侧（{@code MekCkLegacyMachineNbt.migrateSlots}）
+     * 也一并写那一份，所以旧档在迁移那一刻就不丢。详见 {@link MekCkSlotNbt} 的类注释。</p>
+     *
+     * <p><b>为什么不走第 5 个 Mixin</b>：{@code DataHandlerUtils.writeContents/readContents}
+     * 是 {@code static}，签名只接 {@code List<? extends INBTSerializable<CompoundTag>>}
+     * 与槽位下标字符串，<b>没有任何 tile 上下文</b>，无法把改写收窄到 MekCK 的机器上。
+     * 重定向会改掉整个整合包里所有 Mekanism 机器（含 Mek 自带的）的存档格式，
+     * 制造出「装了 MekCK 存的档，没装 MekCK 打开时 Mek 自己的机器读不出来」这种更糟的问题。
+     * 阶段 1 的 4 个 Mixin 名额因此不动。</p>
+     *
+     * <p>本测试刻意跑<b>整条链路</b>（旧档 → 迁移 → {@code super.load} 的 byte 读 →
+     * 专属键覆盖），而不只测迁移：迁移只是这条链的一环，中间任何一环把顺序做反，
+     * 症状都与修复前完全一致——静默丢槽位，没有任何日志。</p>
      */
     @Test
-    public void veryHighParallelTiersLoseTheirTailBecauseMekIndexesSlotsWithAByte() {
+    public void veryHighParallelTiersKeepTheirTailAfterTheIntIndexedSlotFix() {
         int processes = 81;                  // CuttingMachineFactoryTier.SINGULARITY.processes
         int oldSize = 2 * processes + 4 + 1; // 旧处理器：2N + 4 张升级卡 + 1 能源槽
+        int powerSlot = 2 * processes;       // 新排布里能源槽在第 2N 号
         CompoundTag root = legacy(oldSize,
-                // 128 号在旧排布里是输出区（[N, 2N) = [81, 162)），但已越过 byte 的 127
+                // 128 与 161 在旧排布里都属于输出区（[N, 2N) = [81, 162)）
                 legacyItem(128, new ItemStack(Items.BREAD, 1), 1),
+                legacyItem(161, new ItemStack(Items.DIAMOND, 1), 1),
                 legacyItem(oldSize - 1, new ItemStack(Items.BUCKET), 1));
         CompoundTag migrated = MekCkLegacyMachineNbt.migrate(root, Direction.NORTH, processes);
 
+        // 第一步：super.load 会做的 byte 读——第 128 / 161 号与第 162 号的能量槽在这里必然丢掉。
+        List<IInventorySlot> slots = mekckTestSlots(processes);
+        DataHandlerUtils.readContents(slots, migrated.getList("Items", Tag.TAG_COMPOUND), "Slot");
+        assertTrue("第 128 号在 Mek 的 byte 路径上确实寻址不到（这正是专属键存在的理由）",
+                slots.get(128).isEmpty());
+        assertTrue("第 161 号同理", slots.get(161).isEmpty());
+        assertTrue("第 162 号（能量槽）同样越过 127，一并丢掉", slots.get(powerSlot).isEmpty());
+
+        // 第二步：MekCkMachineTile.load 紧接着做的事——int 下标那份覆盖回来。
+        assertTrue("迁移出来的档必须带专属键", MekCkSlotNbt.read(migrated, slots));
+
+        assertHolds(slots, 128, Items.BREAD, 1);
+        assertHolds(slots, 161, Items.DIAMOND, 1);
+        assertHolds(slots, powerSlot, Items.BUCKET, 1);
+    }
+
+    /**
+     * 反面对照：迁移产出的 {@code Items} <b>仍然</b>是 byte 下标，第 128 号就是 -128。
+     *
+     * <p>这不是在钉 MekCK 的 bug（MekCK 早就不靠这条路径了），而是钉住
+     * 「为什么必须另写一份」这个前提：Mek 的格式本身改不动（它服务于整个整合包），
+     * 专属键是唯一的出路。哪天 Mek 自己换成 int 下标，这里会先炸出来，
+     * 届时专属键可以退休；反之若有人以为 {@code Items} 本来就够用，这条立刻否掉那个误解。
+     * 见 {@code TestMekCkSlotNbt#mekNativeByteFormatAloneCannotAddressSlot128}。</p>
+     */
+    @Test
+    public void theMigratedItemsListIsStillMekByteFormatAndCannotReachSlot128() {
+        int processes = 81;
+        int oldSize = 2 * processes + 4 + 1;
+        CompoundTag root = legacy(oldSize, legacyItem(128, new ItemStack(Items.BREAD, 1), 1));
+        CompoundTag migrated = MekCkLegacyMachineNbt.migrate(root, Direction.NORTH, processes);
+
         ListTag items = migrated.getList("Items", Tag.TAG_COMPOUND);
-        assertEquals("两件都写出来了", 2, items.size());
-        int firstByte = items.getCompound(0).getByte("Slot");
-        int secondByte = items.getCompound(1).getByte("Slot");
-        assertTrue("第 128 号之后的槽位在 byte 下标下变成负数，读档侧会整条跳过："
-                        + "实际拿到 " + firstByte + " / " + secondByte,
-                firstByte < 0 || secondByte < 0);
+        assertEquals("一条", 1, items.size());
+        assertEquals("第 128 号在 byte 下标下就是 -128", -128, items.getCompound(0).getByte("Slot"));
+    }
+
+    /** 低端位（< 128）在两份存档里必须完全一致——「行为不变」的回归保护。 */
+    @Test
+    public void lowSlotsAreIdenticalInBothStorages() {
+        int processes = 81;
+        int oldSize = 2 * processes + 4 + 1;
+        CompoundTag root = legacy(oldSize,
+                legacyItem(0, new ItemStack(Items.CARROT, 4), 4),
+                legacyItem(100, new ItemStack(Items.WHEAT, 9), 9),
+                legacyItem(127, new ItemStack(Items.EMERALD, 2), 2));
+        CompoundTag migrated = MekCkLegacyMachineNbt.migrate(root, Direction.NORTH, processes);
+
+        List<IInventorySlot> viaMek = mekckTestSlots(processes);
+        DataHandlerUtils.readContents(viaMek, migrated.getList("Items", Tag.TAG_COMPOUND), "Slot");
+        List<IInventorySlot> viaMekCk = mekckTestSlots(processes);
+        assertTrue(MekCkSlotNbt.read(migrated, viaMekCk));
+
+        for (int index : new int[]{0, 100, 127}) {
+            // 比的是持久化出来的那份 NBT 而不是 ItemStack：后者的 equals 链
+            // （isSameItemSameTags → areCapsCompatible）在裸 JVM 里不可靠。
+            assertEquals("第 " + index + " 号槽两份存档持久化出来的内容必须逐键一致",
+                    viaMek.get(index).serializeNBT(), viaMekCk.get(index).serializeNBT());
+        }
+        assertHolds(viaMekCk, 0, Items.CARROT, 4);
+        assertHolds(viaMekCk, 100, Items.WHEAT, 9);
+        assertHolds(viaMekCk, 127, Items.EMERALD, 2);
     }
 
     // ── 源码不变量：一条裸 JVM 测不到、但错了就静默丢升级的顺序约束 ──────

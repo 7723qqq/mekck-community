@@ -195,16 +195,19 @@ public final class MekCkLegacyMachineNbt {
      * {@code 2N+4} 还是 {@code 2N+3} 个升级卡槽——而这个信息只能从存档的
      * {@code Size} 反推，代码里拿不到，所以能源槽一律取 {@code Size - 1}。
      *
-     * <h3>⚠️ 已知上限：{@code 2N + 1 > 127} 的档位会丢尾段（不是本类引入的）</h3>
-     * Mek 的槽位下标是 <b>byte</b>：{@code DataHandlerUtils.writeContents} 写的是
-     * {@code compound.putByte(tagName, (byte) i)}，{@code readContents} 读的
-     * {@code getByte} 遇负值直接跳过。本模组最高档 {@code SINGULARITY} 有 81 并行，
-     * 即 {@code 2N = 162}，于是第 128 号之后的 35 个槽位在<b>新格式里根本寻址不到</b>
+     * <h3>⚠️ {@code 2N + 1 > 127} 的档位：byte 存不下，所以<b>写两份</b></h3>
+     * Mek 的槽位下标是 <b>byte</b>：{@code DataHandlerUtils.writeContents} 偏移 50~53 是
+     * {@code iload_3; i2b; invokevirtual CompoundTag.putByte}，
+     * {@code readContents} 偏移 30 读的是 {@code getByte}、偏移 35~37 {@code iflt} 遇负值整条跳过。
+     * 本模组最高档 {@code SINGULARITY} 有 81 并行，即 {@code 2N = 162}，
+     * 于是第 128 号之后的 34 个槽位在 Mek 的那份列表里<b>根本寻址不到</b>
      * （旧格式的 {@code Slot} 是 int，所以旧存档存得下）。
-     * 这条限制属于基类的持久化设计（Task 1/4 引入），不是迁移造成的；但迁移会让
-     * 旧存档里那部分槽位的内容一并消失，因此在 {@code MekCkMachineTile} 换掉
-     * 槽位持久化方式之前，81 并行机器的产物与能源物品都保不住。
-     * 断言见 {@code TestLegacyMachineNbtMigration#veryHighParallelTiersLoseTheirTail...}。
+     *
+     * <p>因此本方法把机器槽位<b>同时</b>写进两份：Mek 的 {@code Items}（照旧，
+     * 让 {@code super.load} 仍能读出 127 号以内的部分，格式与其它 Mek 机器保持一致）
+     * 与 {@link MekCkSlotNbt#TAG_SLOTS} 的 int 下标列表（阶段 2 Task 4.8 的基类权威来源）。
+     * 少了第二份，81 并行机器在<b>迁移那一刻</b>就会丢掉那 34 槽的产物与能源物品——
+     * 之后再怎么修基类也救不回来。升级卡槽只有 2 格，byte 下标安全，仍只写一份。</p>
      */
     private static void migrateSlots(CompoundTag legacy, CompoundTag out, int inputSlotCount) {
         if (!legacy.contains(LEGACY_ITEMS, Tag.TAG_COMPOUND)) {
@@ -216,6 +219,7 @@ public final class MekCkLegacyMachineNbt {
         int powerSlot = Math.max(0, old.getInt("Size")) - 1;
 
         ListTag items = new ListTag();
+        ListTag mekckItems = new ListTag();
         ListTag upgradeCards = new ListTag();
         int dropped = 0;
         for (int i = 0; i < oldList.size(); i++) {
@@ -229,8 +233,10 @@ public final class MekCkLegacyMachineNbt {
             int slot = entry.getInt(NATIVE_SLOT_INDEX);
             if (slot >= 0 && slot < machineSlots) {
                 items.add(nativeSlot((byte) slot, stack));
+                mekckItems.add(MekCkSlotNbt.entry(slot, stack));
             } else if (slot == powerSlot) {
                 items.add(nativeSlot((byte) machineSlots, stack));
+                mekckItems.add(MekCkSlotNbt.entry(machineSlots, stack));
             } else if (slot >= machineSlots && slot < powerSlot && upgradeCards.size() < UPGRADE_CARD_SLOTS) {
                 upgradeCards.add(nativeSlot((byte) upgradeCards.size(), stack));
             } else {
@@ -241,6 +247,9 @@ public final class MekCkLegacyMachineNbt {
         }
         // 同名不同型：必须整体覆盖，否则读档侧会拿到旧格式的 CompoundTag 并静默丢光槽位。
         out.put(LEGACY_ITEMS, items);
+        if (!mekckItems.isEmpty()) {
+            out.put(MekCkSlotNbt.TAG_SLOTS, MekCkSlotNbt.block(machineSlots + 1, mekckItems));
+        }
         if (!upgradeCards.isEmpty()) {
             CompoundTag component = new CompoundTag();
             component.put(NATIVE_UPGRADE_SLOT_LIST, upgradeCards);
