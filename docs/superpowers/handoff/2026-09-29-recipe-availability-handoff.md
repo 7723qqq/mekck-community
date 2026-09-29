@@ -75,7 +75,7 @@ basic_planting_cutting_factory_from_cutting_factory.json  （不依赖 mekmm） 
 > | | 需要可达性分析 | 需要知道"已装 mod 集合" |
 > |---|---|---|
 > | 条件化**方块**（隐藏） | 是 | 是 ← 前置卡点在此 |
-> | 条件化**配方**（§4 的 `forge:conditional`） | **否** | **否** |
+> | 条件化**配方**（顶层 `conditions`，见 §4） | **否** | **否** |
 >
 > 条件配方把判断**推迟到运行期**，Forge 对每个配方独立判定其 `conditions`，
 > 正确性与"最终哪些方块能造出来"无关。也就是说，逐配方加条件本身
@@ -91,10 +91,57 @@ basic_planting_cutting_factory_from_cutting_factory.json  （不依赖 mekmm） 
 
 ## 4. 建议的实现形态
 
+> **2026-09-29 实测更正：本节原有内容有两处错误，且推荐的形态不是最优解。**
+>
+> 原先声称 `forge:conditional` 接受顶层 `{"conditions": [...], "recipe": {...}}`。
+> **这是错的。** `ConditionalRecipe.Serializer.fromJson` 只读 `recipes` 数组；
+> `conditions` / `recipe` 是**数组内每个 holder 对象**的字段
+> （`ConditionalRecipe.Finished.save`：`holder.add("conditions", …)` / `holder.add("recipe", …)`）。
+> 当初用 `javap` 读常量池时把 `ConditionalRecipe` 与其 `Serializer` 的字段混在了一起。
+> 正确形态：
+>
+> ```json
+> { "type": "forge:conditional",
+>   "recipes": [ { "conditions": [ … ], "recipe": { … } } ] }
+> ```
+>
+> 仓库里已有的 8 个条件配方（`createcafe_crushing/`、`createcafe_milling/`）用的就是这个形态。
+>
+> **但实际采用的是更好的方案：不用包装，直接在配方顶层写 `conditions`。**
+> 证据是 Forge 的 vanilla 补丁
+> `patches/net/minecraft/world/item/crafting/RecipeManager.java.patch`：
+>
+> ```java
+> if (entry.getValue().isJsonObject()
+>         && !CraftingHelper.processConditions(entry.getValue().getAsJsonObject(), "conditions", this.context)) {
+>     LOGGER.debug("Skipping loading recipe {} as it's conditions were not met", resourcelocation);
+>     continue;
+> }
+> ```
+>
+> 这个检查在**任何序列化器运行之前**执行，对每个配方都生效。因此：
+>
+> - 无需 `forge:conditional` 包装，不嵌套、不重排缩进，diff 最小
+> - 对「未知配方类型 / 未知物品 / 写错 schema 的 conditions」三类失败**同时有效**
+> - 条件数组语义为 AND（`CraftingHelper.processConditions` 遇首个 false 即返回 false）
+>
+> 采用的写法：
+>
+> ```json
+> { "type": "mekck:sawing", "…原内容不动…",
+>   "conditions": [ { "type": "forge:mod_loaded", "modid": "youkaishomecoming" } ] }
+> ```
+>
+> 已实施：454 个配方文件（提交 `5a36aa4`）。完整依据见
+> `docs/audit/2026-09-29-conditional-recipe-report.md`。
+
+<details>
+<summary>以下为原始（部分错误）记录，保留以备追溯</summary>
+
 Forge 1.20.1 有现成的条件加载体系（`javap` 核实）：
 
 ```
-net.minecraftforge.common.crafting.ConditionalRecipe        字段: conditions + recipe
+net.minecraftforge.common.crafting.ConditionalRecipe        字段: conditions + recipe   ← 错：这是内层 holder 的字段
 net.minecraftforge.common.crafting.conditions.ModLoadedCondition   NAME = forge:mod_loaded, 字段 modid
 net.minecraftforge.common.crafting.conditions.ItemExistsCondition  字段 item
 net.minecraftforge.common.crafting.conditions.AndCondition / OrCondition / NotCondition
@@ -124,6 +171,8 @@ net.minecraftforge.common.crafting.conditions.AndCondition / OrCondition / NotCo
 > **原先标注的「未实测项」已关闭**——三个字符串全部来自 `javap` 常量池，
 > 不需要「改一个配方启动游戏」来验证。
 
+</details>
+
 
 方块层：Forge 支持在 `RegisterEvent` 里按 `ModList.isLoaded()` 条件注册，
 但那会让**方块 ID 集合随环境变化**（同存档装/卸 mod 会丢方块）。
@@ -140,7 +189,7 @@ mekck 的 `mekckfactory` 命名空间方块若未进过正式存档，可接受�
 
 ### 5.1 条件配方：由**我**做（已确认分工）
 
-条件加载的批量改造（924 个引用外部 mod 的配方，加 `forge:mod_loaded`）由我执行。
+条件加载的批量改造（引用外部 mod 的配方，加 `forge:mod_loaded`）由我执行。
 
 理由：纯 JSON 批量改，与你的 Mixin 注入零耦合；你阶段 1 是 7 任务 37 步，
 Task 1–3 才刚落地，不再加负担。
@@ -159,6 +208,27 @@ Task 1–3 才刚落地，不再加负担。
 **执行前先实测**：`ConditionalRecipe` 自身的 `type` 值（推测 `forge:conditional`）
 `javap` 未取到。我会先拿**一个**配方改动 → 启动实例 → 看日志确认无
 `Parsing error`，再批量跑。**不会拿 924 个文件赌一个未验证字符串。**
+
+> **2026-09-29 已完成（提交 `5a36aa4`）**——实际不用等实机验证，Forge 的
+> `patches/net/minecraft/world/item/crafting/RecipeManager.java.patch` 里有直接证据，
+> 见 §4。更正：924 是日志行数，**去重后是 462 个不同配方**（资源加载跑两轮），
+> 其中 422 个在本仓库、40 个来自用户世界存档的 `mekck_planting` 数据包。
+> 已条件化 454 个文件（422 个报错 + 32 个仅含外部 mod 的 tag 引用的静默失效）。
+> 详见 `docs/audit/2026-09-29-conditional-recipe-report.md`。
+
+### 5.3 交给你的 Task 8：一个我这边查出的额外问题
+
+`creative_upgrade_from_49_foods.json` 我按约定避开了，但需要提醒：
+
+它的 `"type": "avaritia:shapeless_table"` 指向 **Avaritia** 的配方序列化器，
+而 Avaritia 从未在 mekck 的 `mods.toml` 中声明为依赖，实例里也没装。
+所以**只把产物从 `mekanism_extras:upgrade_creative` 换成 `mekck:upgrade_randomize`
+并不能修好这个配方**——`type` 仍会解析失败，日志照样报
+`Invalid or unsupported recipe type 'avaritia:shapeless_table'`。
+
+这是改造后按实例 mod 集合模拟条件判定，**唯一剩下的失败项**。处理方式二选一：
+把 `type` 换成 mekck 自有的表格式配方类型（或原生 `minecraft:crafting_shaped`），
+或者按 §4 的写法给它加顶层 `conditions` 门控 Avaritia。
 
 ### 5.2 可达性分析：独立后续线，不阻塞任何人
 
