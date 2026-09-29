@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"trailandtales_delight:cheese_wheel"}},"mainOutput":{"count":4,"item":"trailandtales_delight:cheese_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"trailandtales_delight:cheese_wheel"}},"mainOutput":{"count":4,"item":"trailandtales_delight:cheese_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "trailandtales_delight"}
+  ]
+}

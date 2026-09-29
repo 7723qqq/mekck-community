@@ -1,1 +1,6 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"alexscaves:cooked_dinosaur_chop"}},"mainOutput":{"count":4,"item":"cavedelight:cooked_dino_cut"},"secondaryChance":1.0,"secondaryOutput":{"item":"minecraft:bone"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"alexscaves:cooked_dinosaur_chop"}},"mainOutput":{"count":4,"item":"cavedelight:cooked_dino_cut"},"secondaryChance":1.0,"secondaryOutput":{"item":"minecraft:bone"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "alexscaves"},
+  {"type": "forge:mod_loaded", "modid": "cavedelight"}
+  ]
+}

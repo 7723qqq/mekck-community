@@ -5,4 +5,8 @@
 }},"mainOutput":{"count":4,
 
 "item":"ice_and_fire_delight:dragon_special_pie_slice"
-}}
+},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "ice_and_fire_delight"}
+  ]
+}

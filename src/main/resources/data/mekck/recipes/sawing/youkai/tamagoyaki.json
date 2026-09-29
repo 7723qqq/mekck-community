@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:tamagoyaki"}},"mainOutput":{"count":3,"item":"youkaishomecoming:tamagoyaki_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:tamagoyaki"}},"mainOutput":{"count":3,"item":"youkaishomecoming:tamagoyaki_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

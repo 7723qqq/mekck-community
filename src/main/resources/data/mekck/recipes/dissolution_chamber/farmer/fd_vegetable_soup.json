@@ -22,5 +22,8 @@
     "output": {
       "item": "farmersdelight:vegetable_soup",
       "count": 1
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

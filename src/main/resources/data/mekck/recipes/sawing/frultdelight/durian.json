@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:durian"}},"mainOutput":{"count":6,"item":"fruitsdelight:durian_flesh"},"secondaryChance":1.0,"secondaryOutput":{"item":"fruitsdelight:durian_sapling"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:durian"}},"mainOutput":{"count":6,"item":"fruitsdelight:durian_flesh"},"secondaryChance":1.0,"secondaryOutput":{"item":"fruitsdelight:durian_sapling"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "fruitsdelight"}
+  ]
+}

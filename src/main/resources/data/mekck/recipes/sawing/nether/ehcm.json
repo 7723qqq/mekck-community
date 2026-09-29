@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"mynethersdelight:ghasta"}},"mainOutput":{"count":1,"item":"mynethersdelight:ghasmati"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"mynethersdelight:ghasta"}},"mainOutput":{"count":1,"item":"mynethersdelight:ghasmati"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "mynethersdelight"}
+  ]
+}

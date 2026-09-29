@@ -4,4 +4,8 @@
 
 }},"output":{
     
-"count":1,"item":"mekck:nebula_cutting_factory"}}
+"count":1,"item":"mekck:nebula_cutting_factory"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "avaritia_delight"}
+  ]
+}

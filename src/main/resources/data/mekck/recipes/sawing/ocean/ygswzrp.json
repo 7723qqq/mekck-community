@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"oceansdelight:elder_guardian_slab"}},"mainOutput":{"count":9,"item":"oceansdelight:elder_guardian_slice"},"secondaryChance":1.0,"secondaryOutput":{"item":"minecraft:bone_meal"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"oceansdelight:elder_guardian_slab"}},"mainOutput":{"count":9,"item":"oceansdelight:elder_guardian_slice"},"secondaryChance":1.0,"secondaryOutput":{"item":"minecraft:bone_meal"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "oceansdelight"}
+  ]
+}

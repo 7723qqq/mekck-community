@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"minecraft:rose_bush"}},"mainOutput":{"count":2,"item":"farmersrespite:rose_hips"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"minecraft:rose_bush"}},"mainOutput":{"count":2,"item":"farmersrespite:rose_hips"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "farmersrespite"}
+  ]
+}

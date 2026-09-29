@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"ends_delight:roasted_shulker_meat"}},"mainOutput":{"count":2,"item":"ends_delight:roasted_shulker_meat_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"ends_delight:roasted_shulker_meat"}},"mainOutput":{"count":2,"item":"ends_delight:roasted_shulker_meat_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "ends_delight"}
+  ]
+}

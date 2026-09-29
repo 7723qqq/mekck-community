@@ -7,4 +7,9 @@
 
 "alexscaves:flytrap"
 
-}],"soil":{"item":"minecraft:dirt"},"time":800}
+}],"soil":{"item":"minecraft:dirt"},"time":800,
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "alexscaves"},
+  {"type": "forge:mod_loaded", "modid": "immersiveengineering"}
+  ]
+}

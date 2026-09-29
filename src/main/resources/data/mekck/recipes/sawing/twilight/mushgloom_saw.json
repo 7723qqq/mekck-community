@@ -1,1 +1,6 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"twilightdelight:mushgloom_colony"}},"mainOutput":{"count":5,"item":"twilightforest:mushgloom"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"twilightdelight:mushgloom_colony"}},"mainOutput":{"count":5,"item":"twilightforest:mushgloom"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "twilightdelight"},
+  {"type": "forge:mod_loaded", "modid": "twilightforest"}
+  ]
+}

@@ -1,2 +1,6 @@
 {"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:cucumber"}},
-"mainOutput":{"count":2,"item":"youkaishomecoming:cucumber_slice"}}
+"mainOutput":{"count":2,"item":"youkaishomecoming:cucumber_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

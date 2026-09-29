@@ -1,1 +1,6 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"twilightforest:raw_venison"}},"mainOutput":{"count":2,"item":"twilightdelight:raw_venison_rib"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"twilightforest:raw_venison"}},"mainOutput":{"count":2,"item":"twilightdelight:raw_venison_rib"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "twilightdelight"},
+  {"type": "forge:mod_loaded", "modid": "twilightforest"}
+  ]
+}

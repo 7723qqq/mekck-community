@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:mandrake_root"}},"mainOutput":{"item":"youkaishomecoming:stripped_mandrake_root"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:mandrake_root"}},"mainOutput":{"item":"youkaishomecoming:stripped_mandrake_root"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

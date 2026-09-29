@@ -22,5 +22,8 @@
     "output": {
       "item": "farmersdelight:squid_ink_pasta",
       "count": 1
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

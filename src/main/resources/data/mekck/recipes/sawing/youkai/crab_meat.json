@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:steamed_crab"}},"mainOutput":{"item":"youkaishomecoming:crab_meat"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:steamed_crab"}},"mainOutput":{"item":"youkaishomecoming:crab_meat"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

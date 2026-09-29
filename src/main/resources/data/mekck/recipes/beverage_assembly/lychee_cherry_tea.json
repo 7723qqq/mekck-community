@@ -13,9 +13,6 @@
     "item": "fruitsdelight:lychee_cherry_tea"
   },
   "conditions": [
-    {
-      "condition": "forge:mod_loaded",
-      "modid": "fruitsdelight"
-    }
+    {"type": "forge:mod_loaded", "modid": "fruitsdelight"}
   ]
 }

@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"muffins_thaidelight:lime"}},"mainOutput":{"count":2,"item":"muffins_thaidelight:lime_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"muffins_thaidelight:lime"}},"mainOutput":{"count":2,"item":"muffins_thaidelight:lime_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "muffins_thaidelight"}
+  ]
+}

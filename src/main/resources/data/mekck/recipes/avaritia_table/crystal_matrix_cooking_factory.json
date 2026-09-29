@@ -29,5 +29,8 @@
   "result": {
     "item": "mekck:crystal_matrix_cooking_factory",
     "count": 1
-  }
+  },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "avaritia"}
+  ]
 }

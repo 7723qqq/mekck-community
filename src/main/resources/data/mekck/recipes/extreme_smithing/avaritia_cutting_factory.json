@@ -19,5 +19,9 @@
   },
   "template": {
     "item": "avaritia:upgrade_smithing_template"
-  }
+  },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "avaritia"},
+  {"type": "forge:mod_loaded", "modid": "avaritia_delight"}
+  ]
 }

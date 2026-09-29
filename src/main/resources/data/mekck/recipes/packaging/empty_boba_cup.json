@@ -1,19 +1,8 @@
 {
   "type": "mekck:packaging",
   "conditions": [
-    {
-      "condition": "minecraft:all_of",
-      "terms": [
-        {
-          "condition": "forge:mod_loaded",
-          "modid": "create"
-        },
-        {
-          "condition": "forge:mod_loaded",
-          "modid": "createcafe"
-        }
-      ]
-    }
+    {"type": "forge:mod_loaded", "modid": "create"},
+  {"type": "forge:mod_loaded", "modid": "createcafe"}
   ],
   "ingredients": [
     {

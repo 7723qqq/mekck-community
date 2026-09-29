@@ -1,1 +1,6 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"twilightforest:cooked_meef"}},"mainOutput":{"count":2,"item":"twilightdelight:cooked_meef_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"twilightforest:cooked_meef"}},"mainOutput":{"count":2,"item":"twilightdelight:cooked_meef_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "twilightdelight"},
+  {"type": "forge:mod_loaded", "modid": "twilightforest"}
+  ]
+}

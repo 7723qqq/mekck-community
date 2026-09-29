@@ -7,4 +7,9 @@
 
 "farmersrespite:green_tea_leaves"
 
-}],"soil":{"item":"minecraft:dirt"},"time":800}
+}],"soil":{"item":"minecraft:dirt"},"time":800,
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "farmersrespite"},
+  {"type": "forge:mod_loaded", "modid": "immersiveengineering"}
+  ]
+}

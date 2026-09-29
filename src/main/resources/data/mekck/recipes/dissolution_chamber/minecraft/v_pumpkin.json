@@ -28,5 +28,8 @@
     "output": {
       "item": "farmersdelight:stuffed_pumpkin_block",
       "count": 1
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

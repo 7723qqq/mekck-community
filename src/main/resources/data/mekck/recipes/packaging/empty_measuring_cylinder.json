@@ -1,10 +1,7 @@
 {
   "type": "mekck:packaging",
   "conditions": [
-    {
-      "condition": "forge:mod_loaded",
-      "modid": "ice_and_fire_delight"
-    }
+    {"type": "forge:mod_loaded", "modid": "ice_and_fire_delight"}
   ],
   "ingredients": [
     {

@@ -7,4 +7,9 @@
 
 "ends_delight:chorus_succulent"
 
-}],"soil":{"item":"minecraft:end_stone"},"time":800}
+}],"soil":{"item":"minecraft:end_stone"},"time":800,
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "ends_delight"},
+  {"type": "forge:mod_loaded", "modid": "immersiveengineering"}
+  ]
+}

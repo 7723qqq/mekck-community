@@ -4,4 +4,8 @@
 
 }},"output":{
     
-"count":4,"item":"ends_delight:grilled_shulker"}}
+"count":4,"item":"ends_delight:grilled_shulker"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "ends_delight"}
+  ]
+}

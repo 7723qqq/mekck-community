@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:pods"}},"mainOutput":{"count":2,"item":"youkaishomecoming:soybean"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:pods"}},"mainOutput":{"count":2,"item":"youkaishomecoming:soybean"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

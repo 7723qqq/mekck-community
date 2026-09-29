@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:orange"}},"mainOutput":{"count":4,"item":"fruitsdelight:orange_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:orange"}},"mainOutput":{"count":4,"item":"fruitsdelight:orange_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "fruitsdelight"}
+  ]
+}

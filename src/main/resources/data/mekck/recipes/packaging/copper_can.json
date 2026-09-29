@@ -1,10 +1,7 @@
 {
   "type": "mekck:packaging",
   "conditions": [
-    {
-      "condition": "forge:mod_loaded",
-      "modid": "tconstruct"
-    }
+    {"type": "forge:mod_loaded", "modid": "tconstruct"}
   ],
   "ingredients": [
     {

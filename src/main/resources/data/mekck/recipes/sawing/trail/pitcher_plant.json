@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"trailandtales_delight:pitcher_plant"}},"mainOutput":{"count":1,"item":"minecraft:pitcher_plant"},"secondaryChance":1.0,"secondaryOutput":{"item":"trailandtales_delight:pitcher_taro"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"trailandtales_delight:pitcher_plant"}},"mainOutput":{"count":1,"item":"minecraft:pitcher_plant"},"secondaryChance":1.0,"secondaryOutput":{"item":"trailandtales_delight:pitcher_taro"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "trailandtales_delight"}
+  ]
+}

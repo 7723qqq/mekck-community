@@ -12,5 +12,9 @@
   "mainOutput": {
     "count": 2,
     "item": "pineapple_delight:pineapple"
-  }
+  },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "mekmm"},
+  {"type": "forge:mod_loaded", "modid": "pineapple_delight"}
+  ]
 }

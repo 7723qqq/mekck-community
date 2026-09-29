@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"oceansdelight:tentacles"}},"mainOutput":{"count":3,"item":"oceansdelight:cut_tentacles"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"oceansdelight:tentacles"}},"mainOutput":{"count":3,"item":"oceansdelight:cut_tentacles"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "oceansdelight"}
+  ]
+}

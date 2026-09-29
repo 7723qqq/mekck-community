@@ -13,9 +13,6 @@
     "item": "farmersrespite:long_gamblers_tea"
   },
   "conditions": [
-    {
-      "condition": "forge:mod_loaded",
-      "modid": "farmersrespite"
-    }
+    {"type": "forge:mod_loaded", "modid": "farmersrespite"}
   ]
 }

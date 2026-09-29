@@ -13,9 +13,6 @@
     "item": "fruitsdelight:bellini_cocktail"
   },
   "conditions": [
-    {
-      "condition": "forge:mod_loaded",
-      "modid": "fruitsdelight"
-    }
+    {"type": "forge:mod_loaded", "modid": "fruitsdelight"}
   ]
 }

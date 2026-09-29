@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:raw_lamprey"}},"mainOutput":{"count":2,"item":"youkaishomecoming:raw_lamprey_fillet"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:raw_lamprey"}},"mainOutput":{"count":2,"item":"youkaishomecoming:raw_lamprey_fillet"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

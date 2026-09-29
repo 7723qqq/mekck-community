@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"mynethersdelight:strider_slice"}},"mainOutput":{"count":2,"item":"mynethersdelight:minced_strider"},"secondaryChance":1.0,"secondaryOutput":{"count":2,"item":"minecraft:string"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"mynethersdelight:strider_slice"}},"mainOutput":{"count":2,"item":"mynethersdelight:minced_strider"},"secondaryChance":1.0,"secondaryOutput":{"count":2,"item":"minecraft:string"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "mynethersdelight"}
+  ]
+}

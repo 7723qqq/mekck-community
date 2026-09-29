@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"trailandtales_delight:cherry_cake"}},"mainOutput":{"count":4,"item":"trailandtales_delight:cherry_cake_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"trailandtales_delight:cherry_cake"}},"mainOutput":{"count":4,"item":"trailandtales_delight:cherry_cake_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "trailandtales_delight"}
+  ]
+}

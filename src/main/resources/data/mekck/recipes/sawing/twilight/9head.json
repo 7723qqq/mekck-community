@@ -1,1 +1,6 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"twilightforest:hydra_chop"}},"mainOutput":{"count":2,"item":"twilightdelight:hydra_piece"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"twilightforest:hydra_chop"}},"mainOutput":{"count":2,"item":"twilightdelight:hydra_piece"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "twilightdelight"},
+  {"type": "forge:mod_loaded", "modid": "twilightforest"}
+  ]
+}

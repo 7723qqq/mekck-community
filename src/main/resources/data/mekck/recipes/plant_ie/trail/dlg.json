@@ -7,4 +7,9 @@
 
 "trailandtales_delight:lantern_fruit"
 
-}],"soil":{"item":"minecraft:dirt"},"time":800}
+}],"soil":{"item":"minecraft:dirt"},"time":800,
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "immersiveengineering"},
+  {"type": "forge:mod_loaded", "modid": "trailandtales_delight"}
+  ]
+}

@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:fig_pudding"}},"mainOutput":{"count":4,"item":"fruitsdelight:fig_pudding_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:fig_pudding"}},"mainOutput":{"count":4,"item":"fruitsdelight:fig_pudding_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "fruitsdelight"}
+  ]
+}

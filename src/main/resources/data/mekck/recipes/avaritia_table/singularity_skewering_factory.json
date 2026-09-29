@@ -37,5 +37,8 @@
   "result": {
     "item": "mekck:singularity_skewering_factory",
     "count": 1
-  }
+  },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "avaritia"}
+  ]
 }

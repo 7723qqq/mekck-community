@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:rainbow_futomaki"}},"mainOutput":{"count":6,"item":"youkaishomecoming:rainbow_futomaki_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:rainbow_futomaki"}},"mainOutput":{"count":6,"item":"youkaishomecoming:rainbow_futomaki_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

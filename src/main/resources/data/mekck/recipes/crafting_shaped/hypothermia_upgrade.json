@@ -23,5 +23,10 @@
   "result": {
     "item": "mekck:hypothermia_upgrade"
   },
-  "show_notification": true
+  "show_notification": true,
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "avaritia"},
+  {"type": "forge:mod_loaded", "modid": "iceandfire"},
+  {"type": "forge:mod_loaded", "modid": "twilightforest"}
+  ]
 }

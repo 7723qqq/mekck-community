@@ -25,5 +25,8 @@
     "output": {
       "item": "farmersdelight:pasta_with_meatballs",
       "count": 2
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"pineapple_delight:pineapple_pie"}},"mainOutput":{"count":4,"item":"pineapple_delight:pineapple_pie_side"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"pineapple_delight:pineapple_pie"}},"mainOutput":{"count":4,"item":"pineapple_delight:pineapple_pie_side"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "pineapple_delight"}
+  ]
+}

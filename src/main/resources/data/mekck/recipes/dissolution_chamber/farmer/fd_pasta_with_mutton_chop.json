@@ -25,5 +25,8 @@
     "output": {
       "item": "farmersdelight:pasta_with_mutton_chop",
       "count": 2
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

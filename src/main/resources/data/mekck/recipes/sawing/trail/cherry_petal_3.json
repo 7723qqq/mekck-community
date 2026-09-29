@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"minecraft:cherry_leaves"}},"mainOutput":{"count":4,"item":"trailandtales_delight:cherry_petal"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"minecraft:cherry_leaves"}},"mainOutput":{"count":4,"item":"trailandtales_delight:cherry_petal"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "trailandtales_delight"}
+  ]
+}

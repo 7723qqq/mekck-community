@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"pineapple_delight:pineapple"}},"mainOutput":{"count":2,"item":"pineapple_delight:pineapple_side"},"secondaryChance":1.0,"secondaryOutput":{"item":"pineapple_delight:pineapple_crop"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"pineapple_delight:pineapple"}},"mainOutput":{"count":2,"item":"pineapple_delight:pineapple_side"},"secondaryChance":1.0,"secondaryOutput":{"item":"pineapple_delight:pineapple_crop"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "pineapple_delight"}
+  ]
+}

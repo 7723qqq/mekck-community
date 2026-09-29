@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:lemon"}},"mainOutput":{"count":4,"item":"fruitsdelight:lemon_slice"},"secondaryChance":1.0,"secondaryOutput":{"item":"fruitsdelight:lemon_seeds"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:lemon"}},"mainOutput":{"count":4,"item":"fruitsdelight:lemon_slice"},"secondaryChance":1.0,"secondaryOutput":{"item":"fruitsdelight:lemon_seeds"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "fruitsdelight"}
+  ]
+}

@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"muffins_thaidelight:papaya"}},"mainOutput":{"count":2,"item":"muffins_thaidelight:papaya_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"muffins_thaidelight:papaya"}},"mainOutput":{"count":2,"item":"muffins_thaidelight:papaya_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "muffins_thaidelight"}
+  ]
+}

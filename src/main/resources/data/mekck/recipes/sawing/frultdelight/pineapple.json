@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:pineapple"}},"mainOutput":{"count":6,"item":"fruitsdelight:pineapple_slice"},"secondaryChance":1.0,"secondaryOutput":{"item":"fruitsdelight:pineapple_sapling"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:pineapple"}},"mainOutput":{"count":6,"item":"fruitsdelight:pineapple_slice"},"secondaryChance":1.0,"secondaryOutput":{"item":"fruitsdelight:pineapple_sapling"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "fruitsdelight"}
+  ]
+}

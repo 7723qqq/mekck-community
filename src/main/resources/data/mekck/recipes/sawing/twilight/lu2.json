@@ -1,1 +1,6 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"twilightforest:cooked_venison"}},"mainOutput":{"count":2,"item":"twilightdelight:cooked_venison_rib"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"twilightforest:cooked_venison"}},"mainOutput":{"count":2,"item":"twilightdelight:cooked_venison_rib"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "twilightdelight"},
+  {"type": "forge:mod_loaded", "modid": "twilightforest"}
+  ]
+}

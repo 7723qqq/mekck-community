@@ -1,1 +1,6 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"alexscaves:trilocaris_tail"}},"mainOutput":{"count":2,"item":"cavedelight:raw_trilocaris_slice"},"secondaryChance":1.0,"secondaryOutput":{"item":"minecraft:bone_meal"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"alexscaves:trilocaris_tail"}},"mainOutput":{"count":2,"item":"cavedelight:raw_trilocaris_slice"},"secondaryChance":1.0,"secondaryOutput":{"item":"minecraft:bone_meal"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "alexscaves"},
+  {"type": "forge:mod_loaded", "modid": "cavedelight"}
+  ]
+}

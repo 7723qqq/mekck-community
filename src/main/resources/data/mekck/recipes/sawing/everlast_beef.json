@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"artifacts:everlasting_beef"}},"mainOutput":{"count":2,"item":"artifacts:everlasting_beef"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"artifacts:everlasting_beef"}},"mainOutput":{"count":2,"item":"artifacts:everlasting_beef"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "artifacts"}
+  ]
+}

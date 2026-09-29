@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:tarte_lune"}},"mainOutput":{"count":4,"item":"youkaishomecoming:tarte_lune_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:tarte_lune"}},"mainOutput":{"count":4,"item":"youkaishomecoming:tarte_lune_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"oceansdelight:guardian"}},"mainOutput":{"count":1,"item":"oceansdelight:guardian_tail"},"secondaryChance":1.0,"secondaryOutput":{"item":"minecraft:bone_meal"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"oceansdelight:guardian"}},"mainOutput":{"count":1,"item":"oceansdelight:guardian_tail"},"secondaryChance":1.0,"secondaryOutput":{"item":"minecraft:bone_meal"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "oceansdelight"}
+  ]
+}

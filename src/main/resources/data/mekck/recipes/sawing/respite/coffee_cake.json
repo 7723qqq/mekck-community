@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"farmersrespite:coffee_cake"}},"mainOutput":{"count":7,"item":"farmersrespite:coffee_cake_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"farmersrespite:coffee_cake"}},"mainOutput":{"count":7,"item":"farmersrespite:coffee_cake_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "farmersrespite"}
+  ]
+}

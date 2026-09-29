@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"minecraft:ice"}},"mainOutput":{"count":8,"item":"youkaishomecoming:ice_cube"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"minecraft:ice"}},"mainOutput":{"count":8,"item":"youkaishomecoming:ice_cube"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

@@ -4,4 +4,8 @@
 
 }},"output":{
     
-"count":4,"item":"cavedelight:plate_of_roasted_dino_chop"}}
+"count":4,"item":"cavedelight:plate_of_roasted_dino_chop"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "cavedelight"}
+  ]
+}

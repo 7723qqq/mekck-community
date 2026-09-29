@@ -13,9 +13,6 @@
     "item": "farmersrespite:strong_hot_cocoa"
   },
   "conditions": [
-    {
-      "condition": "forge:mod_loaded",
-      "modid": "farmersrespite"
-    }
+    {"type": "forge:mod_loaded", "modid": "farmersrespite"}
   ]
 }

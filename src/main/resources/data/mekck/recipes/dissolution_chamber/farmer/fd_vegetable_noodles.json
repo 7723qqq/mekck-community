@@ -25,5 +25,8 @@
     "output": {
       "item": "farmersdelight:vegetable_noodles",
       "count": 1
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

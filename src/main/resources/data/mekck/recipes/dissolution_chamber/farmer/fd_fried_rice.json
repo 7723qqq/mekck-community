@@ -22,5 +22,8 @@
     "output": {
       "item": "farmersdelight:fried_rice",
       "count": 1
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

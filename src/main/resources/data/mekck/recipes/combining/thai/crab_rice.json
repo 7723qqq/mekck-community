@@ -4,4 +4,8 @@
 
 }},"output":{
     
-"count":4,"item":"muffins_thaidelight:crab_fried_rice"}}
+"count":4,"item":"muffins_thaidelight:crab_fried_rice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "muffins_thaidelight"}
+  ]
+}

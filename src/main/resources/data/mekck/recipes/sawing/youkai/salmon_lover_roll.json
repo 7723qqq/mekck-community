@@ -1,2 +1,6 @@
 {"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:salmon_lover_roll"}},
-"mainOutput":{"count":6,"item":"youkaishomecoming:salmon_lover_roll_slice"}}
+"mainOutput":{"count":6,"item":"youkaishomecoming:salmon_lover_roll_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

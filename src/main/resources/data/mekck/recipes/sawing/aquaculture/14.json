@@ -1,2 +1,6 @@
 {"type":"mekanism:sawing","input":{"ingredient":{"item":"aquaculture:atlantic_halibut"}},"mainOutput":{"count":14,
-"item":"aquaculture:fish_fillet_raw"},"secondaryChance":1.0,"secondaryOutput":{"item":"minecraft:bone_meal"}}
+"item":"aquaculture:fish_fillet_raw"},"secondaryChance":1.0,"secondaryOutput":{"item":"minecraft:bone_meal"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "aquaculture"}
+  ]
+}

@@ -17,5 +17,9 @@
     "output": {
       "item": "farm_and_charm:cat_food",
       "count": 6
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "farm_and_charm"},
+  {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

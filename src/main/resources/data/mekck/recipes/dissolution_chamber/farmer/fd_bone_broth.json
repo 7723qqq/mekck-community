@@ -25,5 +25,8 @@
     "output": {
       "item": "farmersdelight:bone_broth",
       "count": 2
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

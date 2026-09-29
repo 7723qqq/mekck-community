@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"ends_delight:smoked_dragon_leg"}},"mainOutput":{"count":1,"item":"ends_delight:roasted_dragon_meat"},"secondaryChance":1.0,"secondaryOutput":{"count":6,"item":"minecraft:bone_meal"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"ends_delight:smoked_dragon_leg"}},"mainOutput":{"count":1,"item":"ends_delight:roasted_dragon_meat"},"secondaryChance":1.0,"secondaryOutput":{"count":6,"item":"minecraft:bone_meal"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "ends_delight"}
+  ]
+}

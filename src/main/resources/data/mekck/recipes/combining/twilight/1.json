@@ -4,4 +4,8 @@
 
 }},"output":{
     
-"count":4,"item":"twilightdelight:plate_of_meef_wellington"}}
+"count":4,"item":"twilightdelight:plate_of_meef_wellington"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "twilightdelight"}
+  ]
+}

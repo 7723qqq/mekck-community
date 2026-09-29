@@ -1,9 +1,7 @@
 {
   "conditions": [
-    {
-      "type": "forge:mod_loaded",
-      "modid": "roasted"
-    }
+    {"type": "forge:mod_loaded", "modid": "pasterdream"},
+  {"type": "forge:mod_loaded", "modid": "roasted"}
   ],
   "type": "mekanism:nucleosynthesizing",
   "gasInput": {

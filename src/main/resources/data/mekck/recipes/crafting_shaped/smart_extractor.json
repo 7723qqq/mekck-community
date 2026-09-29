@@ -23,5 +23,8 @@
   "result": {
     "item": "mekck:smart_extractor"
   },
-  "show_notification": true
+  "show_notification": true,
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "create"}
+  ]
 }

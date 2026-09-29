@@ -5,4 +5,8 @@
 }},"mainOutput":{"count":4,
 
 "item":"ice_and_fire_delight:fiery_hot_pie_slice"
-}}
+},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "ice_and_fire_delight"}
+  ]
+}

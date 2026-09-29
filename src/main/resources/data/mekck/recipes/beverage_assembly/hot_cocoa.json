@@ -13,18 +13,6 @@
     "item": "farmersdelight:hot_cocoa"
   },
   "conditions": [
-    {
-      "condition": "minecraft:all_of",
-      "terms": [
-        {
-          "condition": "forge:mod_loaded",
-          "modid": "farmersdelight"
-        },
-        {
-          "condition": "forge:mod_loaded",
-          "modid": "farmersrespite"
-        }
-      ]
-    }
+    {"type": "forge:mod_loaded", "modid": "farmersrespite"}
   ]
 }

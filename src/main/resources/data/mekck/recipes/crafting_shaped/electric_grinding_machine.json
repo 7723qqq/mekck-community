@@ -14,5 +14,8 @@
   "output": {
     "count": 1,
     "item": "mekck:electric_grinding_machine"
-  }
+  },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "kaleidoscope_cookery"}
+  ]
 }

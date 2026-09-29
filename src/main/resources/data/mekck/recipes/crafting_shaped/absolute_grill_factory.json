@@ -23,5 +23,8 @@
   "result": {
     "item": "mekck:absolute_grill_factory"
   },
-  "show_notification": true
+  "show_notification": true,
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "mekanism_extras"}
+  ]
 }

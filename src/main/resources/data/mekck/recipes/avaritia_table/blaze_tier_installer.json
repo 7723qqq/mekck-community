@@ -24,5 +24,8 @@
   "result": {
     "item": "mekck:blaze_tier_installer",
     "count": 1
-  }
+  },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "avaritia"}
+  ]
 }

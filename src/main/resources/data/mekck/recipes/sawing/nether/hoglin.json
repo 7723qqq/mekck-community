@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"mynethersdelight:hoglin_loin"}},"mainOutput":{"count":2,"item":"mynethersdelight:hoglin_sausage"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"mynethersdelight:hoglin_loin"}},"mainOutput":{"count":2,"item":"mynethersdelight:hoglin_sausage"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "mynethersdelight"}
+  ]
+}

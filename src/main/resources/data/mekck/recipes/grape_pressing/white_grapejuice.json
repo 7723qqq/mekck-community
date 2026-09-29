@@ -11,5 +11,8 @@
   ],
   "result": {
     "item": "vinery:white_grapejuice"
-  }
+  },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "vinery"}
+  ]
 }

@@ -13,9 +13,6 @@
     "item": "farmersrespite:long_apple_cider"
   },
   "conditions": [
-    {
-      "condition": "forge:mod_loaded",
-      "modid": "farmersrespite"
-    }
+    {"type": "forge:mod_loaded", "modid": "farmersrespite"}
   ]
 }

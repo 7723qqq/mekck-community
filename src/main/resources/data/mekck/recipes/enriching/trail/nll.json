@@ -1,1 +1,5 @@
-{"type":"mekanism:enriching","input":{"ingredient":{"item":"trailandtales_delight:curd_block"}},"output":{"count":1,"item":"trailandtales_delight:cheese_wheel"}}
+{"type":"mekanism:enriching","input":{"ingredient":{"item":"trailandtales_delight:curd_block"}},"output":{"count":1,"item":"trailandtales_delight:cheese_wheel"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "trailandtales_delight"}
+  ]
+}

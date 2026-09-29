@@ -4,4 +4,8 @@
 
 }},"output":{
     
-"count":4,"item":"muffins_thaidelight:somtam"}}
+"count":4,"item":"muffins_thaidelight:somtam"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "muffins_thaidelight"}
+  ]
+}

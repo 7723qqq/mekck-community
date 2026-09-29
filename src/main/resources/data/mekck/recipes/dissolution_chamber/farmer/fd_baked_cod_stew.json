@@ -22,5 +22,8 @@
     "output": {
       "item": "farmersdelight:baked_cod_stew",
       "count": 1
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

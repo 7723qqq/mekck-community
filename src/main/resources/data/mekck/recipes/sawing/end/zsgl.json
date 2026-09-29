@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"minecraft:chorus_fruit"}},"mainOutput":{"count":4,"item":"ends_delight:chorus_fruit_grain"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"minecraft:chorus_fruit"}},"mainOutput":{"count":4,"item":"ends_delight:chorus_fruit_grain"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "ends_delight"}
+  ]
+}

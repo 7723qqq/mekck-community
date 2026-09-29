@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:volcano_roll"}},"mainOutput":{"count":6,"item":"youkaishomecoming:volcano_roll_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:volcano_roll"}},"mainOutput":{"count":6,"item":"youkaishomecoming:volcano_roll_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

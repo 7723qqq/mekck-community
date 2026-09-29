@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"farmersrespite:rose_hip_pie"}},"mainOutput":{"count":4,"item":"farmersrespite:rose_hip_pie_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"farmersrespite:rose_hip_pie"}},"mainOutput":{"count":4,"item":"farmersrespite:rose_hip_pie_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "farmersrespite"}
+  ]
+}

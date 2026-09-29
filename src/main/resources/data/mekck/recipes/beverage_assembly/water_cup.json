@@ -13,9 +13,6 @@
     "item": "miners_delight:water_cup"
   },
   "conditions": [
-    {
-      "condition": "forge:mod_loaded",
-      "modid": "miners_delight"
-    }
+    {"type": "forge:mod_loaded", "modid": "miners_delight"}
   ]
 }

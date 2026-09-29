@@ -20,5 +20,8 @@
   "result": {
     "item": "mekck:gravity_field_upgrade"
   },
-  "show_notification": true
+  "show_notification": true,
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "mekanism_extras"}
+  ]
 }

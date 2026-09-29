@@ -4,4 +4,8 @@
 
 }},"output":{
     
-"count":4,"item":"fruitsdelight:bowl_of_pineapple_fried_rice"}}
+"count":4,"item":"fruitsdelight:bowl_of_pineapple_fried_rice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "fruitsdelight"}
+  ]
+}

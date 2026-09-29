@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:hamimelon"}},"mainOutput":{"count":9,"item":"fruitsdelight:hamimelon_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"fruitsdelight:hamimelon"}},"mainOutput":{"count":9,"item":"fruitsdelight:hamimelon_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "fruitsdelight"}
+  ]
+}

@@ -4,4 +4,9 @@
 
 }},"output":{
     
-"count":1,"item":"mekck:cosmic_cutting_factory"}}
+"count":1,"item":"mekck:cosmic_cutting_factory"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "mekanism_extras"},
+  {"type": "forge:item_exists", "item": "mekanism_extras:cosmic_sawing_factory"}
+  ]
+}

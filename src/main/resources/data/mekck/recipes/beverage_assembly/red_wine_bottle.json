@@ -13,9 +13,6 @@
     "item": "youkaishomecoming:red_wine_bottle"
   },
   "conditions": [
-    {
-      "condition": "forge:mod_loaded",
-      "modid": "youkaishomecoming"
-    }
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
   ]
 }

@@ -5,4 +5,9 @@
 }},"mainOutput":{"count":4,
 
 "item":"twilightdelight:naga_chip"
-}}
+},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "twilightdelight"},
+  {"type": "forge:mod_loaded", "modid": "twilightforest"}
+  ]
+}

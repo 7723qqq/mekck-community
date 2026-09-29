@@ -1,1 +1,6 @@
-{"type":"mekanism:enriching","input":{"ingredient":{"item":"twilightforest:mushgloom"}},"output":{"count":1,"item":"twilightdelight:mushgloom_colony"}}
+{"type":"mekanism:enriching","input":{"ingredient":{"item":"twilightforest:mushgloom"}},"output":{"count":1,"item":"twilightdelight:mushgloom_colony"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "twilightdelight"},
+  {"type": "forge:mod_loaded", "modid": "twilightforest"}
+  ]
+}

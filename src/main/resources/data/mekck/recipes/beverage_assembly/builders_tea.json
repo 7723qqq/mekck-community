@@ -13,9 +13,6 @@
     "item": "create:builders_tea"
   },
   "conditions": [
-    {
-      "condition": "forge:mod_loaded",
-      "modid": "create"
-    }
+    {"type": "forge:mod_loaded", "modid": "create"}
   ]
 }

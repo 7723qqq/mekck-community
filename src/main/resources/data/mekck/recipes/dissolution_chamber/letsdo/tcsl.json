@@ -15,5 +15,9 @@
     "output": {
       "item": "candlelight:beetroot_salad",
       "count": 2
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "candlelight"},
+  {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

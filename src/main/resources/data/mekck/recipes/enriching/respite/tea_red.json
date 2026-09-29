@@ -1,1 +1,5 @@
-{"type":"mekanism:enriching","input":{"ingredient":{"item":"farmersrespite:yellow_tea_leaves"}},"output":{"count":1,"item":"farmersrespite:black_tea_leaves"}}
+{"type":"mekanism:enriching","input":{"ingredient":{"item":"farmersrespite:yellow_tea_leaves"}},"output":{"count":1,"item":"farmersrespite:black_tea_leaves"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "farmersrespite"}
+  ]
+}

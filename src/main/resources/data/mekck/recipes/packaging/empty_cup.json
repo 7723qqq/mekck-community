@@ -1,10 +1,7 @@
 {
   "type": "mekck:packaging",
   "conditions": [
-    {
-      "condition": "forge:mod_loaded",
-      "modid": "kaleidoscope_cookery"
-    }
+    {"type": "forge:mod_loaded", "modid": "kaleidoscope_cookery"}
   ],
   "ingredients": [
     {

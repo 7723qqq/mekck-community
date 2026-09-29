@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:raw_tuna"}},"mainOutput":{"count":3,"item":"youkaishomecoming:raw_tuna_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"youkaishomecoming:raw_tuna"}},"mainOutput":{"count":3,"item":"youkaishomecoming:raw_tuna_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "youkaishomecoming"}
+  ]
+}

@@ -1,1 +1,5 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"ends_delight:chorus_fruit_pie"}},"mainOutput":{"count":4,"item":"ends_delight:chorus_fruit_pie_slice"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"ends_delight:chorus_fruit_pie"}},"mainOutput":{"count":4,"item":"ends_delight:chorus_fruit_pie_slice"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "ends_delight"}
+  ]
+}

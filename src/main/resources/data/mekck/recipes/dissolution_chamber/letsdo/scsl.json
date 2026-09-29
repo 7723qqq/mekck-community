@@ -18,5 +18,9 @@
     "output": {
       "item": "candlelight:salad",
       "count": 4
-    }
-  }
+    },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "candlelight"},
+  {"type": "forge:mod_loaded", "modid": "industrialforegoing"}
+  ]
+}

@@ -12,5 +12,9 @@
   "mainOutput": {
     "count": 3,
     "item": "trailandtales_delight:lantern_fruit"
-  }
+  },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "mekmm"},
+  {"type": "forge:mod_loaded", "modid": "trailandtales_delight"}
+  ]
 }

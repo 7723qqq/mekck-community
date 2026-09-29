@@ -23,5 +23,8 @@
   "result": {
     "item": "mekck:sandwich_assembler"
   },
-  "show_notification": true
+  "show_notification": true,
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "some_assembly_required"}
+  ]
 }

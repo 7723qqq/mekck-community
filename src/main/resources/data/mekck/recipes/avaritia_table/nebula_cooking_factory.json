@@ -32,5 +32,8 @@
   "result": {
     "item": "mekck:nebula_cooking_factory",
     "count": 1
-  }
+  },
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "avaritia"}
+  ]
 }

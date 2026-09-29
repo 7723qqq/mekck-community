@@ -1,1 +1,6 @@
-{"type":"mekanism:sawing","input":{"ingredient":{"item":"iceandfire:dragonbone"}},"mainOutput":{"count":1,"item":"ice_and_fire_delight:flour_from_dragon_bones"}}
+{"type":"mekanism:sawing","input":{"ingredient":{"item":"iceandfire:dragonbone"}},"mainOutput":{"count":1,"item":"ice_and_fire_delight:flour_from_dragon_bones"},
+  "conditions": [
+    {"type": "forge:mod_loaded", "modid": "ice_and_fire_delight"},
+  {"type": "forge:mod_loaded", "modid": "iceandfire"}
+  ]
+}
