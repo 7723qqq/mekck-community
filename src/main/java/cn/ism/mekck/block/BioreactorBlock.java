@@ -124,8 +124,14 @@ public final class BioreactorBlock extends BaseEntityBlock {
         if (!state.is(newState.getBlock())) {
             // 清理绑定方块（整体一起破坏），并掉落方块本体
             MekCkMultiblock.removeBoundingBlocks(level, pos, state, BOUNDING_SHAPE, UniversalCuttingMachine.BIOREACTOR_BOUNDING_BLOCK.get());
-            if (!level.isClientSide) {
-                Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(this));
+            if (!level.isClientSide && level.getBlockEntity(pos) instanceof BioreactorBlockEntity machine) {
+                // 必须把 BE 数据（16 个燃料输入槽、动力槽、流体容器、能量、已存流体）
+                // 序列化进物品：getDrops 返回空，所以这一个物品是状态的唯一载体，
+                // 掉裸方块等于把整台机器的内容物连同储能一起蒸发。
+                // 用继承自 BlockEntity 的 saveToItem，它序列化完整的 saveAdditional 输出。
+                ItemStack stack = new ItemStack(this);
+                machine.saveToItem(stack);
+                Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
             }
         }
         super.onRemove(state, level, pos, newState, movedByPiston);

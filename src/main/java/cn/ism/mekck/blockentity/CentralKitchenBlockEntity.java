@@ -410,6 +410,11 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                 continue;
             }
             // 流体校验（步骤若需要水 / 奶，必须由流体罐提供）
+            //
+            // 这里只做校验、绝不扣流体：下方 tickStep() 在加工完成前每 tick 都返回 false
+            // 并 continue 回本段，若在此处扣除，一个 200 tick 的步骤会扣掉 200 份流体
+            // （等待与排队期间同样照扣），罐子会在瞬间见底且扣掉的水一去不回。
+            // 实际扣除统一放在「本步骤完成」分支（下方），与扣料同一时机。
             if (step.fluidNeed != null && !step.fluidNeed.isEmpty()) {
                 boolean enough = fluidTank.hasEnoughOf(true, step.fluidNeed.waterMb)
                         && fluidTank.hasEnoughOf(false, step.fluidNeed.milkMb);
@@ -418,7 +423,6 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                     order.setNote("缺少流体（水/奶）");
                     continue;
                 }
-                cn.ism.mekck.kitchen.KitchenRecipeMatcher.consumeFluid(fluidTank, step.fluidNeed);
             }
             // ===== 线程占用：同一系列同时推进的订单数不超过线程数 =====
             int used = busyThreads.getOrDefault(step.family, 0);
@@ -687,8 +691,16 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         t.progress++;
         if (t.progress < t.totalTime) return;
         int parallel = Math.max(1, ability.parallel());
-        cn.ism.mekck.kitchen.KitchenRecipeMatcher.insertOutputs(items, OUTPUT_START, OUTPUT_START + OUTPUT_SLOTS,
-                t.outputs, parallel);
+        java.util.List<net.minecraft.world.item.ItemStack> leftover =
+                cn.ism.mekck.kitchen.KitchenRecipeMatcher.insertOutputs(items, OUTPUT_START,
+                        OUTPUT_START + OUTPUT_SLOTS, t.outputs, parallel);
+        if (!leftover.isEmpty()) {
+            // 输出区装不下：保留线程状态，下 tick 重试插入。
+            // 绝不能像以前那样把 leftover 丢掉再无条件重置线程——料是在开工时就扣掉的，
+            // 产物被丢弃等于「吃料不交货」，而且六面默认 NONE 不会自动推出输出区，
+            // 30 格输出槽一旦被占满，这条自动加工线就会永远空转吃料。
+            return;
+        }
         t.recipeId = null;
         t.consumes = null;
         t.outputs = null;
