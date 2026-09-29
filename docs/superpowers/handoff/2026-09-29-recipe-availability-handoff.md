@@ -110,8 +110,20 @@ net.minecraftforge.common.crafting.conditions.AndCondition / OrCondition / NotCo
 }
 ```
 
-> 唯一未实测项：`ConditionalRecipe` 自身的 `type` 值（我推测是 `forge:conditional`，
-> `javap` 未取到）。改一个配方启动一次看日志即可确认，30 秒。
+> **2026-09-29 已确认（字节码常量池证据，无需实机验证）**
+>
+> | 项 | 值 | 证据来源 |
+> |---|---|---|
+> | 配方 type | `forge:conditional` | `ForgeMod` 常量池 `#588=forge` + `#1048=conditional` |
+> | 条件 type | `forge:mod_loaded` | `ModLoadedCondition.NAME` 静态初始化 |
+> | 条件 type | `forge:item_exists`（字段 `item`） | `ItemExistsCondition` |
+> | 包装字段 | `conditions` / `recipe` | `ConditionalRecipe$Serializer` 常量池 #95 / #103 |
+> | 条件字段 | `modid` | `ModLoadedCondition$Serializer` 常量池 #22 |
+>
+> 组合条件用 `forge:and` / `forge:or` / `forge:not`。
+> **原先标注的「未实测项」已关闭**——三个字符串全部来自 `javap` 常量池，
+> 不需要「改一个配方启动游戏」来验证。
+
 
 方块层：Forge 支持在 `RegisterEvent` 里按 `ModList.isLoaded()` 条件注册，
 但那会让**方块 ID 集合随环境变化**（同存档装/卸 mod 会丢方块）。
