@@ -30,19 +30,27 @@ import java.util.Arrays;
  * 单参构造 {@code APILang(String key)} 原样使用传入的 key，故用
  * {@code upgrade.mekck.*}。
  *
- * <h3>为什么 invoker 只能收一个 String</h3>
- * Mixin 对指向 {@code <init>} 的 {@code @Invoker} 会按<b>invoker 自身的描述符</b>
- * 推导目标构造（{@code Bytecode.changeDescriptorReturnType(this.method.desc, "V")}），
- * 再生成 {@code NEW / DUP / 压参 / INVOKESPECIAL / ARETURN}。
- * 参数个数一旦对不上，要么找不到目标构造，要么生成出来的方法通不过字节码校验。
- * 所以必须与 {@code private APILang(String)} 逐个参数对应。
+ * <h3>为什么 invoker 要显式写出 name / ordinal</h3>
+ * Mixin 对指向 {@code <init>} 的 {@code @Invoker}，是拿 <b>invoker 自身的字节码描述符</b>
+ * 去匹配目标构造的（{@code Bytecode.changeDescriptorReturnType(this.method.desc, "V")}），
+ * 匹配上之后生成 {@code NEW / DUP / 压参 / INVOKESPECIAL / ARETURN}。
+ * 所以参数必须按<b>字节码元数</b>写，不能按源码元数写：
+ * 枚举构造的前两个槽位是编译器合成的 {@code (String name, int ordinal)}，
+ * {@code javap} 不加 {@code -s} 时看不到它们。实测：
+ * <pre>
+ *   private APILang(String key);                       // 源码 1 参
+ *       descriptor: (Ljava/lang/String;ILjava/lang/String;)V              // 字节码 3 参
+ *   private APILang(String type, String path);         // 源码 2 参
+ *       descriptor: (Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V  // 字节码 4 参
+ * </pre>
+ * 因此 {@link #mekck$langInitInvoker(String, int, String)} 声明 3 个参数对应单参构造。
+ * 传 1 个参数会让 Mixin 去找不存在的 {@code (Ljava/lang/String;)V}，
+ * 在 required mixin 下直接抛 {@code InvalidAccessorException} 导致启动失败。
  *
- * <h3>注入出来的常量没有 name / ordinal</h3>
- * 枚举的 {@code name} 与 {@code ordinal} 声明在 {@link Enum} 里，
- * 不在 {@code APILang} 的私有构造参数中，无法借这次注入写进去。
- * 因此这 4 个常量只能当译名 key 用：{@code name()} 返回 null、{@code ordinal()} 返回 0。
- * 已核实 Mekanism 1.20.1 自身没有任何一处调用 {@code APILang.values()} 或
- * {@code APILang.valueOf()}，所以不会踩到枚举遍历。
+ * <h3>为什么 ordinal 取数组长度</h3>
+ * {@code ordinal} 必须是常量在 {@code $VALUES} 里的下标。{@code variants} 是加入新常量
+ * <i>之前</i>的快照，其长度恰好等于新常量的下标。name 传常量名后，
+ * {@code name()} 与 {@code valueOf("UPGRADE_STORAGE")} 也能正常工作。
  *
  * <h3>与其它注入者的共存</h3>
  * {@code @Shadow} 读的是目标类的活字段，所以本 Mixin 看到的是
@@ -61,28 +69,32 @@ public abstract class MixinAPILang {
     }
 
     /**
-     * 调 {@code APILang} 的单参私有构造 {@code private APILang(String key)}。
+     * 调 {@code APILang} 的单参私有构造，字节码上即
+     * {@code private APILang(String, int, String)}——前两个参数是枚举编译器合成的
+     * {@code name} 与 {@code ordinal}，源码签名里看不到，必须显式声明。
      *
      * <p>必须 {@code static} 且返回 {@link APILang}，否则 Mixin 不会把它当成
      * 构造器工厂（{@code OBJECT_FACTORY}）而按普通方法代理处理。
      */
     @Invoker("<init>")
-    public static APILang mekck$langInitInvoker(String key) {
+    public static APILang mekck$langInitInvoker(String internalName, int internalId, String key) {
         throw new AssertionError("mixin 未应用");
     }
 
     @Inject(method = "<clinit>", at = @At("TAIL"))
     private static void mekck$injectLangEntries(CallbackInfo ci) {
-        MekCkAPILang.upgradeStorage = mekck$add("upgrade.mekck.storage");
-        MekCkAPILang.upgradeStorageDescription = mekck$add("upgrade.mekck.storage.description");
-        MekCkAPILang.upgradeRandomize = mekck$add("upgrade.mekck.randomize");
-        MekCkAPILang.upgradeRandomizeDescription = mekck$add("upgrade.mekck.randomize.description");
+        MekCkAPILang.upgradeStorage = mekck$add("UPGRADE_STORAGE", "upgrade.mekck.storage");
+        MekCkAPILang.upgradeStorageDescription =
+                mekck$add("UPGRADE_STORAGE_DESCRIPTION", "upgrade.mekck.storage.description");
+        MekCkAPILang.upgradeRandomize = mekck$add("UPGRADE_RANDOMIZE", "upgrade.mekck.randomize");
+        MekCkAPILang.upgradeRandomizeDescription =
+                mekck$add("UPGRADE_RANDOMIZE_DESCRIPTION", "upgrade.mekck.randomize.description");
     }
 
     @Unique
-    private static APILang mekck$add(String key) {
+    private static APILang mekck$add(String internalName, String key) {
         ArrayList<APILang> variants = new ArrayList<>(Arrays.asList($VALUES));
-        APILang entry = mekck$langInitInvoker(key);
+        APILang entry = mekck$langInitInvoker(internalName, variants.size(), key);
         variants.add(entry);
         $VALUES = variants.toArray(new APILang[0]);
         return entry;
