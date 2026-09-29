@@ -4,7 +4,6 @@ import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.config.MekckConfig;
 import mekanism.api.Upgrade;
 import mekanism.common.item.interfaces.IUpgradeItem;
-import mekanism.common.util.UpgradeUtils;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.ItemStack;
 
@@ -101,21 +100,45 @@ public final class MekCkUpgradeTypes {
     /**
      * 升级物品 → 升级常量。
      *
-     * <p>优先走 {@link IUpgradeItem}：卡片自身知道自己是哪张，O(1)，且对
-     * 任何按 Mek 规矩实现的第三方卡片都成立。Mek 自己的 7 种卡片全部走这条
-     * （{@code mekanism.common.item.ItemUpgrade implements IUpgradeItem}）。
-     * 不实现该接口的物品再回退到逐个比对原生卡片。
+     * <p><b>设计约束：升级物品一律经 {@link IUpgradeItem} 识别，没有第二条路。</b>
+     * 这不是省事，而是被 Mek 自己的代码逼出来的：
      *
-     * <p><b>回退只遍历 Mek 原生的 7 个常量，不能遍历 {@link #all()}</b>：
-     * {@code UpgradeUtils.getStack} 是 javac 合成的 {@code switch (type.ordinal())}，
-     * 映射表 {@code UpgradeUtils$1.$SwitchMap$mekanism$api$Upgrade} 只给
-     * Mek 自己声明的 7 个常量填了值，注入常量的槽位保持 0。实测：
+     * <p>① Mek 的 7 张原生卡全部走这条。实测
+     * {@code mekanism.common.item.ItemUpgrade implements IUpgradeItem}，
+     * 且 {@code MekanismItems.registerUpgrade} 的 supplier 就是
+     * {@code new ItemUpgrade(upgrade, properties)}。
+     *
+     * <p>② <b>不实现该接口的卡，Mek 自己也不认。</b>
+     * {@code UpgradeInventorySlot} 的输入槽判定就是一把「非 {@code IUpgradeItem} 即拒绝」：
+     * <pre>
+     *   $ javap -p -c mekanism.common.inventory.slot.UpgradeInventorySlot
+     *     private static boolean lambda$input$0(java.util.Set, net.minecraft.world.item.ItemStack, mekanism.api.AutomationType);
+     *         Code:
+     *            6: instanceof    #137  // class mekanism/common/item/interfaces/IUpgradeItem
+     *            9: ifeq          37
+     *           ...
+     *           21: invokeinterface #143 // InterfaceMethod .../IUpgradeItem.getUpgradeType:(...)Lmekanism/api/Upgrade;
+     *           ...
+     *           31: invokeinterface #148 // InterfaceMethod java/util/Set.contains:(Ljava/lang/Object;)Z
+     *           37: iconst_0
+     *           38: ireturn              // 不是 IUpgradeItem → 一律拒绝
+     * </pre>
+     * {@code TileComponentUpgrade.tickServer()} 同样先
+     * {@code instanceof IUpgradeItem} 再取 type。
+     * 所以「能装进 Mek 升级槽」与「实现 {@code IUpgradeItem}」是同一条线，
+     * 本方法没有额外能捞回来的东西。
+     *
+     * <p><b>不要试图用 {@code UpgradeUtils.getStack(type, n)} 反查</b>：
+     * 它不是查表，而是 javac 合成的 {@code switch (type.ordinal())}，
+     * 索引 {@code UpgradeUtils$1.$SwitchMap$mekanism$api$Upgrade}。
+     * 该表只给 Mek 自己声明的 7 个常量填了槽位，<b>注入常量的槽位恒为 0</b>，
+     * 于是落进 {@code default} 分支。实测：
      * <pre>
      *   $ javap -p -c mekanism.common.util.UpgradeUtils
      *     public static net.minecraft.world.item.ItemStack getStack(mekanism.api.Upgrade, int);
      *         Code:
      *            0: getstatic     #30  // Field UpgradeUtils$1.$SwitchMap$mekanism$api$Upgrade:[I
-     *            3: aload_0
+     *            ...
      *            4: invokevirtual #34  // Method mekanism/api/Upgrade.ordinal:()I
      *            7: iaload
      *            8: tableswitch   { // 1 to 7
@@ -128,30 +151,13 @@ public final class MekCkUpgradeTypes {
      *           55: dup
      *           56: invokespecial #37  // Method java/lang/IncompatibleClassChangeError."&lt;init&gt;":()V
      *           59: athrow
-     *
-     *   $ javap -p -c "mekanism.common.util.UpgradeUtils$1"
-     *     static {};
-     *         ...
-     *         0: invokestatic  #19  // Method mekanism/api/Upgrade.values:()[Lmekanism/api/Upgrade;
-     *         3: arraylength
-     *         4: newarray       int
-     *         6: putstatic      #21  // Field $SwitchMap$mekanism$api$Upgrade:[I
-     *         9: getstatic      #21  // Field $SwitchMap$mekanism$api$Upgrade:[I
-     *        12: getstatic      #25  // Field mekanism/api/Upgrade.SPEED:Lmekanism/api/Upgrade;
-     *        15: invokevirtual #29  // Method mekanism/api/Upgrade.ordinal:()I
-     *        18: iconst_1
-     *        19: iastore
-     *         ...
      * </pre>
-     * 数组长度取自那一刻的 {@code values().length}，而只有 7 个 {@code iastore}
-     * 分别写入 {@code Upgrade.SPEED} 之类的原生常量，注入常量的槽位恒为 0。
-     * 换句话说，{@code getStack} 对注入常量（ordinal ≥ 7）会<b>抛异常而不是返回空栈</b>：
-     * 映射表若在注入之后初始化是 {@code IncompatibleClassChangeError}（落 default），
-     * 若在注入之前初始化则数组长度不够、{@code iaload} 越界是
-     * {@code ArrayIndexOutOfBoundsException}——<b>两种都取决于加载顺序</b>。
-     * 而 {@link #byItem} 的入参是「槽位里的任意物品」，普通物品必然走到回退循环，
-     * 于是每一次非升级物品的查询都会崩。原生卡片本来就走 {@code IUpgradeItem}，
-     * 这层回退只是兜底，按原生清单遍历即可。
+     * 也就是<b>对注入常量抛 {@code IncompatibleClassChangeError} 而不是返回空栈</b>
+     * （若该映射表在注入之前初始化，数组长度不够，{@code iaload} 越界则是
+     * {@code ArrayIndexOutOfBoundsException}——两种都取决于加载顺序）。
+     * 这正是上一版「按原生 7 常量回退」被换成「完全不回退」的原因：
+     * 原生常量本来就走 {@code IUpgradeItem}，而唯一能被回退「救回来」的
+     * 第三方卡，恰好就是会让 {@code getStack} 崩的那一批。
      *
      * <p><b>不要记日志</b>：本方法会被槽位校验逐 tick 调用，普通物品查不到是常态。
      */
@@ -162,28 +168,7 @@ public final class MekCkUpgradeTypes {
         if (stack.getItem() instanceof IUpgradeItem upgradeItem) {
             return Optional.ofNullable(upgradeItem.getUpgradeType(stack));
         }
-        for (Upgrade type : nativeUpgrades()) {
-            if (stack.is(UpgradeUtils.getStack(type, 1).getItem())) {
-                return Optional.of(type);
-            }
-        }
         return Optional.empty();
-    }
-
-    /**
-     * {@code UpgradeUtils.getStack} 的 {@code tableswitch} 认识的那 7 个常量。
-     *
-     * <p><b>不要缓存成 static final 字段</b>：那会把 {@code Upgrade.values()} 的取值
-     * 钉死在本类首次加载的瞬间。若那次加载发生在 {@code Upgrade.<clinit>} 执行途中
-     * （例如被某个 Mixin 的 TAIL 触达），拿到的就是还没被追加完的半成品数组，
-     * 且此后永不更新——正是 {@link MekCkUpgradeCodec#byName} 注释里要避开的那类时序。
-     * 这里每次现造数组，代价可以忽略（本方法只在非 {@code IUpgradeItem} 的物品上才走到）。
-     */
-    private static Upgrade[] nativeUpgrades() {
-        return new Upgrade[]{
-                Upgrade.SPEED, Upgrade.ENERGY, Upgrade.FILTER, Upgrade.GAS,
-                Upgrade.MUFFLING, Upgrade.ANCHOR, Upgrade.STONE_GENERATOR
-        };
     }
 
     /**
@@ -193,16 +178,28 @@ public final class MekCkUpgradeTypes {
      * {@code MekckConfig} 参与配置的三种（速度/能量/存储），其余留给 Mek 自己的
      * 机器语义，避免装上无效果的卡。
      *
-     * <p><b>本方法目前不看 {@code tier}</b>（全档位同一答案，见上面的枚举）。
-     * 因此 {@code SINGULARITY} 也会被判为接受存储卡，尽管
-     * {@code MekckConfig.getFactoryStackUpgradeMax} 在该档返回 0
-     * （{@code CuttingMachineFactoryTier#supportsStackUpgrade} 明确排除它），
-     * 最终由 {@link #capOf(Upgrade, CuttingMachineFactoryTier)} 把上限裁到 0 兜住。
-     * 若将来要让「接受」本身也随档位变化，在这里补分支。
+     * <p><b>存储卡是唯一随档位变化的分支，判据只能取
+     * {@link CuttingMachineFactoryTier#supportsStackUpgrade()}</b>：
+     * 它是「本档位是否有倍增资格」的<b>唯一权威定义</b>，明确排除 {@code SINGULARITY}。
+     * <b>不要在这里另写一遍 {@code ordinal()} 或 {@code processes >= N} 的推导</b>——
+     * 历史上正是这类重复推导导致各机器对「哪些档能叠」的判断互相矛盾。
+     *
+     * <p>{@code SINGULARITY} 因此直接判 false，而不是像旧写法那样判 true 再靠
+     * {@link #capOf(Upgrade, CuttingMachineFactoryTier)} 把上限裁到 0 兜底：
+     * 「不接受」与「能装但上限为 0」是两件事，槽位校验要的是前者。
+     *
+     * <p>{@code RANDOMIZE} / {@code SPEED} / {@code ENERGY} 与档位无关：
+     * 随机化是全局特性；速度与能量的<b>数量</b>由档位配置裁剪（见
+     * {@link #capOf(Upgrade, CuttingMachineFactoryTier)}），资格不在这里拦。
+     *
+     * @param tier {@code null} 表示「不知道档位」。此时存储卡判 {@code false}——
+     *              宁可漏判为不接受，也不要在缺依据时放过一档没有倍增资格的机器。
      */
     public static boolean isSupportedBy(Upgrade type, CuttingMachineFactoryTier tier) {
-        return type == MekCkUpgradeRefs.storage()
-                || type == MekCkUpgradeRefs.randomize()
+        if (type == MekCkUpgradeRefs.storage()) {
+            return tier != null && tier.supportsStackUpgrade();
+        }
+        return type == MekCkUpgradeRefs.randomize()
                 || type == Upgrade.SPEED
                 || type == Upgrade.ENERGY;
     }
@@ -239,9 +236,31 @@ public final class MekCkUpgradeTypes {
         return Math.max(0, Math.min(configured, type.getMax()));
     }
 
-    /** 解码，按 {@link #capOf(Upgrade)} 裁剪。 */
+    /**
+     * 解码，<b>不</b>按 MekCK 配置裁剪，只按 {@link Upgrade#getMax()} 裁。
+     *
+     * <p>等价于 {@code decode(tag, null)}。仅供「确实没有档位概念」的场合使用；
+     * <b>凡是能拿到档位的地方（方块实体读档）一律用
+     * {@link #decode(CompoundTag, CuttingMachineFactoryTier)}</b>，
+     * 否则不支持倍增的档位会把存档里的存储卡数量读成 {@code getMax()}（6），
+     * 而不是它在 MekCK 配置里真正的上限。
+     */
     public static MekCkUpgradeCodec.Decoded<Upgrade> decode(CompoundTag tag) {
-        return MekCkUpgradeCodec.decode(tag, MekCkUpgradeTypes::resolve, MekCkUpgradeTypes::capOf);
+        return decode(tag, null);
+    }
+
+    /**
+     * 解码，按 {@link #capOf(Upgrade, CuttingMachineFactoryTier)} 裁剪。
+     *
+     * <p>读档与运行期走<b>同一条</b>裁剪契约
+     * {@code min(MekCK 配置的按等级上限, type.getMax())}，
+     * 这样存档里的数量在进内存的那一刻就已经是合法的，不会出现
+     * 「读进来一堆、再被 tick 逻辑逐个削掉」的中间态。
+     *
+     * @param tier {@code null} 时回落到 {@link #capOf(Upgrade)}（不按配置裁）
+     */
+    public static MekCkUpgradeCodec.Decoded<Upgrade> decode(CompoundTag tag, CuttingMachineFactoryTier tier) {
+        return MekCkUpgradeCodec.decode(tag, MekCkUpgradeTypes::resolve, type -> capOf(type, tier));
     }
 
     /** 编码，带上无法解析的原始条目以免丢失。 */
