@@ -15,6 +15,11 @@
   也**没有** `RecipeFinder` / `BasicMachine` / `ITickingTile`；
   配方走 `IRecipeLookupHandler` + `RecipeCacheLookupMonitor` + `CachedRecipe` 三件套。
   v1/v2 的自定义泛型 + `findRecipe`/`executeRecipe` 抽象方法**已废弃**。
+- **v4：按用户复审补齐缺口**——
+  §5 清除 v1/v2 遗留（自定义配方泛型 / `MekCkFactoryRecipe` / 不存在的
+  `MekCkUpgradeRegistry`）；§6.5 实测每个工艺的配方来源（发现 3 个工艺无自有配方）；
+  §8.3 档位接入 Mek `ITier`（含硬边界）；§10.1 三个特例工艺的失败模式；
+  §11 第 6/7/8 条补齐；新增 §14 条件化方块注册、§15 测试策略。
 
 **两份 spec 的分工**
 | 阶段 | 权威文档 |
@@ -207,29 +212,39 @@ protected onUpdateServer()   // 调 ejector
 
 ## 5. 分层架构
 
+> **v4 更正**：本节原为 v1/v2 版本，遗留了两处已被 v3 推翻的内容——
+> `TileEntityMekCkFactory<MekCkXxxRecipe>` 的**自定义配方泛型**，以及要新建的
+> `MekCkFactoryRecipe` 统一接口。二者与 §6.2 的决策直接冲突（配方走 Mek 的
+> `IRecipeLookupHandler` + `CachedRecipe`，**不引入自定义配方基类与泛型参数**）。
+> 照原图实现会重造 v1/v2 被废弃的抽象。下面是订正后的结构。
+
 ```
 mekck/
 ├── factory/                     Mek 机器层（方块 / 通用 tile / GUI / 注册）
-│   ├── MekCkFactoryRegistration     84 个方块注册
+│   ├── MekCkFactoryRegistration     84 个方块注册（★ 条件化注册，见 §14）
 │   ├── MekCkFactoryBlock            extends BlockTile
 │   ├── MekCkFactoryMultiblockBlock  ★ 新增：PLANTING_CUTTING 用
 │   ├── MekCkFactoryType             7 工艺（需补 recipeTypeName）
-│   ├── MekCkFactoryTier             12 等级
-│   ├── TileEntityMekCkFactory       ★ 抽象基类：全部通用加工流程
+│   ├── MekCkFactoryTier             12 等级（★ 实现 ITier，见 §8.3）
+│   ├── TileEntityMekCkFactory       ★ 抽象基类：全部通用加工流程（不泛型）
 │   └── MekCkFactoryMenu/Screen
 │
 ├── machine/                      工艺实现层（每工艺一个）
-│   └── MekCkXxxFactoryTile extends TileEntityMekCkFactory<MekCkXxxRecipe>
+│   └── MekCkXxxFactoryTile extends TileEntityMekCkFactory
 │
 ├── recipe/                       配方层
-│   ├── MekCkFactoryRecipe           ★ 统一接口（7 工艺共用）
-│   └── MekCkXxxRecipe + Serializer
+│   ├── MekCkXxxRecipe              继承 Mek 的 ItemStackToItemStackRecipe
+│   └── MekCkXxxRecipeSerializer    ItemStackToItemStackRecipeSerializer<>(…)
 │
 └── upgrade/                      升级层
-    └── MekCkUpgradeRegistry
+    └── MekCkUpgradeTypes          阶段 1 产出（★ 名字以阶段 1 plan 为准）
 ```
 
 **依赖方向严格单向**：`machine → recipe → factory`。`factory` 层不认识任何具体工艺。
+
+**命名权威**：升级层的类名以 `../plans/2026-09-29-mekck-phase1-upgrade-system.md`
+为准（`MekCkUpgradeTypes` / `MekCkUpgradeCodec`）。本节早期版本写的
+`MekCkUpgradeRegistry` **不存在**，不要创建。
 
 ---
 
@@ -350,6 +365,68 @@ if (currentMax > 0) {
 注意 `ICE` 的输入槽为 0，与 `TileEntityMekCkFactory.addSlotGrid` 的
 「输入 = 输出 = processes」假设**冲突**，需特殊处理。
 
+### 6.5 配方来源归属（v4 新增，实测代码得出）
+
+§6.4 让人以为 7 个工艺各有自己的配方类型。**实测旧 BE 后发现不是。**
+下表全部来自 `src/main/java` 的实际读取代码，不是推测：
+
+| 工艺 | 配方 `RecipeType` 来源 | 命名空间归属 | mekck 自带配方数 |
+|---|---|---|---|
+| **GRILLING** | `barbequesdelight:grilling` | **外部，未声明依赖** | **0** |
+| **SKEWERING** | `barbequesdelight:skewering` | **外部，未声明依赖** | **0** |
+| **COOKING** | farmersdelight 烹饪 + `avaritia_delight:extreme_cooking_{shaped,shapeless}` + kaleidoscope 的 stockpot / pot / flex | **外部** | 0 |
+| CUTTING | `mekanism:sawing` | Mek（强制依赖） | 94 |
+| PLANTING_CUTTING | `mekanism:combining`（升级路径）/ `mekck:plantcut` | Mek / 自有 | 31 / 0 |
+| GRINDING | `mekck:grinding` | 自有 | 1 |
+| ICE | `mekck:ice_make` | 自有 | 4 |
+
+（「自带配方数」= `src/main/resources/data/mekck/recipes/` 下引用该命名空间的文件数。）
+
+#### 6.5.1 三个必须写进设计的结论
+
+**结论 1：7 个工艺里有 3 个（GRILLING / SKEWERING / COOKING）没有 mekck 自有配方。**
+用户诉求「注册我们的配方」在这三个工艺上**目前是空的**——不是没注册，是没有内容。
+迁移到 Mek 机器框架时若照 §6.4 的印象给它们建自有配方类型，等于**放弃**这三条外部配方链，
+是功能倒退。
+
+**结论 2：`barbequesdelight` 在 mekck 的配方数据里引用数为 0，且不在 `mods.toml`。**
+即：即使玩家装了 Barbeques Delight，GRILLING / SKEWERING 两个工厂
+**在 mekck 侧也一个配方都没有**。这两个工厂目前实质上是空壳。
+这不是迁移引入的问题，是现状缺陷——但迁移会把它固化成"看起来能跑、实际没有配方"的状态。
+
+**结论 3：旧代码已有优雅降级，迁移必须保留。**
+`GrillFactoryBlockEntity` / `SkeweringFactoryBlockEntity` / `CookingFactoryBlockEntity`
+的模式都是：
+
+```java
+RecipeType<?> t = RecipeCache.type(new ResourceLocation("<外部命名空间>", "<类型>"));
+if (t == null) return Optional.empty();     // 源 mod 缺席 → 安静不可用
+```
+
+即**配方源缺席时机器不报错，只是没有可用配方**。这是正确设计，
+迁移到 `IRecipeLookupHandler` 时**不要改成硬依赖**。
+`mods.toml` 也不应把 `barbequesdelight` 声明为强制依赖。
+
+#### 6.5.2 自有 RecipeType 全清单
+
+全部注册在 `UniversalCuttingMachine.java`（`RECIPE_TYPES.register(name, …)`，
+未写命名空间故均为 `mekck:` 前缀）：
+
+| id | 配方类 | 归属 |
+|---|---|---|
+| `mekck:plantcut` | `PlantingCuttingRecipe` | A 组（PLANTING_CUTTING） |
+| `mekck:ice_make` | `IceMakeRecipe` | A 组（ICE） |
+| `mekck:grinding` | `GrindingRecipe` | A 组（GRINDING） |
+| `mekck:beverage_assembly` | `BeverageAssemblyRecipe` | **B/C 组**（不是 COOKING 工厂） |
+| `mekck:packaging` | `PackagingRecipe` | B/C 组 |
+| `mekck:grape_pressing` | `GrapePressingRecipe` | B/C 组 |
+| `mekck:extracting` | `ExtractingRecipe` | B/C 组 |
+| `mekck:ferrero` | `FerreroRecipe` | B/C 组 |
+| `mekck:nut_roasting` | `NutRoastingRecipe` | B/C 组 |
+
+> 注意 `mekck:beverage_assembly` 名字最像"烹饪工厂"，实际属于 B/C 组的饮品机器。
+> 迁移时**不要**把它当成 COOKING 工厂的配方类型。
+
 ---
 
 ## 7. 进度与存档（v2 补全）
@@ -416,7 +493,121 @@ B/C 组旧机器用旧的，A 组新机器用 Mek 的。阶段 5 后再决定是
 **未声明 `mekanism_extras`**。未装 Mek Extras 时两类升级卡静默失效——
 `getType()` 恒返回 `NONE`，STACK/CREATIVE 槽永远填不上，线程数锁死基础值。
 
+### 8.3 档位接入 Mek `ITier`（v4 新增，2026-09-29 决策）
+
+**决策**：`MekCkFactoryTier` 实现 `mekanism.api.tier.ITier`，让 12 档成为**合法的 Mek 档位**，
+而不是私有平行枚举。
+
+#### 8.3.1 Mek 侧已核实 API
+
+`javap` 读 `mekanism-268560-6018299_mapped_official_1.20.1.jar`：
+
+```java
+public interface mekanism.api.tier.ITier {
+    BaseTier getBaseTier();          // 只有一个方法
+}
+
+public enum BaseTier implements StringRepresentable, SupportsColorMap {
+    BASIC, ADVANCED, ELITE, ULTIMATE, CREATIVE;   // 只有 5 个常量
+    // getSimpleName / getLowerName / getMapColor / getRgbCode / getColor / getSerializedName
+}
+
+public record AttributeTier<TIER extends ITier>(TIER tier) implements Attribute { … }
+```
+
+> **更正既有代码注释**：`MekCkFactoryTier:26` 与 `CuttingMachineFactoryTier:6` 写的
+> 「与 Mek `BaseTier`(BASIC~ULTIMATE) + `AdvancedTier`(ABSOLUTE~INFINITE) 对齐」中，
+> **`AdvancedTier` 这个类在 Mek 1.20.1 中不存在**。Mek 的公开档位 API 只有
+> `BaseTier` 的 5 个常量。那句注释描述的是配色参考，不是可对接的类型。
+> 本次一并订正。
+
+#### 8.3.2 映射表
+
+用户决策：**有 Mek 拓展就映射到对应 Mek 档位；没有的一律映射到 `BaseTier.ULTIMATE`
+（终极工厂升级）**。
+
+| mekck 档位 | 并行槽 | → `getBaseTier()` | 理由 |
+|---|---|---|---|
+| `BASIC` | 3 | `BaseTier.BASIC` | 一一对应 |
+| `ADVANCED` | 5 | `BaseTier.ADVANCED` | 一一对应 |
+| `ELITE` | 7 | `BaseTier.ELITE` | 一一对应 |
+| `ULTIMATE` | 9 | `BaseTier.ULTIMATE` | 一一对应 |
+| `ABSOLUTE` | 11 | `BaseTier.ULTIMATE` | Mek 无对应档 |
+| `SUPREME` | 13 | `BaseTier.ULTIMATE` | 同上 |
+| `COSMIC` | 15 | `BaseTier.ULTIMATE` | 同上 |
+| `INFINITE` | 17 | `BaseTier.ULTIMATE` | 同上 |
+| `BLAZE` | 25 | `BaseTier.ULTIMATE` | 同上 |
+| `CRYSTAL_MATRIX` | 36 | `BaseTier.ULTIMATE` | 同上 |
+| `NEBULA` | 49 | `BaseTier.ULTIMATE` | 同上 |
+| `SINGULARITY` | 81 | `BaseTier.ULTIMATE` | 同上 |
+
+`BaseTier.CREATIVE` **不映射任何档位**——它对应 Mek 的创造模式物品，与工厂档位无关。
+
+> 12 档压成 5 档是刻意的：档位身份仍由方块 ID 承载（§9 硬约束），
+> `getBaseTier()` 只用于「Mek 侧通用机制需要一个粗粒度档位」的场合。
+> 压到 `ULTIMATE` 的 8 档不会被 Mek 误判成基础档。
+
+#### 8.3.3 ⚠ 硬边界：实现 `ITier` **不会**让 `Attribute.getBaseTier(block)` 生效
+
+这一点必须写死，否则后续实现者会误以为接了 `ITier` 就「Mek 认得我们的档位」。
+
+`Attribute` 的静态读取实现（字节码）：
+
+```java
+public static BaseTier getBaseTier(Block block) {
+    AttributeTier at = Attribute.get(block, AttributeTier.class);
+    return at == null ? null : at.tier().getBaseTier();
+}
+```
+
+即：**方块的 `BlockType` 上必须挂有 `AttributeTier`，否则返回 `null`。**
+
+而 `AttributeTier` 对 addon **不可设置**：
+
+- 引用 `AttributeTier` 的只有 5 种传输管线（`BlockLogisticalTransporter` /
+  `BlockMechanicalPipe` / `BlockPressurizedTube` / `BlockThermodynamicConductor` /
+  `BlockUniversalCable`）和 Mek 自家的 `Factory` 方块类型。
+- `BlockType$BlockTypeBuilder` **没有** `withTier`；唯一带 `ITier` 的入口是
+  `withComputerSupport(ITier, String)`，而它的字节码是：
+
+  ```java
+  public T withComputerSupport(ITier tier, String name) {
+      return withComputerSupport(tier.getBaseTier().getLowerName() + name);
+  }
+  public T withComputerSupport(String name) {
+      return with(new AttributeComputerIntegration(name));   // 记录里只有 String name
+  }
+  ```
+
+  **ITier 在构建期就被消费成字符串，`ITier` 本身不留在 `BlockType` 上。**
+  所以即便调了 `withComputerSupport`，`AttributeTier` 依然不存在，
+  `Attribute.getBaseTier(block)` 仍返回 `null`。
+
+**结论**：实现 `ITier` 的收益是——我们的档位成为任何接受 `ITier` 的 Mek API 的合法输入，
+并且我们自己可以用 `Attribute.getTier(block, MekCkFactoryTier.class)` 这条路做统一查询
+（前提是自己维护 `Block → MekCkFactoryTier` 的反查，即已有的 `tierFromBlock()`）。
+收益是**有限且明确的**，不要在文档或对外说明里夸大成「Mek 支持我们的档位」。
+
+#### 8.3.4 与 `TileEntityFactory` 的关系不变
+
+`TileEntityFactory` 的档位字段是**具体类型** `public FactoryTier tier`，
+不是 `ITier`（常量池里的 `ITier` 只来自 `Attribute.getTier` 调用）。
+且 `Factory$FactoryBuilder.createFactory(Supplier, FactoryType, FactoryTier)` 的
+最后一参**写死 `FactoryTier`**，不接受任意 `ITier`。
+
+这印证 §3 第 2 条：`TileEntityMekCkFactory` 与 `TileEntityFactory` 平行、不是子类，
+所以我们可以保留 `MekCkFactoryTier` 字段类型不变，只是让它多实现一个 `ITier`。
+**不引入对 `FactoryBuilder` 的依赖。**
+
+#### 8.3.5 存档影响：无
+
+`MekCkFactoryTier` 实现的是 `StringRepresentable`，序列化走 `getSerializedName()`
+（名字）而非 `ordinal()`。这与 §8.1 提到的 `Upgrade` 枚举按 `ordinal()` 持久化、
+注入会静默损坏存档的缺陷**性质不同**——我们走名字，无此风险。
+阶段 4 的存档兼容层**不需要**为档位做任何映射。
+
 ---
+
 
 ## 9. 存档兼容
 
@@ -456,6 +647,44 @@ v3 起失败模式**不再由我们自己的 `tick()` 处理**，而是通过
 `finishProcessing` 回调**之前**判定（等价于 v2 的 `canAcceptResult()` 前置），
 或直接在 `calculateOperationsThisTick` 里让「产物放不下」的输入被拒绝为 `currentMax = 0`。
 
+### 10.1 三个特例工艺的失败模式（v4 新增）
+
+上面的三态语义是通用规则，但有三个工艺的结构会让通用规则**不够用**。
+逐个给条款：
+
+#### 10.1.1 ICE —— 无输入槽
+
+`§6.4` 已记录 ICE 的输入槽为 0，与 `addSlotGrid`「输入 = 输出 = processes」冲突。失败模式上的具体后果：
+
+- ICE 靠外部供料（流体管道 / 其他机器）注入，**输入不是物品槽**。
+  「缺原料」这个 `= 0` 状态在 ICE 里的判据不是"输入槽空"，而是**流体容器为空**。
+- 产物只有一个，且是流体。**「产物放不下」的判定对象是输出流体容器，不是输出槽。**
+  若输出容器已满，必须停在 `currentMax = 0`，不得返回负数（否则流体被抽走却没有去处）。
+- `processes` 对 ICE 无意义（单一流体输出），档位差异只体现在能量容量上。
+  实现时**不要**给 ICE 建 `processes` 个并行槽。
+
+#### 10.1.2 COOKING —— 144 格材料库
+
+COOKING 有 144 格材料库（`§6.4`），与另外 6 个工艺的 `processes × 2` 槽位模型完全不同。
+
+- 材料库**不参与** `currentMax` 计算，它是"配方可选取用哪些材料"的来源，
+  不是"这一 tick 能处理几份"的计数。
+- 配方可能声明**多个候选输入**，从材料库里自动选料。此时"缺原料"要细分为：
+  - 材料库里有满足配方的料，但**输出放不下** → `currentMax = 0`（暂停，进度保留）
+  - 材料库里**根本没有**满足配方的料 → `currentMax = 0`（暂停，等玩家投料）
+  - 两者都成立时**优先按"放不下"处理**，因为它可恢复，后者也 recover，但前者更常见
+- 144 格材料库迁到 Mek 槽位时（§12 阶段 2），槽位数量超出 `InventorySlotHelper` 常规用法，
+  需单独确认上限与性能，**不能默认照搬其他工艺的槽位装配**。
+
+#### 10.1.3 GRILLING —— 调味槽
+
+- 调味槽（seasoning）是**独立于主输入的第二个输入**，不参与并行计数。
+- 调味料的语义通常是"可选但影响产物"：配方可能声明"有调味料走 A 产物，无则走 B 产物"。
+  这意味着**同一台机器同一时刻可能匹配两条不同配方**，配方查找必须能区分这两种情况，
+  且 `getRecipe(int)` 的槽位索引要能把主输入与调味槽分开传。
+- 调味料耗尽 ≠ 原料耗尽。若把"调味槽空"当 `currentMax < 0`，会在换配方时清空
+  已积累的 `operatingTicks`，等于惩罚玩家。**调味槽空一律按 `= 0` 处理。**
+
 ---
 
 ## 11. Mek 1.20.1 API 契约（v3 已实测填入）
@@ -481,8 +710,15 @@ v3 起失败模式**不再由我们自己的 `tick()` 处理**，而是通过
 6. **多方块 tile 基类** — `BlockBasicMultiblock<TILE extends TileEntityMekanism> extends
    BlockTile<TILE, BlockTypeTile<TILE>>`（**与 `MekCkFactoryBlock` 同源，不推翻继承链**）；
    方块属性用 `AttributeMultiblock`（`EXTERNAL` / `STRUCTURAL` / `INTERNAL`）。
-   **仍未定**：Mek 自有多方块 tile（`TileEntityMultiblock`）不继承
-   `TileEntityConfigurableMachine`，需在阶段 2 开始前确认 mekck 是否必须跟随。
+   **已定（v2 定，原文写「仍未定」已作废）**：走 §4 的路线乙——
+   `TileEntityMultiblock` + 自建 `MultiblockData`，换基类成本约 50 行（§4.3 已量化）。
+   阶段 2 开始前**无需**再确认。
+7. **档位 API** ✓ — `ITier` 只有 `getBaseTier()` 一个方法；`BaseTier` 只有 5 个常量
+   （`BASIC`/`ADVANCED`/`ELITE`/`ULTIMATE`/`CREATIVE`），**`AdvancedTier` 类不存在**。
+   但 `AttributeTier` 对 addon 不可设置，实现 `ITier` 并不会让
+   `Attribute.getBaseTier(block)` 生效——完整边界见 §8.3.3。
+8. **配方注册** — `RecipeSerializerDeferredRegister`（Mek 自有）+ vanilla `RecipeType`；
+   每工艺注册独立的 `RecipeType` 与 `RecipeSerializer`，见 §6.5。
 
 > **与另一份 spec 的关系**：阶段 1（升级体系）以
 > `2026-09-29-mek-native-machine-framework-design.md` +
@@ -505,6 +741,15 @@ v3 起失败模式**不再由我们自己的 `tick()` 处理**，而是通过
 | **5** | 旧工厂 BE 下线 | 移除旧方块注册与旧 BE（**注意：先确认 B/C 组不再用 `MekCkMultiblock`**） |
 | **6** | B/C 组（15 联动机器 + 独立机器）单独立项 | —— |
 
+**v4 新增的插入点**：
+
+| 阶段 | 内容 | 为什么插在这里 |
+|---|---|---|
+| **1**（并入） | `MekCkFactoryTier implements ITier` + §8.3 映射表 | 3 行改动 + 12 行映射，越早做越省事；阶段 4 存档迁移时它已经是最终形态 |
+| **1**（并入） | 条件化方块注册（§14） | 只影响 GRILLING / SKEWERING 24 个方块，与升级体系零耦合 |
+| **2**（前置） | 决定 GRILLING / SKEWERING 是否补自有配方（§6.5.1 结论 2、§14.2） | **内容决策，不是架构决策**，但会决定 §14 的实际效果，必须在铺开 7 工艺前定 |
+| **2**（并入） | COOKING 材料库 / ICE 流体 / GRILLING 调味槽的槽位装配（§10.1） | 这三个工艺的槽位模型与另外 4 个不同，不能等铺开后再补 |
+
 **阶段 1 是硬门槛**：7 工艺共享基类，抽象一旦错误代价是 7 倍。
 **§4 的多方块换基类必须在阶段 3 单独完成**，不要与配方接线混在同一批改动里——
 两处问题（`CachedRecipe` 状态机语义 vs `MultiblockData` 构造期行为）会互相掩盖。
@@ -524,3 +769,108 @@ v3 起失败模式**不再由我们自己的 `tick()` 处理**，而是通过
 6. 多方块工艺（PLANTING_CUTTING）：破坏/放置整体结构无残留，边界方块不误掉落。
 
 **禁止**：为跑通而删存档兼容、省略 `clean`、或吞异常。
+
+---
+
+## 14. 条件化方块注册（v4 新增，用户选定"最严格"方案）
+
+配方层已在 `5a36aa4` 完成条件化（见 `../audit/2026-09-29-conditional-recipe-report.md`）。
+本节处理**方块层**：当 84 个工厂方块中某个所需的外部 mod 缺席时，该方块
+**不注册**，而不是注册成一个永远无法工作的空壳。
+
+### 14.1 方案选择
+
+用户拍定：**全部依赖到位才注册（最严格）**。
+
+被否掉的两个较宽松方案，理由记录在此以备追溯：
+
+| 方案 | 行为 | 否决理由 |
+|---|---|---|
+| 注册但隐藏 | 方块注册，JEI/创造栏隐藏 | 存档里若已有该方块，加载后成未知方块，玩家资产消失 |
+| 注册并可工作（降级） | 用占位配方运行 | 行为不可预期，且 84 个方块各自的降级语义不同，无法统一 |
+
+### 14.2 判据：每个方块的"依赖"是什么
+
+这是本节**唯一的难点**，必须逐方块确定，不能一刀切。
+
+一个 `<tier>_<craft>_factory` 方块的依赖 = **该工艺的配方来源 mod**（§6.5）：
+
+| 工艺 | 依赖 mod | 缺席时的方块 |
+|---|---|---|
+| GRILLING | `barbequesdelight` | 12 档**全部不注册** |
+| SKEWERING | `barbequesdelight` | 12 档**全部不注册** |
+| COOKING | `farmersdelight`（+可选 `avaritia_delight` / `kaleidoscope_cookery`） | 由 `farmersdelight` 决定；它是 `mods.toml` 强制依赖，**恒注册** |
+| CUTTING | `mekanism`（`sawing`） | 恒注册 |
+| PLANTING_CUTTING | `mekanism`（`combining`） | 恒注册 |
+| GRINDING | 无（`mekck:grinding` 自有） | 恒注册 |
+| ICE | 无（`mekck:ice_make` 自有） | 恒注册 |
+
+**结论：最严格方案实际只影响 GRILLING 与 SKEWERING 两组，共 24 个方块。**
+其余 60 个方块的依赖是 `mekanism` / `farmersdelight` 这类强制依赖，不存在缺席问题。
+
+> ⚠ 这与 §6.5.1 结论 2 联动：`barbequesdelight` 既不在 `mods.toml`，
+> mekck 侧也**一个配方都没有**。按本节严格注册后，**默认实例下 24 个方块不会出现**。
+> 这是规则的正确结果，但也意味着：
+> **若希望 GRILLING / SKEWERING 工厂默认可用，必须先给它们补自有配方**
+> （改用 `mekck:grilling` / `mekck:skewering` 自有类型，或补 barbequesdelight 配方数据）。
+> 这是内容缺口，不是架构缺口——见 §6.5.1。
+
+### 14.3 实现位置与形态
+
+- **位置**：`MekCkFactoryRegistration`，注册循环内按 `type` 过滤。
+- **判据 API**：`ModList.get().isLoaded("barbequesdelight")`。
+  必须在注册期（`RegisterEvent`）可求值——Forge 的 mod 列表在注册期已就绪。
+- **日志**：缺席时 `LOGGER.info` 列出被跳过的方块 id，便于排查"为什么我的工厂没了"。
+  用 `info` 不用 `warn`/`error`——这是**预期行为**，不是错误。
+- **不得**在缺席时注册占位方块（否则 §14.1 第 3 行的存档风险照旧）。
+
+### 14.4 与存档的交互（必须在阶段 4 前定案）
+
+玩家若在装了 `barbequesdelight` 的环境里造了 GRILLING 工厂，之后卸掉该 mod，
+存档里会留下 24 个未知方块。**本节不提供兼容层**——理由是提供它需要为
+「内容将来会不会被补上」做假设，而这是内容决策不是架构决策。
+
+处置方式记录在此，等内容侧定案后二选一：
+1. 补齐 GRILLING / SKEWERING 自有配方，使这两个依赖永不缺席（推荐，也顺带解 §6.5 缺口）
+2. 接受未知方块，在阶段 4 加 tombstone 清理
+
+---
+
+## 15. 测试策略（v4 新增）
+
+§13 的 6 条验收**全部是手工实测**，而迁移面是 84 方块 × 7 工艺。
+纯手测不现实，也无法回归。本节定义自动化覆盖。
+
+### 15.1 分层
+
+| 层 | 范围 | 手段 | 门槛 |
+|---|---|---|---|
+| **L1 纯逻辑** | 档位↔`BaseTier` 映射、配方选取、失败模式三态判定、进度存取 | 纯 JUnit，无 Minecraft 类加载 | 每次提交 |
+| **L2 序列化** | 配方 JSON ↔ `Recipe` 对象、存档 NBT 往返 | `GameTest` 或 JUnit + 反序列化工具 | 每次提交 |
+| **L3 结构** | 多方块形成/破坏、槽位装配、能量容器 | `GameTest` | 每阶段 |
+| **L4 手工** | §13 的 6 条 | 人 | 每阶段 |
+
+### 15.2 L1 必须覆盖的用例（逐条对应本规格的硬规则）
+
+1. **档位映射完整性**：`MekCkFactoryTier.values()` 每一项 `getBaseTier()` 非 null；
+   12 档全部映射到 4 个 `BaseTier` 常量；`CREATIVE` 不被任何档位使用。
+2. **产物闸门**：`currentMax` 在「输出满」时**必须为 0**，不为负。
+   构造一个输出槽已满的场景，断言 `operatingTicks` 未被清零。
+3. **能量不足**：`currentMax == 0` 且 `operatingTicks` 保留。
+4. **配方失效**：`currentMax < 0` 时 `resetCache()` 被调用，进度归零。
+5. **ICE 特例**（§10.1.1）：输出流体容器满时 `currentMax == 0`，且输入流体**未被抽走**。
+6. **COOKING 材料库**（§10.1.2）：144 格中任一格命中配方即算满足；
+   全部不命中时 `currentMax == 0`。
+7. **GRILLING 调味槽**（§10.1.3）：调味槽空 → `currentMax == 0` 且进度保留。
+8. **存档往返**（§7）：`activeRecipeId` + `progress` 序列化后反序列化一致。
+9. **条件化方块注册**（§14）：模拟 `ModList` 不含 `barbequesdelight` 时，
+   GRILLING/SKEWERING 共 24 个方块不在注册表中；含时在。
+
+### 15.3 硬门槛
+
+- `./gradlew clean build --offline` 必须通过，**0 跳过测试**（沿用 §13 第 1、2 条）。
+- **禁止**为了让测试通过而放宽断言。L1 的每条断言都直接对应本规格的一条硬规则，
+  改断言等于改规格，必须走评审。
+
+---
+

@@ -23,7 +23,9 @@ import net.minecraft.util.StringRepresentable;
  * <p><b>免能耗档</b>：NEBULA / SINGULARITY 的 {@link #energyPerTick} 为 0。</p>
  */
 public enum MekCkFactoryTier implements StringRepresentable, SupportsColorMap {
-    // 前 8 档：与 Mek BaseTier 颜色对齐（BASIC~ULTIMATE）+ AdvancedTier（ABSOLUTE~INFINITE）
+    // 前 8 档：RGB 取自 Mek BaseTier 的 5 个常量（BASIC~ULTIMATE）；
+    // ABSOLUTE~INFINITE 4 档在 Mek 1.20.1 中无对应类型（不存在 AdvancedTier 类），
+    // 其颜色为自行设定。档位接入 Mek 的方案见规格 §8.3。
     BASIC("basic", 3, 300_000, 60, new int[]{95, 255, 184}),
     ADVANCED("advanced", 5, 500_000, 100, new int[]{255, 128, 106}),
     ELITE("elite", 7, 700_000, 140, new int[]{75, 248, 255}),

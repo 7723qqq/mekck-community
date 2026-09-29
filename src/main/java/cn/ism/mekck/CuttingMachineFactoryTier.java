@@ -3,7 +3,8 @@ package cn.ism.mekck;
 import net.minecraft.network.chat.TextColor;
 
 public enum CuttingMachineFactoryTier {
-    // RGB values match Mekanism BaseTier (BASIC~ULTIMATE) and AdvancedTier (ABSOLUTE~INFINITE)
+    // 前 4 档 RGB 取自 Mek BaseTier（BASIC/ADVANCED/ELITE/ULTIMATE）；
+    // 其余档位在 Mek 1.20.1 中无对应类型（不存在 AdvancedTier 类），颜色为自行设定
     BASIC("basic", 3, 300_000, 60, new int[]{95, 255, 184}),
     ADVANCED("advanced", 5, 500_000, 100, new int[]{255, 128, 106}),
     ELITE("elite", 7, 700_000, 140, new int[]{75, 248, 255}),
