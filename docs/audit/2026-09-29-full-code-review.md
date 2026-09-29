@@ -72,20 +72,35 @@ agent 用 `javap` 检查编译产物（同样是旧 class）得出结论，形�
 
 ## 三、未修复项（按置信度分级）
 
-### 高置信度 Important（建议下一轮处理）
+### 已在 2026-09-29 第二轮修复（5 项）
+
+| # | 位置 | 问题 | 提交 |
+|---|---|---|---|
+| I4 | `MultiFluidHandler:216,232` | `drain(FluidStack,…)` 每罐都按完整请求量抽 → **流体复制**；`drain(int,…)` 先抽后判流体类型，异种流体 break 时**已抽走的流体被丢弃** | `3021e38` |
+| I5 | `SimpleMachineBlockEntity:4799` | `saveToItem` 手写 NBT，漏调 `AE2Compat.saveAdditional` / `PlacerPersist.save`（`load` 两个都读）→ 挖机再放下，ME 补料清单与放置器 UUID 必丢 | `290b3ef` |
+| I6 | `BigStackDrops:31` | 掉落物走 vanilla `ItemStack.save`，`putByte("Count")` 截断。新增 `MixinItemStack` 让 `McCount` 旁路在**所有** NBT 往返生效 | `10b4f97` |
+| I7 | `CentralKitchenBlockEntity:1116` | `saveAdditional` 不写 `threads` → 区块卸载时**已扣料的线程状态消失，材料永久损失** | `8ec8e7c` |
+| — | `SimpleMachineBlockEntity` | 新发现：输入槽校验漏 `RecipeInputMatcher.matchesFoodCooking`（同 I3/I5 那一类「查找侧改了、校验侧没改」的静默失效） | `a4dc8cf` |
+
+> I6 原描述「5000 变 136」有误：`getByte` 返回**有符号** byte，5000 往返后是 **-120**。
+> 已由 `TestVanillaCountByteTruncation` 钉正。
+
+### 仍未修复（需设计决策，非机械缺陷）
+
+| # | 位置 | 问题 | 为什么不能顺手修 |
+|---|---|---|---|
+| **I1** | `SimpleMachineBlockEntity:350` 等 **17 个 BE** | `ContainerData` 经 `ClientboundContainerSetDataPacket` 走 **`writeShort`**（字节码已证），超 ±32767 即截断。`WineCellar` 容量 4 亿 → 客户端显示 −31,744 FE | **缩放修不了**：要装下 4 亿需除数 ≥ 12211，那样 4000 FE 的普通 Mek 机器会显示 0——用一个错换另一个错。Mek 之所以没这问题，是因为它**整个 jar 里引用 `ContainerData` 的类数为 0**，走的是另一套同步通道；照搬属架构改动。且这是**纯显示问题**，无数据丢失 |
+| **I3** | `SimpleMachineBlockEntity:4478` | `SideMode.NONE` 落到 `default ->` 返回 `fullItemCapability`，六面默认全 NONE ⇒ 所有格六面全开，侧面配置失效 | 改成返回空会**断掉现有玩家**建立在「默认全开」上的全部管道/漏斗。且 `PULL_INPUT_STORAGE`（枚举第 4 值）**没有任何 capability 对应**——BE 里只有 full/input/output 三个，修它要先实现 storage capability |
+| I2 | `GrillFactoryBlockEntity:1752` | 槽位迁移重建 NBT 漏写 `Size` 键 → 玩家升级时区块崩溃 | 属 A 组，按既定决策随 Mek 迁移一起处理 |
+
+### 高置信度 Important（仍待处理）
 
 | # | 位置 | 问题 |
 |---|---|---|
-| I1 | `SimpleMachineBlockEntity:350` 等 | `ContainerData` 是 16 位通道，能量/容量/半径/温度全部溢出。`WineCellar` 容量 4 亿 → 客户端显示 **−31,744 FE**；`PlantingCuttingStationScreen:423` 的创造模式指示器因此恒为关 |
-| I2 | `GrillFactoryBlockEntity:1752` | 槽位迁移重建 NBT 时漏写 `Size` 键 → handler 保持旧尺寸而类按新布局索引 → `validateSlotIndex` 抛异常，**区块崩溃**。14 个迁移点中只有这一处漏（已脚本核对全部） |
-| I3 | `SimpleMachineBlockEntity:4478` | `SideMode.NONE` 落到 `default ->` 分支返回**完整** item capability；六面默认全 NONE，等于所有库存/产出格六面全开，侧面配置对外访问完全失效 |
-| I4 | `MultiFluidHandler:216, 232` | `drain(FluidStack,…)` 每个匹配子罐都用完整请求量（返回值可达 N 倍请求）；`drain(int,…)` 在类型不匹配时 `break` 掉**已抽走**的流体。这是暴露给外部管道的 capability |
-| I5 | `SimpleMachineBlockEntity:4799` | 覆写的 `saveToItem` 漏了 `AE2Compat.saveAdditional` 与 `PlacerPersist.save`，丢 ME 自动补料清单；而 `getDrops` 为空意味着这是唯一载体 |
-| I6 | `BigStackDrops:31` | 掉落物实体用单个 `ItemEntity` 承载大堆叠，而 vanilla `ItemStack.save` 用 `putByte("Count")` → 重载后 5000 变 136，4097–4223 变**负数**。该 mod 自己的 NBT 已用 `McCount` 旁路解决，掉落路径没有 |
-| I7 | `CentralKitchenBlockEntity:1116` | `saveAdditional` 不写 `threads` → 区块卸载时已扣料的线程状态消失，材料永久损失 |
 | I8 | `MekckAe2:743, 541` | `extractAll` 的 `break` 使同一网络堆叠最多满足一个需求项；含重复材料的配方永远匹配失败（fail-safe，但玩家零反馈） |
 | I9 | `SimpleMachineBlockEntity:3826` | `matchBakeriesOven` 把「过滤后」与「未过滤」的两个列表配对，`Ingredient.EMPTY.test()` 恒 false → 加工机**永久静默卡死**。需 `bakeries` 配方含空 Ingredient 才触发（该 mod 不在 libs/，未坐实可达性） |
 | I10 | `MekCkTransfer:40` | `existing.getCount() + source.getCount()` 是 int，两个接近 `Integer.MAX_VALUE` 的堆叠相加溢出为负 → 两个堆叠同时消失。该 mod 正是为超大堆叠而建，此处恰好无防护 |
+
 
 ### 中置信度 / 需要设计决策
 
