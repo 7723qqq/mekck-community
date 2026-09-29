@@ -41,8 +41,17 @@ public final class ClientPacketBridge {
 
     private static final String IMPL_CLASS = "cn.ism.mekck.client.ClientPacketBridgeImpl";
 
-    /** 客户端实现类。**非客户端侧恒为 null**，所有调用因此退化成 no-op。 */
+    /** 客户端实现类。**非客户端侧、以及加载失败后恒为 null**，所有调用因此退化成 no-op。 */
     private static Class<?> impl;
+    /**
+     * 加载是否已经失败过 —— <b>用来把错误日志真正压到「一次」</b>。
+     *
+     * <p>第三轮复核发现：只靠 {@code impl != null} 的短路是<b>无效</b>的 ——
+     * 失败时 {@code impl} 保持 null，于是每次调用都会重新进入 {@code Class.forName}
+     * 并再打一条带堆栈的 error。而这条路径正是 S2C 包的每包入口，
+     * 在集成包里会变成日志海啸（而且每条都带完整堆栈）。</p>
+     */
+    private static boolean resolveFailed;
 
     private ClientPacketBridge() {
     }
@@ -62,6 +71,9 @@ public final class ClientPacketBridge {
         if (impl != null) {
             return true;
         }
+        if (resolveFailed) {
+            return false; // 已经失败并记过了 —— 不再重复 Class.forName 与堆栈日志
+        }
         if (!isPhysicalClient()) {
             return false;
         }
@@ -69,9 +81,10 @@ public final class ClientPacketBridge {
             impl = Class.forName(IMPL_CLASS);
             return true;
         } catch (Throwable t) {
-            // 只记一次：这是 setup 阶段就注定失败的路径，重复打日志没有价值。
+            // 真的只记一次：resolveFailed 置位后短路（原先只置 impl=null，
+            // 而 impl=null 恰好是「未加载」的状态 ⇒ 每包重打一条带堆栈的 error）。
+            resolveFailed = true;
             LOGGER.error("[mekck] 客户端包落地实现类 {} 不可用，下单面板将不更新：{}", IMPL_CLASS, t.toString());
-            impl = null;
             return false;
         }
     }

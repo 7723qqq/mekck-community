@@ -106,15 +106,25 @@ public class TestFactoryGuiSyncSurface {
                 : "public int " + getter + "() {");
         assertTrue(getter + " 必须读 " + field, getterBody.contains(field));
 
-        // 找到该 getter 后面那个 lambda 的 setter
+        // 找到该 getter 后面那个 lambda 的 setter。
+        // 窗口必须**包含**结尾的 "))" —— 表达式 lambda 写成
+        // `value -> this.x = value))`，右括号正是「赋值到此为止」的证据；
+        // 早先版本用 indexOf("));") 取子串把它切在外面，于是正则永远匹配不上（假红）。
         int at = trackers.indexOf("this::" + getter);
         assertTrue("addContainerTrackers 里没找到 " + getter, at >= 0);
         int end = trackers.indexOf("));", at);
         assertTrue("找不到 " + getter + " 的 lambda 结尾", end > at);
-        String lambda = trackers.substring(at, end);
-        assertTrue(getter + " 的 setter 必须写 " + field
-                        + "（写错字段的症状与「完全没有同步」完全一样，排查毫无线索）",
-                lambda.contains("this." + field + " = value"));
+        String lambda = trackers.substring(at, end + 2);
+        // 用正则而不是子串：变异测试实测把 setter 改成 `= value + 1` 时，
+        // 子串 `= value` 仍然命中 ⇒ 假绿。必须要求 `value` **后面紧跟 lambda 的右括号**，
+        // 即赋值到此为止。（第一版写成 `= value;` 也不行 —— 这里用的是**表达式** lambda
+        // `value -> this.x = value`，本来就没有分号，那是第一版的假红。）
+        assertTrue(getter + " 的 setter 必须把 value 原样写进 " + field
+                        + "（写错字段、或写入的值被加工，症状都与「完全没有同步」完全一样，"
+                        + "排查毫无线索）",
+                java.util.regex.Pattern
+                        .compile("this\\." + java.util.regex.Pattern.quote(field) + "\\s*=\\s*value\\s*\\)")
+                        .matcher(lambda).find());
     }
 
     /**
@@ -136,7 +146,84 @@ public class TestFactoryGuiSyncSurface {
     }
 
     /**
-     * 烧烤的调味料位必须走 {@code syncFamilyExtraBits} 这条同步通道。
+     * <b>读取侧</b>必须真的走镜像 —— 这是第三轮自己踩的坑留下的护栏。
+     *
+     * <p>上一轮把 {@code addContainerTrackers} 的 4 条 {@code SyncableInt} 配齐后，
+     * 我宣称「订单进度现在会实时刷新」。<b>实际上那 4 条只写不读</b>：</p>
+     * <ul>
+     *   <li>{@code getClientOrderActive()} 的调用方数量是 <b>0</b>（只有它自己的声明）；</li>
+     *   <li>{@code CookingFactoryMenu} / {@code SkeweringFactoryMenu} 读的是
+     *       tile 的同名方法，而那两个方法<b>直接问执行器</b>，
+     *       客户端拿到的仍是区块加载快照 ⇒ <b>症状与修复前完全一致</b>。</li>
+     * </ul>
+     *
+     * <p>之所以能溜过去：变异测试实测把 {@code CookingFactoryTile.getOrderQuantity()}
+     * 改成 {@code return 999999}，<b>两个护栏全绿</b> —— 因为它们只读写入侧
+     * （{@code MekCkMachineTile} / {@code GrillFactoryTile} / 执行器接口）的文本，
+     * <b>从不去看读取侧</b>（menu / screen / tile）。本条就是补上读取侧。</p>
+     */
+    @Test
+    public void orderReadoutsOnTilesMustGoThroughTheMirroredBase() throws IOException {
+        // 家族 tile 的读数方法必须委托给基类，而不是直接问执行器。
+        for (String family : new String[]{
+                "src/main/java/cn/ism/mekck/machine/cooking/CookingFactoryTile.java",
+                "src/main/java/cn/ism/mekck/machine/skewering/SkeweringFactoryTile.java"}) {
+            String src = read(family);
+            for (String sig : new String[]{
+                    "public boolean hasOrder()", "public int getOrderQuantity()",
+                    "public int getOrderCompleted()"}) {
+                String body = methodBody(src, sig);
+                assertFalse(family + " 找不到 " + sig, body.isEmpty());
+                assertTrue(family + sig + " 必须委托给基类（super.）而不是直接问执行器："
+                                + "直接问执行器在客户端拿到的是区块加载快照，永远不刷新",
+                        body.contains("super."));
+                assertFalse(family + sig + " 不得绕过镜像直接读执行器："
+                                + "那样 4 条 SyncableInt 就成了只写不读的死通道",
+                        body.contains("exec.getOrder") || body.contains("exec.hasOrder()"));
+            }
+        }
+
+        // 基类必须提供这三个读取侧的公共出口。
+        String tile = read(TILE);
+        for (String sig : new String[]{
+                "public boolean hasOrder()", "public int getOrderQuantity()",
+                "public int getOrderCompleted()"}) {
+            assertTrue("MekCkMachineTile 必须提供 " + sig + " 作为读取侧的唯一出口",
+                    tile.contains(sig));
+        }
+        // getClientOrderActive 至少要被 hasOrder 用上（上一轮它是零调用方）。
+        assertTrue("hasOrder() 必须用 getClientOrderActive()，否则那条 SyncableInt 是只写不读",
+                methodBody(tile, "public boolean hasOrder() {").contains("executor().hasOrder()")
+                        && tile.contains("clientOrderActive = value"));
+    }
+
+    /**
+     * 烤炉取消订单必须<b>连调味料一起清</b>。
+     *
+     * <p>旧 {@code GrillFactoryBlockEntity.clearOrder} 明确写着「订单完成，清空（含调味料）」。
+     * 迁到执行器时只清了那三个订单字段 ⇒ 一次订单跑完，调味料永久赖在机器上：
+     * {@code currentSeasoningFor()} 在无订单时也会拿它强制调味，
+     * 而 {@code consumeSeasoningUses} 的 {@code enabledOnly} 会因此变成 false，
+     * 去扣<b>未启用</b>槽的次数；{@code save()} 又把它写进 NBT 持久化。</p>
+     */
+    @Test
+    public void grillClearOrderAlsoClearsTheSeasoning() throws IOException {
+        String src = read("src/main/java/cn/ism/mekck/machine/grill/GrillFactoryExecutor.java");
+        String body = methodBody(src, "public void clearOrder() {");
+        assertFalse("找不到 GrillFactoryExecutor.clearOrder", body.isEmpty());
+        assertTrue("clearOrder() 必须清 orderSeasoning，否则订单跑完后调味料会永久残留"
+                        + "（旧实现是清的，迁移时漏了 —— 第三轮的行为回归）",
+                body.contains("orderSeasoning = null"));
+        // 取消路径必须走 clearOrder，而不是「只清 id」。
+        String setBody = methodBody(src, "public void setOrder(ResourceLocation recipeId, int quantity, String seasoningId) {");
+        assertTrue("setOrder(null, …) 必须走 clearOrder()，否则取消按钮只清 id 而留下调味料",
+                setBody.contains("clearOrder()"));
+        assertTrue("setOrder 的份数下界必须是 max(1,·)（0 份订单会让批量夹成 0 而永久惰性）",
+                setBody.contains("Math.max(1, quantity)"));
+    }
+
+    /**
+     * 烤炉的调味料位必须走 {@code syncFamilyExtraBits} 这条同步通道。
      *
      * <p>逐条钉住「打包位图」这一段：位图是三次调用的打包结果，
      * 一旦有人把它缓存成字段，Mek 的脏值判定就永远读到同一个值 ⇒ 永不推送。</p>
@@ -166,26 +253,6 @@ public class TestFactoryGuiSyncSurface {
     }
 
     private static String methodBody(String src, String signature) {
-        int i = src.indexOf(signature);
-        if (i < 0) {
-            return "";
-        }
-        int start = src.indexOf('{', i);
-        if (start < 0) {
-            return "";
-        }
-        int depth = 0;
-        for (int j = start; j < src.length(); j++) {
-            char c = src.charAt(j);
-            if (c == '{') {
-                depth++;
-            } else if (c == '}') {
-                depth--;
-                if (depth == 0) {
-                    return src.substring(i, j + 1);
-                }
-            }
-        }
-        return src.substring(i);
+        return cn.ism.mekck.TestSourceText.methodBody(src, signature);
     }
 }

@@ -389,8 +389,7 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
     // ── 订单转发（网络包与界面走这几个方法）─────────────────────────────
 
     public boolean hasOrder() {
-        CookingFactoryExecutor exec = cooking();
-        return exec != null && exec.hasOrder();
+        return super.hasOrder();
     }
 
     public void setOrder(ResourceLocation recipeId, int quantity) {
@@ -408,13 +407,11 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
     }
 
     public int getOrderQuantity() {
-        CookingFactoryExecutor exec = cooking();
-        return exec == null ? 0 : exec.getOrderQuantity();
+        return super.getOrderQuantity();
     }
 
     public int getOrderCompleted() {
-        CookingFactoryExecutor exec = cooking();
-        return exec == null ? 0 : exec.getOrderCompleted();
+        return super.getOrderCompleted();
     }
 
     // ── 能量闸门参数 ────────────────────────────────────────────────────

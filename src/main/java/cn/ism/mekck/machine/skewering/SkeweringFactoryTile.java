@@ -235,8 +235,7 @@ public class SkeweringFactoryTile extends MekCkMachineTile implements IMekCkPort
     // ── 订单转发（网络包与界面走这几个方法）─────────────────────────────
 
     public boolean hasOrder() {
-        SkeweringFactoryExecutor exec = skewering();
-        return exec != null && exec.hasOrder();
+        return super.hasOrder();
     }
 
     public void setOrder(ResourceLocation recipeId, int quantity) {
@@ -261,13 +260,11 @@ public class SkeweringFactoryTile extends MekCkMachineTile implements IMekCkPort
     }
 
     public int getOrderQuantity() {
-        SkeweringFactoryExecutor exec = skewering();
-        return exec == null ? 0 : exec.getOrderQuantity();
+        return super.getOrderQuantity();
     }
 
     public int getOrderCompleted() {
-        SkeweringFactoryExecutor exec = skewering();
-        return exec == null ? 0 : exec.getOrderCompleted();
+        return super.getOrderCompleted();
     }
 
     // ── 能量闸门参数 ────────────────────────────────────────────────────

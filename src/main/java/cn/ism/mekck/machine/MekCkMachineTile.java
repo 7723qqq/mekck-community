@@ -787,10 +787,39 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
     /** 客户端镜像：家族自定义位（烧烤的 3 个调味料启用位等）。 */
     private int clientFamilyExtraBits;
 
+    // ── 订单读数的**唯一公共出口** ──────────────────────────────────────
+    //
+    // ⚠️ 第三轮修正：这三个方法原先只有「写」的一侧（SyncableInt + 三个 clientXxx 字段），
+    // 而各家族 tile 的同名方法**直接读执行器**，于是镜像写进去了没人读 ——
+    // 客户端拿到的仍是区块加载快照，症状与修复前完全一致。
+    // 变异测试实测：把 CookingFactoryTile.getOrderQuantity() 改成 return 999999，
+    // 两个护栏**全绿** —— 因为它们只读写入侧文本，从不看读取侧。
+    //
+    // 现在这三个方法是读取侧的**唯一**出口：家族 tile 一律委托到基类，
+    // 而菜单本来就调 tile 的同名方法（CookingFactoryMenu / SkeweringFactoryMenu 同款），
+    // 所以**菜单一行都不用改**。服务端由 clientMirroring()==false 走权威值兜住。
+
+    /** 本机是否有一张单在跑（GUI 与 AE2 共用口径）。 */
+    public boolean hasOrder() {
+        return executor().hasOrder();
+    }
+
+    /** 订单总份数（无订单为 0）。按端分流。 */
+    public int getOrderQuantity() {
+        return getOrderQuantityForSync();
+    }
+
+    /** 订单已完成份数（按端分流）。 */
+    public int getOrderCompleted() {
+        return getOrderCompletedForSync();
+    }
+
     /** 执行器是否「有单」—— 服务端读权威值、客户端读镜像。 */
     protected int syncOrderActiveFlag() {
-        MekCkRecipeExecutor exec = clientMirroring() ? null : executor();
-        return exec == null ? clientOrderActive : (exec.hasOrder() ? 1 : 0);
+        if (clientMirroring()) {
+            return clientOrderActive;
+        }
+        return executor().hasOrder() ? 1 : 0;
     }
 
     /** 订单总份数（按端分流）。 */

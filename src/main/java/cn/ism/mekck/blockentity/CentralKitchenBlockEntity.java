@@ -352,13 +352,36 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     }
 
     /** 放入订单暂存区，返回未放入的数量。 */
+    /**
+     * 把物品放进订单暂存区，<b>返回未能放入的数量</b>。
+     *
+     * <h3>⚠️ 归并必须逐格夹紧（第三轮修，同一 bug 的第三条路径）</h3>
+     * 原实现是 {@code existing.grow(remainder.getCount()); remainder.setCount(0);}——
+     * {@code ItemStack.grow(n)} 就是 {@code setCount(getCount() + n)}，而 1.20.1 的
+     * {@code ItemStack.setCount} <b>不做任何夹紧</b>；buffer 的槽上限是
+     * {@code Integer.MAX_VALUE - 1}，两个大堆叠一合并就<b>必然溢出为负</b>。
+     * 负数 ⇒ {@code isEmpty()} 为真 ⇒ 那一格被当成空格；落盘时
+     * {@code BigStackItemHandler.readStack} 的 {@code if (count <= 0) return EMPTY;}
+     * 再确认一次删除 ⇒ <b>既有那堆和新产物一起消失</b>。
+     *
+     * <p>为什么这次才暴露：前两轮分别修了 {@code KitchenRecipeMatcher.insertOutputs} 与
+     * {@code CentralKitchenBlockEntity.insertIntoStorage}，<b>唯独漏了这一条</b>。
+     * 三条路径处理的是同一件事（把一批同物合并进容器），修法也必须一致：
+     * 逐格算剩余空间、只搬得动的量、剩余量留在参数里继续往下找。</p>
+     */
     private int insertIntoBuffer(cn.ism.mekck.kitchen.KitchenOrder order, net.minecraft.world.item.ItemStack stack) {
         var remainder = stack.copy();
         for (int i = 0; i < order.buffer.getSlots() && !remainder.isEmpty(); i++) {
             var existing = order.buffer.getStackInSlot(i);
             if (!existing.isEmpty() && net.minecraft.world.item.ItemStack.isSameItemSameTags(existing, remainder)) {
-                existing.grow(remainder.getCount());
-                remainder.setCount(0);
+                int space = Math.min(order.buffer.getSlotLimit(i), Integer.MAX_VALUE) - existing.getCount();
+                if (space <= 0) {
+                    continue;
+                }
+                int moved = Math.min(space, remainder.getCount());
+                existing.grow(moved);
+                order.buffer.setStackInSlot(i, existing);
+                remainder.shrink(moved);
             }
         }
         for (int i = 0; i < order.buffer.getSlots() && !remainder.isEmpty(); i++) {
@@ -390,8 +413,14 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         while (iter.hasNext()) {
             var order = iter.next();
             if (order.finished()) {
-                deliverOrder(order);
-                iter.remove();
+                // ⚠️ 只有**全部交付完**才移除订单。deliverOrder 此前是 void，
+                // 它把装不下的 leftover 放回 order.buffer 就返回，而这里紧接着
+                // iter.remove() —— 那个 order 对象自此再无任何引用（saveAdditional
+                // 只遍历 orders），buffer 里的成品与订单预留的剩余叶子材料随对象一起
+                // 被 GC，连存档都不记录。输出区被填满时这是必现的静默物品删除。
+                if (deliverOrder(order)) {
+                    iter.remove();
+                }
                 setChanged();
                 continue;
             }
@@ -509,16 +538,48 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         }
     }
 
-    /** 订单完成：把最终产物从暂存区移入输出区。 */
-    private void deliverOrder(cn.ism.mekck.kitchen.KitchenOrder order) {
+    /**
+     * 订单完成：把最终产物从暂存区移入输出区。
+     *
+     * <h3>⚠️ 交付不完整时**不能**让订单消失（第三轮修）</h3>
+     * 原实现在每一格交付后把 leftover <b>写回 {@code order.buffer}</b> 就返回（void），
+     * 而调用方 {@code tickOrders} 紧接着 {@code iter.remove()}。此后：
+     * <ul>
+     *   <li>再没有任何字段引用 {@code order}（{@code saveAdditional} 只遍历 {@code orders}）；</li>
+     *   <li>于是 buffer 里的成品<b>连同订单预留的、没被链吃掉的全部叶子材料</b>
+     *       随对象一起被 GC，<b>连存档都不会记录</b>，玩家无法找回。</li>
+     * </ul>
+     * 触发门槛极低：把 30 个输出槽填满后下任意一单，等它走完最后一步 ⇒
+     * 30 次 {@code insertOutputs} 全部返回 leftover ⇒ 全塞回 buffer ⇒ 全丢。
+     * 另一条更隐蔽的：产物种类数 ≥ 30 的订单。
+     *
+     * <p>修法与同文件 {@code advanceThread} 的做法<b>刻意对称</b> —— 那条路径早就
+     * 「装不下就保留线程、下 tick 重试」，并写了注释说明为什么不能丢；订单路径缺了同一处理。
+     * {@link cn.ism.mekck.kitchen.KitchenOrder#finished()} 只看 {@code stepIndex} 不看
+     * {@code state}，所以置 DONE 之后每 tick 会自动重试，不会死循环。</p>
+     *
+     * @return true = 已全部交付，订单可以移除
+     */
+    private boolean deliverOrder(cn.ism.mekck.kitchen.KitchenOrder order) {
+        boolean complete = true;
         for (int i = 0; i < order.buffer.getSlots(); i++) {
             var stack = order.buffer.getStackInSlot(i);
             if (stack.isEmpty()) continue;
             var remainder = cn.ism.mekck.kitchen.KitchenRecipeMatcher.insertOutputs(items,
                     OUTPUT_START, OUTPUT_START + OUTPUT_SLOTS, java.util.List.of(stack), 1);
-            order.buffer.setStackInSlot(i, remainder.isEmpty() ? net.minecraft.world.item.ItemStack.EMPTY : remainder.get(0));
+            if (remainder.isEmpty()) {
+                order.buffer.setStackInSlot(i, net.minecraft.world.item.ItemStack.EMPTY);
+            } else {
+                // 放不下：留在暂存区，等下次 tick 重试（见方法注释）。
+                order.buffer.setStackInSlot(i, remainder.get(0));
+                complete = false;
+            }
         }
         order.setState(cn.ism.mekck.kitchen.KitchenOrder.State.DONE);
+        if (!complete) {
+            setChanged();
+        }
+        return complete;
     }
 
     // ================== 系列过滤器 ==================

@@ -213,17 +213,39 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
      * @param seasoningId 调味料 id；{@code null} / 空串表示不指定（随后按工作模式决定）
      */
     public void setOrder(ResourceLocation recipeId, int quantity, String seasoningId) {
+        if (recipeId == null) {
+            // 取消订单：整体清空，**含调味料**。
+            // 取消按钮发的正是 (null, 0, null) —— 若这里只清 id 而留下 orderSeasoning，
+            // 「无订单」状态就会残留一份调味料；而 currentSeasoningFor() 在**无订单**时
+            // 也会拿它去强制调味，于是玩家刚点的「取消」看起来毫无效果。
+            clearOrder();
+            return;
+        }
         this.orderRecipeId = recipeId;
-        this.orderQuantity = Math.max(0, quantity);
+        // 下界用 max(1,·) 而不是旧实现的 max(0,·)：0 份的订单会让
+        // 「batch = min(batch, quantity - completed)」夹出 0 而永久惰性。
+        this.orderQuantity = Math.max(1, quantity);
         this.orderCompleted = 0;
-        this.orderSeasoning = (recipeId == null || seasoningId == null || seasoningId.isEmpty())
-                ? null : seasoningId;
+        this.orderSeasoning = (seasoningId == null || seasoningId.isEmpty()) ? null : seasoningId;
     }
 
+    /**
+     * 清空订单 —— <b>含调味料</b>。
+     *
+     * <p>⚠️ 这一点是相对旧实现的**行为回归**，第三轮复核时才发现：
+     * 旧 {@code GrillFactoryBlockEntity.clearOrder} 明确写着「订单完成，清空（含调味料）」
+     * 并执行了 {@code machine.orderSeasoning = null}；迁到本类时只清了那三个订单字段。
+     * 后果链不止「显示上多一行」：{@code currentSeasoningFor()} 把它用于
+     * <b>自由投料</b>（无订单也强制调味），而 {@code consumeSeasoningUses} 的
+     * {@code enabledOnly = orderSeasoning == null || isEmpty()} 会变成 {@code false}
+     * ⇒ 去扣<b>未启用</b>槽的次数；{@code save()} 又会把它写进 NBT 持久化下来。
+     * 也就是说一次订单跑完，调味料会永久赖在机器上影响后续自由加工。</p>
+     */
     public void clearOrder() {
         this.orderRecipeId = null;
         this.orderQuantity = 0;
         this.orderCompleted = 0;
+        this.orderSeasoning = null;
     }
 
     /**

@@ -122,8 +122,8 @@ public class TestMenuQuickMoveSlotRanges {
      * 字符串里，所以这个精度对本用例足够——而它比"要求注释里别贴代码"这种约定可靠得多。</p>
      */
     private static String stripComments(String src) {
-        String noBlock = src.replaceAll("(?s)/\\*.*?\\*/", " ");
-        return noBlock.replaceAll("(?m)//.*$", " ");
+        // 已收进共享工具：同一个坑本轮踩了三次（详见 TestSourceText 的类注释）。
+        return cn.ism.mekck.TestSourceText.stripComments(src);
     }
 
     /** 机器类槽的构造器名（用于「机器槽必须排在玩家槽之前」这条结构断言）。 */
