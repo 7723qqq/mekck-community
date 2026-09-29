@@ -1171,6 +1171,40 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         }
         tag.put("Orders", orderList);
         tag.putInt("NextOrderId", nextOrderId);
+        // 加工线程持久化：料在 startThread 时就扣了，只存 recipeId 会让已扣的材料凭空消失
+        // （区块卸载 / 机器被搬走时该线程直接消失，等于「吃料不交货」且不可追回）。
+        // 存 Outputs 而非只存 recipeId，是为了输出区被占满时的重试状态（见 advanceThread 的 leftover 分支）也能续上。
+        net.minecraft.nbt.CompoundTag threadTag = new net.minecraft.nbt.CompoundTag();
+        for (var e : threads.entrySet()) {
+            net.minecraft.nbt.ListTag list = new net.minecraft.nbt.ListTag();
+            for (var t : e.getValue()) {
+                if (!t.busy()) continue;
+                net.minecraft.nbt.CompoundTag tt = new net.minecraft.nbt.CompoundTag();
+                tt.putString("Recipe", t.recipeId.toString());
+                net.minecraft.nbt.ListTag consumeList = new net.minecraft.nbt.ListTag();
+                if (t.consumes != null) {
+                    for (int[] c : t.consumes) {
+                        net.minecraft.nbt.IntArrayTag at = new net.minecraft.nbt.IntArrayTag(new int[]{c[0], c[1]});
+                        consumeList.add(at);
+                    }
+                }
+                tt.put("Consumes", consumeList);
+                net.minecraft.nbt.ListTag outputList = new net.minecraft.nbt.ListTag();
+                if (t.outputs != null) {
+                    for (var o : t.outputs) {
+                        net.minecraft.nbt.CompoundTag ot = new net.minecraft.nbt.CompoundTag();
+                        o.save(ot);
+                        outputList.add(ot);
+                    }
+                }
+                tt.put("Outputs", outputList);
+                tt.putInt("Progress", t.progress);
+                tt.putInt("Total", t.totalTime);
+                list.add(tt);
+            }
+            if (!list.isEmpty()) threadTag.put(e.getKey().id, list);
+        }
+        tag.put("Threads", threadTag);
         tag.put("HeatSide", heatComponent.save());
         tag.put("ColdSide", coldComponent.save());
     }
@@ -1248,6 +1282,50 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
             }
         }
         if (tag.contains("NextOrderId")) nextOrderId = Math.max(nextOrderId, tag.getInt("NextOrderId"));
+        if (tag.contains("Threads", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            var threadTag = tag.getCompound("Threads");
+            for (cn.ism.mekck.kitchen.KitchenFamily f : cn.ism.mekck.kitchen.KitchenFamily.values()) {
+                if (!threadTag.contains(f.id, net.minecraft.nbt.Tag.TAG_LIST)) continue;
+                var ability = abilityOf(f);
+                if (ability == null) continue;   // 该系列模块已不在机器里，存档中的线程无处安放
+                var list = threads.computeIfAbsent(f, k -> new java.util.ArrayList<>());
+                // 线程数由当前已安装模块决定（可能因拆模块 / 换机器而变化），先对齐到应有长度
+                int want = Math.max(1, ability.threads());
+                while (list.size() < want) list.add(new KitchenThread());
+                while (list.size() > want) list.remove(list.size() - 1);
+                var src = threadTag.getList(f.id, net.minecraft.nbt.Tag.TAG_COMPOUND);
+                for (int i = 0; i < src.size() && i < list.size(); i++) {
+                    var tt = src.getCompound(i);
+                    var t = list.get(i);
+                    var rid = net.minecraft.resources.ResourceLocation.tryParse(tt.getString("Recipe"));
+                    if (rid == null) continue;
+                    t.recipeId = rid;
+                    t.progress = Math.max(0, tt.getInt("Progress"));
+                    t.totalTime = Math.max(1, tt.getInt("Total"));
+                    var consumeList = tt.getList("Consumes", net.minecraft.nbt.Tag.TAG_INT_ARRAY);
+                    if (!consumeList.isEmpty()) {
+                        java.util.List<int[]> consumes = new java.util.ArrayList<>(consumeList.size());
+                        for (int j = 0; j < consumeList.size(); j++) {
+                            int[] pair = consumeList.getIntArray(j);
+                            // 槽位索引必须仍在当前布局内，否则说明机器被换过型
+                            if (pair.length < 2 || pair[0] < 0 || pair[0] >= items.getSlots()) {
+                                consumes.clear();
+                                break;
+                            }
+                            consumes.add(pair);
+                        }
+                        t.consumes = consumes;
+                    }
+                    var outputList = tt.getList("Outputs", net.minecraft.nbt.Tag.TAG_COMPOUND);
+                    java.util.List<net.minecraft.world.item.ItemStack> outputs = new java.util.ArrayList<>(outputList.size());
+                    for (int j = 0; j < outputList.size(); j++) {
+                        var st = net.minecraft.world.item.ItemStack.of(outputList.getCompound(j));
+                        if (!st.isEmpty()) outputs.add(st);
+                    }
+                    t.outputs = outputs;
+                }
+            }
+        }
         if (tag.contains("AutoMode", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
             var autoTag = tag.getCompound("AutoMode");
             for (cn.ism.mekck.kitchen.KitchenFamily f : cn.ism.mekck.kitchen.KitchenFamily.values()) {
