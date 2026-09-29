@@ -95,7 +95,35 @@ public class TestCuttingRecipeInvariants {
         if (!Files.exists(file)) {
             fail("找不到切菜配方逻辑的源文件（测试需在项目根目录运行）：" + file.toAbsolutePath());
         }
-        return Files.readString(file, StandardCharsets.UTF_8);
+        return stripComments(Files.readString(file, StandardCharsets.UTF_8));
+    }
+
+    /**
+     * 去掉块注释与行注释，只留代码。
+     *
+     * <p>不做这一步就会出假阳性：本文件自己的 javadoc 里为了说明「为什么要改」而
+     * 写下了 {@code MekckConfig.getFactoryStackUpgradeMax(…)} 这个<b>已被移除的</b>调用，
+     * 而断言「不得再出现它」是按裸文本匹配的。注释里的字符串不是代码。</p>
+     */
+    private static String stripComments(String source) {
+        StringBuilder out = new StringBuilder(source.length());
+        int i = 0;
+        int n = source.length();
+        while (i < n) {
+            if (source.startsWith("/*", i)) {
+                int end = source.indexOf("*/", i + 2);
+                i = end < 0 ? n : end + 2;
+                out.append(' ');
+            } else if (source.startsWith("//", i)) {
+                int end = source.indexOf('\n', i);
+                i = end < 0 ? n : end;
+                out.append(' ');
+            } else {
+                out.append(source.charAt(i));
+                i++;
+            }
+        }
+        return out.toString();
     }
 
     /**
@@ -185,12 +213,19 @@ public class TestCuttingRecipeInvariants {
                 queries >= 2);
     }
 
-    /** 断言 5：配方类型常量名（本版本只有 CUTTING，没有 CUTTING_BOARD）。 */
+    /**
+     * 断言 5：配方类型常量名（本版本只有 CUTTING，没有 CUTTING_BOARD）。
+     *
+     * <p>负向断言在实践里是<b>编译期</b>防线而不是测试期防线：写错常量名根本编译不过。
+     * 所以正向断言才是这条测试真正在盯的东西——{@code getRecipeFor} 的类型实参
+     * 必须是 {@code ModRecipeTypes.CUTTING.get()}，换成别的砧板/烹饪类型会在这里被抓住。</p>
+     */
     @Test
     public void recipeTypeConstantIsTheOneThatActuallyExists() throws IOException {
+        String body = methodBody(readLogic(), FIND_RECIPE);
+        assertTrue("getRecipeFor 的配方类型实参必须是 ModRecipeTypes.CUTTING.get()，实际正文：\n" + body,
+                body.contains("getRecipeFor(ModRecipeTypes.CUTTING.get()"));
         String source = readLogic();
-        assertTrue("必须用 ModRecipeTypes.CUTTING",
-                source.contains("ModRecipeTypes.CUTTING"));
         assertTrue("ModRecipeTypes.CUTTING_BOARD 在 Farmer's Delight 1.20.1 里不存在"
                         + "（javap 实测该类只有 RECIPE_TYPES / COOKING / CUTTING 三个字段）",
                 !source.contains("ModRecipeTypes.CUTTING_BOARD"));
