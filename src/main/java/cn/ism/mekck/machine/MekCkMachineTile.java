@@ -24,6 +24,7 @@ import mekanism.common.inventory.slot.OutputInventorySlot;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.component.TileComponentConfig;
 import mekanism.common.tile.component.TileComponentEjector;
+import mekanism.common.tile.component.TileComponentUpgrade;
 import mekanism.common.tile.interfaces.IRedstoneControl;
 import mekanism.common.tile.prefab.TileEntityConfigurableMachine;
 import mekanism.common.util.MekanismUtils;
@@ -122,9 +123,9 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
     /** NBT：执行器自有状态的子标签。 */
     private static final String TAG_EXECUTOR = "mekckExecutor";
     /** NBT：本 tile 由 Mek 原生基类承载的存档格式版本。 */
-    private static final String TAG_NATIVE_VERSION = "MekCkNative";
+    static final String TAG_NATIVE_VERSION = "MekCkNative";
     /** NBT：进度条已走的 tick 数。 */
-    private static final String TAG_WORK_PROGRESS = "MekCkWorkProgress";
+    static final String TAG_WORK_PROGRESS = "MekCkWorkProgress";
     /** 当前存档格式版本。v1 是首个 Mek 原生版本，没有需要迁移的旧格式。 */
     private static final int NATIVE_VERSION = 1;
 
@@ -621,10 +622,37 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
      *
      * <p><b>红石模式不在这里读</b>：{@code controlType} 是 {@code TileEntityMekanism} 的
      * 私有字段，由它自己的 {@code loadGeneralPersistentData} 负责，本类重复读会互相覆盖。</p>
+     *
+     * <h3>旧存档迁移（阶段 2 Task 4.5）</h3>
+     * 方块注册名没变、变的是 {@code BlockEntityType} 的实现类，所以旧存档的内容
+     * 不会有人去读——方块还在，里面空了。这里按 {@link MekCkLegacyMachineNbt#isLegacy}
+     * 分流：旧格式先整体翻译成新格式再交给 {@code super.load}，新格式原样走。
+     * 一次性翻译而不是「兼容读旧键」，理由见 {@link MekCkLegacyMachineNbt} 的类注释。
+     *
+     * <p>迁移必须在 {@code super.load} <b>之前</b>完成：旧格式的 {@code Items} 是
+     * CompoundTag、新格式是 ListTag，同名不同型，若不先换掉，
+     * {@code TileEntityMekanism.load} 里的 {@code getList("Items", 10)} 会静默取到
+     * 空列表，整机槽位归零且不报错。</p>
+     *
+     * <p>升级计数则必须落在 {@code super.load} <b>之后</b>：
+     * {@code TileComponentUpgrade.read} 的第一件事就是
+     * {@code upgrades.clear(); upgrades.putAll(buildMap(tag))}（实测其
+     * {@code lambda$read$1} 偏移 0~17），先灌后读会被这一次 clear 抹掉。</p>
      */
     @Override
     public void load(CompoundTag tag) {
+        CompoundTag legacyTag = MekCkLegacyMachineNbt.isLegacy(tag) ? tag : null;
+        if (legacyTag != null) {
+            // 档位为 null 时按「无机器槽位」处理：正常情况下构造器早就抛了
+            // IllegalStateException，真到这里说明方块被换成了非工厂方块。
+            // 此时宁可让旧内容被逐条记日志丢掉，也不要在区块加载路径上抛 NPE。
+            CuttingMachineFactoryTier tier = getTier();
+            tag = MekCkLegacyMachineNbt.migrate(legacyTag, getDirection(), tier == null ? 0 : tier.processes);
+        }
         super.load(tag);
+        if (legacyTag != null) {
+            installLegacyUpgrades(legacyTag);
+        }
         int version = tag.getInt(TAG_NATIVE_VERSION);
         if (version > NATIVE_VERSION) {
             LOGGER.warn("工厂方块 {} 的存档格式版本为 {}，高于本版本 MekCK 支持的 {}，"
@@ -632,5 +660,45 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine {
         }
         workProgress = Math.max(0, tag.getInt(TAG_WORK_PROGRESS));
         executor().load(tag.getCompound(TAG_EXECUTOR));
+    }
+
+    /**
+     * 把旧存档 4 个升级计数器的已装数量灌进 {@link TileComponentUpgrade}。
+     *
+     * <p><b>刻意走内存而不是 NBT</b>：阶段 1 的
+     * {@code MixinTileComponentUpgradePersistence} 已经把
+     * {@code TileComponentUpgrade.read} 的解码换成名字键，但那只在游戏内生效；
+     * 走内存则这条迁移路径与 Mixin 无关，普通 JUnit 里也测得到。</p>
+     *
+     * <p><b>灌「补差额」而不是「直接装 N 张」</b>：同一份旧存档被 load 两次
+     * （区块重载、任务 4.6 的网络包触发局部重载）时第二次补 0，不会翻倍。
+     * 上限用 {@code MekCkUpgradeTypes.capOf} 裁，与原生读档路径
+     * （{@code MekCkUpgradeTypes.decode}）同一道闸，存档里的越界值不会被放行。</p>
+     *
+     * <p>旧创造卡（{@code CreativeUpgradeTracker}）对应新的随机化卡：两者都只提供
+     * 「随机化本局 49 种可用食物」这一项能力，且随机化卡在 {@code isSupportedBy} 的
+     * 放行集内。卡种本身换了（{@code mekanism_extras:upgrade_creative} →
+     * {@code mekck:upgrade_randomize}），能力保留、数量照搬。</p>
+     */
+    private void installLegacyUpgrades(CompoundTag legacyTag) {
+        TileComponentUpgrade component = getComponent();
+        if (component == null) {
+            return;
+        }
+        int[] counts = MekCkLegacyMachineNbt.legacyUpgradeCounts(legacyTag);
+        Upgrade[] targets = {
+                Upgrade.SPEED,
+                Upgrade.ENERGY,
+                MekCkUpgradeRefs.storage(),
+                MekCkUpgradeRefs.randomize()
+        };
+        for (int i = 0; i < targets.length; i++) {
+            Upgrade type = targets[i];
+            int cap = MekCkUpgradeTypes.capOf(type, getTier());
+            int delta = MekCkLegacyMachineNbt.upgradesToInstall(component.getUpgrades(type), counts[i], cap);
+            if (delta > 0) {
+                component.addUpgrades(type, delta);
+            }
+        }
     }
 }
