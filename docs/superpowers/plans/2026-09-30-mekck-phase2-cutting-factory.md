@@ -418,11 +418,144 @@ MSYS_NO_PATHCONV=1 git commit -m "切菜工厂：tile / 方块 / 菜单 / 界面
 
 ---
 
+## Task 4.5: 补旧存档迁移（必须在 Task 5 删旧 BE 之前完成）
+
+**为什么是阻塞项**：方块注册名不变，但 `BlockEntityType` 的实现类换了。
+旧 NBT 无人读取 → **机器内容静默归零**（方块还在，里面空了）。
+
+**已核实的旧键布局**（`blockentity/CuttingMachineFactoryBlockEntity.java:1125-1207`）：
+
+| 旧键 | 类型 | 内容 |
+|---|---|---|
+| `SpeedUpgradeTracker` / `EnergyUpgradeTracker` / `StackUpgradeTracker` / `CreativeUpgradeTracker` | CompoundTag | 各含 `Installed: int`（`MekCkUpgradeTracker.save()`） |
+| `Items` | CompoundTag | `ItemStackHandler.serializeNBT()` = `{Size:int, Items:ListTag<{Slot,Item}>}` |
+| `Energy` | int | 存量 |
+| `Progress` | int | 加工进度 |
+| `SideConfig` | byte[6] | 六个面的 `SideMode.ordinal()` |
+| `AutoDistribute` | boolean | |
+| `RedstoneControl` | int | `RedstoneControl.ordinal()` |
+| `RedstonePowered` | boolean | |
+| `AutoSelectedItems` | ListTag\<String\> | |
+| `CustomName` | String | `Component.Serializer` 的 JSON |
+
+**迁移目标**：
+
+| 旧 | 新 |
+|---|---|
+| 4 个 Tracker 的 `Installed` | `componentUpgrade.upgrades`（名字键，经阶段 1 的 Mixin） |
+| `Items` 的槽位序列 | `MekCkMachineTile` 的 `IInventorySlot` 列表（**下标需按旧布局映射**：0..N-1 输入、N..2N-1 输出） |
+| `Energy` | `MachineEnergyContainer` |
+| `Progress` | 执行器自有状态 |
+| `SideConfig` | `TileComponentConfig`（⚠️ **两边格式不同**，Mek 用自己的转码，见下） |
+| `RedstoneControl` / `RedstonePowered` | 基类的红石状态 |
+| `AutoDistribute` / `AutoSelectedItems` | 由 Task 4.6 的 AE2 层接管 |
+| `CustomName` | 基类已有 |
+
+- [ ] **Step 1: 确认 `SideConfig` 两边的格式**
+
+用 javap 核实 `TileComponentConfig` 的读写方法与它用的字节编码，
+**不要假设与我们的 6 字节枚举数组同构**。若不兼容，走"读旧字节 → 转成 Mek 侧配对象"的显式转换。
+
+- [ ] **Step 2: 在 `MekCkMachineTile.load(CompoundTag)` 加版本判断与迁移**
+
+```java
+// 有 MekCkNative 标记 = 已是新格式，直接读
+// 无标记 = 旧格式，先迁移再读
+```
+
+**必须一次性全量迁移，不要留「兼容读旧键」的分支**——两套格式并存会让后续每个 bug 都要查两遍。
+
+- [ ] **Step 3: 测试 + 提交**
+
+用**旧格式样本 NBT** 做测试（把上表结构写成字面量），
+断言迁移后槽位内容、能量、升级数量、红石状态逐项正确，且**迁移幂等**（`load` 两次结果相同）。
+
+```bash
+cd /d/mc/mod/mekck && ./gradlew test --console=plain
+MSYS_NO_PATHCONV=1 git add src/main/java/cn/ism/mekck/machine/ src/test/
+MSYS_NO_PATHCONV=1 git commit -m "切菜工厂：旧存档 NBT 迁移"
+```
+
+---
+
+## Task 4.6: AE2 自动化层改消费 `IMekCkPorted`
+
+**为什么**：`ae2/MekckAe2.java`（2358 行）与 `network/` 的三个包**仍然指向旧的
+`CuttingMachineFactoryBlockEntity`**。Task 5 一删旧 BE，这些 `instanceof` 永远不匹配 →
+网络拉料按钮、自动处理、ME 下单**静默失效**（不崩，就是没反应）。
+
+已核实的断链点：
+
+```
+network/AutoDistributePacket.java:36          if (be instanceof CuttingMachineFactoryBlockEntity machine)
+network/AutoProcessListRequestPacket.java:36  if (be instanceof CuttingMachineFactoryBlockEntity || ...)
+network/AutoProcessListPacket.java:48         // 依赖旧 tile 的 autoSelectedItems
+```
+
+- [ ] **Step 1: 让 `MekckAe2` 改用 `IMekCkPorted` 的端口声明**
+
+把"哪些槽是配料、哪些是产物"的判定，从"读旧 BE 的槽位下标"改成
+"问 `IMekCkPorted`"。`meGroupParallelItemInputs()` 返回 true 时，
+**N 个并行输入槽按 1 个组端口处理**——这正是 81 线程机器在 AE2 里不被当成 81 个独立配料口的关键。
+
+- [ ] **Step 2: 改三个包的 `instanceof`**
+
+从 `instanceof CuttingMachineFactoryBlockEntity` 改成 `instanceof IMekCkPorted`。
+`AutoProcessListPacket` 依赖的 `autoSelectedItems`（自动处理清单）需要在新 tile 上有对应存储。
+
+- [ ] **Step 3: 测试 + 提交**
+
+```bash
+cd /d/mc/mod/mekck && ./gradlew test --console=plain
+MSYS_NO_PATHCONV=1 git add src/main/java/cn/ism/mekck/ae2/ src/main/java/cn/ism/mekck/network/
+MSYS_NO_PATHCONV=1 git commit -m "AE2 自动化层改消费 IMekCkPorted，切菜工厂不再断链"
+```
+
+---
+
+## Task 4.7: 随机化卡补齐机械收益
+
+**背景**：旧的创造升级（`mekanism_extras:upgrade_creative`）除"随机化 49 食物"外还带
+**免耗电 + 1 tick 批次 + 自动补满**三个分支。新的 `mekck:upgrade_randomize`
+（`MekCkUpgradeRefs.randomize()`，`maxStack=1`）**已在 `isSupportedBy` 的放行集里**，
+但那三个分支在 Task 4 接线时没有对应实现。
+
+- [ ] **Step 1: 查清旧行为的确切语义**
+
+读旧 `CuttingMachineFactoryBlockEntity` 里与 `creativeTracker` / `hasCreativeUpgrade`
+相关的分支，逐条记录：免耗电是"完全跳过能量扣减"还是"能量消耗乘 0"？
+1 tick 批次是"进度门槛从 N 降到 1"还是别的？自动补满是哪个槽位？
+
+**不要凭描述实现**——按旧代码逐条对照。
+
+- [ ] **Step 2: 在 `CuttingFactoryTile` / `MekCkMachineTile` 实现**
+
+三个分支做成**基类的可覆写钩子**（其余 6 个家族可能不需要），
+默认实现走"无随机化卡"的原行为。
+
+- [ ] **Step 3: 测试 + 提交**
+
+```bash
+cd /d/mc/mod/mekck && ./gradlew test --console=plain
+MSYS_NO_PATHCONV=1 git add src/main/java/cn/ism/mekck/machine/
+MSYS_NO_PATHCONV=1 git commit -m "随机化卡补齐免耗电 / 1 tick 批次 / 自动补满"
+```
+
+---
+
 ## Task 5: 删除旧实现 + 清理死代码
 
 **Files:**
 - Delete: `src/main/java/cn/ism/mekck/blockentity/CuttingMachineFactoryBlockEntity.java`（1314 行）
 - Modify: `src/main/java/cn/ism/mekck/CuttingMachineFactoryTier.java`（删第 38–64 行的 7 个 `getXxxBlockId()`）
+- Modify: `src/main/java/cn/ism/mekck/UniversalCuttingMachine.java`（**删 11 个恒为 null 的 `*_FACTORY_BLOCK_ENTITY` 字段与恒空的 `FACTORY_BLOCK_ENTITIES` 集合**）
+
+⚠️ **Task 4.5/4.6/4.7 全部完成后再做本任务。**
+4.5 的迁移需要读旧 NBT 布局，4.6 的断链点仍指向旧类——两者都要求旧 BE 还在。
+
+⚠️ 11 个 `*_FACTORY_BLOCK_ENTITY` 字段现在恒为 `null`、`FACTORY_BLOCK_ENTITIES` 恒空
+（一个注册名不能挂两个 `BlockEntityType`）。实测它们在 `UniversalCuttingMachine`
+之外无读取点，但**必须一并删掉**，否则留下永久静默 null。
 
 - [ ] **Step 1: 确认无残留引用**
 
