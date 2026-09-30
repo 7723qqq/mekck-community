@@ -115,7 +115,10 @@ public class TestNoClientSymbolsInCommonCode {
             "src/main/java/cn/ism/mekck/blockentity/SmartCookingPotBlockEntity.java",
             "src/main/java/cn/ism/mekck/blockentity/SkeweringMachineBlockEntity.java",
             "src/main/java/cn/ism/mekck/blockentity/PlantingCuttingStationBlockEntity.java",
-            "src/main/java/cn/ism/mekck/blockentity/UniversalCuttingMachineBlockEntity.java",
+            //    切菜机已从本清单移除：迁到 TileEntityConfigurableMachine 之后 clientTick 整个
+            //      删掉、音效改由方块的 AttributeSound 接管（同电力烧烤架那条）。
+            //      本测试的「豁免必须仍然真的在豁免」反向断言正是为此存在 ——
+            //      文件删了而清单留着，它会立刻报陈旧（第四轮实测确实报了）。
             "src/main/java/cn/ism/mekck/blockentity/ElectricGrindingMachineBlockEntity.java",
 
             // ③ 根包注册类 import 了 7 个 client 类的 Screen / Renderer，但**只**在嵌套的

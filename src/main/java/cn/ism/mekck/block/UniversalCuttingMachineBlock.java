@@ -1,142 +1,125 @@
 package cn.ism.mekck.block;
 
-import cn.ism.mekck.UniversalCuttingMachine;
-import cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.Containers;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.context.BlockPlaceContext;
-import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.BaseEntityBlock;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Mirror;
-import net.minecraft.world.level.block.RenderShape;
-import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.block.SoundType;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityTicker;
-import net.minecraft.world.level.block.entity.BlockEntityType;
+import cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile;
+import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
+import mekanism.api.math.FloatingLong;
+import mekanism.api.text.ILangEntry;
+import mekanism.common.block.attribute.AttributeStateFacing;
+import mekanism.common.block.attribute.Attributes;
+import mekanism.common.block.prefab.BlockTile;
+import mekanism.common.content.blocktype.BlockTypeTile;
+import mekanism.common.inventory.container.MekanismContainer;
+import mekanism.common.registries.MekanismSounds;
+import mekanism.common.registration.impl.ContainerTypeRegistryObject;
+import mekanism.common.registration.impl.TileEntityTypeRegistryObject;
 import net.minecraft.world.level.block.state.BlockBehaviour;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
-import net.minecraft.world.level.block.state.properties.DirectionProperty;
-import net.minecraft.world.level.storage.loot.LootParams;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraftforge.network.NetworkHooks;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
+import java.util.Set;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
-public final class UniversalCuttingMachineBlock extends BaseEntityBlock {
-    public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    public static final BooleanProperty ACTIVE = BooleanProperty.create("active");
+/**
+ * 切菜机方块（Mek 体系版）—— 第四轮从自研 {@code BaseEntityBlock} 换成 Mek 的 {@link BlockTile}。
+ *
+ * <h3>换体系省下的代码</h3>
+ * 本类<b>不再有</b> {@code createBlockStateDefinition}、
+ * {@code getStateForPlacement} / {@code rotate} / {@code mirror}（{@link AttributeStateFacing} 接管）、
+ * {@code newBlockEntity} / {@code getTicker}（{@link BlockTile} 接管）、
+ * {@code use}（{@code AttributeGui} 接管）、{@code onRemove} + 手动掉物品
+ * （{@code BlockMekanism.onRemove} + 战利品表接管）、
+ * {@code setPlacedBy} 里的自定义名字。
+ *
+ * <p><b>注册名一个字没改</b>（仍是 {@code mekck:universal_cutting_machine}）。</p>
+ *
+ * <h3>随之作废的两条旧能力（与 {@code GrillBlock} 逐条对应）</h3>
+ * <ul>
+ *   <li>「潜行 + 手持升级模块直接装进对应槽」（旧 {@code addUpgradesFromHand}）
+ *       —— 由 Mek 升级 tab 取代；</li>
+ *   <li>方块侧的 {@code SideMode} 枚举 —— 由 {@code ISideConfiguration} 取代。</li>
+ * </ul>
+ */
+public final class UniversalCuttingMachineBlock
+        extends BlockTile<UniversalCuttingMachineTile, BlockTypeTile<UniversalCuttingMachineTile>> {
 
-    public UniversalCuttingMachineBlock() {
-        super(BlockBehaviour.Properties.of().strength(3.5F).sound(SoundType.METAL).requiresCorrectToolForDrops());
-        this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(ACTIVE, false));
+    public UniversalCuttingMachineBlock(BlockTypeTile<UniversalCuttingMachineTile> type,
+                                       UnaryOperator<BlockBehaviour.Properties> propertyModifier) {
+        super(type, propertyModifier);
     }
 
-    @Override
-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING, ACTIVE);
+    /**
+     * 构造本方块的方块类型描述。
+     *
+     * <p>属性一个都不能少，<b>各自的缺失症状</b>：
+     * <ul>
+     *   <li>{@code withGui} → 缺了右键不开界面；</li>
+     *   <li>{@code withEnergyConfig} → {@code MachineEnergyContainer.input} 在构造时读它
+     *       （实测走 {@code validateBlock(tile).getStorage()/getUsage()}），
+     *       缺了容量/能耗无处声明；</li>
+     *   <li>{@code withSupportedUpgrades} → 缺了 {@code supportsUpgrades()} 为 false，
+     *       升级槽与升级 tab 都不出现；</li>
+     *   <li>{@link AttributeStateFacing} → 缺了 blockstate 的 {@code facing=} 变体全部匹配失败，
+     *       方块直接<b>隐形</b>；</li>
+     *   <li>{@code withSound} → 缺了机器工作时彻底静音。</li>
+     * </ul>
+     *
+     * @param containerRef 延迟引用：容器要等 tile/block 建好之后才能注册
+     * @param tileRef      同理 —— {@code BlockTypeTile} 构造时就要 tile 的 Supplier，
+     *                     而 tile 的构造又需要方块，形成先后依赖
+     */
+    public static BlockTypeTile<UniversalCuttingMachineTile> blockTypeFor(
+            Supplier<ContainerTypeRegistryObject<? extends MekanismContainer>> containerRef,
+            Supplier<TileEntityTypeRegistryObject<UniversalCuttingMachineTile>> tileRef) {
+
+        BlockTypeTile.BlockTileBuilder<BlockTypeTile<UniversalCuttingMachineTile>,
+                UniversalCuttingMachineTile, ?> builder =
+                BlockTypeTile.BlockTileBuilder.createBlock(tileRef, LANG_ENTRY);
+
+        builder.withGui(containerRef);
+
+        // AttributeEnergy 的参数是 (usage, storage)（先用后容）。用 lambda 延迟取值，
+        // 使 /reload 改配置后立即生效。
+        builder.withEnergyConfig(
+                () -> FloatingLong.create(UniversalCuttingMachineTile.ENERGY_PER_TICK),
+                () -> FloatingLong.create(UniversalCuttingMachineTile.ENERGY_CAPACITY));
+
+        builder.withSupportedUpgrades(supportedUpgrades());
+
+        // 运行音效：旧 clientTick 里是 SoundHandler.startTileSound(PRECISION_SAWMILL, …)，
+        // 迁到 Mek 体系后由 AttributeSound 接管（updateSound 按 hasSound() + getActive() 自启停）。
+        builder.withSound(MekanismSounds.PRECISION_SAWMILL);
+
+        // 默认构造器用 BlockStateProperties.HORIZONTAL_FACING，与旧方块的 4 向
+        // blockstate JSON 逐字一致，因此不需要传自定义属性。
+        builder.with(new AttributeStateFacing());
+        builder.with(Attributes.ACTIVE);
+        builder.with(Attributes.REDSTONE);
+        builder.with(Attributes.SECURITY);
+        builder.with(Attributes.INVENTORY);
+
+        return builder.build();
     }
 
-    @Nullable
-    @Override
-    public BlockState getStateForPlacement(BlockPlaceContext context) {
-        return this.defaultBlockState().setValue(FACING, context.getHorizontalDirection());
+    /**
+     * 本机允许装进升级槽的类型。
+     *
+     * <p>与 {@code UniversalCuttingMachineTile#getSupportedUpgrade()} 是<b>同一来源</b>：
+     * 后者读的就是本属性（{@code supportsUpgrades()} 为真时返回
+     * {@code Attribute.get(block, AttributeUpgradeSupport.class).supportedUpgrades()}），
+     * 而 {@code TileComponentUpgrade} 构造器再 {@code EnumSet.copyOf} 它。
+     * 所以这一份清单同时决定「升级槽收哪几种卡」与「升级 tab 列哪几种」。</p>
+     *
+     * <p>「创造卡」走 {@link MekCkUpgradeRefs#randomize()} 而非 {@code Upgrade.CREATIVE} ——
+     * Mek Extras 也注入了一个同名 {@code CREATIVE}，两者会抢同一个注册 id，
+     * 详见 {@link MekCkUpgradeRefs} 类注释。</p>
+     */
+    private static Set<mekanism.api.Upgrade> supportedUpgrades() {
+        return Set.of(
+                mekanism.api.Upgrade.SPEED,
+                mekanism.api.Upgrade.ENERGY,
+                MekCkUpgradeRefs.randomize());
     }
 
-    @Override
-    public BlockState rotate(BlockState state, Rotation rotation) {
-        return state.setValue(FACING, rotation.rotate(state.getValue(FACING)));
-    }
-
-    @Override
-    public BlockState mirror(BlockState state, Mirror mirror) {
-        return state.rotate(mirror.getRotation(state.getValue(FACING)));
-    }
-
-    @Override
-    public RenderShape getRenderShape(BlockState state) {
-        return RenderShape.MODEL;
-    }
-
-    @Override
-    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (!level.isClientSide && player instanceof ServerPlayer serverPlayer
-                && level.getBlockEntity(pos) instanceof UniversalCuttingMachineBlockEntity machine) {
-            if (player.isShiftKeyDown()) {
-                ItemStack held = player.getItemInHand(hand);
-                if (!held.isEmpty() && cn.ism.mekck.util.UpgradeHelper.isUpgrade(held)) {
-                    String upgradeName = held.getHoverName().getString();
-                    int added = machine.addUpgradesFromHand(held);
-                    if (added > 0) {
-                        held.shrink(added);
-                        player.setItemInHand(hand, held);
-                        player.displayClientMessage(net.minecraft.network.chat.Component.literal("§a已安装升级：§f" + upgradeName), true);
-                        return InteractionResult.sidedSuccess(false);
-                    }
-                    player.displayClientMessage(net.minecraft.network.chat.Component.literal("§c无法安装升级：对应槽位已满或本机器不支持该升级"), true);
-                    return InteractionResult.sidedSuccess(false);
-                }
-            }
-            NetworkHooks.openScreen(serverPlayer, machine, pos);
-        }
-        return InteractionResult.sidedSuccess(level.isClientSide);
-    }
-
-    @Override
-    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
-        if (stack.hasCustomHoverName() && level.getBlockEntity(pos) instanceof UniversalCuttingMachineBlockEntity machine) {
-            machine.setCustomName(stack.getHoverName());
-        }
-    }
-
-    @Override
-    public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof UniversalCuttingMachineBlockEntity machine) {
-            // Save block entity data (including inventory) to the item stack and drop it
-            ItemStack stack = new ItemStack(this);
-            machine.saveToItem(stack);
-            Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
-            level.updateNeighbourForOutputSignal(pos, this);
-        }
-        super.onRemove(state, level, pos, newState, movedByPiston);
-    }
-
-    @Override
-    public List<ItemStack> getDrops(BlockState state, LootParams.Builder builder) {
-        // Prevent the default block drop; inventory is handled by onRemove
-        return List.of();
-    }
-
-    @Nullable
-    @Override
-    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new UniversalCuttingMachineBlockEntity(pos, state);
-    }
-
-    @Nullable
-    @Override
-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
-        if (level.isClientSide) {
-            return createTickerHelper(type, UniversalCuttingMachine.MACHINE_BLOCK_ENTITY.get(), UniversalCuttingMachineBlockEntity::clientTick);
-        }
-        return createTickerHelper(type, UniversalCuttingMachine.MACHINE_BLOCK_ENTITY.get(), UniversalCuttingMachineBlockEntity::serverTick);
-    }
-
-    @Override
-    public int getLightEmission(BlockState state, BlockGetter level, BlockPos pos) {
-        return 0;
-    }
+    /** 方块译名：键必须与注册名一致，否则 GUI 标题与物品名显示 raw key。 */
+    private static final ILangEntry LANG_ENTRY =
+            () -> "block.mekck.universal_cutting_machine";
 }

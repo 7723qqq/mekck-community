@@ -171,7 +171,10 @@ public class TestBlockDropInvariants {
             }
         }
 
-        assertTrue("护栏空转了：一张表都没检查到（checked=" + checked + "）", checked >= 10);
+        // 第四轮切菜机迁到 Mek BlockTile 后不再覆写 getDrops（改由 BlockMekanism.onRemove
+        // + 战利品表接管），被本测试扫到的方块从 10 降到 9。阈值跟着实际数量走，
+        // 但保留「必须扫到若干台」这一层 —— 它防的是正则失配导致的全绿。
+        assertTrue("护栏空转了：一张表都没检查到（checked=" + checked + "）", checked >= 9);
         assertTrue("以下方块抑制战利品表却又带着一张死表：\n  " + String.join("\n  ", offenders),
                 offenders.isEmpty());
     }

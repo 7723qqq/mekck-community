@@ -20,7 +20,6 @@ import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
 import cn.ism.mekck.blockentity.SmartCookingPotBlockEntity;
 import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
-import cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity;
 import cn.ism.mekck.block.IceMakerBlock;
 import cn.ism.mekck.block.IceFactoryBlock;
 import cn.ism.mekck.block.WineCellarBlock;
@@ -249,16 +248,39 @@ public final class UniversalCuttingMachine {
     // Roasted hazelnut entity (坚果爆炒机发射的炒榛子弹射物)
     public static final RegistryObject<EntityType<cn.ism.mekck.entity.RoastedHazelnutEntity>> ROASTED_HAZELNUT_ENTITY;
 
-    // Basic machine
-    public static final RegistryObject<Block> MACHINE_BLOCK = BLOCKS.register("universal_cutting_machine", UniversalCuttingMachineBlock::new);
-    public static final RegistryObject<Item> MACHINE_ITEM = ITEMS.register("universal_cutting_machine",
-            () -> new MekCkBlockItem(MACHINE_BLOCK.get(), new Item.Properties(),
-                    1, UniversalCuttingMachineBlockEntity.ENERGY_PER_TICK, UniversalCuttingMachineBlockEntity.ENERGY_CAPACITY));
-    public static final RegistryObject<BlockEntityType<UniversalCuttingMachineBlockEntity>> MACHINE_BLOCK_ENTITY = BLOCK_ENTITIES.register(
-            "universal_cutting_machine",
-            () -> BlockEntityType.Builder.of(UniversalCuttingMachineBlockEntity::new, MACHINE_BLOCK.get()).build(null));
-    public static final RegistryObject<MenuType<UniversalCuttingMachineMenu>> MACHINE_MENU = MENUS.register(
-            "universal_cutting_machine", () -> IForgeMenuType.create(UniversalCuttingMachineMenu::new));
+    // 切菜机（单机、无等级维度）：第四轮改走 Mek 的注册器，**注册名一字不改**
+    // （仍是 mekck:universal_cutting_machine），旧存档里已放置的方块因此不会变空气。
+    public static final mekanism.common.registration.impl.BlockDeferredRegister MACHINE_BLOCKS_REG =
+            new mekanism.common.registration.impl.BlockDeferredRegister(MOD_ID);
+    public static final mekanism.common.registration.impl.TileEntityTypeDeferredRegister MACHINE_TILES_REG =
+            new mekanism.common.registration.impl.TileEntityTypeDeferredRegister(MOD_ID);
+    public static final mekanism.common.registration.impl.ContainerTypeDeferredRegister MACHINE_CONTAINERS_REG =
+            new mekanism.common.registration.impl.ContainerTypeDeferredRegister(MOD_ID);
+
+    /** 已注册的切菜机方块（Mek 体系下的真实句柄）。 */
+    public static final mekanism.common.registration.impl.BlockRegistryObject<UniversalCuttingMachineBlock, MekCkBlockItem> MACHINE_HANDLE;
+    /** 已注册的切菜机 tile 类型，供 BlockType 的延迟 Supplier 回查。 */
+    public static final mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile> MACHINE_TILE;
+    /** 切菜机容器类型（注册名与旧值逐字相同）。 */
+    public static final mekanism.common.registration.impl.ContainerTypeRegistryObject<UniversalCuttingMachineMenu> MACHINE_CONTAINER;
+
+    /** 方块属性：Mek 的 BlockTile 要 UnaryOperator<Properties>，这里原样透传。 */
+    public static final java.util.function.UnaryOperator<net.minecraft.world.level.block.state.BlockBehaviour.Properties> MACHINE_PROPERTIES =
+            p -> p.strength(3.5F).sound(net.minecraft.world.level.block.SoundType.METAL)
+                    .requiresCorrectToolForDrops();
+
+    /** 兼容面：仍按旧类型读方块/物品的地方（JEI 等）。 */
+    public static final RegistryObject<Block> MACHINE_BLOCK;
+    public static final RegistryObject<Item> MACHINE_ITEM;
+    /** 客户端屏幕绑定用。容器本身已改走 MACHINE_CONTAINER（Mek 体系），
+     *  这里的 MENUS 注册只用于让 {@code UniversalCuttingMachineScreen} 拿到 MenuType。 */
+    public static final RegistryObject<MenuType<UniversalCuttingMachineMenu>> MACHINE_MENU =
+            MENUS.register("universal_cutting_machine",
+                    () -> IForgeMenuType.create(
+                            (int id, net.minecraft.world.entity.player.Inventory inv,
+                                    net.minecraft.network.FriendlyByteBuf buf) -> new UniversalCuttingMachineMenu(
+                                            id, inv,
+                                            (cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile) inv.player.level().getBlockEntity(buf.readBlockPos()))));
 
     // Electric Grinding Machine (basic machine, processes kaleidoscope_cookery millstone recipes)
     public static final RegistryObject<Block> GRINDING_MACHINE_BLOCK = BLOCKS.register("electric_grinding_machine", ElectricGrindingMachineBlock::new);
@@ -1136,6 +1158,33 @@ public final class UniversalCuttingMachine {
             GRILL_FACTORY_ITEMS.put(tier, registryView(id, ForgeRegistries.ITEMS));
         }
 
+        // 切菜机：方块/物品/tile/容器全部走 Mek 的注册器，**注册名一字不改**。
+        MACHINE_CONTAINER = MACHINE_CONTAINERS_REG.register(
+                "universal_cutting_machine", cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile.class,
+                UniversalCuttingMachineMenu::new);
+        {
+            // BlockType 需要 tile 与容器，但两者都必须先有方块 —— 用延迟 Supplier 破这个环。
+            mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile> blockType =
+                    UniversalCuttingMachineBlock.blockTypeFor(() -> MACHINE_CONTAINER, () -> findMachineTile());
+
+            MACHINE_HANDLE = MACHINE_BLOCKS_REG.register("universal_cutting_machine",
+                    () -> new UniversalCuttingMachineBlock(blockType, MACHINE_PROPERTIES),
+                    block -> new MekCkBlockItem(block, new Item.Properties(), 1,
+                            cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile.ENERGY_PER_TICK,
+                            cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile.ENERGY_CAPACITY));
+            // 两个 ticker 都必须显式给：getTicker(boolean) 只是原样返回存进去的那个、
+            // 没有任何兜底（实测字节码：ifeq 取 serverTicker / else 取 clientTicker，直接 areturn）。
+            // 不填就是 null，而 Level 只在 ticker 非 null 时才驱动方块实体 ——
+            // 机器会「放置成功、界面能开、就是不干活」。
+            MACHINE_TILE = MACHINE_TILES_REG.register(MACHINE_HANDLE,
+                    (pos, state) -> new cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile(MACHINE_HANDLE, pos, state),
+                    (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickClient(level, pos, state, tile),
+                    (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickServer(level, pos, state, tile));
+
+            MACHINE_BLOCK = registryView("universal_cutting_machine", ForgeRegistries.BLOCKS);
+            MACHINE_ITEM = registryView("universal_cutting_machine", ForgeRegistries.ITEMS);
+        }
+
         // 电力烧烤架（阶段 3）：方块/物品/tile/容器全部走 Mek 的注册器，
         // **注册名一字不改**（仍是 mekck:electric_grill）。
         GRILL_CONTAINER = GRILL_CONTAINERS_REG.register(
@@ -1385,6 +1434,20 @@ public final class UniversalCuttingMachine {
         return found;
     }
 
+    /**
+     * 取回已注册的切菜机 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
+     *
+     * <p>必须延迟：{@code TILES_REG.register(block, …)} 要求先有方块，而方块的
+     * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。理由同
+     * {@link #findGrillTile}。</p>
+     */
+    private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile> findMachineTile() {
+        if (MACHINE_TILE == null) {
+            throw new IllegalStateException("切菜机 tile 尚未注册（BlockTypeTile 的 Supplier 被过早求值）");
+        }
+        return MACHINE_TILE;
+    }
+
     private static boolean firstPlayerJoined = false;
     /** 创造升级的 49 种食物提示是否已发过（与种植调试信息各自独立）。 */
     private static boolean creativeUpgradeHintSent = false;
@@ -1447,6 +1510,9 @@ public final class UniversalCuttingMachine {
         // RegistryObject 壳子（字段非 null、编译通过），真正写进 Forge 注册表的是这里；
         // 缺了就是「方块放下去变空气 + 客户端 MenuScreens.register(GRILL_CONTAINER.get(), ...)
         // 抛 Registry Object not present」。
+        MACHINE_BLOCKS_REG.register(bus);
+        MACHINE_TILES_REG.register(bus);
+        MACHINE_CONTAINERS_REG.register(bus);
         GRILL_BLOCKS_REG.register(bus);
         GRILL_TILES_REG.register(bus);
         GRILL_CONTAINERS_REG.register(bus);

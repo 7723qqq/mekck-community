@@ -257,8 +257,7 @@ public class TestMenuQuickMoveSlotRanges {
             "ElectricGrindingMachineMenu.java",
             "SimpleMachineMenu.java",
             "SkeweringMachineMenu.java",
-            "SmartCookingPotMenu.java",
-            "UniversalCuttingMachineMenu.java");
+            "SmartCookingPotMenu.java");
 
     @Test
     public void powerSlotTargetIsAMenuIndexNotAHandlerConstant() throws IOException {
@@ -360,8 +359,7 @@ public class TestMenuQuickMoveSlotRanges {
                     "3 输入 + 产物 + 返还 + 速度 + 能量 + 81 存储 + 能源 = 8+STORAGE_SLOT_COUNT"),
             new Menu("SmartCookingPotMenu.java", 92, set("powerSlotIndex"), map(),
                     "6 输入 + 产物 + 返还 + 速度 + 能量 + 81 存储 + 能源 = 11+STORAGE_SLOT_COUNT"),
-            new Menu("UniversalCuttingMachineMenu.java", 5, set("powerSlotIndex"), map(),
-                    "输入/输出/速度/能量/能源（能源槽曾被漏算，见 A3）"),
+
             new Menu("WineCellarMenu.java", 10, set(), map(),
                     "9 存储 + 能源 = TOTAL_SLOTS"));
 

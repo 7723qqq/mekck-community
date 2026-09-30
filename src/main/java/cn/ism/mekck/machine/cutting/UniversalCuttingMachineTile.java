@@ -8,6 +8,7 @@ import cn.ism.mekck.util.UpgradeHelper;
 import cn.ism.mekck.util.MatchKey;
 import mekanism.api.Action;
 import mekanism.api.AutomationType;
+import mekanism.api.energy.IEnergyContainer;
 import mekanism.api.IContentsListener;
 import mekanism.api.Upgrade;
 import mekanism.api.math.FloatingLong;
@@ -21,6 +22,7 @@ import mekanism.common.inventory.slot.EnergyInventorySlot;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.component.TileComponentConfig;
 import mekanism.common.tile.component.TileComponentEjector;
+import mekanism.common.tile.component.TileComponentUpgrade;
 import mekanism.common.tile.interfaces.ISustainedData;
 import mekanism.common.tile.prefab.TileEntityConfigurableMachine;
 import net.minecraft.core.BlockPos;
@@ -83,7 +85,11 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
 
     /** 基础加工耗时（游戏刻）。装速度卡后按倍率缩短。 */
     public static final int PROCESS_TIME = 200;
-    /** 单件 FE 耗电（容量与接收上限改由方块 {@code AttributeEnergy} 声明）。 */
+    /** 能量容量（FE）—— 旧 {@code UniversalCuttingMachineBlockEntity.ENERGY_CAPACITY} 搬过来。 */
+    public static final int ENERGY_CAPACITY = 100_000;
+    /** 单次接收上限（FE）。 */
+    public static final int MAX_RECEIVE = 1_000;
+    /** 单件 FE 耗电。 */
     public static final int ENERGY_PER_TICK = 20;
 
     /**
@@ -491,4 +497,39 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
     public void setMeOrderEnabled(boolean enabled) {
         this.meOrderEnabled = enabled;
     }
+
+    // ── 供外部（AE2 / 升级安装）取用的访问器 ───────────────────────────
+
+    /** 升级组件（父类的 {@code upgradeComponent} 是 protected，只有本类能读）。 */
+    public TileComponentUpgrade getUpgradeComponent() {
+        return upgradeComponent;
+    }
+
+    /** 本机物品槽的容器视图（AE2 自动补料用）。 */
+    public net.minecraftforge.items.ItemStackHandler getItems() {
+        return new cn.ism.mekck.machine.MekCkSlotHandler(List.of(inputSlot, outputSlot));
+    }
+
+    /**
+     * 存量能量（FE）。菜单与屏幕读它。
+     *
+     * <p>Mek 的 {@code getEnergyContainer()} 在接口上是 <b>final</b>、且返回
+     * {@code List<IEnergyContainer>}，不适合 GUI 直接用；本方法给出标量视图。</p>
+     */
+    public FloatingLong getEnergyStored() {
+        return energyContainer == null ? FloatingLong.ZERO : energyContainer.getEnergy();
+    }
+
+    /** 容量上限（FE）。 */
+    public FloatingLong getEnergyCapacity() {
+        return FloatingLong.create(ENERGY_CAPACITY);
+    }
+
+    /** 无参取本机能量容器 —— 给 GUI 的 GuiVerticalPowerBar 用。
+     *  Mek 的 getEnergyContainer(Direction) 是接口上的 final 方法、且要方向参数；
+     *  本机没有分面能量，直接返回唯一那只。 */
+    public IEnergyContainer getEnergyContainer() {
+        return energyContainer;
+    }
+
 }

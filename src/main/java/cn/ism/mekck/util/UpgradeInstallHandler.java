@@ -9,7 +9,6 @@ import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
 import cn.ism.mekck.blockentity.SmartCookingPotBlockEntity;
-import cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
@@ -110,8 +109,9 @@ public final class UpgradeInstallHandler {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof NutRoasterBlockEntity m) {
             added = m.addUpgradesFromHand(held);
-        } else if (be instanceof UniversalCuttingMachineBlockEntity m) {
-            added = m.addUpgradesFromHand(held);
+        } else if (be instanceof cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile m) {
+            added = m.getUpgradeComponent() == null ? 0
+                    : m.getUpgradeComponent().addUpgrades(mekanism.api.Upgrade.SPEED, 1);
         } else if (be instanceof PlantingCuttingStationBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof ElectricGrindingMachineBlockEntity m) {

@@ -1557,7 +1557,7 @@ public final class MekckAe2 {
                 entries = buildCookingPatterns(portedCooking, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) {
                 entries = buildSimpleMachinePatterns(sm, avail);
-            } else if (owner instanceof cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity) {
+            } else if (owner instanceof cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile) {
                 entries = buildCuttingPatterns(level, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.SkeweringMachineBlockEntity) {
                 entries = buildSkeweringPatterns(level, avail);
@@ -1763,7 +1763,7 @@ public final class MekckAe2 {
                 s.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) {
                 sm.setOrder(entry.recipeId, 1);
-            } else if (owner instanceof cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity cut) {
+            } else if (owner instanceof cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile cut) {
                 cut.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.SkeweringMachineBlockEntity sk) {
                 sk.setOrder(entry.recipeId, 1);
@@ -1794,7 +1794,7 @@ public final class MekckAe2 {
             // ItemStackHandler，槽位由 portWindow() / MekPortWindow 提供——与切菜、研磨、
             // 种植切配、烧烤迁完时的处理完全一致（那四家当年也是各删一行）。
             if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) return sm.getItems();
-            if (owner instanceof cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity cut) return cut.getItems();
+            if (owner instanceof cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile cut) return cut.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.SkeweringMachineBlockEntity sk) return sk.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.GrillBlockEntity g) return g.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.SmartCookingPotBlockEntity pot) return pot.getItems();
@@ -1811,8 +1811,8 @@ public final class MekckAe2 {
             if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) {
                 return new int[]{sm.OUTPUT_SLOT};
             }
-            if (owner instanceof cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity cut) {
-                return new int[]{cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity.OUTPUT_SLOT};
+            if (owner instanceof cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile) {
+                return new int[]{1};   // 输出槽：Mek 槽顺序为 [输入, 输出, 升级, 电源]
             }
             if (owner instanceof cn.ism.mekck.blockentity.SkeweringMachineBlockEntity) {
                 return new int[]{cn.ism.mekck.blockentity.SkeweringMachineBlockEntity.OUTPUT_SLOT};

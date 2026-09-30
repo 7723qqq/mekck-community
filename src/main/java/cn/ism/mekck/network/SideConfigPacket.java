@@ -8,7 +8,6 @@ import cn.ism.mekck.blockentity.SimpleMachineBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
 import cn.ism.mekck.blockentity.SmartCookingPotBlockEntity;
-import cn.ism.mekck.blockentity.UniversalCuttingMachineBlockEntity;
 import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import net.minecraft.core.BlockPos;
@@ -100,9 +99,10 @@ public final class SideConfigPacket {
             // 由 Mek 自己的侧配界面写入，MekCK 这个包对它永远不生效。
             // 电力烧烤架分支在阶段 3 同理删除（GrillBlockEntity 也换成了
             // TileEntityConfigurableMachine）。
-            if (be instanceof UniversalCuttingMachineBlockEntity machine) {
-                machine.setSideMode(dir, mode);
-            } else if (be instanceof SmartCookingPotBlockEntity machine) {
+            // 切菜机分支在第四轮删除：新的 UniversalCuttingMachineTile 是
+            // TileEntityConfigurableMachine，物品侧配由 Mek 自己的 configComponent 持有、
+            // 由 Mek 自己的侧配界面写入，本包对它永远不生效（同 GrillBlockEntity / CuttingFactoryTile）。
+            if (be instanceof SmartCookingPotBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof SkeweringMachineBlockEntity machine) {
                 machine.setSideMode(dir, mode);
