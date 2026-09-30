@@ -634,7 +634,7 @@ public final class MekckConfig {
      * {@code .superpowers/sdd/2026-09-29-mekck-phase1-upgrade-system/
      * energy-extract-and-efficiency-report.md} 的「energyPerTick 脱节」一节。</p>
      *
-     * <p><b>免能耗档读本方法也没有实际作用</b>：{@code energyPerWorkTick()} 在
+     * <p><b>免能耗档读本方法也没有实际作用</b>：{@code energyPerLanePerTick()} 在
      * {@code tier.energyPerTick == 0} 时就短路返回 0，算不到乘数。
      * 这一点已写进配置项的注释，避免整合包作者白调。</p>
      */

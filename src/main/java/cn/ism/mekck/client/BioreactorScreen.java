@@ -107,13 +107,12 @@ public final class BioreactorScreen extends GuiMekanism<BioreactorMenu> {
         }
         addRenderableWidget(tankVs);
 
-        // AE2 网络拉料按钮（生物反应堆：燃料输入）。§F14 #4：几何统一向 NetworkPullButton 取
-        // ⇒ 与其余 16 屏同口径（面板外左侧 tab 列、24×24）。本屏无侧配/下单 tab ⇒ 走 getYTop()，
-        // 「自动」从 tab 列首格 y=6 起、「ME拉」在其下一格 y=32。
-        if (cn.ism.mekck.util.AE2Compat.isLoaded()) {
-            addRenderableWidget(new cn.ism.mekck.client.NetworkPullButtonElement(this,
-                    cn.ism.mekck.client.NetworkPullButton.getX(imageWidth),
-                    cn.ism.mekck.client.NetworkPullButton.getYTop(), menu.getBlockPos()));
+        // AE2 自动补料 / 网络拉料标签页（生物反应堆：燃料输入）。与其余 10 屏同一入口、
+        // 同一左列坐标（62 / 90）——本屏左列没有侧配/下单，上方留白但位置全模组一致。
+        if (cn.ism.mekck.client.NetworkPullButton.isVisible()) {
+            for (var tab : cn.ism.mekck.client.NetworkPullButton.register(this, menu.getBlockPos())) {
+                addRenderableWidget(tab);
+            }
         }
     }
 

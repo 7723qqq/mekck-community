@@ -3,7 +3,6 @@ package cn.ism.mekck.util;
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
 import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
-import cn.ism.mekck.blockentity.GrillBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
@@ -120,8 +119,6 @@ public final class UpgradeInstallHandler {
         } else if (be instanceof SmartCookingPotBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof SkeweringMachineBlockEntity m) {
-            added = m.addUpgradesFromHand(held);
-        } else if (be instanceof GrillBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity m) {
             // §F25 修法 A：SimpleMachine 家族（陈酿/榨汁/发酵/凝乳…凡借祖本注册的基础机器）

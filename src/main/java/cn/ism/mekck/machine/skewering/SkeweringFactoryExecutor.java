@@ -74,14 +74,55 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
 
     // ── MekCkRecipeExecutor ─────────────────────────────────────────────
 
+    /**
+     * 本机只有一路 —— 三个输入槽一起做出一个批次，没有「第几路」可言。
+     * 覆写成 1 之后 {@code MekCkMachineTile} 的进度数组长度为 1，整机共用一条进度条。
+     */
     @Override
-    public void tick(MekCkMachineTile tile, int slotCount) {
+    public int processCount(MekCkMachineTile tile) {
+        return 1;
+    }
+
+    /**
+     * 第 0 路此刻能不能开工：有订单、有配方、批量算得出来且大于 0。
+     *
+     * <p>{@code index} 在本家族无意义（{@link #processCount} 恒为 1）。本方法每 tick
+     * 被调一次，<b>不得改动机器状态</b>；{@link #owner} 的绑定与配方缓存是执行器自有状态，
+     * 可以在这里刷新。</p>
+     */
+    @Override
+    public boolean canProcess(MekCkMachineTile tile, int index) {
         this.owner = tile instanceof SkeweringFactoryTile s ? s : null;
-        this.busy = false;
         Level level = tile == null ? null : tile.getLevel();
         if (level == null || owner == null) {
+            return false;
+        }
+        Recipe<?> recipe = findRecipe(level);
+        if (recipe == null) {
+            return false;
+        }
+        List<IInventorySlot> scan = owner.ingredientSlots();
+        int batch = batchSize(recipe, scan);
+        if (orderRecipeId != null || !orderCustomIngredients.isEmpty()) {
+            // 订单剩余量是硬上限：不能做出「比订单多」的东西。
+            batch = Math.min(batch, orderQuantity - orderCompleted);
+        }
+        return batch > 0;
+    }
+
+    /**
+     * 加工第 0 路一次。先调一次 {@link #canProcess} 兜底，再重新取配方与批量执行。
+     *
+     * <p>{@code busy} 的复位与旧 {@code tick} 同款：开工前先清，真跑完才置位。</p>
+     */
+    @Override
+    public void process(MekCkMachineTile tile, int index) {
+        this.owner = tile instanceof SkeweringFactoryTile s ? s : null;
+        this.busy = false;
+        if (!canProcess(tile, index)) {
             return;
         }
+        Level level = tile.getLevel();
         Recipe<?> recipe = findRecipe(level);
         if (recipe == null) {
             return;

@@ -115,6 +115,19 @@ public class SkeweringFactoryTile extends MekCkMachineTile implements IMekCkPort
     /**
      * {@inheritDoc}
      *
+     * <p><b>穿串工厂不提供自动分选</b>：它的 3 个输入槽是签子 / 主料 / 辅料三种不同角色，
+     * 而配方匹配是位置无关的、返还槽却复制「输入槽 0 的整叠」（见类注释的已知坑 ①）。
+     * 分选会把签子挪出槽 0，让那个坑从「可达」变成「常态」—— 返还的会是另一种物品。
+     * 与其提供一个会踩坑的开关，不如不提供。</p>
+     */
+    @Override
+    public boolean supportsSorting() {
+        return false;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * <p>退出旧存档迁移：本机的槽位排布（3 输入 / 2 输出 / 81 存储 / 4 升级卡）
      * 与 {@link MekCkLegacyMachineNbt} 假设的并行方阵排布不同，硬套会把
      * 速度升级卡灌进能源槽。理由与逐条下标见基类该方法的注释。</p>
@@ -283,7 +296,7 @@ public class SkeweringFactoryTile extends MekCkMachineTile implements IMekCkPort
      * 而旧实现的公式里根本没有这一项（逐字对齐第 478 行）。</p>
      */
     @Override
-    protected int energyPerWorkTick() {
+    protected int energyPerLanePerTick() {
         CuttingMachineFactoryTier tier = getTier();
         if (tier == null || tier.energyPerTick == 0) {
             return 0;

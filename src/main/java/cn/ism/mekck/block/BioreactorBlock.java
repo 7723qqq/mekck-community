@@ -50,9 +50,11 @@ public final class BioreactorBlock extends BaseEntityBlock {
     private static final VoxelShape SHAPE = Shapes.block();
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
     public static final BooleanProperty ACTIVE = BooleanProperty.create("active");
-    /** 绑定方块形状：2×2×3（主方块位于底层西南角，绑定方块占其余 11 格）。 */
+    /**
+     * 绑定方块形状：3×3×3（主方块位于底部正中，绑定方块占其余 26 格）。
+     */
     private static final mekanism.api.functions.TriConsumer<BlockPos, BlockState, java.util.stream.Stream.Builder<BlockPos>> BOUNDING_SHAPE =
-            MekCkMultiblock.SHAPE_2X2X3;
+            MekCkMultiblock.SHAPE_3X3X3;
 
     public BioreactorBlock() {
         super(BlockBehaviour.Properties.of().strength(3.5F).sound(SoundType.METAL).requiresCorrectToolForDrops());
@@ -122,8 +124,11 @@ public final class BioreactorBlock extends BaseEntityBlock {
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (!state.is(newState.getBlock())) {
-            // 清理绑定方块（整体一起破坏），并掉落方块本体
+            // 清理绑定方块（整体一起破坏），并掉落方块本体。
+            // 除现行 3×3×3 外还要清一遍旧的 2×2×3：改尺寸之前放下的机器仍带旧布局，
+            // 只按新形状清会漏掉 3 个绑定块，在世界里留下拿不掉也点不开的残块。
             MekCkMultiblock.removeBoundingBlocks(level, pos, state, BOUNDING_SHAPE, UniversalCuttingMachine.BIOREACTOR_BOUNDING_BLOCK.get());
+            MekCkMultiblock.removeBoundingBlocks(level, pos, state, MekCkMultiblock.SHAPE_2X2X3_LEGACY, UniversalCuttingMachine.BIOREACTOR_BOUNDING_BLOCK.get());
             if (!level.isClientSide && level.getBlockEntity(pos) instanceof BioreactorBlockEntity machine) {
                 // 必须把 BE 数据（16 个燃料输入槽、动力槽、流体容器、能量、已存流体）
                 // 序列化进物品：getDrops 返回空，所以这一个物品是状态的唯一载体，

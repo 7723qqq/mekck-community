@@ -104,13 +104,14 @@ public class TestNoClientSymbolsInCommonCode {
             "src/main/java/cn/ism/mekck/item/MekCkBlockItem.java",
             "src/main/java/cn/ism/mekck/item/BioreactorBlockItem.java",
 
-            // ② 6 个遗留 BE 的 clientTick 静态方法里 import mekanism.client.sound.SoundHandler。
+            // ② 5 个遗留 BE 的 clientTick 静态方法里 import mekanism.client.sound.SoundHandler。
             //    **这一类比 ① 更难修**：clientTick 是 Forge BlockEntityType.getTicker 契约要求的
             //    静态方法，必须留在 BE 类上；而 Mek 自己的 tile 类里查不到同型写法
             //    （实测映射 jar：引用 SoundHandler 的 tile 类只有 2 个，都不含 clientTick），
-            //    也就是说 Mek 走了另一条路。改它需要先给 6 个机器换一套 ticker 兼容类。
+            //    也就是说 Mek 走了另一条路。改它需要先给这 5 个机器换一套 ticker 兼容类。
             //    在那之前它同样是「靠惰性解析侥幸不崩」的债。
-            "src/main/java/cn/ism/mekck/blockentity/GrillBlockEntity.java",
+            //    （电力烧烤架已从本清单移除：它迁到 TileEntityConfigurableMachine 之后
+            //      clientTick 整个删掉，音效改由方块的 AttributeSound 接管。）
             "src/main/java/cn/ism/mekck/blockentity/SmartCookingPotBlockEntity.java",
             "src/main/java/cn/ism/mekck/blockentity/SkeweringMachineBlockEntity.java",
             "src/main/java/cn/ism/mekck/blockentity/PlantingCuttingStationBlockEntity.java",

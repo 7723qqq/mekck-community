@@ -32,7 +32,7 @@ import java.util.List;
  * ——它们本来就是同一套「多线程工厂」的通用参数，各家族只换了配方。
  * 唯一不同的是执行器（石磨的随机产出 + 订单层）。
  *
- * <h3>能量闸门为什么落在 {@link #energyPerWorkTick()} 而不是执行器里</h3>
+ * <h3>能量闸门为什么落在 {@link #energyPerLanePerTick()} 而不是执行器里</h3>
  * 旧 {@code GrindingFactoryBlockEntity.serverTick} 的顺序是
  * 「红石 → 扣能量 → 进度条 → 满批次才 completeRecipe」。而 {@link GrindingFactoryExecutor}
  * 的契约是「本 tick 尽可能多地加工」——它必须在被调用<b>之前</b>就知道该不该调用。
@@ -124,39 +124,38 @@ public class GrindingFactoryTile extends MekCkMachineTile implements IMekCkPorte
      *   int energyPerTick = activeSlots &gt; 0 &amp;&amp; !hasCreative
      *       ? CountMath.mulClamp(Integer.MAX_VALUE, baseEnergyPerTick, activeSlots, stackMult) : 0;
      * </pre>
-     * 四项逐条对应：
+     * 三项逐条对应：
      * <ol>
      *   <li>{@code speedMult * speedMult} 的平方——语义见 {@link #ENERGY_PER_PROCESS}；</li>
      *   <li>{@code tier.energyPerTick == 0} 的免能耗档先判、后算，免得免能耗档还去乘
      *       一个可能很大的倍率；</li>
-     *   <li>{@code activeSlots > 0} 用基类的 {@link #activeWorkSlots()}（非空输入槽数）；</li>
      *   <li>{@code stackMult} 复用 {@link MekCkUpgradeTypes#stackMultiplier}，
      *       与执行器算并行数用的是<b>同一个纯函数</b>，两边不可能算出不同的倍增系数。</li>
      * </ol>
      * <p>旧式子里 {@code !hasCreative} 那半支不在本方法里：随机化卡的「免耗电」由基类的
      * {@link #randomizeGrantsFreeEnergy()} 在闸门上把扣减额整体置 0，
      * 本方法因此保持「无卡时的原公式」。</p>
+     *
+     * <p><b>{@code activeSlots} 那一项也不在本方法里</b>：本方法给的是<b>单路</b>成本，
+     * 并行数由基类 {@code workCycle} 的逐路扣减自然乘出来（跑几路扣几份），
+     * 与 Mek 的 {@code CachedRecipe.updateAndProcess} 逐路 extract 同构。</p>
      */
     @Override
-    protected int energyPerWorkTick() {
+    protected int energyPerLanePerTick() {
         CuttingMachineFactoryTier tier = getTier();
         // 免能耗档（NEBULA / SINGULARITY 的 energyPerTick == 0）先短路。
         if (tier == null || tier.energyPerTick == 0) {
-            return 0;
-        }
-        int active = activeWorkSlots();
-        if (active <= 0) {
             return 0;
         }
         double speedMult = effectiveSpeedMultiplier();
         double consumptionMult = effectiveEnergyConsumptionMultiplier();
         int baseEnergyPerTick = baseEnergyPerTick(speedMult, consumptionMult,
                 MekckConfig.getTierEnergyEfficiency(tier));
-        return CountMath.mulClamp(Integer.MAX_VALUE, baseEnergyPerTick, active, stackMultiplier());
+        return CountMath.mulClamp(Integer.MAX_VALUE, baseEnergyPerTick, stackMultiplier());
     }
 
     /**
-     * 单 tick 基准能耗 —— {@link #energyPerWorkTick} 公式里那一段乘法，抽出来只为能单测。
+     * 单路单 tick 基准能耗 —— {@link #energyPerLanePerTick} 公式里那一段乘法，抽出来只为能单测。
      *
      * <p><b>能效乘数为什么乘在 {@code ceil} 之前</b>：乘在之后，{@code 20 × 0.32 = 6.4}
      * 这种非整数必须再截断一次才能喂给整数乘法，而 Java 的 {@code (int)} 是<b>向零截断</b>，

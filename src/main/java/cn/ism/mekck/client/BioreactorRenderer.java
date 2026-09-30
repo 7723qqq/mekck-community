@@ -45,8 +45,8 @@ public final class BioreactorRenderer implements BlockEntityRenderer<BioreactorB
     private static final ResourceLocation MESH =
             new ResourceLocation(UniversalCuttingMachine.MOD_ID, "models/mesh/bioreactor.obj");
 
-    private static final RenderType RENDER_TYPE = MekCkRenderTypes.objSolid(
-            new ResourceLocation(UniversalCuttingMachine.MOD_ID, "block/mekck/bioreactor/bioreactor"));
+    private static final RenderType RENDER_TYPE = MekCkRenderTypes.objCutoutNoCull(
+            new ResourceLocation(UniversalCuttingMachine.MOD_ID, "textures/block/mekck/bioreactor/bioreactor.png"));
 
     /** 各层在 OBJ 中的分组名；顺序与层的堆叠顺序一致。 */
     private static final List<String> LAYER_GROUPS =
@@ -83,10 +83,9 @@ public final class BioreactorRenderer implements BlockEntityRenderer<BioreactorB
         BlockPos pos = blockEntity.getBlockPos();
 
         poseStack.pushPose();
-        // 绕 2×2 足迹中心（主方块原点的 (1, 0, 1) 处）旋转，足迹旋转后不变
-        poseStack.translate(1.0, 0.0, 1.0);
+        // 绕 3×3 足迹中心（主方块自身的 (0.5, 0, 0.5) 处）旋转，足迹旋转后不变
+        poseStack.translate(0.5, 0.0, 0.5);
         poseStack.mulPose(Axis.YN.rotationDegrees(angle));
-        poseStack.translate(-1.0, 0.0, -1.0);
         for (int i = 0; i < LAYER_GROUPS.size(); i++) {
             String group = LAYER_GROUPS.get(i);
             if (!mesh.hasGroup(group)) {

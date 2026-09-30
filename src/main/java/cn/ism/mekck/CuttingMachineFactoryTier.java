@@ -33,7 +33,7 @@ public enum CuttingMachineFactoryTier {
      * 是给 Mek 的<b>声明值</b>（GUI 显示 / {@code AttributeEnergy.getUsage()}），
      * 只被当作「是不是免能耗档」的布尔量读（{@code == 0}）；
      * 真实扣电走的是 {@code ENERGY_PER_PROCESS × speed² × cons × 本值}，见
-     * {@code CuttingFactoryTile.energyPerWorkTick()}。</p>
+     * {@code CuttingFactoryTile.energyPerLanePerTick()}。</p>
      *
      * <p><b>设计意图：高阶更省电，因为贵。</b>玩家一次性付升级材料，换来长期更高的
      * 单位产出效率；于是 NEBULA / SINGULARITY 的免能耗不再是断崖，而是这条曲线的终点。</p>
@@ -46,7 +46,7 @@ public enum CuttingMachineFactoryTier {
      * 等比曲线在日志坐标下是直线，玩家按「贵一档 ≈ 省两成电」就能估算出装价值。</p>
      *
      * <p><b>为什么免能耗档是 0 而不是 0.05</b>：NEBULA / SINGULARITY 的
-     * {@link #energyPerTick == 0}，而 {@code energyPerWorkTick()} 第一件事就是
+     * {@link #energyPerTick == 0}，而 {@code energyPerLanePerTick()} 第一件事就是
      * 对它短路返回 0——公式根本算不到本值。给它们写 0.05 等于在配置文件里放一个
      * <b>永远读不到、且会误导人</b>的数字（整合包作者看到 0.05 会以为星云档要抽 5% 的电）。
      * 写 0 还多一层保险：万一哪天那个短路被去掉，曲线自己仍然终止在 0，行为不变。</p>

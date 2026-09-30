@@ -62,28 +62,35 @@ public class TestBioreactorObjAsset {
 
     @Test
     public void triangleCountsMatchTheSourceJsonModels() throws IOException {
-        // 338 条面记录 × 2 = 676 个三角形，按源模型分配到三层
+        // Deep Mek 高精硬表面模型（各层在降面不减配下的三角形数）
         Map<String, float[]> groups = parseAsset();
-        assertEquals(160, countTriangles(groups, "bioreactor_layer0"));
-        assertEquals(350, countTriangles(groups, "bioreactor_layer1"));
-        assertEquals(166, countTriangles(groups, "bioreactor_layer2"));
-        assertEquals(676, countTriangles(groups));
+        assertEquals(4778, countTriangles(groups, "bioreactor_layer0"));
+        assertEquals(2529, countTriangles(groups, "bioreactor_layer1"));
+        assertEquals(3707, countTriangles(groups, "bioreactor_layer2"));
+        assertEquals(11014, countTriangles(groups));
     }
 
     @Test
     public void footprintSpansTwoBlocks() throws IOException {
-        // 原资产是 32×32 px 的 2×2 足迹，换算后应为 2 block
+        // 3×3×3 多方块结构：机器以 (0,0) 为中心，X 和 Z 必须处于 [-1.5, 1.5] 约束内
         Map<String, float[]> groups = parseAsset();
+        float minX = Float.MAX_VALUE;
         float maxX = -Float.MAX_VALUE;
+        float minZ = Float.MAX_VALUE;
         float maxZ = -Float.MAX_VALUE;
         for (float[] data : groups.values()) {
             for (int i = 0; i < data.length; i += ObjMesh.STRIDE) {
+                minX = Math.min(minX, data[i]);
                 maxX = Math.max(maxX, data[i]);
+                minZ = Math.min(minZ, data[i + 2]);
                 maxZ = Math.max(maxZ, data[i + 2]);
             }
         }
-        assertEquals(2.0f, maxX, 1e-6f);
-        assertEquals(2.0f, maxZ, 1e-6f);
+        assertTrue("X 下界应在 -1.5 范围内: " + minX, minX >= -1.5f);
+        assertTrue("X 上界应在 1.5 范围内: " + maxX, maxX <= 1.5f);
+        assertTrue("Z 下界应在 -1.5 范围内: " + minZ, minZ >= -1.5f);
+        assertTrue("Z 上界应在 1.5 范围内: " + maxZ, maxZ <= 1.5f);
+        assertTrue("机器跨度应超过 2 格 (3x3 规格)", (maxX - minX) > 2.0f);
     }
 
     private static int countTriangles(Map<String, float[]> groups, String group) {

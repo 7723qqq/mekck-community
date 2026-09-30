@@ -1,12 +1,8 @@
 package cn.ism.mekck.client;
 
-import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.machine.skewering.SkeweringFactoryTile;
 import cn.ism.mekck.menu.SkeweringFactoryMenu;
-import mekanism.api.math.FloatingLong;
 import mekanism.client.gui.GuiConfigurableTile;
-import mekanism.client.gui.element.progress.GuiProgress;
-import mekanism.client.gui.element.progress.ProgressType;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -67,12 +63,15 @@ public final class SkeweringFactoryScreen extends MekCkFactoryScreenBase<Skeweri
         // 侧配 / 传输配置 / 升级 / 红石 / 安全 + 全部槽位 widget —— 一句 super 全排好。
         super.addGuiElements();
 
-        CuttingMachineFactoryTier tier = tile.getTier();
-        addRenderableWidget(new GuiEnergyTab(this, tile.getEnergyContainer(),
-                () -> FloatingLong.create(tier == null ? 0 : tier.energyPerTick)));
+        // 第三个参数是「使用量」供给器 —— 上游 GuiFactory 传的是 tile::getLastUsage
+        // （上一 tick 的真实扣电量），不是等级的声明值。
+        addRenderableWidget(new GuiEnergyTab(this, tile.getEnergyContainer(), tile::getLastUsage));
 
         // 竖直能源条（旧 GUI 有、迁移时丢的那条），位置与数据源见基类。
         addEnergyBar();
+
+        // 自动分选标签页（上游 GuiFactory 的第一句就是它）。
+        addSortingTab();
 
         // 槽位悬浮窗标签页：只有高档工厂（>17 并行）或烹饪/穿串才有窗口槽，
         // 三组皆空时不加标签页（menu.windowSlots().isEmpty()）。
@@ -81,11 +80,10 @@ public final class SkeweringFactoryScreen extends MekCkFactoryScreenBase<Skeweri
                     menu.windowSlots(), () -> slotWindowTab));
         }
 
-        // 进度条：SMALL_RIGHT 箭头，横在输入三格与输出两格之间。
-        int progressX = 38 + SkeweringFactoryTile.INPUT_SLOTS * 18 + (GAP_BETWEEN - 28) / 2;
-        int progressY = 41 + 18 / 2 - 4;
-        // isActive() 不覆写（Mek 默认 true，底图常驻）——理由见 MekCkFactoryScreenBase 类注释。
-        addRenderableWidget(new GuiProgress(() -> menu.getProgressRatio(), ProgressType.SMALL_RIGHT, this, progressX, progressY));
+        // 进度条：Mek 工厂同款的 DOWN 竖条（8×20）。穿串是整机一次，只有一路。
+        // 落在输入三格与输出一列之间的空带里，纵向对齐输入行的中线。
+        addSingleProgressBar(() -> menu.getProgressRatio(0), 0,
+                38 + SkeweringFactoryTile.INPUT_SLOTS * 18, GAP_BETWEEN, 41 + 18 / 2);
     }
 
     @Override

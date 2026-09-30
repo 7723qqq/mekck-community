@@ -1,14 +1,10 @@
 package cn.ism.mekck.client;
 
-import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.machine.grill.GrillFactoryTile;
 import cn.ism.mekck.menu.GrillFactoryMenu;
 import cn.ism.mekck.network.GrillSeasoningTogglePacket;
 import cn.ism.mekck.network.ModMessages;
-import mekanism.api.math.FloatingLong;
 import mekanism.client.gui.GuiConfigurableTile;
-import mekanism.client.gui.element.progress.GuiProgress;
-import mekanism.client.gui.element.progress.ProgressType;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -60,8 +56,6 @@ public final class GrillFactoryScreen extends MekCkFactoryScreenBase<GrillFactor
      */
     private MekCkSlotWindowTab slotWindowTab;
 
-    /** 输入方阵与输出方阵的水平间隔，与 tile 侧 {@code GRID_GAP} 同值。 */
-    private static final int GAP_BETWEEN = 30;
     /** 调味料列的横向起点，与 tile 侧 {@code SEASONING_SLOT_X} 同值。 */
     private static final int SEASONING_COL_X = 8;
     /** 单个槽位间距，与 tile 侧 {@code SEASONING_SLOT_STEP} 同值。 */
@@ -86,12 +80,15 @@ public final class GrillFactoryScreen extends MekCkFactoryScreenBase<GrillFactor
 
         // 能量 tab：Mek 固定 (x=-26, y=137, 26, 26)，与侧配/传输配置同处左列不冲突。
         // tooltip 里的存量/上限/每秒耗量由 Mek 自己组装。
-        CuttingMachineFactoryTier tier = tile.getTier();
-        addRenderableWidget(new GuiEnergyTab(this, tile.getEnergyContainer(),
-                () -> FloatingLong.create(tier == null ? 0 : tier.energyPerTick)));
+        // 第三个参数是「使用量」供给器 —— 上游 GuiFactory 传的是 tile::getLastUsage
+        // （上一 tick 的真实扣电量），不是等级的声明值。
+        addRenderableWidget(new GuiEnergyTab(this, tile.getEnergyContainer(), tile::getLastUsage));
 
         // 竖直能源条（旧 GUI 有、迁移时丢的那条），位置与数据源见基类。
         addEnergyBar();
+
+        // 自动分选标签页（上游 GuiFactory 的第一句就是它）。
+        addSortingTab();
 
         // 槽位悬浮窗标签页：只有高档工厂（>17 并行）或烹饪/穿串才有窗口槽，
         // 三组皆空时不加标签页（menu.windowSlots().isEmpty()）。
@@ -100,25 +97,9 @@ public final class GrillFactoryScreen extends MekCkFactoryScreenBase<GrillFactor
                     menu.windowSlots(), () -> slotWindowTab));
         }
 
-        // 进度条：SMALL_RIGHT 箭头（悬浮窗 / 一行式 / 方阵三种落点）。
-        int progressX;
-        int progressY;
-        int processes = tier == null ? 1 : tier.processes;
-        if (cn.ism.mekck.menu.MekCkFactoryLayout.usesSlotWindow(tile)) {
-            progressX = (imageWidth - 28) / 2;
-            progressY = 41;
-        } else if (cn.ism.mekck.menu.MekCkFactoryLayout.useOneRow(processes)) {
-            int rowWidth = (processes - 1) * cn.ism.mekck.menu.MekCkFactoryLayout.oneRowStep(processes) + 18;
-            progressX = cn.ism.mekck.menu.MekCkFactoryLayout.oneRowBaseX(processes) + (rowWidth - 28) / 2;
-            progressY = 33;
-        } else {
-            int columns = (int) Math.ceil(Math.sqrt(processes));
-            int rows = (int) Math.ceil((double) processes / columns);
-            progressX = 38 + columns * SLOT_STEP + (GAP_BETWEEN - 28) / 2;
-            progressY = 41 + rows * SLOT_STEP / 2 - 4;
-        }
-        // isActive() 不覆写（Mek 默认 true，底图常驻）——理由见 MekCkFactoryScreenBase 类注释。
-        addRenderableWidget(new GuiProgress(() -> menu.getProgressRatio(), ProgressType.SMALL_RIGHT, this, progressX, progressY));
+        // 进度条：一行式档位每并行槽一条（上游 GuiFactory / GuiExtraFactory 的做法），
+        // 悬浮窗布局主面板上没有机器槽、居中一条。几何与理由见 MekCkFactoryScreenBase。
+        addFactoryProgressBars(menu::getProgressRatio);
     }
 
     @Override

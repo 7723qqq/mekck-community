@@ -6,7 +6,89 @@
       "entries": [
         {
           "type": "minecraft:item",
-          "name": "mekck:electric_grill"
+          "name": "mekck:electric_grill",
+          "functions": [
+            {
+              "function": "minecraft:copy_name",
+              "source": "block_entity"
+            },
+            {
+              "function": "minecraft:copy_nbt",
+              "source": "block_entity",
+              "ops": [
+                {
+                  "op": "replace",
+                  "source": "componentUpgrade",
+                  "target": "mekData.componentUpgrade"
+                },
+                {
+                  "op": "replace",
+                  "source": "componentConfig",
+                  "target": "mekData.componentConfig"
+                },
+                {
+                  "op": "replace",
+                  "source": "componentEjector",
+                  "target": "mekData.componentEjector"
+                },
+                {
+                  "op": "replace",
+                  "source": "controlType",
+                  "target": "mekData.controlType"
+                },
+                {
+                  "op": "replace",
+                  "source": "EnergyContainers",
+                  "target": "mekData.EnergyContainers"
+                },
+                {
+                  "op": "replace",
+                  "source": "HeatCapacitors",
+                  "target": "mekData.HeatCapacitors"
+                },
+                {
+                  "op": "replace",
+                  "source": "Items",
+                  "target": "mekData.Items"
+                },
+                {
+                  "op": "replace",
+                  "source": "OrderRecipeId",
+                  "target": "mekData.OrderRecipeId"
+                },
+                {
+                  "op": "replace",
+                  "source": "OrderQuantity",
+                  "target": "mekData.OrderQuantity"
+                },
+                {
+                  "op": "replace",
+                  "source": "OrderCompleted",
+                  "target": "mekData.OrderCompleted"
+                },
+                {
+                  "op": "replace",
+                  "source": "MeOrderEnabled",
+                  "target": "mekData.MeOrderEnabled"
+                },
+                {
+                  "op": "replace",
+                  "source": "Progress",
+                  "target": "mekData.Progress"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekCkGrillNative",
+                  "target": "mekData.MekCkGrillNative"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekckPlacerUuid",
+                  "target": "mekData.MekckPlacerUuid"
+                }
+              ]
+            }
+          ]
         }
       ],
       "conditions": [

@@ -105,8 +105,8 @@ public class TestFactoryMigrationParity {
     public void wasteHeatIsAddedAfterTheEnergyIsDeducted() throws IOException {
         String base = TestSourceText.read(TILE);
         String cycle = TestSourceText.methodBody(base, "private void workCycle() {");
-        int deduct = cycle.indexOf("deductEnergy(energyContainer, cost);");
-        int heat = cycle.indexOf("addHeatFromEnergy(cost);");
+        int deduct = cycle.indexOf("deductEnergy(energyContainer, perLaneCost);");
+        int heat = cycle.indexOf("addHeatFromEnergy(perLaneCost);");
         assertTrue("workCycle 必须扣能量", deduct >= 0);
         assertTrue("workCycle 必须把耗能转成废热（迁移前旧 BE 有这一步）", heat >= 0);
         assertTrue("addHeatFromEnergy 必须在 deductEnergy 之后（次序与迁移前逐字一致）", heat > deduct);

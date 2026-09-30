@@ -46,8 +46,9 @@ import java.util.Set;
  * </ol>
  *
  * <h3>能量与进度条闸门不在这</h3>
- * 与切菜执行器同口径：{@link #tick} 的语义是「本 tick 尽可能多地加工」，
- * 该不该干活由 {@link MekCkMachineTile#onUpdateServer} 的闸门决定。
+ * 与切菜执行器同口径：{@link #canProcess} / {@link #process} 的语义是
+ * 「这一路该不该加工 / 加工一次」，该不该干活由
+ * {@link MekCkMachineTile#onUpdateServer} 的闸门决定。
  *
  * <h3>配方缓存的由来（与切菜逐字相同）</h3>
  * 旧 {@code serverTick} 每 tick 对每个输入槽做一次 O(配方数) 的配方查找，
@@ -112,42 +113,44 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
     // ── MekCkRecipeExecutor ─────────────────────────────────────────────
 
     @Override
-    public void tick(MekCkMachineTile tile, int slotCount) {
+    public boolean canProcess(MekCkMachineTile tile, int index) {
         this.tile = tile;
-        this.busy = false;
-
         Level level = tile == null ? null : tile.getLevel();
         List<IInventorySlot> inputs = tile == null ? null : tile.getInputSlots();
         List<IInventorySlot> outputs = tile == null ? null : tile.getOutputSlots();
-        if (level == null || inputs == null || outputs == null || outputs.isEmpty()) {
-            return;
+        if (level == null || inputs == null || outputs == null || outputs.isEmpty()
+                || index < 0 || index >= inputs.size()) {
+            return false;
         }
-        int slots = Math.min(slotCount, inputs.size());
-        if (slots <= 0) {
-            return;
+        ItemStack input = inputs.get(index).getStack();
+        if (input.isEmpty()) {
+            return false;
         }
+        Optional<Recipe<?>> found = findRecipe(index);
+        if (found.isEmpty()) {
+            return false;
+        }
+        int consumeCount = Math.min(effectiveProcessCount(tile), input.getCount());
+        // 装不下就跳过这一槽，而不是让所有槽一起停摆（与旧实现同口径）。
+        return consumeCount > 0 && canFitWorstCase(found.get(), consumeCount);
+    }
 
-        int budget = effectiveProcessCount(tile);
-        for (int i = 0; i < slots; i++) {
-            ItemStack input = inputs.get(i).getStack();
-            if (input.isEmpty()) {
-                continue;
-            }
-            Optional<Recipe<?>> found = findRecipe(i);
-            if (found.isEmpty()) {
-                continue;
-            }
-            int consumeCount = Math.min(budget, input.getCount());
-            if (consumeCount <= 0) {
-                continue;
-            }
-            if (!canFitWorstCase(found.get(), consumeCount)) {
-                // 装不下就跳过这一槽，而不是让所有槽一起停摆（与旧实现同口径）。
-                continue;
-            }
-            completeRecipe(inputs, outputs, i, found.get(), consumeCount);
-            this.busy = true;
+    @Override
+    public void process(MekCkMachineTile tile, int index) {
+        this.tile = tile;
+        this.busy = false;
+        if (!canProcess(tile, index)) {
+            return;
         }
+        List<IInventorySlot> inputs = tile.getInputSlots();
+        List<IInventorySlot> outputs = tile.getOutputSlots();
+        Recipe<?> recipe = findRecipe(index).orElse(null);
+        if (recipe == null) {
+            return;
+        }
+        int consumeCount = Math.min(effectiveProcessCount(tile), inputs.get(index).getStack().getCount());
+        completeRecipe(inputs, outputs, index, recipe, consumeCount);
+        this.busy = true;
     }
 
     @Override

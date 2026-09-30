@@ -259,7 +259,7 @@ public class TestRandomizeUpgradeBranches {
         String source = read(TILE);
         assertTrue("自动补满必须挂在闸门之前（与旧第 378~380 行同位置）",
                 source.contains("if (randomizeRefillsEnergy()) {"));
-        assertTrue("免耗电必须过闸门", source.contains("gatedEnergyCost(randomizeGrantsFreeEnergy(), energyPerWorkTick())"));
+        assertTrue("免耗电必须过闸门", source.contains("gatedEnergyCost(randomizeGrantsFreeEnergy(), energyPerLanePerTick())"));
         assertTrue("1 tick 批次必须过 effectiveTicksPerWorkCycle",
                 source.contains("gatedTicksPerCycle(randomizeCollapsesWorkCycle(), ticksPerWorkCycle())"));
         // 补能走的是 gate，不许有人绕过它直接灌缺口
@@ -268,18 +268,18 @@ public class TestRandomizeUpgradeBranches {
     }
 
     /**
-     * 切菜 tile 的 {@code energyPerWorkTick()} 必须保持「无卡时的原公式」，
+     * 切菜 tile 的 {@code energyPerLanePerTick()} 必须保持「无卡时的原公式」，
      * 免耗电只在基类闸门上做。
      */
     @Test
     public void cuttingEnergyFormulaStaysCardFree() throws IOException {
         String source = read(CUTTING);
-        int start = source.indexOf("protected int energyPerWorkTick() {");
-        assertTrue("必须仍有 energyPerWorkTick 覆写", start >= 0);
+        int start = source.indexOf("protected int energyPerLanePerTick() {");
+        assertTrue("必须仍有 energyPerLanePerTick 覆写", start >= 0);
         int end = source.indexOf("\n    }", start);
         String body = source.substring(start, end);
         assertFalse("扣减公式里不得夹带随机化卡判断", body.contains("andomize"));
-        assertTrue("扣减公式必须仍是 baseEnergyPerTick × active × stackMult",
+        assertTrue("扣减公式必须仍是 baseEnergyPerTick × stackMult（并行数由基类逐路扣减乘出来）",
                 body.contains("CountMath.mulClamp"));
     }
 

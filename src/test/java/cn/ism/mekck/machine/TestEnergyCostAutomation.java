@@ -127,7 +127,7 @@ public class TestEnergyCostAutomation {
     @Test
     public void deductEnergyIsTheOnlyExtractionSite() throws IOException {
         String source = Files.readString(TILE, StandardCharsets.UTF_8);
-        assertTrue("workCycle 必须走 deductEnergy", source.contains("deductEnergy(energyContainer, cost)"));
+        assertTrue("workCycle 必须走 deductEnergy", source.contains("deductEnergy(energyContainer, perLaneCost)"));
         assertFalse("不得绕过 deductEnergy 直接抽取能量（AutomationType 会退回 EXTERNAL 的老坑）",
                 source.contains("energyContainer.extract("));
     }

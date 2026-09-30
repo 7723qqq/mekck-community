@@ -51,8 +51,9 @@ public class TestFactoryGuiSyncSurface {
         String src = read(TILE);
         String trackers = methodBody(src, "public void addContainerTrackers(");
 
-        // 进度条：双向分流的样板，注释里写明了这个坑。
-        assertTrue("进度条必须仍然挂在容器追踪上", trackers.contains("this::getWorkProgress"));
+        // 进度条：走 trackArray（与 Mek 的 TileEntityFactory 同款）。数组本身就是权威值 ——
+        // 服务端读它、客户端由同步 setter 写它，所以不需要按端分流。
+        assertTrue("进度条必须仍然挂在容器追踪上", trackers.contains("trackArray(progressArray())"));
 
         // 执行器展示态：订单三件套 + 家族自定义位。
         for (String getter : new String[]{

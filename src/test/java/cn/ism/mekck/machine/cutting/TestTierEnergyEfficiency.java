@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -145,15 +146,16 @@ public class TestTierEnergyEfficiency {
     @Test
     public void energyFormulaReadsEfficiencyFromConfig() throws IOException {
         String source = Files.readString(TILE, StandardCharsets.UTF_8);
-        assertTrue("energyPerWorkTick 必须把档位的能效乘数喂进公式",
+        assertTrue("energyPerLanePerTick 必须把档位的能效乘数喂进公式",
                 source.contains("MekckConfig.getTierEnergyEfficiency(tier)"));
         assertTrue("公式入口必须仍是 baseEnergyPerTick(sp, cons, eff)",
                 source.contains("baseEnergyPerTick(speedMult, consumptionMult,"));
-        // 旧式子的其余三段逐字还在：免能耗短路 / 乘入 active / 走 mulClamp 夹紧。
+        // 旧式子的其余两段逐字还在：免能耗短路 / 走 mulClamp 夹紧。
         assertTrue("免能耗档短路不能被能效乘数取代", source.contains("tier.energyPerTick == 0"));
-        assertTrue("并行数仍要乘进去", source.contains("activeWorkSlots()"));
         assertTrue("外层乘法仍要保留溢出夹紧",
-                source.contains("CountMath.mulClamp(Integer.MAX_VALUE, baseEnergyPerTick, active, stackMultiplier())"));
+                source.contains("CountMath.mulClamp(Integer.MAX_VALUE, baseEnergyPerTick, stackMultiplier())"));
+        // 并行数不再乘在这里：它由基类 workCycle 的逐路扣减自然乘出来（跑几路扣几份）。
+        assertFalse("并行数不该再乘进单路公式", source.contains("baseEnergyPerTick, active, stackMultiplier()"));
     }
 
     /**

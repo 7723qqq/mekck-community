@@ -182,6 +182,52 @@ public class TestMekCkFactoryLayout {
     }
 
     /**
+     * 一行式档位的背包 x 必须与上游逐像素一致。
+     *
+     * <p>上游两套都不是「居中」的整数解：Mek 的 {@code FactoryContainer} 给 ULTIMATE 26
+     * （居中会算成 24），MekExtras 的 {@code ExtraFactoryContainer} 给
+     * {@code 22 * (ordinal + 2) - 3 * ordinal} = 44 / 63 / 82 / 101（居中会各少 1）。</p>
+     */
+    @Test
+    public void oneRowInventoryXMatchesUpstream() {
+        int[] processes = {3, 5, 7, 9, 11, 13, 15, 17};
+        int[] upstream = {8, 8, 8, 26, 44, 63, 82, 101};
+        for (int i = 0; i < processes.length; i++) {
+            int width = MekCkFactoryLayout.oneRowPanelWidth(processes[i]);
+            assertEquals("并行 " + processes[i] + "（面板宽 " + width + "）的背包 x",
+                    upstream[i], MekCkFactoryLayout.inventoryXOffset(width));
+        }
+    }
+
+    /**
+     * 一行式进度条必须与上游逐条对齐 —— <b>每并行槽一条</b>，不是一条居中的箭头。
+     *
+     * <p>上游 {@code GuiFactory} 与 {@code GuiExtraFactory} 的 {@code addGuiElements} 都是
+     * {@code 4 + baseX + i * baseXMult}、y=33、{@code ProgressType.DOWN}（8×20 竖条）。
+     * 表里的 baseX / baseXMult 就是 {@code oneRowBaseX} / {@code oneRowStep} 的上游原值。</p>
+     */
+    @Test
+    public void oneRowProgressBarsMatchUpstream() {
+        assertEquals("上游两套都是 y=33", 33, MekCkFactoryLayout.ONE_ROW_PROGRESS_Y);
+        int[] processes = {3, 5, 7, 9, 11, 13, 15, 17};
+        int[] baseX = {55, 35, 29, 27, 27, 27, 27, 27};
+        int[] mult = {38, 26, 19, 19, 19, 19, 19, 19};
+        for (int t = 0; t < processes.length; t++) {
+            int n = processes[t];
+            for (int i = 0; i < n; i++) {
+                assertEquals("并行 " + n + " 第 " + i + " 条进度条的 x",
+                        4 + baseX[t] + i * mult[t], MekCkFactoryLayout.oneRowProgressX(i, n));
+            }
+            // 最后一条必须落在面板内（DOWN 是 8 宽）
+            int last = MekCkFactoryLayout.oneRowProgressX(n - 1, n);
+            int width = MekCkFactoryLayout.oneRowPanelWidth(n);
+            org.junit.Assert.assertTrue(
+                    "并行 " + n + "：最后一条进度条 " + last + ".." + (last + 8) + " 越出面板宽 " + width,
+                    last + 8 <= width);
+        }
+    }
+
+    /**
      * 一行式档位的面板高必须由「额外槽列底边 + 背包余量」算出来，<b>不能</b>再走方阵公式。
      *
      * <p>修复前屏幕按 166 / 187 算、菜单按 {@code gridImageHeight} 算（BASIC 是 184），
@@ -194,7 +240,7 @@ public class TestMekCkFactoryLayout {
             assertEquals("并行 " + processes + " 无额外槽：取 Mek 的 166",
                     MekCkFactoryLayout.ONE_ROW_PANEL_HEIGHT,
                     MekCkFactoryLayout.gridFamilyPanelHeight(processes, false, 0, 0, 0));
-            // 种植切配：2 个额外槽从 y=41 起 ⇒ 底边 77，背包在 84 ⇒ 166 够用
+            // 种植切配：2 个额外槽从 y=41 起 ⇒ 底边 77，背包在 85 ⇒ 166 够用
             assertEquals("并行 " + processes + " 种植切配",
                     MekCkFactoryLayout.ONE_ROW_PANEL_HEIGHT,
                     MekCkFactoryLayout.gridFamilyPanelHeight(processes, false, 2, 0, 18));
@@ -204,17 +250,31 @@ public class TestMekCkFactoryLayout {
         }
     }
 
-    /** 背包偏移恒不低于 Mek 的 {@code BASE_Y_OFFSET = 84}。 */
+    /**
+     * 背包偏移必须与上游逐像素一致。
+     *
+     * <p>上游 {@code FactoryContainer.getInventoryYOffset()} 给的是 <b>85 / 95 / 105</b>
+     * （对应面板高 166 / 177 / 187），而 166 那一档的余量是 <b>81</b>、另两档才是 82。
+     * 套 {@code 面板高 - 82} 会在 166 上得到 84 —— 背包槽与「Inventory」标签一起上移 1px。</p>
+     */
     @Test
-    public void inventoryOffsetNeverGoesAboveMekBase() {
+    public void inventoryYOffsetMatchesUpstream() {
+        assertEquals("Mek 普通工厂面板 166", 85, MekCkFactoryLayout.inventoryYOffset(166));
+        assertEquals("Mek 有副资源条面板 177", 95, MekCkFactoryLayout.inventoryYOffset(177));
+        assertEquals("Mek 锯木工厂面板 187", 105, MekCkFactoryLayout.inventoryYOffset(187));
+        // 标签恒在背包首行上方 10px（上游三档都是）
+        assertEquals(75, MekCkFactoryLayout.inventoryLabelY(166));
+        assertEquals(85, MekCkFactoryLayout.inventoryLabelY(177));
+        assertEquals(95, MekCkFactoryLayout.inventoryLabelY(187));
+        // 本模组自有面板（≥184）仍按「面板高 - 82」外推，且不得低于上游最小值 85
         for (int processes : ALL_PROCESSES) {
             for (boolean window : new boolean[]{false, true}) {
                 if (window && MekCkFactoryLayout.useOneRow(processes)) {
                     continue;
                 }
                 int height = MekCkFactoryLayout.gridFamilyPanelHeight(processes, window, 3, 1, 0);
-                org.junit.Assert.assertTrue("面板高 " + height + " 的背包偏移低于 84",
-                        MekCkFactoryLayout.inventoryYOffset(height) >= 84);
+                org.junit.Assert.assertTrue("面板高 " + height + " 的背包偏移低于 85",
+                        MekCkFactoryLayout.inventoryYOffset(height) >= 85);
             }
         }
     }

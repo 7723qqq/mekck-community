@@ -332,13 +332,9 @@ public class GrillFactoryTile extends MekCkMachineTile implements IMekCkPorted {
     }
 
     @Override
-    protected int energyPerWorkTick() {
+    protected int energyPerLanePerTick() {
         CuttingMachineFactoryTier tier = getTier();
         if (tier == null || tier.energyPerTick == 0) {
-            return 0;
-        }
-        int active = activeWorkSlots();
-        if (active <= 0) {
             return 0;
         }
         double speedMult = effectiveSpeedMultiplier();
@@ -348,7 +344,7 @@ public class GrillFactoryTile extends MekCkMachineTile implements IMekCkPorted {
         int base = (int) Math.min(Integer.MAX_VALUE, Math.max(0.0,
                 Math.ceil(ENERGY_PER_PROCESS * speedMult * speedMult * consumptionMult
                         * MekckConfig.getTierEnergyEfficiency(tier))));
-        return cn.ism.mekck.util.CountMath.mulClamp(Integer.MAX_VALUE, base, active, stackMultiplier());
+        return cn.ism.mekck.util.CountMath.mulClamp(Integer.MAX_VALUE, base, stackMultiplier());
     }
 
     public double effectiveSpeedMultiplier() {

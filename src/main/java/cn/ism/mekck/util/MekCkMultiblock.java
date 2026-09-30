@@ -52,8 +52,37 @@ public final class MekCkMultiblock {
                 }
             };
 
-    /** 生物反应堆：2×2×3（主方块位于底层 2×2 的西南角，绑定方块占其余 11 格）。 */
-    public static final TriConsumer<BlockPos, BlockState, Stream.Builder<BlockPos>> SHAPE_2X2X3 =
+    /**
+     * 生物反应堆：3×3×3（<b>主方块位于底部正中</b>，绑定方块占其余 26 格）。
+     *
+     * <p>与 {@link #SHAPE_2X2X3} 的区别不只是尺寸：旧形状主方块在西南角，
+     * 改成居中后 {@code BioreactorRenderer} 的旋转中心就是主方块自身，
+     * 渲染时不必再做偏移。
+     *
+     * <p>本形状同时是 {@code BioreactorBlockEntity#emitEnergy} 的推送足迹，
+     * 改这里等于改反应堆向四周供电的覆盖范围。
+     */
+    public static final TriConsumer<BlockPos, BlockState, Stream.Builder<BlockPos>> SHAPE_3X3X3 =
+            (pos, state, builder) -> {
+                for (int y = 0; y < 3; y++) {
+                    for (int x = -1; x <= 1; x++) {
+                        for (int z = -1; z <= 1; z++) {
+                            if (x != 0 || y != 0 || z != 0) {
+                                builder.add(pos.offset(x, y, z));
+                            }
+                        }
+                    }
+                }
+            };
+
+    /**
+     * 生物反应堆的<b>旧</b> 2×2×3 形状（主方块在底层西南角，11 个绑定块）。
+     *
+     * <p>仅供 {@code BioreactorBlock#onRemove} 清理存量机器用：改成 3×3×3 之前
+     * 已经放下的生物反应堆仍带着旧布局的绑定块，只按新形状清理会漏掉 3 个，
+     * 在世界里留下拿不掉的 Mekanism 绑定方块。
+     */
+    public static final TriConsumer<BlockPos, BlockState, Stream.Builder<BlockPos>> SHAPE_2X2X3_LEGACY =
             (pos, state, builder) -> {
                 for (int y = 0; y < 3; y++) {
                     for (int x = 0; x < 2; x++) {

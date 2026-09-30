@@ -33,14 +33,12 @@ import java.util.Optional;
  * 「怎么按 Farmer's Delight 的砧板配方匹配输入」与「怎么把一批原料一次性变成产物」。
  * 本类不含任何方块实体职责，也不碰能量、红石、进度条。
  *
- * <h3>⚠️ {@link #tick} 当前<b>没有能量与进度条闸门</b></h3>
- * 本方法的语义是「本 tick 尽可能多地加工」，调用方必须先确认机器<b>本 tick 该不该干活</b>。
- * 旧 {@code CuttingMachineFactoryBlockEntity.serverTick} 的顺序是
- * 「红石 → 扣能量 → 累进度 → 进度满才 completeRecipe」；其中红石三件套按计划归 tile、
- * 能量与进度条属于 Task 4 的机器基类接线，<b>不在本任务的搬运清单里</b>。
- * {@code MekCkMachineTile.onUpdateServer} 会无条件调本方法，因此 Task 4 落地时
- * <b>必须</b>在调用前加闸门（覆写 {@code onUpdateServer} 或改基类），
- * 否则机器会每 tick 空转且不耗电。
+ * <h3>⚠️ 本执行器<b>没有能量与进度条闸门</b></h3>
+ * {@link #canProcess} / {@link #process} 的语义是「这一路该不该加工 / 加工一次」，
+ * 调用方必须先确认机器<b>本 tick 该不该干活</b>。旧
+ * {@code CuttingMachineFactoryBlockEntity.serverTick} 的顺序是
+ * 「红石 → 扣能量 → 累进度 → 进度满才 completeRecipe」；这三段现在都在
+ * {@code MekCkMachineTile.workCycle} 里，本类只负责最后一步。
  *
  * <h3>配方缓存的由来</h3>
  * 原先每次 {@code findRecipe} 都 {@code new} 一个匿名 {@code ItemStackHandler} 加
@@ -131,42 +129,44 @@ public final class CuttingFactoryExecutor implements MekCkRecipeExecutor {
     // ── MekCkRecipeExecutor ─────────────────────────────────────────────
 
     @Override
-    public void tick(MekCkMachineTile tile, int slotCount) {
+    public boolean canProcess(MekCkMachineTile tile, int index) {
         this.tile = tile;
-        this.busy = false;
-
         Level level = tile == null ? null : tile.getLevel();
         List<IInventorySlot> inputs = tile == null ? null : tile.getInputSlots();
         List<IInventorySlot> outputs = tile == null ? null : tile.getOutputSlots();
-        if (level == null || inputs == null || outputs == null || outputs.isEmpty()) {
-            return;
+        if (level == null || inputs == null || outputs == null || outputs.isEmpty()
+                || index < 0 || index >= inputs.size()) {
+            return false;
         }
-        int slots = Math.min(slotCount, inputs.size());
-        if (slots <= 0) {
-            return;
+        ItemStack input = inputs.get(index).getStack();
+        if (input.isEmpty()) {
+            return false;
         }
+        Optional<CuttingBoardRecipe> found = findRecipe(index);
+        if (found.isEmpty()) {
+            return false;
+        }
+        int consumeCount = Math.min(effectiveProcessCount(tile), input.getCount());
+        // 装不下就跳过这一槽，而不是让所有槽一起停摆（与旧实现同口径）。
+        return consumeCount > 0 && canFitAll(outputs, found.get().getResults(), consumeCount);
+    }
 
-        int budget = effectiveProcessCount(tile);
-        for (int i = 0; i < slots; i++) {
-            ItemStack input = inputs.get(i).getStack();
-            if (input.isEmpty()) {
-                continue;
-            }
-            Optional<CuttingBoardRecipe> found = findRecipe(i);
-            if (found.isEmpty()) {
-                continue;
-            }
-            int consumeCount = Math.min(budget, input.getCount());
-            if (consumeCount <= 0) {
-                continue;
-            }
-            if (!canFitAll(outputs, found.get().getResults(), consumeCount)) {
-                // 装不下就跳过这一槽，而不是让所有槽一起停摆（与旧实现同口径）。
-                continue;
-            }
-            completeRecipe(inputs, outputs, i, found.get(), consumeCount);
-            this.busy = true;
+    @Override
+    public void process(MekCkMachineTile tile, int index) {
+        this.tile = tile;
+        this.busy = false;
+        if (!canProcess(tile, index)) {
+            return;
         }
+        List<IInventorySlot> inputs = tile.getInputSlots();
+        List<IInventorySlot> outputs = tile.getOutputSlots();
+        CuttingBoardRecipe recipe = findRecipe(index).orElse(null);
+        if (recipe == null) {
+            return;
+        }
+        int consumeCount = Math.min(effectiveProcessCount(tile), inputs.get(index).getStack().getCount());
+        completeRecipe(inputs, outputs, index, recipe, consumeCount);
+        this.busy = true;
     }
 
     @Override

@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.function.BooleanSupplier;
 import mekanism.client.SpecialColors;
 import mekanism.client.gui.GuiMekanism;
+import mekanism.client.gui.element.GuiElement;
 import mekanism.client.gui.element.bar.GuiBar.IBarInfoHandler;
 import mekanism.client.gui.element.bar.GuiVerticalPowerBar;
 import mekanism.client.gui.element.progress.GuiProgress;
@@ -67,7 +68,7 @@ public final class SmartCookingPotScreen extends GuiMekanism<SmartCookingPotMenu
     private boolean customInputMode = false;
     private GuiTextField qtyField;
     /** 侧栏 tab（MekCkTabElement）——供 {@link #clickTabElement} 在覆盖层分支里做优先派发。 */
-    private final List<MekCkTabElement> tabElements = new java.util.ArrayList<>();
+    private final List<GuiElement> tabElements = new java.util.ArrayList<>();
     /** 输入框相对 GUI 坐标：与 renderOrderMode/handleOrderClick 里同一套布局公式同源
      * （x = ORDER_PANEL_LEFT(10)+4 = 14；y = ORDER_PANEL_TOP(10)+16+ORDER_LIST_HEIGHT(120)+4+10+14+2 = 176；
      * 宽 80 高 14，沿用旧 DIY 值）。硬编码是因为静态初始化禁止前向引用后声明的 ORDER_PANEL_*。 */
@@ -293,10 +294,7 @@ public final class SmartCookingPotScreen extends GuiMekanism<SmartCookingPotMenu
         // 侧栏 tab 必须最后注册：Mek 的 GuiMekanism#mouseClicked 对 children() 倒序遍历、
         // 命中即返回，越晚注册命中优先。
         if (cn.ism.mekck.client.NetworkPullButton.isVisible()) {
-            for (var tab : cn.ism.mekck.client.NetworkPullButton.register(this,
-                    NetworkPullButton.getX(imageWidth),
-                    NetworkPullButton.getY(AUTO_DIST_Y),
-                    menu.getBlockPos())) {
+            for (var tab : cn.ism.mekck.client.NetworkPullButton.register(this, menu.getBlockPos())) {
                 addRenderableWidget(tab);
                 tabElements.add(tab);
             }

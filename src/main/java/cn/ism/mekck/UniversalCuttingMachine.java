@@ -670,14 +670,31 @@ public final class UniversalCuttingMachine {
             "smart_skewering_machine", () -> IForgeMenuType.create(SkeweringMachineMenu::new));
 
     // Electric Grill
-    public static final RegistryObject<Block> GRILL_BLOCK = BLOCKS.register("electric_grill", GrillBlock::new);
-    public static final RegistryObject<Item> GRILL_ITEM = ITEMS.register("electric_grill",
-            () -> new MekCkBlockItem(GRILL_BLOCK.get(), new Item.Properties(), 1, 20, 100000, false));
-    public static final RegistryObject<BlockEntityType<GrillBlockEntity>> GRILL_BLOCK_ENTITY = BLOCK_ENTITIES.register(
-            "electric_grill",
-            () -> BlockEntityType.Builder.of(GrillBlockEntity::new, GRILL_BLOCK.get()).build(null));
-    public static final RegistryObject<MenuType<GrillMenu>> GRILL_MENU = MENUS.register(
-            "electric_grill", () -> IForgeMenuType.create(GrillMenu::new));
+    // 阶段 3：改走 Mek 的注册器，**注册名一字不改**（仍是 mekck:electric_grill），
+    // 旧存档里已放置的方块因此不会变空气。
+    public static final mekanism.common.registration.impl.BlockDeferredRegister GRILL_BLOCKS_REG =
+            new mekanism.common.registration.impl.BlockDeferredRegister(MOD_ID);
+    public static final mekanism.common.registration.impl.TileEntityTypeDeferredRegister GRILL_TILES_REG =
+            new mekanism.common.registration.impl.TileEntityTypeDeferredRegister(MOD_ID);
+    public static final mekanism.common.registration.impl.ContainerTypeDeferredRegister GRILL_CONTAINERS_REG =
+            new mekanism.common.registration.impl.ContainerTypeDeferredRegister(MOD_ID);
+
+    /** 已注册的烧烤架方块（Mek 体系下的真实句柄）。 */
+    public static final mekanism.common.registration.impl.BlockRegistryObject<GrillBlock, MekCkBlockItem> GRILL_HANDLE;
+    /** 已注册的烧烤架 tile 类型，供 BlockType 的延迟 Supplier 回查。 */
+    public static final mekanism.common.registration.impl.TileEntityTypeRegistryObject<GrillBlockEntity> GRILL_TILE;
+    /** 烧烤架容器类型（注册名与旧的 mekck:electric_grill 逐字相同）。 */
+    public static final mekanism.common.registration.impl.ContainerTypeRegistryObject<GrillMenu> GRILL_CONTAINER;
+
+    /**
+     * 兼容面：{@code JEIPlugin} 与本类 1618 行按旧类型 {@code RegistryObject} 读这两个字段，
+     * {@code registryView} 让它们一行都不用改。
+     */
+    public static final RegistryObject<Block> GRILL_BLOCK;
+    public static final RegistryObject<Item> GRILL_ITEM;
+
+    private static final UnaryOperator<BlockBehaviour.Properties> GRILL_PROPERTIES =
+            props -> props.sound(net.minecraft.world.level.block.SoundType.METAL);
 
     // Cooking Factory blocks, items, and block entities
     // Cooking Factory：阶段 3 Task 7 改走 Mek 的注册器，
@@ -1147,6 +1164,32 @@ public final class UniversalCuttingMachine {
             GRILL_FACTORY_ITEMS.put(tier, registryView(id, ForgeRegistries.ITEMS));
         }
 
+        // 电力烧烤架（阶段 3）：方块/物品/tile/容器全部走 Mek 的注册器，
+        // **注册名一字不改**（仍是 mekck:electric_grill）。
+        GRILL_CONTAINER = GRILL_CONTAINERS_REG.register(
+                "electric_grill", GrillBlockEntity.class, GrillMenu::new);
+        {
+            // BlockType 需要 tile 与容器，但两者都必须先有方块 —— 用延迟 Supplier 破这个环。
+            // 两个 Supplier 都只在 Mek 真正求值的时刻（放置 / 开 GUI）才被调用，那时注册早已完成。
+            mekanism.common.content.blocktype.BlockTypeTile<GrillBlockEntity> blockType =
+                    GrillBlock.blockTypeFor(() -> GRILL_CONTAINER, () -> findGrillTile());
+
+            // 末位 false = MekCkBlockItem 的 isCooking 标志（tooltip 用），旧实现同款。
+            GRILL_HANDLE = GRILL_BLOCKS_REG.register("electric_grill",
+                    () -> new GrillBlock(blockType, GRILL_PROPERTIES),
+                    block -> new MekCkBlockItem(block, new Item.Properties(), 1, 20, 100000, false));
+            // 两个 ticker 都必须显式给：TileEntityTypeRegistryObject.getTicker(boolean) 只是
+            // 原样返回存进去的那个，没有任何兜底。不填就是 null，而 Level 只在 ticker 非 null 时
+            // 才驱动方块实体 —— 机器会「放置成功、界面能开、就是不干活」。
+            GRILL_TILE = GRILL_TILES_REG.register(GRILL_HANDLE,
+                    (pos, state) -> new GrillBlockEntity(GRILL_HANDLE, pos, state),
+                    (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickClient(level, pos, state, tile),
+                    (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickServer(level, pos, state, tile));
+
+            GRILL_BLOCK = registryView("electric_grill", ForgeRegistries.BLOCKS);
+            GRILL_ITEM = registryView("electric_grill", ForgeRegistries.ITEMS);
+        }
+
         // 种植切配工厂（阶段 3 Task 2）：方块/物品/tile/容器全部走 Mek 的注册器，
         // **注册名一字不改**（仍是 mekck:<tier>_planting_cutting_factory），
         // 旧存档里已放置的方块因此不会变空气。
@@ -1389,6 +1432,20 @@ public final class UniversalCuttingMachine {
                     + "（BlockTypeTile 的 Supplier 被过早求值）");
         }
         return found;
+    }
+
+    /**
+     * 取回已注册的烧烤架 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
+     *
+     * <p>必须延迟：{@code TILE_ENTITIES.register(block, ...)} 要求先有方块，而方块的
+     * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。理由同
+     * {@link #findGrillFactoryTile}。</p>
+     */
+    private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<GrillBlockEntity> findGrillTile() {
+        if (GRILL_TILE == null) {
+            throw new IllegalStateException("电力烧烤架 tile 尚未注册（BlockTypeTile 的 Supplier 被过早求值）");
+        }
+        return GRILL_TILE;
     }
 
     private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cutting.CuttingFactoryTile> findCuttingFactoryTile(
@@ -1943,7 +2000,7 @@ public final class UniversalCuttingMachine {
                 boundingPositions = MekCkMultiblock.getBoundingPositions(target, placeState, MekCkMultiblock.SHAPE_2_TALL);
                 multiblock = true;
             } else if (block instanceof BioreactorBlock) {
-                boundingPositions = MekCkMultiblock.getBoundingPositions(target, placeState, MekCkMultiblock.SHAPE_2X2X3);
+                boundingPositions = MekCkMultiblock.getBoundingPositions(target, placeState, MekCkMultiblock.SHAPE_3X3X3);
                 multiblock = true;
             } else {
                 AttributeHasBounding bounding = Attribute.get(placeState, AttributeHasBounding.class);
@@ -2116,7 +2173,7 @@ public final class UniversalCuttingMachine {
                 MenuScreens.register(COOKING_FACTORY_CONTAINER.get(), CookingFactoryScreen::new);
                 MenuScreens.register(SKEWERING_MACHINE_MENU.get(), SkeweringMachineScreen::new);
                 MenuScreens.register(SKEWERING_FACTORY_CONTAINER.get(), SkeweringFactoryScreen::new);
-                MenuScreens.register(GRILL_MENU.get(), GrillScreen::new);
+                MenuScreens.register(GRILL_CONTAINER.get(), GrillScreen::new);
                 MenuScreens.register(GRILL_FACTORY_CONTAINER.get(), GrillFactoryScreen::new);
                 MenuScreens.register(PLANTING_CUTTING_CONTAINER.get(), PlantingCuttingFactoryScreen::new);
                 MenuScreens.register(PLANTING_CUTTING_STATION_MENU.get(), PlantingCuttingStationScreen::new);
@@ -2142,6 +2199,13 @@ public final class UniversalCuttingMachine {
                 // blockstate 仍指向 bioreactor_layer0，供物品栏与掉落物外观使用。
                 net.minecraft.client.renderer.blockentity.BlockEntityRenderers.register(BIOREACTOR_BLOCK_ENTITY.get(),
                         cn.ism.mekck.client.BioreactorRenderer::new);
+                // 工厂进度条的 JEI 分类表必须在这里提前建好 —— 不能等开屏时懒加载。
+                // 理由见 MekCkFactoryJei 的类注释：Mek 10.4.16 的 MekanismJEIRecipeType
+                // 构造器在 findType() 把 allKnownTypes 置空之后必 NPE，而 findType()
+                // 正是 JEI 的插件回调（催化剂注册）里调的。守卫不能省：本类引用 mezz.jei.*。
+                if (net.minecraftforge.fml.ModList.get().isLoaded("jei")) {
+                    cn.ism.mekck.client.MekCkFactoryJei.init();
+                }
             });
         }
 

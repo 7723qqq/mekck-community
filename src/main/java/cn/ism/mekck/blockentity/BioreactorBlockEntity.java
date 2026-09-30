@@ -451,10 +451,10 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
             return 0;
         }
         int budget = MAX_ENERGY_OUTPUT_PER_TICK;
-        // 收集结构足迹：主方块 + 11 个绑定块位置（与 MekCkMultiblock.SHAPE_2X2X3 一致）
+        // 收集结构足迹：主方块 + 26 个绑定块位置（与 MekCkMultiblock.SHAPE_3X3X3 一致）
         Set<BlockPos> structure = new java.util.HashSet<>();
         structure.add(worldPosition);
-        for (BlockPos p : MekCkMultiblock.getBoundingPositions(worldPosition, getBlockState(), MekCkMultiblock.SHAPE_2X2X3)) {
+        for (BlockPos p : MekCkMultiblock.getBoundingPositions(worldPosition, getBlockState(), MekCkMultiblock.SHAPE_3X3X3)) {
             structure.add(p);
         }
         int totalOut = 0;

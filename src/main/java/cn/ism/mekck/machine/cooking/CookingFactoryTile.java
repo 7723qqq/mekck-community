@@ -497,7 +497,7 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
      * </ul>
      */
     @Override
-    protected int energyPerWorkTick() {
+    protected int energyPerLanePerTick() {
         CuttingMachineFactoryTier tier = getTier();
         if (tier == null || tier.energyPerTick == 0) {
             return 0;

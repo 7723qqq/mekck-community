@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.function.BooleanSupplier;
 import mekanism.client.SpecialColors;
 import mekanism.client.gui.GuiMekanism;
+import mekanism.client.gui.element.GuiElement;
 import mekanism.client.gui.element.bar.GuiBar.IBarInfoHandler;
 import mekanism.client.gui.element.bar.GuiVerticalPowerBar;
 import mekanism.client.gui.element.progress.GuiProgress;
@@ -74,7 +75,7 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
     private static final ResourceLocation BUTTON_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "button.png");
 
     /** 侧栏 tab（MekCkTabElement）——供 {@link #clickTabElement} 在覆盖层分支里做优先派发。 */
-    private final List<MekCkTabElement> tabElements = new java.util.ArrayList<>();
+    private final List<GuiElement> tabElements = new java.util.ArrayList<>();
 
     // 攻击控制行布局
     private static final int TARGET_X = IceMakerMenu.INPUT_X;
@@ -243,10 +244,7 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
         // 侧栏 tab 必须最后注册：Mek 的 GuiMekanism#mouseClicked 对 children() 倒序遍历、
         // 命中即返回，越晚注册命中优先。
         if (cn.ism.mekck.client.NetworkPullButton.isVisible()) {
-            for (var tab : cn.ism.mekck.client.NetworkPullButton.register(this,
-                    NetworkPullButton.getX(imageWidth),
-                    NetworkPullButton.getY(ORDER_TAB_Y),
-                    menu.getBlockPos())) {
+            for (var tab : cn.ism.mekck.client.NetworkPullButton.register(this, menu.getBlockPos())) {
                 addRenderableWidget(tab);
                 tabElements.add(tab);
             }

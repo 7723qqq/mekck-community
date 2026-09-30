@@ -1,0 +1,39 @@
+{
+  "cell": 16,
+  "size": 128,
+  "inset": 0.5,
+  "materials": {
+    "MAT_Alterra_White": [
+      0,
+      0
+    ],
+    "MAT_Dark_Metal": [
+      2,
+      0
+    ],
+    "MAT_Alterra_Orange": [
+      4,
+      0
+    ],
+    "MAT_Bio_Glass": [
+      6,
+      0
+    ],
+    "MAT_Bio_Fluid_Core": [
+      0,
+      2
+    ],
+    "MAT_Status_Led": [
+      2,
+      2
+    ],
+    "MAT_Screen_UI": [
+      4,
+      2
+    ],
+    "MAT_Hatch_Door": [
+      6,
+      2
+    ]
+  }
+}

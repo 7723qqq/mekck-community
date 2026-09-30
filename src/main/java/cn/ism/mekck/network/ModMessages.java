@@ -133,6 +133,11 @@ public final class ModMessages {
                 WineCellarConfigPacket::encode,
                 WineCellarConfigPacket::new,
                 WineCellarConfigPacket::handle);
+        // 工厂输入槽自动分选开关（Mek 的 GuiSortingTab 对应物）
+        CHANNEL.registerMessage(28, MekCkSortingTogglePacket.class,
+                MekCkSortingTogglePacket::encode,
+                MekCkSortingTogglePacket::decode,
+                MekCkSortingTogglePacket::handle);
     }
 
     public static void sendToServer(SideConfigPacket message) {
@@ -156,6 +161,10 @@ public final class ModMessages {
     }
 
     public static void sendToServer(WineCellarConfigPacket message) {
+        CHANNEL.send(PacketDistributor.SERVER.noArg(), message);
+    }
+
+    public static void sendToServer(MekCkSortingTogglePacket message) {
         CHANNEL.send(PacketDistributor.SERVER.noArg(), message);
     }
 

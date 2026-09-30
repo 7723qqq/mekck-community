@@ -63,19 +63,15 @@ public final class CookingFactoryMenu extends MekanismTileContainer<CookingFacto
     // ── 给 GUI 读的转发 ──────────────────────────────────────────────────
 
     /**
-     * 进度条：0.0~1.0。
+     * 第 {@code index} 路的进度：0.0~1.0。
      *
-     * <p>旧实现是 {@code progress * 24 / max}，Mek 的 {@code ProgressType.SMALL_RIGHT}
-     * 内部按 0~1 的比例画，所以这里直接给比例。分母走
-     * {@code tile.getTicksPerWorkCycle()} 而不是写死 200：装速度卡后批次变短，
+     * <p>烹饪是整机一次的批次操作（{@code processCount} 恒为 1），所以只有第 0 路。
+     * 分母走 {@code tile.getTicksPerWorkCycle()} 而不是写死 200：装速度卡后批次变短，
      * 进度条必须跟着变短才有正确的「越快越满」手感。</p>
      */
-    public double getProgressRatio() {
+    public double getProgressRatio(int index) {
         CookingFactoryTile tile = getTileEntity();
-        if (tile == null) {
-            return 0;
-        }
-        return tile.getWorkProgress() / (double) tile.getTicksPerWorkCycle();
+        return tile == null ? 0 : tile.getProgressRatio(index);
     }
 
     public boolean isBusy() {

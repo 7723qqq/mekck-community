@@ -88,39 +88,62 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
 
     // ── MekCkRecipeExecutor ─────────────────────────────────────────────
 
+    /**
+     * 第 {@code index} 路此刻能不能开工 —— 判定条件与旧 {@code tick} 的循环体逐字一致。
+     *
+     * <p>容量判定必须用<b>已调味</b>的预览栈（见 {@link #completeRecipe}），
+     * 否则会「预演说装得下、落槽只塞一半」。</p>
+     */
     @Override
-    public void tick(MekCkMachineTile tile, int slotCount) {
+    public boolean canProcess(MekCkMachineTile tile, int index) {
         this.tile = tile;
         this.owner = tile instanceof GrillFactoryTile g ? g : null;
-        this.busy = false;
 
         Level level = tile == null ? null : tile.getLevel();
         List<IInventorySlot> inputs = tile == null ? null : tile.getInputSlots();
         List<IInventorySlot> outputs = tile == null ? null : tile.getOutputSlots();
-        if (level == null || inputs == null || outputs == null || outputs.isEmpty()) {
-            return;
+        if (level == null || inputs == null || outputs == null || outputs.isEmpty()
+                || index < 0 || index >= inputs.size()) {
+            return false;
         }
-        int slots = Math.min(slotCount, inputs.size());
-        if (slots <= 0) {
-            return;
+        ItemStack input = inputs.get(index).getStack();
+        if (input.isEmpty()) {
+            return false;
         }
-
+        Optional<Recipe<?>> found = findRecipe(index);
+        if (found.isEmpty()) {
+            return false;
+        }
         int budget = effectiveProcessCount(tile);
         if (budget <= 0) {
+            return false;
+        }
+        int consumeCount = Math.min(budget, input.getCount());
+        if (consumeCount <= 0) {
+            return false;
+        }
+        ItemStack result = found.get().getResultItem(level.registryAccess());
+        if (result.isEmpty()) {
+            return false;
+        }
+        return canFitAll(outputs, seasonedPreview(result, currentSeasoningFor(result)), consumeCount);
+    }
+
+    @Override
+    public void process(MekCkMachineTile tile, int index) {
+        this.tile = tile;
+        this.busy = false;
+        if (!canProcess(tile, index)) {
             return;
         }
-        for (int i = 0; i < slots; i++) {
-            ItemStack input = inputs.get(i).getStack();
-            if (input.isEmpty()) {
-                continue;
-            }
-            Optional<Recipe<?>> found = findRecipe(i);
-            if (found.isEmpty()) {
-                continue;
-            }
-            completeRecipe(i, found.get(), budget);
-            this.busy = true;
+        List<IInventorySlot> inputs = tile.getInputSlots();
+        Recipe<?> recipe = findRecipe(index).orElse(null);
+        if (recipe == null) {
+            return;
         }
+        int consumeCount = Math.min(effectiveProcessCount(tile), inputs.get(index).getStack().getCount());
+        completeRecipe(index, recipe, consumeCount);
+        this.busy = true;
     }
 
     @Override
@@ -425,13 +448,7 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
         }
 
         String seasoning = currentSeasoningFor(result);
-        ItemStack preview = result.copy();
-        if (seasoning != null) {
-            // 预演必须与实际落槽走同一个分派（见 applySeasoningTo）：两个兼容门面写的 NBT
-            // 键不同，预演写错门面就会让 canFitAll 与实际 insertOutput 的口径分家。
-            applySeasoningTo(preview, seasoning);
-        }
-        if (!canFitAll(outputs, preview, consumeCount)) {
+        if (!canFitAll(outputs, seasonedPreview(result, seasoning), consumeCount)) {
             return;
         }
 
@@ -467,6 +484,20 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
     /** 单份产出的容量判定。传的是<b>已调味</b>的栈。 */
     static boolean canFitAll(List<IInventorySlot> outputs, ItemStack seasoned, int multiplier) {
         return MekCkBatchPacking.canFitAll(outputs, List.of(seasoned), multiplier);
+    }
+
+    /**
+     * 预演栈 —— 把调味写进产物副本，供容量判定使用。
+     *
+     * <p>预演必须与实际落槽走同一个分派（见 {@link #applySeasoningTo}）：两个兼容门面写的
+     * NBT 键不同，预演写错门面就会让 canFitAll 与实际 insertOutput 的口径分家。</p>
+     */
+    private ItemStack seasonedPreview(ItemStack result, String seasoning) {
+        ItemStack preview = result.copy();
+        if (seasoning != null) {
+            applySeasoningTo(preview, seasoning);
+        }
+        return preview;
     }
 
     /**

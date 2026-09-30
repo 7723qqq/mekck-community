@@ -185,10 +185,7 @@ public final class UniversalCuttingMachineScreen extends GuiMekanism<UniversalCu
         // 侧栏 tab 必须最后注册：Mek 的 GuiMekanism#mouseClicked 对 children() 倒序遍历、
         // 命中即返回，越晚注册命中优先。
         if (cn.ism.mekck.client.NetworkPullButton.isVisible()) {
-            for (var tab : cn.ism.mekck.client.NetworkPullButton.register(this,
-                    NetworkPullButton.getX(imageWidth),
-                    NetworkPullButton.getY(ORDER_TAB_Y),
-                    menu.getBlockPos())) {
+            for (var tab : cn.ism.mekck.client.NetworkPullButton.register(this, menu.getBlockPos())) {
                 addRenderableWidget(tab);
             }
         }

@@ -86,15 +86,43 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
 
     // ── MekCkRecipeExecutor ─────────────────────────────────────────────
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>烹饪是<b>整机一次</b>的批次操作：一次扫描全部配料槽算出一个 batch，
+     * 只跑一次操作，没有「第几路」可言。</p>
+     */
     @Override
-    public void tick(MekCkMachineTile tile, int slotCount) {
+    public int processCount(MekCkMachineTile tile) {
+        return 1;
+    }
+
+    @Override
+    public boolean canProcess(MekCkMachineTile tile, int index) {
         this.owner = tile instanceof CookingFactoryTile c ? c : null;
-        this.busy = false;
         Level level = tile == null ? null : tile.getLevel();
         if (level == null || owner == null) {
-            return;
+            return false;
         }
         // 无订单绝不加工（旧实现第 729-730 行 // No order set - do not auto-process）。
+        Recipe<?> recipe = findRecipe(level);
+        if (recipe == null) {
+            return false;
+        }
+        List<IInventorySlot> scan = owner.ingredientSlots();
+        int batch = batchSize(recipe, scan);
+        batch = order.remainingOrUnlimited(batch);
+        return batch > 0;
+    }
+
+    @Override
+    public void process(MekCkMachineTile tile, int index) {
+        this.owner = tile instanceof CookingFactoryTile c ? c : null;
+        this.busy = false;
+        if (!canProcess(tile, index)) {
+            return;
+        }
+        Level level = tile.getLevel();
         Recipe<?> recipe = findRecipe(level);
         if (recipe == null) {
             return;

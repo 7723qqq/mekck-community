@@ -68,13 +68,16 @@ public final class PlantingCuttingFactoryMenu extends MekanismTileContainer<Plan
 
     // ── 给 GUI 读的转发 ──────────────────────────────────────────────────
 
-    /** 进度条：0.0~1.0。分母随速度卡变化，装卡后进度条必须跟着变短。 */
-    public double getProgressRatio() {
+    /**
+     * 第 {@code index} 路的进度：0.0~1.0。
+     *
+     * <p>每路一个独立计时器（见 {@code MekCkMachineTile.workCycle}），所以进度条也是一路一条
+     * —— 与 Mek 的 {@code GuiFactory} 里 {@code tile.getScaledProgress(1, i)} 逐条对应。
+     * 分母随速度卡变化，装卡后进度条必须跟着变短。</p>
+     */
+    public double getProgressRatio(int index) {
         PlantingCuttingFactoryTile tile = getTileEntity();
-        if (tile == null) {
-            return 0;
-        }
-        return tile.getWorkProgress() / (double) tile.getTicksPerWorkCycle();
+        return tile == null ? 0 : tile.getProgressRatio(index);
     }
 
     public boolean isBusy() {

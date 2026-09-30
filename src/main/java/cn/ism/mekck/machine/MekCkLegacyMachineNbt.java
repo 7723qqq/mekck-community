@@ -463,9 +463,10 @@ public final class MekCkLegacyMachineNbt {
      * 旧 {@code Progress}（批次内已走的 tick 数）→ 新 {@code MekCkWorkProgress}。
      *
      * <p>两者单位相同：旧实现每 tick {@code progress++} 直到 {@code effectiveProcessTime}，
-     * 新实现的 {@code workProgress} 也是按 tick 累加到 {@code ticksPerWorkCycle}。
+     * 新实现的 {@code MekCkWorkProgressArray} 也是按 tick 累加到 {@code ticksPerWorkCycle}。
      * 因此原样搬运即可复现「读档后第一 tick 就跑完这一批」这一与旧版一致的行为，
-     * 这里不做任何上限裁剪。</p>
+     * 这里不做任何上限裁剪。旧格式只有一个计数器，落到第 0 路（见
+     * {@code MekCkMachineTile.readWorkProgress}）。</p>
      */
     private static void migrateProgress(CompoundTag legacy, CompoundTag out) {
         if (legacy.contains(LEGACY_PROGRESS, Tag.TAG_INT)) {

@@ -19,8 +19,29 @@ import net.minecraft.nbt.CompoundTag;
  */
 public interface MekCkRecipeExecutor {
 
-    /** 每 tick 调用一次。`slotCount` 是本等级的输入槽并行数。 */
-    void tick(MekCkMachineTile tile, int slotCount);
+    /**
+     * 本机有几路并行 —— <b>每路一个独立计时器、一条进度条</b>。
+     *
+     * <p>默认「一路一个输入槽」，与 Mek 的工厂同构（{@code TileEntityFactory.progress}
+     * 的长度就是 {@code tier.processes}）。烹饪与穿串是<b>整机一次</b>的批次操作
+     * （一次消耗多个输入槽里的材料做出一批），没有「第几路」可言，所以覆写成 1。</p>
+     */
+    default int processCount(MekCkMachineTile tile) {
+        return tile == null || tile.getInputSlots() == null
+                ? 1 : Math.max(1, tile.getInputSlots().size());
+    }
+
+    /**
+     * 第 {@code index} 路此刻能不能开工 —— 有输入、有配方、产物装得下。
+     *
+     * <p><b>不得改动机器状态</b>：本方法每 tick 对每一路各调一次，用来决定这一路的进度
+     * 推不推进、推不动时要不要清零。真正的加工在 {@link #process}。
+     * 执行器自己的缓存（配方缓存、{@code this.tile} 绑定）可以在这里更新。</p>
+     */
+    boolean canProcess(MekCkMachineTile tile, int index);
+
+    /** 加工第 {@code index} 路一次。只在 {@link #canProcess} 为真时调用。 */
+    void process(MekCkMachineTile tile, int index);
 
     /** 是否正在工作（决定 GUI 的进度条与 AE2 的忙碌态）。 */
     boolean isBusy();

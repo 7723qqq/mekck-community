@@ -45,7 +45,7 @@ import java.util.Set;
  * </ol>
  *
  * <h3>能量与进度条闸门不在这</h3>
- * 与切菜/研磨同口径：{@link #tick} 的语义是「本 tick 尽可能多地加工」，
+ * 与切菜/研磨同口径：{@link #process} 的语义是「本 tick 尽可能多地加工」，
  * 该不该干活由 {@link MekCkMachineTile#onUpdateServer} 的闸门决定。
  * 这里额外加一道<b>营养液</b>闸门——它是原料门禁，与机器该不该通电无关。
  */
@@ -74,69 +74,81 @@ public final class PlantingCuttingFactoryExecutor implements MekCkRecipeExecutor
     private boolean busy;
 
     // ── MekCkRecipeExecutor ─────────────────────────────────────────────
+    //
+    // 种植切配是**逐槽**的：每个输入槽有自己的配方与产物，槽与槽之间互不影响，
+    // 所以走接口默认的「一路一个输入槽」，不覆写 processCount。
+    //
+    // 营养液是唯一的共享资源，按**单槽**的量逐路扣：nutrientNeeded(1, g) = g × 100。
+    // N 路合计 = N × g × 100，与旧实现 nutrientNeeded(N, g) = ceil(N × g × 100)
+    // 完全相同 —— g × 100 恒为整数（1.0 / 0.1 / 0.05 / 0.01 / 0.0），ceil 是恒等变换。
+    // 差别只在门禁粒度：旧实现「一次不够则整批不动」，现在「这一路不够则这一路不动」。
 
+    /**
+     * 第 {@code index} 路此刻能不能开工：这一槽有输入、有配方、装得下、土合格，
+     * 且营养液够<b>这一路</b>用。
+     *
+     * <p>本方法每 tick 对每一路各调一次，<b>不得改动机器状态</b>；
+     * {@link #tile} 的绑定与配方缓存是执行器自有状态，可以在这里刷新。</p>
+     */
     @Override
-    public void tick(MekCkMachineTile tile, int slotCount) {
+    public boolean canProcess(MekCkMachineTile tile, int index) {
         this.tile = tile;
-        this.busy = false;
-
         Level level = tile == null ? null : tile.getLevel();
         List<IInventorySlot> inputs = tile == null ? null : tile.getInputSlots();
-        if (level == null || inputs == null) {
-            return;
+        if (level == null || inputs == null || index < 0 || index >= inputs.size()) {
+            return false;
         }
-        int slots = Math.min(slotCount, inputs.size());
-        if (slots <= 0) {
-            return;
-        }
-
         int budget = effectiveProcessCount(tile);
         if (budget <= 0) {
-            return;
+            return false;
         }
-
-        // 第一遍：数出本批次真正能动的槽。装不下 / 土不合格的都不计入。
-        List<Integer> active = new ArrayList<>();
-        List<PlantingCuttingRecipe> recipes = new ArrayList<>();
-        for (int i = 0; i < slots; i++) {
-            ItemStack input = inputs.get(i).getStack();
-            if (input.isEmpty()) {
-                continue;
-            }
-            Optional<PlantingCuttingRecipe> found = findRecipe(i);
-            if (found.isEmpty()) {
-                continue;
-            }
-            PlantingCuttingRecipe recipe = found.get();
-            if (!canFitAll(recipe, budget)) {
-                // 装不下就跳过这一槽，而不是让所有槽一起停摆（与旧实现同口径）
-                continue;
-            }
-            if (!hasValidGrowthSoil(recipe)) {
-                continue;
-            }
-            active.add(i);
-            recipes.add(recipe);
+        ItemStack input = inputs.get(index).getStack();
+        if (input.isEmpty()) {
+            return false;
         }
-        if (active.isEmpty()) {
-            return;
+        Optional<PlantingCuttingRecipe> found = findRecipe(index);
+        if (found.isEmpty()) {
+            return false;
         }
-
-        // 营养液是整批门禁：一次不够，整批都不动。
+        PlantingCuttingRecipe recipe = found.get();
+        if (!canFitAll(recipe, budget)) {
+            // 装不下就跳过这一槽，而不是让所有槽一起停摆（与旧实现同口径）
+            return false;
+        }
+        if (!hasValidGrowthSoil(recipe)) {
+            return false;
+        }
         PlantingCuttingFactoryTile owner = tile instanceof PlantingCuttingFactoryTile p ? p : null;
         double gasMult = owner == null ? 1.0 : owner.getGasConsumptionMultiplier();
-        long needed = nutrientNeeded(active.size(), gasMult);
-        if (needed > 0 && owner != null && !owner.hasNutrient(needed)) {
+        long needed = nutrientNeeded(1, gasMult);
+        return needed <= 0 || owner == null || owner.hasNutrient(needed);
+    }
+
+    /**
+     * 加工第 {@code index} 路一次。先调一次 {@link #canProcess} 兜底，再重新取配方执行。
+     *
+     * <p>{@code busy} 的复位与旧 {@code tick} 同款：开工前先清，真跑完才置位。</p>
+     */
+    @Override
+    public void process(MekCkMachineTile tile, int index) {
+        this.tile = tile;
+        this.busy = false;
+        if (!canProcess(tile, index)) {
             return;
         }
-
+        int budget = effectiveProcessCount(tile);
+        PlantingCuttingRecipe recipe = findRecipe(index).orElse(null);
+        if (recipe == null) {
+            return;
+        }
+        PlantingCuttingFactoryTile owner = tile instanceof PlantingCuttingFactoryTile p ? p : null;
+        double gasMult = owner == null ? 1.0 : owner.getGasConsumptionMultiplier();
+        long needed = nutrientNeeded(1, gasMult);
         if (needed > 0 && owner != null) {
             owner.consumeNutrient(needed);
         }
-        for (int k = 0; k < active.size(); k++) {
-            completeRecipe(active.get(k), recipes.get(k), budget);
-            this.busy = true;
-        }
+        completeRecipe(index, recipe, budget);
+        this.busy = true;
     }
 
     @Override
@@ -305,6 +317,42 @@ public final class PlantingCuttingFactoryExecutor implements MekCkRecipeExecutor
     }
 
     // ── 批量执行 ────────────────────────────────────────────────────────
+
+    /** 本批次真正能动的槽，以及它们各自的配方。 */
+    private record Batch(List<Integer> slots, List<PlantingCuttingRecipe> recipes) {
+    }
+
+    /**
+     * 扫出本批次真正能动的槽 —— 判定（{@link #canProcess}）与执行（{@link #process}）
+     * <b>共用同一份扫描</b>，否则「判定说能做、执行时按另一套规则做」会静默漂移。
+     *
+     * <p>装不下 / 土不合格的槽都不计入：跳过这一槽，而不是让所有槽一起停摆
+     * （与旧实现同口径）。</p>
+     */
+    private Batch collectBatch(List<IInventorySlot> inputs, int budget) {
+        List<Integer> active = new ArrayList<>();
+        List<PlantingCuttingRecipe> recipes = new ArrayList<>();
+        for (int i = 0; i < inputs.size(); i++) {
+            ItemStack input = inputs.get(i).getStack();
+            if (input.isEmpty()) {
+                continue;
+            }
+            Optional<PlantingCuttingRecipe> found = findRecipe(i);
+            if (found.isEmpty()) {
+                continue;
+            }
+            PlantingCuttingRecipe recipe = found.get();
+            if (!canFitAll(recipe, budget)) {
+                continue;
+            }
+            if (!hasValidGrowthSoil(recipe)) {
+                continue;
+            }
+            active.add(i);
+            recipes.add(recipe);
+        }
+        return new Batch(active, recipes);
+    }
 
     /**
      * 一次配方的全部潜在产出：主产物 + 次级产物（按最坏情况，次级也全中）。

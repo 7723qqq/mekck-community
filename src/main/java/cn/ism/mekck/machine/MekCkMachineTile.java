@@ -32,6 +32,7 @@ import mekanism.common.tile.prefab.TileEntityConfigurableMachine;
 import mekanism.common.util.MekanismUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -144,10 +145,14 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
     static final String TAG_EXECUTOR = "mekckExecutor";
     /** NBT：本 tile 由 Mek 原生基类承载的存档格式版本。 */
     static final String TAG_NATIVE_VERSION = "MekCkNative";
-    /** NBT：进度条已走的 tick 数。 */
+    /** NBT：进度条已走的 tick 数 —— <b>旧格式</b>的单个 int，只读兼容（见 {@link #readMekckPersistentState}）。 */
     static final String TAG_WORK_PROGRESS = "MekCkWorkProgress";
-    /** 当前存档格式版本。v1 是首个 Mek 原生版本，没有需要迁移的旧格式。 */
-    private static final int NATIVE_VERSION = 1;
+    /** NBT：每路并行各自的进度（int 数组）。 */
+    static final String TAG_WORK_PROGRESS_ARRAY = "MekCkWorkProgressArray";
+    /** NBT：输入槽自动分选开关。与 Mek 的 {@code NBTConstants.SORTING} 同义（键名不同，避免与 Mek 的键撞车）。 */
+    static final String TAG_SORTING = "MekCkSorting";
+    /** 当前存档格式版本。v1 是首个 Mek 原生版本；v2 把进度条从单个 int 换成每路一个 int。 */
+    private static final int NATIVE_VERSION = 2;
 
     /**
      * 家族执行器，懒加载。
@@ -707,16 +712,25 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
     /**
      * 本机是否正在工作（GUI 进度条与 AE2 忙碌态的统一口径）。
      *
-     * <p><b>为什么不用 {@code executor().isBusy()}</b>：执行器只在「一个批次走完」的那一 tick
-     * 被调用（见 {@link #onUpdateServer}），它内部的 {@code busy} 标志在那一 tick 置位后
+     * <p><b>为什么不用 {@code executor().isBusy()}</b>：执行器只在「某一路跑完一个批次」的
+     * 那一 tick 被调用（见 {@link #workCycle}），它内部的 {@code busy} 标志在那一 tick 置位后
      * 一直保持到下一次调用。若拿它当忙碌态，机器跑完第一批之后就会永远显示「在忙」。
-     * 进度条是逐 tick 更新的，天然没有这种陈旧问题。</p>
+     * 进度是逐 tick 更新的，天然没有这种陈旧问题。</p>
      *
-     * <p>走 {@link #getWorkProgress()} 而不是直接读字段：客户端要读同步镜像，
+     * <p>「任一路有进度」= 在忙。客户端读的是同步过来的那一份数组，
      * 否则 {@code GuiProgress.isActive()} 在客户端恒为 false，进度条连底图都不画。</p>
      */
     public boolean isBusy() {
-        return getWorkProgress() > 0;
+        int[] progress = workProgress;
+        if (progress == null) {
+            return false;
+        }
+        for (int value : progress) {
+            if (value > 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ── 能量闸门与进度条 ────────────────────────────────────────────────
@@ -724,20 +738,73 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
     // 这里是旧 serverTick 的「红石 → 能量 → 干活」三段式在 Mek 体系下的落点。
     // 执行器只负责「本 tick 尽可能多地加工」，不判断该不该加工，也不碰能量与进度条。
 
-    /** 进度条已走的 tick 数（一个批次内单调递增）。 */
-    private int workProgress;
     /**
-     * 客户端镜像 —— {@link #workProgress} 的同步副本。
+     * 每路并行各自的进度（tick）—— <b>一路一个独立计时器</b>，与 Mek 的
+     * {@code TileEntityFactory.progress} 同构。
      *
-     * <p><b>为什么必须有它</b>：{@code workProgress} 只在服务端推进，此前唯一的出口是
-     * {@code saveAdditional} 写进 NBT，<b>没有任何网络同步通道</b>。而 GUI 的进度条读的是
-     * {@code menu.getProgressRatio() → tile.getWorkProgress()}，客户端 tile 上这个字段
-     * 恒为 0 ⇒ <b>进度条永远不动</b>（六个工厂家族的进度条此前全部是死的）。
-     * 同步走 Mek 自己的容器追踪机制，见 {@link #addContainerTrackers}。</p>
+     * <p>长度由 {@link MekCkRecipeExecutor#processCount} 定下，之后<b>永不重新分配</b>：
+     * {@link #addContainerTrackers} 里 {@code container.trackArray} 的每个
+     * {@code SyncableInt} 都直接持有这个数组的引用，换一个实例等于把同步通道指向
+     * 一块没人再写的内存。</p>
+     *
+     * <p>服务端与客户端<b>共用同一个字段</b>（Mek 的做法）：服务端它是权威值，
+     * 客户端由同步 setter 写进来。所以读取侧不需要按端分流 —— 这与
+     * {@code clientOrderActive} 那几个镜像字段不同。</p>
      */
-    private int clientWorkProgress;
+    private int[] workProgress;
     /** PULSE 锁存：收到上升沿后一直放行，直到跑完一个完整批次。 */
     private boolean pulseLatched;
+
+    /**
+     * 逐路告警位 —— {@code true} 表示「这一路喂了料却做不出产物」。
+     *
+     * <p>与 {@link #workProgress} 同构：服务端在 {@link #workCycle} 里写，客户端由
+     * {@code container.trackArray} 的同步 setter 写进来，读取侧不按端分流。
+     * 长度与进度数组一致，同样<b>只分配一次</b>（理由见 {@link #progressArray()}）。</p>
+     *
+     * <h3>为什么在服务端算而不是让 GUI 自己调 canProcess</h3>
+     * 这是 Mek 的做法（{@code TileEntityFactory.ErrorTracker} +
+     * {@code container.trackArray(trackedErrors)}）。GUI 的告警供给器每帧都会求值，
+     * 而 {@code canProcess} 会写执行器的 {@code tile} / {@code busy} 字段并做配方查找；
+     * 让客户端每帧跑一遍既浪费又可能污染执行器状态。服务端每 tick 算一次、按脏值下发，
+     * 代价恒定。</p>
+     */
+    private boolean[] laneWarnings;
+
+    /**
+     * 整机能量告警 —— {@code true} 表示「有活干但电不够」。
+     *
+     * <p>与 Mek 的 {@code RecipeError.NOT_ENOUGH_ENERGY} 同义，挂在竖直能源条上。
+     * 服务端与客户端共用同一个字段（Mek 的做法）。</p>
+     */
+    private boolean notEnoughEnergy;
+
+    /**
+     * 输入槽自动分选开关 —— 与 Mek 的 {@code TileEntityFactory.sorting} 同义。
+     *
+     * <p>默认<b>关</b>（Mek 也是默认关）：分选会挪动玩家亲手摆好的槽位，
+     * 必须由玩家显式打开。服务端与客户端共用同一个字段，客户端由
+     * {@code container.track} 的同步 setter 写进来（标签页要显示 On/Off）。</p>
+     */
+    private boolean sorting;
+    /**
+     * 「输入槽变过、需要重新分选」的脏标记 —— 与 Mek 的 {@code sortingNeeded} 同义。
+     *
+     * <p>初值 true：机器刚放下时也要分选一次（Mek 同款）。</p>
+     */
+    private boolean sortingNeeded = true;
+
+    /**
+     * 上一 tick 实际消耗的能量 —— 能源 tab 的「使用量」读数。
+     *
+     * <p>与 Mek 的 {@code TileEntityFactory.lastUsage} 同款：{@code 在干活 ? 本 tick 的能量差 : 0}。
+     * 此前六个工厂屏传的是 {@code tier.energyPerTick}（等级<b>声明值</b>），与机器真实扣电量
+     * 无关 —— 免能耗档（星云 / 奇点）会显示一个非零读数，而装了速度卡之后真实耗电翻倍、
+     * 读数却纹丝不动。</p>
+     *
+     * <p>服务端与客户端共用同一个字段（Mek 的做法），所以读取侧不按端分流。</p>
+     */
+    private FloatingLong lastUsage = FloatingLong.ZERO;
 
     /**
      * 把进度条数据挂进 Mek 的容器同步通道。
@@ -749,17 +816,27 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
      * 自己发包要另写一套「谁在什么时候发、玩家关屏后怎么办」的状态机，
      * 而 Mek 这套已经处理好了开屏/关屏/重开屏。
      *
-     * <p>写法逐字对齐 Mek 的 {@code TileEntityFactory.addContainerTrackers}：
-     * {@code container.track(SyncableInt.create(this::getX, this::setX))}。
-     * <b>getter 在服务端读权威值、setter 在客户端写镜像</b>，
-     * 所以 {@link #getWorkProgress()} 必须按端分流，否则服务端会读到客户端那份恒 0 的镜像、
-     * 脏值判定永远不触发。</p>
+     * <p>进度数组走 {@code container.trackArray(int[])} —— 与 Mek 的
+     * {@code TileEntityFactory.addContainerTrackers} 里 {@code container.trackArray(progress)}
+     * 逐字同款。它给每个下标建一个直接读写该数组的 {@code SyncableInt}，
+     * 所以服务端读到的就是权威值、客户端写进去的就是镜像，<b>不需要按端分流</b>。</p>
      */
     @Override
     public void addContainerTrackers(mekanism.common.inventory.container.MekanismContainer container) {
         super.addContainerTrackers(container);
-        container.track(mekanism.common.inventory.container.sync.SyncableInt.create(
-                this::getWorkProgress, value -> this.clientWorkProgress = value));
+        container.trackArray(progressArray());
+        // 逐路告警位 —— 与 Mek 的 {@code TileEntityFactory} 里 errorTracker.track(container) 同款。
+        container.trackArray(warningArray());
+        // 整机能量告警 —— Mek 把它挂在竖直能源条上（GuiFactory 的
+        // getWarningCheck(RecipeError.NOT_ENOUGH_ENERGY, 0)），这里同样。
+        container.track(mekanism.common.inventory.container.sync.SyncableBoolean.create(
+                this::isNotEnoughEnergy, value -> this.notEnoughEnergy = value));
+        // 自动分选开关 —— 标签页要画 On/Off，客户端必须看得到服务端的权威值。
+        container.track(mekanism.common.inventory.container.sync.SyncableBoolean.create(
+                this::isSorting, value -> this.sorting = value));
+        // 能源 tab 的「使用量」读数 —— 与 Mek 的 TileEntityFactory 同款（同一个字段双端共用）。
+        container.track(mekanism.common.inventory.container.sync.SyncableFloatingLong.create(
+                this::getLastUsage, value -> this.lastUsage = value));
         // 执行器的展示态（订单三件套 + 家族自定义位）。见 syncEx*() 的注释。
         container.track(mekanism.common.inventory.container.sync.SyncableInt.create(
                 this::syncOrderActiveFlag, value -> this.clientOrderActive = value));
@@ -894,12 +971,18 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
     }
 
     /**
-     * 本 tick 应扣多少能量 —— <b>已含并行槽数与存储卡倍增</b>的最终值。
+     * <b>单路</b>每 tick 应扣多少能量 —— 已含存储卡倍增，但<b>不含并行槽数</b>。
+     *
+     * <p>并行槽数由 {@link #workCycle} 的逐路扣减自然乘出来：N 路在跑就扣 N 份。
+     * 这与 Mek 同构 —— 那边每条 {@code CachedRecipe.updateAndProcess} 各自
+     * {@code extract} 一次，总耗电同样是「跑了几路就几份」。旧实现是整机一次扣
+     * {@code base × 非空槽数}，于是「有料但没配方」的槽也在收费，而且电量只够跑一半时
+     * 全部路一起停。</p>
      *
      * <p>默认 0 = 不耗电。旧实现里这条公式是切菜专属的（速度倍率要平方），
      * 因此留给子类算，基类只负责「够不够 → 扣多少 → 扣」这三步动作。</p>
      */
-    protected int energyPerWorkTick() {
+    protected int energyPerLanePerTick() {
         return 0;
     }
 
@@ -1054,8 +1137,8 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
      * 真 tile 在裸 JVM 里造不出来，而这处是整个分支唯一的算术。
      * 语义逐字取自旧 {@code CuttingMachineFactoryBlockEntity.serverTick} 第 414 行。</p>
      */
-    static int gatedEnergyCost(boolean freeEnergy, int energyPerWorkTick) {
-        return freeEnergy ? 0 : energyPerWorkTick;
+    static int gatedEnergyCost(boolean freeEnergy, int energyPerLanePerTick) {
+        return freeEnergy ? 0 : energyPerLanePerTick;
     }
 
     /**
@@ -1250,6 +1333,13 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
         if (randomizeRefillsEnergy()) {
             refillEnergyBuffer();
         }
+        // 自动分选排在 workCycle() 之前：本 tick 刚摆好的槽位要立刻参与加工判定。
+        // 脏标记在调用前清掉（Mek 同款）—— 分选本身会改槽位、从而再次点亮它，
+        // 但下一次分选算出的摆法不变、一个字节都不写，所以不会每 tick 空转。
+        if (sortingNeeded && sorting) {
+            sortingNeeded = false;
+            sortInputs();
+        }
         workCycle();
         // 热推进排在 workCycle() 之后：热是「本 tick 耗能的副产物」，
         // 迁移前旧 BE 的次序同样是先 extractEnergy/addHeatFromEnergy 再 progress++。
@@ -1265,43 +1355,147 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
         cn.ism.mekck.util.AE2Compat.autoProcessTick(this);
     }
 
-    /** 闸门 + 进度条 + 执行器调度。拆出来只为让 {@link #onUpdateServer} 保持一屏可读。 */
+    /** 闸门 + 逐路进度 + 执行器调度。拆出来只为让 {@link #onUpdateServer} 保持一屏可读。 */
     private void workCycle() {
         int cycle = effectiveTicksPerWorkCycle();
         // 免耗电：整个扣减额置 0（旧第 414 行的 `activeSlots > 0 && !hasCreative`）。
         // 置 0 后下面的 hasEnergyFor(0) 恒真，于是能量为 0 时机器照样推进——与旧实现同。
-        int cost = gatedEnergyCost(randomizeGrantsFreeEnergy(), energyPerWorkTick());
-        // 三个条件与旧 serverTick 的 canOperate && anyValid && 能量够 一一对应，
-        // 次序也照旧：红石先判（最便宜），再判有没有活干，最后才去看能量。
-        boolean allowed = allowsWork() && hasWorkToDo() && hasEnergyFor(cost);
-        if (allowed) {
-            if (cost > 0) {
+        int perLaneCost = gatedEnergyCost(randomizeGrantsFreeEnergy(), energyPerLanePerTick());
+        // 红石与「有没有活干」两条与旧 serverTick 的 canOperate && anyValid 一一对应。
+        // <b>能量不再参与这道总闸</b>：它改成逐路各判各扣（见下方循环），
+        // 与 Mek 的 CachedRecipe.updateAndProcess 逐路 extract 同款。
+        boolean work = hasWorkToDo();
+        boolean allowed = allowsWork() && work;
+        // 能量告警：有活干、却连一路都推不动 —— 与 Mek 的
+        // RecipeError.NOT_ENOUGH_ENERGY 同义（GuiFactory 把它挂在竖直能源条上）。
+        // 判据里带 work 是必须的：空转的机器能量为 0 也不该报警。
+        notEnoughEnergy = work && !hasEnergyFor(perLaneCost);
+        int[] progress = progressArray();
+        boolean[] warnings = warningArray();
+        if (!allowed) {
+            // 条件不满足 ⇒ 全部路清零重来（旧实现是单个计数器清零，语义相同）。
+            java.util.Arrays.fill(progress, 0);
+            // 逐路告警一并清掉：机器整台停着（红石关 / 没料）时，
+            // 「这一路做不出东西」不是玩家需要看到的信息。
+            java.util.Arrays.fill(warnings, false);
+            if (pulseLatched) {
+                pulseLatched = false;
+            }
+            setActive(false);
+            lastUsage = FloatingLong.ZERO;
+            return;
+        }
+        // 本 tick 的能量差就是能源 tab 要显示的「使用量」（Mek 的 TileEntityFactory 同款）。
+        FloatingLong energyBefore = energyContainer.getEnergy().copy();
+        MekCkRecipeExecutor exec = executor();
+        boolean anyProgress = false;
+        for (int i = 0; i < progress.length; i++) {
+            boolean can = exec.canProcess(this, i);
+            // 逐路告警：这一路喂了料、却做不出产物（没配方 / 产物装不下 / 缺辅料）。
+            // 与 Mek 的 RecipeError.INPUT_DOESNT_PRODUCE_OUTPUT 同义，挂在同一条进度条上。
+            warnings[i] = !can && laneHasInput(i);
+            if (!can) {
+                // 这一路没活干（没输入 / 没配方 / 产物装不下）⇒ 只清它自己的进度，
+                // 其余路照常推进。这正是「逐路独立」与旧「整批一起停」的区别。
+                progress[i] = 0;
+                continue;
+            }
+            // 逐路扣电：这一路自己付得起才推进。付不起的那一路清零重来，其余路照常 ——
+            // 与 Mek 同款（那边是每条 CachedRecipe 各自 extract，不够就 resetProgress）。
+            // 旧实现是「整机一次扣 base × 非空槽数」，于是「有料但没配方」的槽也在收费，
+            // 而且电量只够跑一半时全部路一起停。
+            if (!hasEnergyFor(perLaneCost)) {
+                progress[i] = 0;
+                continue;
+            }
+            if (perLaneCost > 0) {
                 // AutomationType 的选择与理由都收在 deductEnergy 里，别在这里另传一个：
                 // 本行原先写死 EXTERNAL，被容器的 canExtract=notExternal 整条拒掉，
                 // 于是机器加工了一整个阶段却一 FE 都没扣（阶段 2 Task 4 交付的既有问题）。
-                deductEnergy(energyContainer, cost);
+                deductEnergy(energyContainer, perLaneCost);
                 // 耗能转废热：迁移前旧 BE 在「extractEnergy 之后、progress++ 之前」
                 // 调 addHeatFromEnergy(energyPerTick)，这里保持同一次序。
                 // 没有热能力的家族该钩子是 no-op。
-                addHeatFromEnergy(cost);
+                addHeatFromEnergy(perLaneCost);
             }
-            if (++workProgress >= cycle) {
-                workProgress = 0;
-                executor().tick(this, inputSlots.size());
+            if (advanceLane(progress, i, cycle)) {
+                exec.process(this, i);
                 // PULSE：跑完一整个批次才解除锁存（allowsWork 的锁存语义见其注释）。
                 pulseLatched = false;
             }
-        } else {
-            if (workProgress != 0) {
-                workProgress = 0;
-            }
-            if (pulseLatched) {
-                pulseLatched = false;
+            if (progress[i] > 0) {
+                anyProgress = true;
             }
         }
         // active 口径与旧实现逐字一致：旧代码在 serverTick 末尾算 isActive = progress > 0，
         // 而那时 progress 刚被清零，所以「刚跑完一批」的那一 tick 机器就是不 active 的。
-        setActive(workProgress > 0);
+        setActive(anyProgress);
+        lastUsage = anyProgress ? energyBefore.minusEqual(energyContainer.getEnergy()) : FloatingLong.ZERO;
+    }
+
+    /**
+     * 第 {@code index} 路是否喂了料 —— 逐路告警的判据。
+     *
+     * <p>多路家族（切菜 / 研磨 / 烧烤 / 种植切配）输入槽与路一一对应，直接看第
+     * {@code index} 格。整机一次家族（烹饪 / 穿串，{@link #getProcessCount()} 为 1
+     * 而输入槽有多格）只有一路，判「任意输入槽非空」。</p>
+     */
+    private boolean laneHasInput(int index) {
+        if (inputSlots == null || inputSlots.isEmpty()) {
+            return false;
+        }
+        if (getProcessCount() == 1) {
+            for (IInventorySlot slot : inputSlots) {
+                if (!slot.isEmpty()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return index >= 0 && index < inputSlots.size() && !inputSlots.get(index).isEmpty();
+    }
+
+    /**
+     * 进度数组 —— 长度由 {@link MekCkRecipeExecutor#processCount} 定下，<b>只分配一次</b>。
+     *
+     * <p>为什么不能重新分配：{@link #addContainerTrackers} 里 {@code container.trackArray}
+     * 给每个下标建的 {@code SyncableInt} 直接持有这个数组的引用。换实例之后同步通道
+     * 仍在写旧数组，GUI 读到的进度会永远停在换实例那一刻。</p>
+     */
+    private int[] progressArray() {
+        if (workProgress == null) {
+            workProgress = new int[Math.max(1, executor().processCount(this))];
+        }
+        return workProgress;
+    }
+
+    /**
+     * 告警数组 —— 与 {@link #progressArray()} 同长度、同样<b>只分配一次</b>。
+     *
+     * <p>长度取进度数组而不是执行器的 {@code processCount}：两者必须一致，
+     * 否则 {@code container.trackArray} 建出的同步条目数与 GUI 读的下标对不上。</p>
+     */
+    private boolean[] warningArray() {
+        if (laneWarnings == null) {
+            laneWarnings = new boolean[progressArray().length];
+        }
+        return laneWarnings;
+    }
+
+    /**
+     * 推进一路的进度。
+     *
+     * <p>抽成 {@code static} 纯函数是为了能脱离 tile 单测「各路互不影响」这条不变量 ——
+     * 造一台真的机器需要 {@code BlockEntityType} 注册表，裸 JVM 里拿不到。</p>
+     *
+     * @return true 表示这一路刚好走完一个批次（进度已归零，调用方该加工它了）
+     */
+    static boolean advanceLane(int[] progress, int index, int cycle) {
+        if (++progress[index] >= cycle) {
+            progress[index] = 0;
+            return true;
+        }
+        return false;
     }
 
     private boolean hasEnergyFor(int cost) {
@@ -1325,19 +1519,273 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
     }
 
     /**
-     * 进度条已走的 tick 数（GUI 用）。
+     * 第 {@code index} 路已走的 tick 数（GUI 用）。
      *
-     * <p><b>按端分流</b>：服务端返回权威值 {@link #workProgress}，客户端返回同步镜像
-     * {@link #clientWorkProgress}。分流是必须的——{@code SyncableInt} 的脏值判定在服务端
-     * 调 getter，若这里无条件返回镜像，服务端读到的永远是 0，同步一次都不会发。</p>
+     * <p>服务端与客户端读的是<b>同一个数组</b>：服务端它是权威值，客户端由
+     * {@code container.trackArray} 的同步 setter 写进来（见 {@link #workProgress}）。
+     * 所以这里不需要按端分流 —— 与 {@code getOrderQuantity()} 那几个镜像字段不同。</p>
      */
-    public int getWorkProgress() {
-        return level != null && level.isClientSide ? clientWorkProgress : workProgress;
+    public int getWorkProgress(int index) {
+        int[] progress = workProgress;
+        if (progress == null || index < 0 || index >= progress.length) {
+            return 0;
+        }
+        return progress[index];
+    }
+
+    /** 本机有几路并行（= 进度条条数）。 */
+    public int getProcessCount() {
+        return progressArray().length;
+    }
+
+    /**
+     * 第 {@code index} 路是否有告警（喂了料却做不出产物）—— 进度条的
+     * {@code WarningType.INPUT_DOESNT_PRODUCE_OUTPUT} 供给器。
+     */
+    public boolean hasLaneWarning(int index) {
+        boolean[] warnings = laneWarnings;
+        return warnings != null && index >= 0 && index < warnings.length && warnings[index];
+    }
+
+    /** 全部路里是否有任一路告警 —— 悬浮窗布局那条汇总进度条用。 */
+    public boolean hasAnyLaneWarning() {
+        boolean[] warnings = laneWarnings;
+        if (warnings == null) {
+            return false;
+        }
+        for (boolean warning : warnings) {
+            if (warning) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 是否有「有活干但电不够」的告警 —— 竖直能源条的 {@code WarningType.NOT_ENOUGH_ENERGY} 供给器。 */
+    public boolean isNotEnoughEnergy() {
+        return notEnoughEnergy;
+    }
+
+    // ── 输入槽自动分选（Mek 的 GuiSortingTab / TileEntityFactory.sortInventory 对应物）──
+
+    /** 自动分选开关（GUI 标签页读它画 On/Off）。 */
+    public boolean isSorting() {
+        return sorting;
+    }
+
+    /** 翻转自动分选开关；打开时立刻标脏，下一 tick 就分选一次。 */
+    public void toggleSorting() {
+        sorting = !sorting;
+        if (sorting) {
+            sortingNeeded = true;
+        }
+    }
+
+    /**
+     * 本家族是否支持自动分选。
+     *
+     * <p>默认支持。穿串工厂覆写成 {@code false}：它的 3 个输入槽是<b>签子 / 主料 / 辅料</b>
+     * 三种不同角色，而匹配是位置无关的、返还槽却复制「输入槽 0 的整叠」
+     * （见 {@code SkeweringFactoryTile} 类注释的已知坑 ①）。分选会把签子挪出槽 0，
+     * 让那个坑从「可达」变成「常态」，所以这台机器不提供这个开关。</p>
+     */
+    public boolean supportsSorting() {
+        return true;
+    }
+
+    /**
+     * 输入槽自动分选 —— 把同种物品在<b>能接受它的槽</b>之间摊平。
+     *
+     * <h3>为什么是「摊平」而不是「归并」</h3>
+     * 工厂的并行度就是「有几路在干活」。把 3 槽各 10 个归并成 1 槽 30 个会让并行度
+     * 从 3 掉到 1，正好与工厂的意义相反。所以这里做的是反过来的事：同种物品摊到
+     * 尽可能多的槽上，让每一路都有活干。
+     *
+     * <h3>为什么不会丢东西</h3>
+     * 每种物品的总量在分组时就已固定，回填时按「目标槽数」均分（每槽
+     * {@code ceil(剩余 / 剩余目标槽数)}），<b>总量逐字守恒</b>。目标槽集合一定包含
+     * 该物品原本占用的每一个槽，所以即使某个槽的准入谓词只认特定物品，那些物品也
+     * 一定有地方可放。
+     *
+     * <h3>为什么先算目标摆法、再比对、最后才写回</h3>
+     * {@code IInventorySlot.setStack} / {@code setEmpty} 会触发
+     * {@code onContentsChanged} → 本类的 {@code sortingNeeded = true}。若每次都无条件
+     * 清空再回填，即使摆法没变也会把脏标记重新点亮，于是<b>每 tick 都分选一次</b>、
+     * 每 tick 都把方块标脏。先算后比可以保证「摆法不变就一个字节都不写」。
+     */
+    private void sortInputs() {
+        List<IInventorySlot> inputs = getInputSlots();
+        if (inputs == null || inputs.size() < 2) {
+            return;
+        }
+        List<ItemStack> current = new ArrayList<>(inputs.size());
+        for (IInventorySlot slot : inputs) {
+            current.add(slot.getStack());
+        }
+        // 输入槽的单槽容量在本模组里是统一的（slotLimitPerSlot(tier) 对全档位取同一个配置值），
+        // 所以取第 0 格的口径即可。MekCkSlot 的 obeyStackLimit 是 false，
+        // getLimit 与传进去的栈无关，传 EMPTY 也拿得到真实容量。
+        List<ItemStack> layout = sortedLayout(current, inputs.get(0).getLimit(ItemStack.EMPTY));
+        // 摆法没变就一个字节都不写（理由见方法注释）。
+        boolean changed = false;
+        for (int i = 0; i < inputs.size(); i++) {
+            if (!ItemStack.matches(inputs.get(i).getStack(), layout.get(i))) {
+                changed = true;
+                break;
+            }
+        }
+        if (!changed) {
+            return;
+        }
+        for (int i = 0; i < inputs.size(); i++) {
+            ItemStack stack = layout.get(i);
+            if (stack.isEmpty()) {
+                inputs.get(i).setEmpty();
+            } else {
+                inputs.get(i).setStack(stack);
+            }
+        }
+    }
+
+    /**
+     * 分选的目标摆法 —— 纯函数，不碰任何槽位。
+     *
+     * <p>抽成 {@code static} 是为了能脱离 tile 单测「总量守恒」这条不变量：
+     * 造一台真的机器需要 {@code BlockEntityType} 注册表，裸 JVM 里拿不到。
+     * 见 {@code TestMekCkInputSorting}。</p>
+     *
+     * @param current   当前每个输入槽的内容
+     * @param slotLimit 单槽容量（本模组全档位统一，见 {@code slotLimitPerSlot}）
+     * @return 与 {@code current} 等长的目标摆法；<b>物品总量与 {@code current} 逐字相等</b>
+     */
+    static List<ItemStack> sortedLayout(List<ItemStack> current, int slotLimit) {
+        int size = current.size();
+        List<ItemStack> layout = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            layout.add(ItemStack.EMPTY);
+        }
+        if (size < 2) {
+            return layout;
+        }
+        // ① 分组：同物品同 NBT 算一种，同时记下它原本占用的槽下标。
+        //    用 List 保序 —— HashMap 的迭代顺序会让同样的输入每次分选出不同的摆法，
+        //    玩家会看到槽位自己乱跳。
+        List<ItemStack> kinds = new ArrayList<>();
+        List<List<Integer>> targets = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            ItemStack stack = current.get(i);
+            if (stack.isEmpty()) {
+                continue;
+            }
+            int found = -1;
+            for (int k = 0; k < kinds.size(); k++) {
+                if (ItemStack.isSameItemSameTags(kinds.get(k), stack)) {
+                    found = k;
+                    break;
+                }
+            }
+            if (found < 0) {
+                kinds.add(stack.copy());
+                List<Integer> home = new ArrayList<>();
+                home.add(i);
+                targets.add(home);
+            } else {
+                kinds.get(found).grow(stack.getCount());
+                targets.get(found).add(i);
+            }
+        }
+        if (kinds.isEmpty()) {
+            return layout;
+        }
+        // ② 把空槽按顺序补给「还想摊开」的物品：够几个就摊几槽（每槽至少 1 个）。
+        //    判据与 Mek 的 addEmptySlotsAsTargets 同源（那边是 totalCount / minPerSlot，
+        //    本模组的配方每份至少吃 1 个，所以 minPerSlot 取 1）。先到先得，
+        //    没抢到空槽的物品保留它原有的槽 —— 一个都不会丢。
+        boolean[] claimed = new boolean[size];
+        for (List<Integer> target : targets) {
+            for (int i : target) {
+                claimed[i] = true;
+            }
+        }
+        for (int k = 0; k < kinds.size(); k++) {
+            List<Integer> target = targets.get(k);
+            int want = Math.min(kinds.get(k).getCount(), size);
+            for (int i = 0; i < size && target.size() < want; i++) {
+                if (!claimed[i]) {
+                    claimed[i] = true;
+                    target.add(i);
+                }
+            }
+        }
+        // ③ 均分：每槽取 ceil(剩余 / 剩余目标槽数)，总量逐字守恒。
+        for (int k = 0; k < kinds.size(); k++) {
+            ItemStack kind = kinds.get(k);
+            List<Integer> target = targets.get(k);
+            int remaining = kind.getCount();
+            for (int t = 0; t < target.size() && remaining > 0; t++) {
+                int free = target.size() - t;
+                int perSlot = (remaining + free - 1) / free;
+                int limit = Math.min(slotLimit, kind.getMaxStackSize());
+                int put = Math.min(remaining, Math.min(perSlot, limit));
+                if (put <= 0) {
+                    continue;
+                }
+                layout.set(target.get(t), kind.copyWithCount(put));
+                remaining -= put;
+            }
+            if (remaining > 0) {
+                // 目标槽全装满了还有剩。不会发生（目标槽含该物品原本占用的槽，
+                // 容量必然够），留着是为了「宁可堆叠也不销毁」。
+                int first = target.get(0);
+                ItemStack existing = layout.get(first);
+                layout.set(first, existing.isEmpty()
+                        ? kind.copyWithCount(remaining)
+                        : existing.copyWithCount(existing.getCount() + remaining));
+            }
+        }
+        return layout;
+    }
+
+    /**
+     * 上一 tick 实际消耗的能量 —— 能源 tab 的「使用量」读数。
+     *
+     * <p>与 Mek 的 {@code TileEntityFactory.getLastUsage()} 同款。此前六个工厂屏传的是
+     * {@code tier.energyPerTick}（等级声明值），与真实扣电量无关。</p>
+     */
+    public FloatingLong getLastUsage() {
+        return lastUsage;
     }
 
     /** 完成一个批次需要的 tick 数（GUI 画进度条分母用）。 */
     public int getTicksPerWorkCycle() {
         return effectiveTicksPerWorkCycle();
+    }
+
+    /**
+     * 第 {@code index} 路的进度比例（0..1）—— <b>GUI 进度条的唯一取数口</b>。
+     *
+     * <p>六个菜单的 {@code getProgressRatio(int)} 与槽位悬浮窗的逐路填充都调这里，
+     * 免得同一个除法在七处各写一遍、日后分母口径漂移。</p>
+     */
+    public double getProgressRatio(int index) {
+        int cycle = getTicksPerWorkCycle();
+        return cycle <= 0 ? 0 : getWorkProgress(index) / (double) cycle;
+    }
+
+    /**
+     * 全部路里最大的进度比例 —— 悬浮窗布局（&gt;17 并行）主面板那条汇总进度条用。
+     *
+     * <p>为什么是 max 而不是平均：那条条要回答的是「这台机器在不在干活」。
+     * 平均在「只喂了 1 路」时会显示 1/81 的进度，看起来像卡住；max 则如实
+     * 反映那一路的推进。全部路同步推进时两者相等。</p>
+     */
+    public double getMaxProgressRatio() {
+        int lanes = getProcessCount();
+        double max = 0;
+        for (int i = 0; i < lanes; i++) {
+            max = Math.max(max, getProgressRatio(i));
+        }
+        return max;
     }
 
     // ── 持久化 ──────────────────────────────────────────────────────────
@@ -1369,7 +1817,8 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
         CompoundTag executorTag = new CompoundTag();
         executor().save(executorTag);
         tag.put(TAG_EXECUTOR, executorTag);
-        tag.putInt(TAG_WORK_PROGRESS, workProgress);
+        tag.putIntArray(TAG_WORK_PROGRESS_ARRAY, progressArray());
+        tag.putBoolean(TAG_SORTING, sorting);
         tag.putInt(TAG_NATIVE_VERSION, NATIVE_VERSION);
         // AE2 网格节点的 NBT 必须与节点一同存活（阶段 2 Task 4.6）：
         // 节点里存着频道占用与「已勾选的自动处理材料」，不写就等于每次重载
@@ -1510,13 +1959,36 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
             LOGGER.warn("工厂方块 {} 的存档格式版本为 {}，高于本版本 MekCK 支持的 {}，"
                             + "该机器的执行器进度可能不完整。", getBlockType(), version, NATIVE_VERSION);
         }
-        workProgress = Math.max(0, tag.getInt(TAG_WORK_PROGRESS));
+        readWorkProgress(tag);
+        // 分选开关：缺失键取 false（= 默认关），与 Mek 的 NBTUtils.setBooleanIfPresent 同款。
+        sorting = tag.getBoolean(TAG_SORTING);
         executor().load(tag.getCompound(TAG_EXECUTOR));
         // AE2 网格节点的 NBT（阶段 2 Task 4.6）：必须在 super.load 之后——
         // 它的 loadFromNBT 只是把整个 tag 缓存成 pendingTag，真正建节点要等
         // 下一次 serverTick 的 init()，与旧 BE 的调用位置一致。
         cn.ism.mekck.util.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
+    }
+
+    /**
+     * 读回每路进度。
+     *
+     * <p>v1 存档写的是单个 int（{@link #TAG_WORK_PROGRESS}），v2 起是 int 数组
+     * （{@link #TAG_WORK_PROGRESS_ARRAY}）。旧档的单个值落到第 0 路 —— 进度是
+     * 「半批次」的瞬时状态，落到哪一路都不影响后续行为，但直接丢掉会让升级后的机器
+     * 凭空少半批。</p>
+     */
+    private void readWorkProgress(CompoundTag tag) {
+        int[] progress = progressArray();
+        java.util.Arrays.fill(progress, 0);
+        int[] saved = tag.getIntArray(TAG_WORK_PROGRESS_ARRAY);
+        if (saved.length > 0) {
+            System.arraycopy(saved, 0, progress, 0, Math.min(saved.length, progress.length));
+            return;
+        }
+        if (tag.contains(TAG_WORK_PROGRESS)) {
+            progress[0] = Math.max(0, tag.getInt(TAG_WORK_PROGRESS));
+        }
     }
 
     /**

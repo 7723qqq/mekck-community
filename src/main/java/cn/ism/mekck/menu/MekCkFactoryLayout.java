@@ -24,10 +24,11 @@ package cn.ism.mekck.menu;
  *   有副资源条        177              95                  85
  *   锯木工厂          187             105                  95
  * </pre>
- * 三组数据一致给出两条规则，本类采用的正是它们：
+ * 三组数据给出两条规则，本类采用的正是它们：
  * <ul>
- *   <li>{@code inventoryYOffset ≈ imageHeight - 82}；</li>
- *   <li>{@code inventoryLabelY = inventoryYOffset - 10}。</li>
+ *   <li>{@code inventoryYOffset}：166 那一档是 {@code imageHeight - 81}，另两档是
+ *       {@code imageHeight - 82} —— Mek 自己就不一致，所以 166 照抄数值、其余套公式；</li>
+ *   <li>{@code inventoryLabelY = inventoryYOffset - 10}（三档都成立）。</li>
  * </ul>
  * 于是「面板长高多少，背包就下移多少」，机器槽区永远不会压到玩家背包上。
  *
@@ -180,6 +181,24 @@ public final class MekCkFactoryLayout {
     }
 
     /**
+     * 一行式进度条的 y —— 上游 {@code GuiFactory} 与 {@code GuiExtraFactory} 都是 33。
+     *
+     * <p>输入行占 13..31、输出行占 57..75，33 正落在中间那条空带里。</p>
+     */
+    public static final int ONE_ROW_PROGRESS_Y = 33;
+
+    /**
+     * 一行式第 {@code index} 条进度条的 x —— 上游的 {@code 4 + baseX + i * baseXMult}。
+     *
+     * <p>上游<b>每个并行槽一条</b>进度条（{@code GuiFactory.addGuiElements} 的循环里
+     * {@code addProgress(new GuiProgress(..., ProgressType.DOWN, this, 4 + baseX + (i * baseXMult), 33))}），
+     * 不是一条居中的箭头。{@code ProgressType.DOWN} 是 8×20 的竖条，正好落在对应槽位的正下方。</p>
+     */
+    public static int oneRowProgressX(int index, int processes) {
+        return 4 + oneRowSlotX(index, processes);
+    }
+
+    /**
      * 一行式的面板宽度 —— 照 Mek（176 / ULTIMATE 210）与 MekExtras（每档 +38）的实测值。
      *
      * @param processes 并行数；&gt;17 时返回 {@code -1}（表示「一行式不适用」）
@@ -258,7 +277,7 @@ public final class MekCkFactoryLayout {
      * 「一行式 + 额外槽」的面板高度 —— <b>由内容算出来</b>，不再用魔法值。
      *
      * <p>约束只有一条：<b>额外槽列（及其下方的开关行）必须整块落在玩家背包之上</b>。
-     * 背包的 y 由 {@link #inventoryYOffset} 决定（= 面板高 − 82），
+     * 背包的 y 由 {@link #inventoryYOffset} 决定（面板高 &gt; 166 时 = 面板高 − 82），
      * 所以面板高 ≥ 内容底 + 82 即可。下限仍取 {@value #ONE_ROW_PANEL_HEIGHT}（Mek 的 166）。</p>
      *
      * @param extraCount      额外槽个数
@@ -393,8 +412,12 @@ public final class MekCkFactoryLayout {
      * @param imageHeight 本屏幕的面板高度（与 {@code AbstractContainerScreen.imageHeight} 同值）
      */
     public static int inventoryYOffset(int imageHeight) {
-        // 下限保护：Mek 的 {@code BASE_Y_OFFSET} 是 84，不允许把背包画到比它还靠上。
-        return Math.max(imageHeight - BOTTOM_MARGIN, 84);
+        // 166 那一档照抄 Mek 的 85：它的余量是 81，而 177 / 187 两档是 82。
+        // 套 -82 会得到 84 —— 比上游高 1px，背包槽与「Inventory」标签会一起上移。
+        if (imageHeight <= ONE_ROW_PANEL_HEIGHT) {
+            return 85;
+        }
+        return Math.max(imageHeight - BOTTOM_MARGIN, 85);
     }
 
     /** 「Inventory」文字标签的 y —— 赋给 {@code inventoryLabelY}。 */
@@ -416,17 +439,27 @@ public final class MekCkFactoryLayout {
      *       return tile.tier == FactoryTier.ULTIMATE ? 26 : 8;   // ULTIMATE 面板 210 宽（176+34）
      *   }
      * </pre>
-     * 即「面板变宽 ⇒ 背包右移，保持居中」。
+     * 即「面板变宽 ⇒ 背包右移」。
      *
      * <p><b>本模组此前零覆写</b>，恒为 8。于是面板越宽、背包越贴左：SINGULARITY 面板 412 宽，
      * 背包却只占最左 162px，右侧空出 250px（实测截图：面板 460 宽、背包区间实测 x=0..162）。
      * 这就是「全部工厂的物品栏位置/比例不对」的根因。</p>
      *
-     * <p>这里按「在面板内横向居中」算，与 Mek 的两档实测吻合：
-     * 面板 176 ⇒ (176-162)/2 = 7，Mek 用 8；面板 210 ⇒ (210-162)/2 = 24，Mek 用 26。</p>
+     * <p><b>一行式档位（前 8 档）照抄上游，不套「居中」公式</b>：Mek 与 MekExtras 给的都不是
+     * 居中的整数解 —— 面板 176 居中给 7 而上游是 8，面板 210 居中给 24 而上游是 26。
+     * 表里的宽度全部来自 {@link #oneRowPanelWidth}，一一对应上游 8 档。</p>
+     *
+     * <p>其余布局（烹饪 / 穿串 / 悬浮窗 / 方阵）上游没有对应物，按面板内居中。</p>
      */
     public static int inventoryXOffset(int imageWidth) {
-        return Math.max(8, (imageWidth - INVENTORY_WIDTH) / 2);
+        return switch (imageWidth) {
+            case 210 -> 26;   // Mek ULTIMATE
+            case 248 -> 44;   // MekExtras ABSOLUTE：22 * (0 + 2) - 3 * 0
+            case 286 -> 63;   // SUPREME：22 * (1 + 2) - 3 * 1
+            case 324 -> 82;   // COSMIC：22 * (2 + 2) - 3 * 2
+            case 362 -> 101;  // INFINITE：22 * (3 + 2) - 3 * 3
+            default -> Math.max(8, (imageWidth - INVENTORY_WIDTH) / 2);
+        };
     }
 
     /**
