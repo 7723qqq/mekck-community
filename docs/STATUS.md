@@ -1,26 +1,38 @@
 # mekck 当前状态汇总
 
-- 最后更新：2026-09-30（**第三轮**全量审查）
+- 最后更新：2026-09-30（**第三轮**全量审查；之后另有 3 个提交，见 §一）
 - 审查基线：HEAD `bb00171` 之后的工作区
 - 验收口径：`./gradlew build`（**联网**；理由见第五节第 6 条）→
-  **359 测试 / 0 失败 / 0 错误 / 0 跳过**，且产物内含 `mekck.refmap.json`
+  第三轮收尾时 **359 测试 / 0 失败 / 0 错误 / 0 跳过**，且产物内含 `mekck.refmap.json`
 
-本文是**单一入口**。细节看各专项文档（见文末索引）。
+本文是**单一入口**：当前状态、未修项、环境注意事项都在这里。
+全部文档清单见 [`README.md`](README.md)；第二轮及更早的轮次叙事见 §七。
 
 ---
 
-## 〇-A、第三轮全量审查（2026-09-30）—— 最新
+## 一、第三轮全量审查（2026-09-30）—— 最新
 
 4 个 agent 按**包边界**并行深审 + Lead 亲自复核每条 Critical 与产物级证据。
-详细报告见下方各分域文档（第四份 `client-recipe-mixin` 那一节）。
+本轮**没有**独立的分域报告文件——结论全部内联在本节。第二轮的分域明细见
+[`audit/2026-09-30-details/`](audit/2026-09-30-details/)（基线 `83830e0`，属第二轮）。
 
-### 已修（3 个提交）
+### 已修（第三轮 3 个提交）
 
 | 提交 | 内容 |
 |---|---|
 | `0659f30` | **收编上一轮 C1–C6 的修复成果**。此前 120 个已跟踪文件被改 + **479 个未跟踪文件**（含 `mekck.refmap.json` 本身、审查报告、9 个护栏测试）全部游离在工作区——一次 `git clean -fd` 就全没了，且没有任何东西会失败报警 |
 | `b6435bc` | 两个**服务器崩溃级**缺陷 + 订单契约统一 + 仓库卫生 |
 | `bb00171` | 存档损坏 / TPS 杀手 / 永久无 AI |
+
+### 第三轮之后（3 个提交，本表未逐条复核）
+
+| 提交 | 内容 |
+|---|---|
+| `1448ec9` | 中央厨房 off-by-one + 配方流体 tag NPE + 渲染泄漏 + 配置回滚——**修掉下方「未修项」表 7 项** |
+| `7403722` | 中央厨房 2 个 Critical（每次存档丢物品 / 订单交付静默销毁）+ 补齐自己修复的漏洞 |
+| `5a8756f` | 补回迁移丢失的用途（热容 / 营养液灌注 / 存储区刷新）+ 激活自动加工模式 |
+
+> 护栏数：第三轮收尾 **359** → `5a8756f` 时 **380**（据该提交说明，**未复跑验证**）。
 
 ### Critical 处置表
 
@@ -55,22 +67,38 @@
 并给三个 run 任务传 `-Dmixin.env.remapRefMap=true`；找不到时**显式失败**而不是让 dev 跑出一个看不懂的崩溃。
 `TestMixinRefmapIntegrity` 补了对应断言。
 
-### 仍未修（需你定或需实机验证）
+### 未修项
+
+> ⚠️ **本表写于第三轮收尾时。** 之后又有 3 个提交（`1448ec9` / `7403722` / `5a8756f`）。
+> 其中 `1448ec9` 已修掉下表 7 项——已逐项核实并移入下方「已修」表。
+> **其余各项未逐条复核**，以 `git show <提交>` 为准。
+
+**已修（第三轮内）**
+
+| # | 问题 | 修法 |
+|---|---|---|
+| I-N5 | `ContainerData` 通道是 **16 位有符号** ⇒ 13 台遗留机器能量显示为负；**并顺带关掉**种植切配站的创造升级 UI（`hasCreative` 恒假） | 前两轮都记为「缩放修不了、属架构改动」；第三轮复核认为**框定过宽**——绝大多数 Screen 只用比值，正确低成本修法是同步缩放值或百分比槽。**这是三轮都挂在「未完成」栏的那条对账，现已做完**（逐菜单表见报告） |
+
+**已修（`1448ec9`，逐项核实）**
+
+| # | 问题 | 修法 |
+|---|---|---|
+| I-N3 | `CentralKitchenMenu.quickMoveStack` 少算 1 个机器槽 ⇒ 三明治样品被 shift-click 搬进存储区并清空 | 槽数 83 → 84；护栏 `TestMenuQuickMoveSlotRanges` 的表同步更新（原表把该 bug 登记成了「预期行为」） |
+| I-2 | `MekCkRenderTypes.getIce()` 每帧新建 `RenderType` ⇒ 无界堆增长 + 缓冲缓存失效 | 改为 `static final RenderType[] ICE_LEVELS`，4 张贴图 4 个实例 |
+| I-3 | 冰封贴图 `ResourceLocation` 缺命名空间（`textures/block/textures/block/...`）且 `frosted_ice_0..3` 在本仓与原版都不存在 | 改为返回 0..3 下标，调用方不再持有 `ResourceLocation`，从根上写不出单参构造 |
+| I-5 | `ExtractingRecipe.FluidInput.matches()` 在流体 tag 不存在时 NPE，被 `catch (Throwable)` 吞掉 ⇒ 带 `#tag` 的配方**永远不匹配** | 已修 |
+| I-8 | `CreativeUpgradeFoodRotator` 用**陈旧快照**覆盖 Forge 刚保存的 `mekck-common.toml` | 已修（配置回滚） |
+| I-9 | `MekckConfig.ice_attack_radius` 上界无意义 | `defineInRange(..., 4, IceTargetSearch.MAX_ATTACK_RADIUS)` |
+| M-2 | `item.mekck.ferrero_projectile` 两份 lang 都缺 | 两份都已补 |
+
+**仍未修**
 
 | # | 问题 | 备注 |
 |---|---|---|
-| I-N3 | `CentralKitchenMenu.quickMoveStack` 少算 1 个机器槽 ⇒ 三明治样品被 shift-click 搬进存储区并清空 | 改法明确（`+1`），未动 |
-| I-N4 | 中央厨房的搜索/排序/滚动只在服务端算，**没有任何 S2C 包回传** ⇒ 存储浏览器整体是死的 | 需设计同步字段 |
-| I-N5 | `ContainerData` 通道是 **16 位有符号** ⇒ 13 台遗留机器能量显示为负；**并顺带关掉**种植切配站的创造升级 UI（`hasCreative` 恒假） | 前两轮都记为「缩放修不了、属架构改动」；本轮复核认为**框定过宽**——绝大多数 Screen 只用比值，正确低成本修法是同步缩放值或百分比槽。**这是三轮都挂在「未完成」栏的那条对账，现已做完**（逐菜单表见报告） |
+| I-N4 | 中央厨房的搜索/排序/滚动只在服务端算，**没有任何 S2C 包回传** ⇒ 存储浏览器整体是死的 | 需设计同步字段。`5a8756f` 修的是「存储浏览器是开界面那刻的快照」（另一条），**本条未复核** |
 | I-1 | 制冰工厂 GUI 面板在高档位超出屏幕，玩家背包被推出可视区 | 制冰工厂未注册，实际不可达 |
-| I-2 | `MekCkRenderTypes.getIce()` 每帧新建 `RenderType` ⇒ 无界堆增长 + 缓冲缓存失效 | 4 张贴图本可做成 4 个 `static final` |
-| I-3 | 冰封贴图 `ResourceLocation` 缺命名空间（`textures/block/textures/block/...`）且 `frosted_ice_0..3` 在本仓与原版都不存在 | 应改用 `minecraft:textures/block/frosted_ice.png` |
-| I-5 | `ExtractingRecipe.FluidInput.matches()` 在流体 tag 不存在时 NPE，被 `catch (Throwable)` 吞掉 ⇒ 带 `#tag` 的配方**永远不匹配** | 类注释自称「保守不匹配」，实际没做到 |
 | I-6 | 种植切配站的模型硬依赖未声明的 `mekmm`（18 处引用 + 30 条配方） | 需决定：声明依赖 / 换自有模型 / 条件化 |
 | I-1(生成器) | 配方生成器在主线程跑 + 强制 `/reload`，大整合包首开服可能超 60 s 看门狗 | 需幂等短路 + 分摊到若干 tick |
-| I-8 | `CreativeUpgradeFoodRotator` 用**陈旧快照**覆盖 Forge 刚保存的 `mekck-common.toml` | 删掉手写回写即可 |
-| I-9 | `MekckConfig.ice_attack_radius` 上界无意义 | 已由 C-N2 的服务端闸门兜住，配置项本身仍应加上界 |
-| M-2 | `item.mekck.ferrero_projectile` 两份 lang 都缺 | 一行 |
 | — | 18 个方块把 `getDrops` 覆写成 `List.of()`、物品只在 `onRemove` 掉 ⇒ **TNT/爆炸摧毁时一件不掉** | 需确认是否有意 |
 | — | `MixinExtremeSmithingMenu.INFINITY_UPGRADE` 的求值时机存疑 | 需对 Avaritia 做 `javap -v`，该模组不在本地缓存 |
 
@@ -94,121 +122,11 @@
 
 ---
 
-## 〇、第二轮全量审查（2026-09-30）—— 已被上一节取代，保留作历史
+## 二、需你裁决（第二轮遗留）
 
-报告：`docs/audit/2026-09-30-full-code-review.md`（分域明细在 `.review/*.md`）。**6 个 Critical 全部已修**：
-
-| # | 一句话 | 状态 |
-|---|---|---|
-| C1 | **打包产物启动即崩**：没有 refmap ⇒ `MixinItemStack` 匹配不到 `ItemStack.save/of`，而配置是 `required:true` ⇒ 直接终止 | 已修 + **有护栏测试** |
-| C2 | 烧烤/穿串/烹饪三家 `appendExtraSlots` 在父类构造期对 `null` 调 `clear()` ⇒ **机器建不出来** | 已修 |
-| C3 | 迁到 Mek `BlockTile` 后**破坏丢全部内容**；烹饪 12 档 + `blaze_*` 5 个**连方块都不掉** ⇒ 72 张战利品表重写/新建 | 已修 |
-| C4 | `mekckPersistedSlots()` 漏掉家族专属槽 ⇒ 下标 ≥128 的槽**每次存读档静默丢失**（烹饪 35 格，全 12 档） | 已修 |
-| C5 | 5 个菜单把 handler 索引当菜单下标 ⇒ shift-click **堆叠翻倍**（可无限刷） | 已修 |
-| C6 | `@Redirect` 打在 `TileComponentUpgrade` **类**上 ⇒ **Mek 自己机器**上的静音/过滤升级读档即清零、回写后永久消失 | 已修 |
-
-另修上轮遗留的 **I10**（`MekCkTransfer` int 溢出 ⇒ 两个大堆叠同时消失）等约 10 项 Important，
-**新增 33 个回归测试**（272 → 305）。
-
-### ⚠️ C1 的护栏：refmap 是**手写**的，别让它腐烂
-
-`src/main/resources/mekck.refmap.json` 手写（MixinGradle + 注解处理器那条路走不通：AP 会对 4 个
-`remap = false` 的 mod 类 mixin 报成员级错误——合成 lambda 名、`$VALUES`/`UPGRADES` 这类
-javac 合成字段没有映射——而 `disableTargetValidator` / `@Pseudo` 只能消掉其中一条）。
-`TestMixinRefmapIntegrity` 用三条断言钉住它，其中最强的一条拿 `build/reobfJar/mappings.tsrg`
-（ForgeGradle 重混淆**自己用的那份映射**）核对 SRG 名，**名字写错也能抓到**：
-已用变异测试证明——把 `m_41739_` 改成别的值，该断言立刻变红。
-
-⇒ **只要有人给 `MixinItemStack` 新加一条打原版方法的 `@Inject`，测试先红，而不是等启动崩。**
-
-### 仍未验证
-
-C1 的修复效果需要**真实实例复跑**一次才能坐实（本轮无法自动启动游戏）。
-上一轮之所以能定位它，靠的正是实例日志里那条 `No refMap loaded`。
-
-### 需用户裁决（本轮未动，共 11 项）
-
-上轮 I1 / I3 / I8，以及本轮新发现：AE2 job 无回收、`pushPattern` 事务语义、
-6 个工厂 GUI **进度条无同步通道**、高并行档 GUI 与玩家背包物理重叠、迁移器串位、
-I2 旧档丢升级卡、中央厨房拆模块丢料、`en_us` 缺 21 键。理由见报告 §二。
-
----
-
-## 一、这一轮做了什么
-
-### 1. 配方条件化（`5a36aa4` + `8e08d6e`）
-
-实例日志 924 条 `Parsing error loading recipe` = **462 个不同配方 × 2** 轮加载。
-按堆栈归因出**三类**机制，其中一类此前一直被误判：
-
-| 类别 | 数量 | 机制 |
-|---|---|---|
-| 未知配方类型 | 158 | `type` 的序列化器来自未安装的 mod |
-| **`conditions` 写错 schema** | **155** | 用了 advancement 的 `condition`/`minecraft:all_of`/`terms`，而非 Forge 配方的 `type`/`mod_loaded`/`modid` |
-| 未知物品 | 149 | `type` 合法但 `item` 未注册 |
-
-第二类**全部是 mekck 自己的 `beverage_assembly` 配方**。Forge 对每个配方都调
-`processConditions(json, "conditions", ctx)`，所以那个 `conditions` 块不是被忽略，
-而是被当 Forge 条件解析后抛异常。
-
-**462 个归属**：422 个在本仓库（已修），40 个来自用户世界存档的数据包
-`saves/新的世界/datapacks/mekck_planting/`（`mekck:plant_ie/*` 20 + `mekmm:planting/*` 20），
-属世界本地内容，**未改**。
-
-### 2. 架构 v4 补齐（`0ce2e76`）
-
-修 v1/v2 遗留的**内部矛盾**（照原文实现会重造被 v3 推翻的抽象）：
-§5 分层图里的自定义配方泛型 + `MekCkFactoryRecipe` + 不存在的 `MekCkUpgradeRegistry`；
-§11「仍未定」与 §4 已决策不同步。
-
-新增：§6.5 配方来源归属、§8.3 档位接入 `ITier`、§10.1 三个特例工艺的失败模式、
-§14 条件化方块注册、§15 测试策略。
-
-### 3. 补配方内容（`a4dc8cf` / `aaf214c` / `43baaf5`）
-
-| 提交 | 内容 |
-|---|---|
-| `a4dc8cf` | 烟熏炉/篝火烹饪上位为全档位能力（原为晶钛矩阵以上） |
-| `aaf214c` | 新增 `mekck:skewering`（签子 + 主料 + 辅料，签子不消耗） |
-| `43baaf5` | 新增 `mekck:grilling`（单输入 → 独立的「烤」变体产物） |
-
-**A 组 7 个工艺现已全部无外部可选依赖。**
-
-### 4. 缺陷修复（4 项，各带回归测试）
-
-| 提交 | 项 | 后果 |
-|---|---|---|
-| `3021e38` | I4 | `MultiFluidHandler.drain` 两个重载：**流体复制** + **静默吞流** |
-| `10b4f97` | I6 | 大堆叠掉落物经 `putByte("Count")` 损坏；新增 `MixinItemStack` 让 `McCount` 旁路全局生效 |
-| `8ec8e7c` | I7 | 中央厨房加工线程不落盘 → 区块卸载**已扣材料永久损失** |
-| `290b3ef` | I5 | `saveToItem` 漏调两个持久化助手 → 挖机再放下，**ME 补料清单与放置器 UUID 必丢** |
-| `59c69f1` | — | 实现 `MekCkFactoryTier implements ITier`（兑现 8.3 决策）。**已作废**，见 §5 |
-
-### 5. 档位接入 —— 已作废（`59c69f1` → 阶段 3 Task 0）
-
-`59c69f1` 曾让 `MekCkFactoryTier implements ITier`（`ITier` 只有一个方法 `getBaseTier()`，
-映射规则：前 4 档一一对应、其余 8 档全归 `BaseTier.ULTIMATE`，`CREATIVE` 不被任何档位占用）。
-
-**阶段 3 Task 0 查证结论：全仓库 `ITier` 零消费方，已随该枚举一并删除。**
-`grep -rn "ITier" src/` 的全部命中只有三处：`MekCkFactoryTier` 自己的声明与 javadoc、
-`MekCkMachineTile` 的一句 javadoc、一个**完全不加载生产代码**的测试类。
-**没有**任何代码把档位传进接受 `ITier` 的 Mek API——`blockTypeFor` 从来没调用过
-`withComputerSupport`，而 `AttributeTier` 对 addon 本就不可设置，
-所以 `Attribute.getBaseTier(block)` 对这套档位恒返回 null（这条边界 `59c69f1` 当时就写对了）。
-
-> 原文写的「实际收益是『12 档成为任何接受 `ITier` 的 Mek API 的合法输入』」是一句
-> **从未兑现的推测**，不是既成事实。**不要**再把它当作「已接入 Mek 档位体系」的依据。
-
-**为什么连 `ITier` 一起删、而不移植到 `CuttingMachineFactoryTier`**：移植的前提是
-「有 Mek API 在消费它」，而查证结果是没有；硬移植等于给 12 档枚举加一个
-`baseTier` 字段 + 一个没人读的 `getBaseTier()`，并把死代码带进阶段 3，
-还要扩大与并行同学的 `CuttingMachineFactoryTier.java` 冲突面。
-
-档位本身的存档安全结论不变且仍然有效：等级走 `StringRepresentable` 的名字而非 `ordinal()`。
-
----
-
-## 二、明确判定「不该由我单方面改」的（需你定）
+> **I1 已关闭**：第三轮把它重新框定为 I-N5（见 §一「仍未修」表）——「缩放修不了」的框定过宽，
+> 绝大多数 Screen 只用比值，正确低成本修法是同步缩放值或百分比槽。**已做完**。
+> 下表保留原始判断，作为「当时为什么判错」的记录。
 
 | # | 问题 | 为什么不能机械修 |
 |---|---|---|
@@ -274,10 +192,13 @@ residual failures   : 0
    里有全部 Forge 源码**和 vanilla 补丁**。本轮有一次错误的字段名记录（`forge:conditional`
    的 `conditions`/`recipe`）就是 javap 常量池把两个类的字段混了造成的。
 5. **`clean` 是必须的**：增量编译对跨类引用是盲的。
+6. **`clean` 会删掉 `build/fg_cache`，所以 `--offline` 构建不可靠**：验收口径因此是
+   **联网**的 `./gradlew build`（见文首）。`--offline` 不允许 ForgeGradle 去补被删掉的缓存。
+   详见 [`audit/2026-09-30-full-code-review.md`](audit/2026-09-30-full-code-review.md) §五「最终验证」。
 
 ---
 
-## 六、本轮踩过的坑（方法论，避免重蹈）
+## 六、方法论教训（避免重蹈）
 
 - **三次「查证后判定不是缺口」，避免了无效改动**：COOKING 不需要自有配方类型
   （FD 是强制依赖 + 28 条配方，硬造会脱离 FD/森罗/avaritia 生态丢集成）；
@@ -286,36 +207,46 @@ residual failures   : 0
 - **三次测试自己写错**：假罐没做「最多只能抽罐内存量」的钳制；断言了 400 而实际应为 0；
   读侧/写侧方法名按全等比较。**测试写错时先怀疑测试**，别改生产代码。
 - **一处审查报告描述错误**已订正：`getByte` 返回**有符号** byte，5000 往返是 **-120** 不是 136。
+- **MixinGradle + 注解处理器那条路走不通，refmap 必须手写**：AP 会对 4 个
+  `remap = false` 的 mod 类 mixin 报成员级错误——合成 lambda 名、`$VALUES`/`UPGRADES` 这类
+  javac 合成字段没有映射——而 `disableTargetValidator` / `@Pseudo` 只能消掉其中一条。
+  `src/main/resources/mekck.refmap.json` 因此是**手写**的，由 `TestMixinRefmapIntegrity`
+  用三条断言钉住；最强的一条拿 `build/reobfJar/mappings.tsrg`（ForgeGradle 重混淆**自己用的那份映射**）
+  核对 SRG 名，**名字写错也能抓到**（已用变异测试证明：把 `m_41739_` 改成别的值，断言立刻变红）。
+  ⇒ **只要有人给 `MixinItemStack` 新加一条打原版方法的 `@Inject`，测试先红，而不是等启动崩。**
+  （`.gitignore`、`build.gradle`、`TestMixinRefmapIntegrity` 三处都引用本节。）
 - **批量替换带 `if` 包裹的代码块**要连包裹一起删（改写 `findOrderRecipe` 时留了个多余花括号）。
 
 ---
 
-## 七、本轮提交归属（日志里两个 AI 的提交是交错的）
+## 七、文档索引
 
-**我（架构把关 / 审查 / 缺陷修复）**：
-`5a36aa4` 配方条件化 · `8e08d6e` 更正 conditional 字段名 · `0ce2e76` 架构 v4 ·
-`a4dc8cf` 烟熏炉上位 · `aaf214c` `mekck:skewering` · `43baaf5` `mekck:grilling` ·
-`3021e38` I4 · `10b4f97` I6 · `8ec8e7c` I7 · `290b3ef` I5 · `0f3f67b` 审查报告更新 ·
-`59c69f1` ITier 实现
+**全部文档的清单与状态标记见 [`README.md`](README.md)。** 这里按「该不该读」分组。
 
-**另一 AI（阶段 1 升级体系）**：
-`7d26f0b` 注入 Upgrade 常量 · `d4c2e1d` `MekCkUpgradeTypes` · `5eeb04a` byItem/capOf ·
-`eb7c8fb` 升级上限 · `cbc7fad` 升级持久化改名字键 · `20c9d7f` 存储卡/随机化卡物品 ·
-以及 `59260ed` / `d4cf9bd` / `0d1ba28` 等注释与事实订正
-
-**文件边界**：我碰 `factory/`、`recipe/`、`util/`、`blockentity/`、`mixin/MixinItemStack`、
-`client` 无关、`tools/`、`docs/`；阶段 1 的 `upgrade/`、`mixin/MixinUpgrade*`、
-`mixin/MixinAPILang` 属另一方，**未碰**。
-
----
-
-## 八、文档索引
+### 现行（改动前应读）
 
 | 文档 | 内容 |
 |---|---|
-| `docs/superpowers/specs/2026-09-29-mek-machine-architecture.md` | **架构 v4**，阶段 2 规格（995 行） |
-| `docs/superpowers/specs/2026-09-29-mek-native-machine-framework-design.md` | 阶段 1 升级体系（另一 AI） |
-| `docs/superpowers/plans/2026-09-29-mekck-phase1-upgrade-system.md` | 阶段 1 实施计划（另一 AI） |
-| `docs/audit/2026-09-29-full-code-review.md` | 全量审查报告，I1–I10 处置状态 |
-| `docs/audit/2026-09-29-conditional-recipe-report.md` | 配方条件化报告 |
-| `docs/superpowers/handoff/2026-09-29-recipe-availability-handoff.md` | 旧交接文档，**主题已关闭**，保留作 type id 证据表 |
+| [`superpowers/specs/2026-09-29-mek-machine-architecture.md`](superpowers/specs/2026-09-29-mek-machine-architecture.md) | **架构 v4**，阶段 2 规格（995 行） |
+| [`superpowers/specs/2026-09-29-mek-native-machine-framework-design.md`](superpowers/specs/2026-09-29-mek-native-machine-framework-design.md) | 阶段 1 升级体系设计 |
+| [`superpowers/handoff/2026-09-29-phase1-runtime-verification.md`](superpowers/handoff/2026-09-29-phase1-runtime-verification.md) | 阶段 1 实机验证清单（需能启动 MC 的环境） |
+
+### 历史
+
+| 文档 | 内容 |
+|---|---|
+| [`audit/2026-09-30-round2-archive.md`](audit/2026-09-30-round2-archive.md) | **第二轮归档**——本文拆分出的原 §〇 + §一 + §七 |
+| [`audit/2026-09-30-full-code-review.md`](audit/2026-09-30-full-code-review.md) | 第二轮全量审查报告（6 个 Critical） |
+| [`audit/2026-09-30-details/`](audit/2026-09-30-details/) | 第二轮分域明细 4 份：`machine-core` / `legacy-conservation` / `ae2-network-menu` / `client-recipe-mixin` |
+| [`audit/2026-09-29-full-code-review.md`](audit/2026-09-29-full-code-review.md) | 第一轮全量审查报告，I1–I10 处置状态 |
+| [`audit/2026-09-29-conditional-recipe-report.md`](audit/2026-09-29-conditional-recipe-report.md) | 配方条件化报告 |
+| [`superpowers/plans/2026-09-29-mekck-phase1-upgrade-system.md`](superpowers/plans/2026-09-29-mekck-phase1-upgrade-system.md) | 阶段 1 实施计划 |
+| [`superpowers/plans/2026-09-30-mekck-phase2-cutting-factory.md`](superpowers/plans/2026-09-30-mekck-phase2-cutting-factory.md) | 阶段 2 实施计划 |
+| [`superpowers/specs/2026-09-29-objmesh-loader-design.md`](superpowers/specs/2026-09-29-objmesh-loader-design.md) | OBJ 网格加载器设计（已实施） |
+| [`superpowers/handoff/2026-09-29-recipe-availability-handoff.md`](superpowers/handoff/2026-09-29-recipe-availability-handoff.md) | 旧交接文档，**主题已关闭**，保留作 type id 证据表 |
+
+### 相关
+
+- [`README.md`](README.md) —— 全部文档清单与状态
+- [`../tools/README.md`](../tools/README.md) —— 一次性脚本与审计工具
+- [`../README.md`](../README.md) / [`../README.zh_CN.md`](../README.zh_CN.md) —— 面向玩家的模组说明

@@ -1,11 +1,11 @@
 """Predict which mekck recipes still fail after conditioning, against a real mod set.
 
-Mirrors the two gates that actually throw:
+Mirrors the three gates that actually throw:
   1. RecipeManager: top-level "conditions" not met -> recipe skipped, no error
   2. serializer lookup on "type" namespace
   3. CraftingHelper.getItem / getIngredient on "item" namespaces
 
-Usage: python predict_residual_errors.py <mods-dir> [--client-jar <jar>]
+Usage: python tools/predict_residual_recipe_errors.py <mods-dir> [--client-jar <jar>]
 """
 import json, os, re, sys, zipfile, glob
 from collections import Counter
