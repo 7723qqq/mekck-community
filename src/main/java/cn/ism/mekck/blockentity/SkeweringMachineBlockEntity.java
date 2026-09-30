@@ -52,7 +52,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-public final class SkeweringMachineBlockEntity extends BlockEntity implements MenuProvider, IRedstoneControllable, cn.ism.mekck.ae2.INetworkPullable {
+public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implements MenuProvider, cn.ism.mekck.ae2.INetworkPullable {
     public static final int INPUT_SLOT_START = 0;
     public static final int INPUT_SLOT_COUNT = 3;
     public static final int INPUT_SLOT_END = 2;
@@ -98,9 +98,7 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
     private Component customName;
     private int progress;
 
-    private RedstoneControl redstoneControl = RedstoneControl.DISABLED;
-    private boolean redstonePowered = false;
-    private boolean redstonePoweredLastTick = false;
+    // redstoneControl / redstonePowered / redstonePoweredLastTick 由 MekCkLegacyMachine 持有。
     // PULSE 模式：收到红石信号(上升沿)后锁存为 true，完成一次完整处理后复位。
     private boolean pulseRunning = false;
 
@@ -200,35 +198,40 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
         }
     };
 
-    private final EnergyStorage energy = new EnergyStorage(ENERGY_CAPACITY, MAX_RECEIVE, ENERGY_PER_TICK) {
-        @Override
-        public int receiveEnergy(int maxReceive, boolean simulate) {
-            int received = super.receiveEnergy(maxReceive, simulate);
-            if (!simulate && received > 0) {
-                setChanged();
+    /** 能量容器由基类持有；本机充放都允许、且每次实际充放都标脏，所以覆写 createEnergyStorage。 */
+    @Override
+    protected EnergyStorage createEnergyStorage(int capacity, int maxReceive) {
+        // maxExtract 用 ENERGY_PER_TICK：对外抽取速率与本机自用速率同口径（迁移前逐字如此）。
+        return new EnergyStorage(capacity, maxReceive, ENERGY_PER_TICK) {
+            @Override
+            public int receiveEnergy(int maxReceive, boolean simulate) {
+                int received = super.receiveEnergy(maxReceive, simulate);
+                if (!simulate && received > 0) {
+                    setChanged();
+                }
+                return received;
             }
-            return received;
-        }
 
-        @Override
-        public int extractEnergy(int maxExtract, boolean simulate) {
-            int extracted = super.extractEnergy(maxExtract, simulate);
-            if (!simulate && extracted > 0) {
-                setChanged();
+            @Override
+            public int extractEnergy(int maxExtract, boolean simulate) {
+                int extracted = super.extractEnergy(maxExtract, simulate);
+                if (!simulate && extracted > 0) {
+                    setChanged();
+                }
+                return extracted;
             }
-            return extracted;
-        }
 
-        @Override
-        public boolean canReceive() {
-            return true;
-        }
+            @Override
+            public boolean canReceive() {
+                return true;
+            }
 
-        @Override
-        public boolean canExtract() {
-            return true;
-        }
-    };
+            @Override
+            public boolean canExtract() {
+                return true;
+            }
+        };
+    }
 
     private LazyOptional<IItemHandler> fullItemCapability;
     private LazyOptional<IItemHandler> inputItemCapability;
@@ -288,7 +291,8 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
     };
 
     public SkeweringMachineBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK_ENTITY.get(), pos, state);
+        super(UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK_ENTITY.get(), pos, state,
+                ENERGY_CAPACITY, MAX_RECEIVE);
         for (int i = 0; i < 6; i++) {
             sideConfig[i] = SideMode.NONE;
         }
@@ -753,19 +757,7 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
     }
 
     // ================== 红石控制 (Mekanism 逻辑) ==================
-    @Override
-    public RedstoneControl getRedstoneControl() {
-        return redstoneControl;
-    }
-
-    @Override
-    public void setRedstoneControl(RedstoneControl control) {
-        if (control == null) {
-            control = RedstoneControl.DISABLED;
-        }
-        this.redstoneControl = control;
-        setChanged();
-    }
+    // getRedstoneControl / setRedstoneControl 由 MekCkLegacyMachine 提供。
 
     public boolean isRedstonePowered() {
         return redstonePowered;
@@ -981,10 +973,7 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
             sideBytes[i] = (byte) sideConfig[i].ordinal();
         }
         tag.putByteArray("SideConfig", sideBytes);
-        // 红石控制：两个键必须在无订单时也写出，否则重载后被 load 的 contains 判定跳过，
-        // 玩家的红石设置静默归零（同族穿串工厂一直是对的）。
-        tag.putInt("RedstoneControl", redstoneControl.ordinal());
-        tag.putBoolean("RedstonePowered", redstonePowered);
+        // RedstoneControl / RedstonePowered 由 MekCkLegacyMachine.saveAdditional 统一写。
         // Save order data
         if (orderRecipeId != null) {
             tag.putString("OrderRecipeId", orderRecipeId.toString());
@@ -1004,14 +993,7 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
         cn.ism.mekck.util.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
         items.deserializeNBT(tag.getCompound("Items"));
-        int remainingEnergy = tag.getInt("Energy");
-        while (remainingEnergy > 0) {
-            int received = energy.receiveEnergy(remainingEnergy, false);
-            if (received == 0) {
-                break;
-            }
-            remainingEnergy -= received;
-        }
+        // 能量与红石由 MekCkLegacyMachine.load 统一读。
         progress = tag.getInt("Progress");
         if (tag.contains("SideConfig", Tag.TAG_BYTE_ARRAY)) {
             byte[] sideBytes = tag.getByteArray("SideConfig");
@@ -1032,19 +1014,10 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
         meOrderEnabled = !tag.contains("MeOrderEnabled") || tag.getBoolean("MeOrderEnabled");
         orderQuantity = tag.getInt("OrderQuantity");
         orderCompleted = tag.getInt("OrderCompleted");
-        if (tag.contains("RedstoneControl")) {
-            redstoneControl = RedstoneControl.byOrdinal(tag.getInt("RedstoneControl"));
-        }
-        if (tag.contains("RedstonePowered")) {
-            redstonePowered = tag.getBoolean("RedstonePowered");
-        }
     }
 
     @Override
-    public <T> LazyOptional<T> getCapability(@NotNull Capability<T> capability, @Nullable Direction side) {
-        if (capability == ForgeCapabilities.ENERGY) {
-            return energyCapability.cast();
-        }
+    protected <T> LazyOptional<T> exposeItemCapability(@NotNull Capability<T> capability, @Nullable Direction side) {
         if (capability == ForgeCapabilities.ITEM_HANDLER) {
             if (side == null) {
                 return fullItemCapability.cast();
@@ -1059,7 +1032,7 @@ public final class SkeweringMachineBlockEntity extends BlockEntity implements Me
             }
             return LazyOptional.empty();
         }
-        return super.getCapability(capability, side);
+        return super.exposeItemCapability(capability, side);
     }
 
     @Override

@@ -38,7 +38,7 @@ import org.jetbrains.annotations.Nullable;
  *   <li>某格 {@code Year} 已到地板（推无可推）⇒ <b>停该格运行并停该格耗能</b>，不白烧；未装 vinery 全格 fail-safe。</li>
  * </ul>
  */
-public final class WineCellarBlockEntity extends BlockEntity implements MenuProvider {
+public final class WineCellarBlockEntity extends MekCkLegacyMachine implements MenuProvider {
     public static final int SLOT_COUNT = 9;
     /** §F45：电源槽（能量物品/红石充能），handler 索引 = 9 储存格之后。 */
     public static final int SLOT_POWER = 9;
@@ -129,9 +129,27 @@ public final class WineCellarBlockEntity extends BlockEntity implements MenuProv
         }
     }
 
-    private final CellarEnergy energy = new CellarEnergy(ENERGY_CAPACITY, MAX_RECEIVE);
+    /** 能量容器由基类持有；本机需要「内部扣能、对外只充」语义，覆写 createEnergyStorage 换容器类。 */
     private final LazyOptional<IItemHandler> itemCapability = LazyOptional.of(() -> items);
-    private final LazyOptional<IEnergyStorage> energyCapability = LazyOptional.of(() -> energy);
+
+    @Override
+    protected EnergyStorage createEnergyStorage(int capacity, int maxReceive) {
+        return new CellarEnergy(capacity, maxReceive);
+    }
+
+    /**
+     * 本机<b>没有红石功能</b>（陈化窖只有电源槽，不受红石控制）—— 覆写以免基类
+     * 往存档里凭空写 {@code RedstoneControl} / {@code RedstonePowered} 两个键。 */
+    @Override
+    protected boolean usesRedstone() {
+        return false;
+    }
+
+    /** 带类型的能量容器视图 —— 基类的 {@code energy} 字段声明为 {@link EnergyStorage}，
+     *  而 {@code drainInternal} 只存在于本机的 {@link CellarEnergy} 上。 */
+    private CellarEnergy cellarEnergy() {
+        return (CellarEnergy) energy;
+    }
 
     /** 玩家选定倍速 1..50（默认 = 最低 = 1）。 */
     private int speedSetting = 1;
@@ -178,7 +196,8 @@ public final class WineCellarBlockEntity extends BlockEntity implements MenuProv
     };
 
     public WineCellarBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.WINE_CELLAR_BLOCK_ENTITY.get(), pos, state);
+        super(UniversalCuttingMachine.WINE_CELLAR_BLOCK_ENTITY.get(), pos, state,
+                ENERGY_CAPACITY, MAX_RECEIVE);
     }
 
     public ItemStackHandler getItems() {
@@ -269,7 +288,7 @@ public final class WineCellarBlockEntity extends BlockEntity implements MenuProv
         if (eligible.isEmpty() || need <= 0) {
             return;
         }
-        int drained = energy.drainInternal(need);
+        int drained = cellarEnergy().drainInternal(need);
         if (drained <= 0) {
             return; // 完全没电：全局暂停（不清进度）
         }
@@ -308,7 +327,7 @@ public final class WineCellarBlockEntity extends BlockEntity implements MenuProv
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
         tag.put("Items", items.serializeNBT());
-        tag.putInt("Energy", energy.getEnergyStored());
+        // Energy / RedstoneControl 由 MekCkLegacyMachine.saveAdditional 统一写。
         tag.putInt("Speed", speedSetting);
         tag.putFloat("Progress", globalProgress); // §F46：单值全局进度（替旧逐格 Prog0..8）
         tag.putInt("AgedDays", agedDays);         // §F47：年内已累计陈化日 0..23
@@ -335,7 +354,7 @@ public final class WineCellarBlockEntity extends BlockEntity implements MenuProv
                 items.deserializeNBT(newTag);
             }
         }
-        energy.setStored(tag.getInt("Energy"));
+        // 能量与红石由 MekCkLegacyMachine.load 统一读。
         setSpeedInternal(tag.getInt("Speed"));
         // §F46：全局进度；旧档逐格 Prog0..8 取最大值迁移（多格同起时各格进度本就近似）
         if (tag.contains("Progress")) {
@@ -361,17 +380,15 @@ public final class WineCellarBlockEntity extends BlockEntity implements MenuProv
     // ================== 能力 ==================
 
     @Override
-    public @NotNull <T> LazyOptional<T> getCapability(@NotNull Capability<T> cap, @Nullable Direction side) {
+    protected <T> LazyOptional<T> exposeItemCapability(@NotNull Capability<T> cap, @Nullable Direction side) {
         if (cap == ForgeCapabilities.ITEM_HANDLER) return itemCapability.cast();
-        if (cap == ForgeCapabilities.ENERGY) return energyCapability.cast();
-        return super.getCapability(cap, side);
+        return super.exposeItemCapability(cap, side);
     }
 
     @Override
     public void invalidateCaps() {
         super.invalidateCaps();
         itemCapability.invalidate();
-        energyCapability.invalidate();
     }
 
     // ================== MenuProvider ==================
