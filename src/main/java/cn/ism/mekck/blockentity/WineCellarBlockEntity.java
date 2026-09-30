@@ -66,7 +66,19 @@ public final class WineCellarBlockEntity extends BlockEntity implements MenuProv
     public static final int DATA_SPEED = 2;
     public static final int DATA_ACTIVE = 3;      // 本刻正在陈化的格数（闪电弧强度，见 §F20⑤）
     public static final int DATA_PROGRESS0 = 4;   // 4..12 = 每格进度百分比 0..100（-1 = 空格/非酒）；§F46 后在陈化格同源同值
-    public static final int DATA_SIZE = 13;
+    /**
+     * {@link #DATA_ENERGY} 的<b>高 16 位</b> —— 能量被拆成两个槽传输。
+     *
+     * <p>原版 {@code ContainerData} 走 {@code ClientboundContainerSetDataPacket}，
+     * 对每个值只 {@code writeShort}（16 位有符号），而本机容量是
+     * {@link #ENERGY_CAPACITY} = 4 亿 ⇒ 不拆必然截断成负数。
+     * 详见 {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     *
+     * <p>取值 = 旧 {@code DATA_SIZE}，即<b>追加</b>到槽表末尾：现有下标一律不动
+     * （移位会静默读到别的量，比现在更糟）。</p>
+     */
+    public static final int DATA_ENERGY_HI = 13;
+    public static final int DATA_SIZE = 14;
 
     private final ItemStackHandler items = new ItemStackHandler(TOTAL_SLOTS) {
         @Override
@@ -139,7 +151,9 @@ public final class WineCellarBlockEntity extends BlockEntity implements MenuProv
                 return index >= 0 && index < stored.length ? stored[index] : 0;
             }
             int value = switch (index) {
-                case DATA_ENERGY -> energy.getEnergyStored();
+                // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
+                case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
+                case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
                 case DATA_CAPACITY -> ENERGY_CAPACITY;
                 case DATA_SPEED -> speedSetting;
                 case DATA_ACTIVE -> activeCount;

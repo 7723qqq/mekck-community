@@ -131,7 +131,17 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     public static final int DATA_TARGET_TEMP = 18;
     /** 设定温度功能开关（0 关 / 1 开）。 */
     public static final int DATA_TEMP_CONTROL = 19;
-    public static final int DATA_SIZE = 20;
+    /**
+     * {@link #DATA_ENERGY} 的<b>高 16 位</b> —— 能量被拆成两个槽传输。
+     *
+     * <p>{@code ContainerData} 经 {@code ClientboundContainerSetDataPacket} 时对每个值
+     * 只 {@code writeShort}（16 位有符号），而本机容量是 {@link #ENERGY_CAPACITY} = 30 万
+     * ⇒ 不拆必然截断成负数。详见 {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     *
+     * <p>取值 = 旧 {@code DATA_SIZE}，即<b>追加</b>到槽表末尾：现有下标一律不动。</p>
+     */
+    public static final int DATA_ENERGY_HI = 20;
+    public static final int DATA_SIZE = 21;
 
     /** 目标类型：0=敌对生物（配置文件敌对列表），1=全部生物，2=非敌对生物（动物）。 */
     public static final int TARGET_HOSTILE = 0;
@@ -300,7 +310,9 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
             int value = switch (index) {
                 case DATA_PROGRESS -> progress;
                 case DATA_PROCESS_TIME -> getEffectiveProcessTime();
-                case DATA_ENERGY -> energy.getEnergyStored();
+                // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
+                case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
+                case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
                 case DATA_SIDE_CONFIG -> encodeSideConfig();
                 case DATA_SPEED_UPGRADE -> getSpeedUpgradeCount();
                 case DATA_ENERGY_UPGRADE -> getEnergyUpgradeCount();

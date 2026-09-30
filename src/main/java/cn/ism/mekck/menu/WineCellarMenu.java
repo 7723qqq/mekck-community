@@ -3,6 +3,7 @@ package cn.ism.mekck.menu;
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.WineCellarBlockEntity;
 import cn.ism.mekck.util.PowerSlotUtil;
+import cn.ism.mekck.util.WideDataSlot;
 import mekanism.common.inventory.container.IGUIWindow;
 import mekanism.common.inventory.container.slot.IVirtualSlot;
 import net.minecraft.core.BlockPos;
@@ -115,7 +116,9 @@ public final class WineCellarMenu extends AbstractContainerMenu {
 
     // ================== 数据访问（客户端从 ContainerData 读） ==================
     public int getEnergy() {
-        return data.get(WineCellarBlockEntity.DATA_ENERGY);
+        return WideDataSlot.read(data,
+                WineCellarBlockEntity.DATA_ENERGY,
+                WineCellarBlockEntity.DATA_ENERGY_HI);
     }
 
     public int getEnergyCapacity() {

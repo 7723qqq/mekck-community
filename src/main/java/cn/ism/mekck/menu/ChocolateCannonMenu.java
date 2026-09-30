@@ -5,6 +5,7 @@ import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.item.FerreroUpgradeTier;
+import cn.ism.mekck.util.WideDataSlot;
 import mekanism.common.inventory.container.IGUIWindow;
 import mekanism.common.inventory.container.slot.IVirtualSlot;
 import net.minecraft.core.BlockPos;
@@ -152,7 +153,9 @@ public final class ChocolateCannonMenu extends AbstractContainerMenu implements 
     }
 
     public int getEnergy() {
-        return data.get(ChocolateCannonBlockEntity.DATA_ENERGY);
+        return WideDataSlot.read(data,
+                ChocolateCannonBlockEntity.DATA_ENERGY,
+                ChocolateCannonBlockEntity.DATA_ENERGY_HI);
     }
 
     public int getEnergyCapacity() {

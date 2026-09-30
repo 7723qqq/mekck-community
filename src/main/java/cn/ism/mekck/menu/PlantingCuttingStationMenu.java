@@ -4,6 +4,7 @@ import cn.ism.mekck.SideMode;
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.util.MekCkTransfer;
+import cn.ism.mekck.util.WideDataSlot;
 import mekanism.common.inventory.container.IGUIWindow;
 import mekanism.common.inventory.container.slot.IVirtualSlot;
 import net.minecraft.core.BlockPos;
@@ -158,11 +159,21 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
     }
 
     public int getEnergy() {
-        return data.get(2);
+        return WideDataSlot.read(data,
+                PlantingCuttingStationBlockEntity.DATA_ENERGY,
+                PlantingCuttingStationBlockEntity.DATA_ENERGY_HI);
     }
 
+    /**
+     * 能量上限 —— 直接取 BE 上的 static final 常量，<b>不走 {@code ContainerData}</b>。
+     *
+     * <p>此前返回 {@code data.get(3)}（即旧的 {@code DATA_ENERGY_CAPACITY} 槽），
+     * 而容量是客户端已知的常量，那个槽纯冗余，且同样会被 16 位通道截断
+     * （10 万 → -31072，能源条比值变负、条纹为空）。该槽现已改作
+     * {@link PlantingCuttingStationBlockEntity#DATA_ENERGY_HI}。</p>
+     */
     public int getEnergyCapacity() {
-        return data.get(3);
+        return PlantingCuttingStationBlockEntity.ENERGY_CAPACITY;
     }
 
     /**
@@ -174,9 +185,14 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
      *
      * <p>那条猜法<b>必然失败</b>：{@code ContainerData} 经
      * {@code ClientboundContainerSetDataPacket} 传输时对每个值用 {@code writeShort} ——
-     * <b>16 位有符号</b>，上限 32767。{@code getMaxEnergyStored()} 的常规值就是
-     * {@code 100_000}，到客户端会变成 {@code 100000 - 65536 = 34464}，
-     * 于是 {@code 34464 > 100000} 恒假。</p>
+     * <b>16 位有符号</b>，上限 32767。容量常量是 {@code ENERGY_CAPACITY = 100_000}，
+     * 到客户端会变成 <b>-31072</b>（0x186A0 取低 16 位得 0x86A0，
+     * {@code readShort()} 返回有符号 short 后符号扩展），于是
+     * {@code -31072 > 100000} 恒假。</p>
+     *
+     * <p>⚠️ 别被「{@code 100000 - 65536 = 34464}」那种说法骗了：那只是<b>无符号</b>解读；
+     * 原版包里是 {@code this.value = p_178825_.readShort();}，会符号扩展。
+     * 该值由 {@code TestWideDataSlot#channelIsSixteenBitSigned} 拿真实包往返实测钉住。</p>
      *
      * <p>本 getter 读的那一格值域是 {@code {0, 1}}，<b>不可能溢出</b> ——
      * 这才是「有没有装创造升级」的正确判据。与 {@code client/MekCkUpgradeType} 里

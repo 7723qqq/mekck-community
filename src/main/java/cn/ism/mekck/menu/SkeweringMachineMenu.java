@@ -4,6 +4,7 @@ import cn.ism.mekck.SideMode;
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
 import cn.ism.mekck.util.MekCkTransfer;
+import cn.ism.mekck.util.WideDataSlot;
 import mekanism.common.inventory.container.IGUIWindow;
 import mekanism.common.inventory.container.slot.IVirtualSlot;
 import net.minecraft.core.BlockPos;
@@ -173,7 +174,9 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
     }
 
     public int getEnergy() {
-        return data.get(2);
+        return WideDataSlot.read(data,
+                SkeweringMachineBlockEntity.DATA_ENERGY,
+                SkeweringMachineBlockEntity.DATA_ENERGY_HI);
     }
 
     public int getEncodedSideConfig() {

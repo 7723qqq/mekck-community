@@ -74,7 +74,17 @@ public final class UniversalCuttingMachineBlockEntity extends BlockEntity implem
     public static final int DATA_ENERGY_UPGRADE = 5;
     public static final int DATA_CREATIVE_UPGRADE = 6;
     public static final int DATA_REDSTONE_CONTROL = 7;
-    public static final int DATA_SIZE = 8;
+    /**
+     * {@link #DATA_ENERGY} 的<b>高 16 位</b> —— 能量被拆成两个槽传输。
+     *
+     * <p>{@code ContainerData} 经 {@code ClientboundContainerSetDataPacket} 时对每个值
+     * 只 {@code writeShort}（16 位有符号），而本机容量是 {@link #ENERGY_CAPACITY} = 10 万
+     * ⇒ 不拆必然截断成负数。详见 {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     *
+     * <p>取值 = 旧 {@code DATA_SIZE}，即<b>追加</b>到槽表末尾：现有下标一律不动。</p>
+     */
+    public static final int DATA_ENERGY_HI = 8;
+    public static final int DATA_SIZE = 9;
 
     private Component customName;
     // ================== ME 终端下单（AE2） ==================
@@ -209,7 +219,9 @@ public final class UniversalCuttingMachineBlockEntity extends BlockEntity implem
             int value = switch (index) {
                 case DATA_PROGRESS -> progress;
                 case DATA_PROCESS_TIME -> getEffectiveProcessTime();
-                case DATA_ENERGY -> energy.getEnergyStored();
+                // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
+                case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
+                case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
                 case DATA_SIDE_CONFIG -> encodeSideConfig();
                 case DATA_SPEED_UPGRADE -> getSpeedUpgradeCount();
                 case DATA_ENERGY_UPGRADE -> getEnergyUpgradeCount();

@@ -7,6 +7,7 @@ import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.item.ColdBrewTier;
 import cn.ism.mekck.item.ColdBrewUpgradeItem;
+import cn.ism.mekck.util.WideDataSlot;
 import mekanism.common.inventory.container.IGUIWindow;
 import mekanism.common.inventory.container.slot.IVirtualSlot;
 import net.minecraft.core.BlockPos;
@@ -223,7 +224,9 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
     }
 
     public int getEnergy() {
-        return data.get(IceFactoryBlockEntity.DATA_ENERGY);
+        return WideDataSlot.read(data,
+                IceFactoryBlockEntity.DATA_ENERGY,
+                IceFactoryBlockEntity.DATA_ENERGY_HI);
     }
 
     public int getEnergyCapacity() {

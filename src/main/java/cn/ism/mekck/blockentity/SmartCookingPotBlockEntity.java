@@ -113,7 +113,20 @@ public final class SmartCookingPotBlockEntity extends BlockEntity implements Men
 
     /** 机身温度（单位 0.01 ℃）。 */
     public static final int DATA_TEMPERATURE = 16;
-    public static final int DATA_SIZE = 17;
+    /**
+     * {@link #DATA_ENERGY} 的<b>高 16 位</b> —— 能量被拆成两个槽传输。
+     *
+     * <p>{@code ContainerData} 经 {@code ClientboundContainerSetDataPacket} 时对每个值
+     * 只 {@code writeShort}（16 位有符号），而本机容量是 {@link #ENERGY_CAPACITY} = 10 万
+     * ⇒ 不拆必然截断成负数。详见 {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     *
+     * <p>取值 = 旧 {@code DATA_SIZE}，即<b>追加</b>到槽表末尾：下面 switch 里那些
+     * {@code case 0}…{@code case 9} 字面量<b>一律不重编号</b> —— 追加不移位，
+     * 移位会静默读到别的量。顺带把能量的 {@code case 2} 换成命名常量，
+     * 免得「下标 2 是能量」这种知识只存在于两处字面量里。</p>
+     */
+    public static final int DATA_ENERGY_HI = 17;
+    public static final int DATA_SIZE = 18;
 
     public static final int DATA_PROGRESS = 0;
     public static final int DATA_PROCESS_TIME = 1;
@@ -304,7 +317,8 @@ public final class SmartCookingPotBlockEntity extends BlockEntity implements Men
             int value = switch (index) {
                 case 0 -> progress;
                 case 1 -> getEffectiveProcessTime();
-                case 2 -> energy.getEnergyStored();
+                case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
+                case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
                 case 3 -> encodeSideConfig();
                 case 4 -> getSpeedUpgradeCount();
                 case 5 -> getEnergyUpgradeCount();

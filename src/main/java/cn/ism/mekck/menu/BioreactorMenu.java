@@ -3,6 +3,7 @@ package cn.ism.mekck.menu;
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.BioreactorBlockEntity;
 import cn.ism.mekck.util.PowerSlotUtil;
+import cn.ism.mekck.util.WideDataSlot;
 import mekanism.common.inventory.container.IGUIWindow;
 import mekanism.common.inventory.container.slot.IVirtualSlot;
 import net.minecraft.core.BlockPos;
@@ -135,11 +136,21 @@ public final class BioreactorMenu extends AbstractContainerMenu {
     }
 
     public int getEnergy() {
-        return data.get(BioreactorBlockEntity.DATA_ENERGY);
+        return WideDataSlot.read(data,
+                BioreactorBlockEntity.DATA_ENERGY,
+                BioreactorBlockEntity.DATA_ENERGY_HI);
     }
 
+    /**
+     * 能量上限 —— 直接取 BE 上的 static final 常量，<b>不走 {@code ContainerData}</b>。
+     *
+     * <p>此前同步一个 {@code DATA_ENERGY_CAPACITY} 槽，但容量是客户端已知的常量，
+     * 那个槽纯冗余，且同样会被 16 位通道截断（10 万 → -31072）。
+     * 该槽现已改作 {@link BioreactorBlockEntity#DATA_ENERGY_HI}，见
+     * {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     */
     public int getEnergyCapacity() {
-        return data.get(BioreactorBlockEntity.DATA_ENERGY_CAPACITY);
+        return BioreactorBlockEntity.ENERGY_CAPACITY;
     }
 
     /** 当前实际发电量 FE/t。 */

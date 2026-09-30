@@ -143,7 +143,23 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
      * 原版 ContainerData 的 id+量两个 int，与果汁类型 DATA_JUICE_TYPE 同一路子）。</p>
      */
     public static final int DATA_INPUT_FLUID_ID = 15;
-    public static final int DATA_SIZE = 16;
+    /**
+     * {@link #DATA_ENERGY} 的<b>高 16 位</b> —— 能量槽被拆成两个槽传输。
+     *
+     * <p><b>为什么</b>：原版 {@code ContainerData} 经 {@code ClientboundContainerSetDataPacket}
+     * 时对每个值只 {@code writeShort}，<b>16 位有符号</b>，上限 32767；而
+     * {@code energy.getEnergyStored()} 上限是 {@link #ENERGY_CAPACITY} = 100_000。
+     * 不拆的话 100_000 到客户端变成 {@code (short)0x86A0 = -31072} ⇒ 能源条
+     * {@code getLevel()} 为负、条纹显示为空、tooltip 显示负 FE。详见
+     * {@link cn.ism.mekck.util.WideDataSlot} 类注释。</p>
+     *
+     * <p><b>为什么取值是 16（旧 DATA_SIZE）</b>：高位槽一律<b>追加</b>到槽表末尾，
+     * 上面所有 {@code DATA_*} 常量与各处 {@code data.get(1)} 字面量下标全部不动 ——
+     * 追加不会移位，移位会静默读到别的量。客户端
+     * {@code new SimpleContainerData(DATA_SIZE)} 是符号引用，会自动跟着长大。</p>
+     */
+    public static final int DATA_ENERGY_HI = 16;
+    public static final int DATA_SIZE = 17;
 
     /** 发酵机流体罐容量（mb）。 */
     public static final int FLUID_CAPACITY = 16_000;
@@ -347,7 +363,9 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
             int value = switch (index) {
                 case DATA_PROGRESS -> containerProgress();
                 case DATA_PROCESS_TIME -> containerProcessTime();
-                case DATA_ENERGY -> energy.getEnergyStored();
+                // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
+                case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
+                case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
                 case DATA_SIDE_CONFIG -> encodeSideConfig();
                 case DATA_SPEED_UPGRADE -> getSpeedUpgradeCount();
                 case DATA_ENERGY_UPGRADE -> getEnergyUpgradeCount();

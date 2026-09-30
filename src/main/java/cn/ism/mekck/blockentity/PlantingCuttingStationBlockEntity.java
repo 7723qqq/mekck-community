@@ -77,7 +77,18 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
     public static final int DATA_PROGRESS = 0;
     public static final int DATA_PROCESS_TIME = 1;
     public static final int DATA_ENERGY = 2;
-    public static final int DATA_ENERGY_CAPACITY = 3;
+    /**
+     * {@link #DATA_ENERGY} 的<b>高 16 位</b>。
+     *
+     * <p><b>这个槽原本是 {@code DATA_ENERGY_CAPACITY}，现已改用途。</b>
+     * 原先这里同步 {@code energy.getMaxEnergyStored()}，而容量是本类的 static final 常量、
+     * 客户端本来就知道 ⇒ 纯冗余槽，且同样会被 16 位通道截断成负数（10 万 → -31072）。
+     * 现在改存能量高 16 位：<b>值不变（3）、{@code DATA_SIZE} 不动</b>，不留下死槽位、
+     * 也不必重编号后面 {@code DATA_NUTRIENT} / {@code DATA_REDSTONE_CONTROL} 等下标。</p>
+     *
+     * <p>详见 {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     */
+    public static final int DATA_ENERGY_HI = 3;
     public static final int DATA_SIDE_CONFIG = 4;
     public static final int DATA_SPEED_UPGRADE = 5;
     public static final int DATA_ENERGY_UPGRADE = 6;
@@ -243,8 +254,9 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
             int value = switch (index) {
                 case DATA_PROGRESS -> progress;
                 case DATA_PROCESS_TIME -> getEffectiveProcessTime();
-                case DATA_ENERGY -> energy.getEnergyStored();
-                case DATA_ENERGY_CAPACITY -> energy.getMaxEnergyStored();
+                // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
+                case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
+                case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
                 case DATA_SIDE_CONFIG -> encodeSideConfig();
                 case DATA_SPEED_UPGRADE -> getSpeedUpgradeCount();
                 case DATA_ENERGY_UPGRADE -> getEnergyUpgradeCount();

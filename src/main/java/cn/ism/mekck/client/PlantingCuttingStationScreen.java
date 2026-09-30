@@ -400,8 +400,13 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
         // Creative upgrade slot (right column, middle)
         // ⚠️ 原先这里是 `boolean hasCreative = menu.getEnergyCapacity() > ENERGY_CAPACITY;`
         // 然后**再也没用过它**（死变量），而那条判据本身也是错的：ContainerData 经
-        // ClientboundContainerSetDataPacket 传输时对每个值用 writeShort（16 位有符号），
-        // 100_000 的容量到客户端会变成 34464，恒不成立。
+        // ClientboundContainerSetDataPacket 传输时对每个值用 writeShort（**16 位有符号**），
+        // 10 万的容量到客户端会被 readShort() 符号扩展成 **-31072**
+        // （0x186A0 → 低 16 位 0x86A0 → 作为 short 是负数），于是 `-31072 > 100_000` 恒假。
+        //
+        // 注意别被「100000 - 65536 = 34464」那种说法骗了：那只是**无符号**解读，
+        // 而 readShort() 返回有符号 short，赋给 int 字段时会发生符号扩展。
+        // -31072 是 TestWideDataSlot#channelIsSixteenBitSigned 拿真实包往返实测出来的。
         //
         // 现在改读专用的 DATA_CREATIVE_UPGRADE（值域 {0,1}，不可能溢出），与
         // client/MekCkUpgradeType 里 `case CREATIVE -> menu.getCreativeUpgradeCount()`

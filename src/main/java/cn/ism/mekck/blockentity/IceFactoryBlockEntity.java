@@ -120,7 +120,17 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
     /** 水罐流体量（mb）与流体注册 id：经 ContainerData 同步到客户端（流体条显示用，FluidTank 不自动进网络）。 */
     public static final int DATA_WATER_AMOUNT = 16;
     public static final int DATA_WATER_FLUID_ID = 17;
-    public static final int DATA_SIZE = 18;
+    /**
+     * {@link #DATA_ENERGY} 的<b>高 16 位</b> —— 能量被拆成两个槽传输。
+     *
+     * <p>{@code ContainerData} 经 {@code ClientboundContainerSetDataPacket} 时对每个值
+     * 只 {@code writeShort}（16 位有符号），而储能量上限远超 32767
+     * ⇒ 不拆必然截断成负数。详见 {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     *
+     * <p>取值 = 旧 {@code DATA_SIZE}，即<b>追加</b>到槽表末尾：现有下标一律不动。</p>
+     */
+    public static final int DATA_ENERGY_HI = 18;
+    public static final int DATA_SIZE = 19;
 
     public static final int TARGET_HOSTILE = 0;
     public static final int TARGET_ALL = 1;
@@ -189,7 +199,9 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
             int value = switch (index) {
                 case DATA_PROGRESS -> overallProgress();
                 case DATA_PROCESS_TIME -> getEffectiveProcessTime();
-                case DATA_ENERGY -> energy.getEnergyStored();
+                // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
+                case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
+                case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
                 case DATA_SIDE_CONFIG -> encodeSideConfig();
                 case DATA_SPEED_UPGRADE -> getSpeedUpgradeCount();
                 case DATA_ENERGY_UPGRADE -> getEnergyUpgradeCount();

@@ -124,7 +124,19 @@ public final class BioreactorBlockEntity extends BlockEntity implements MenuProv
 
     // ContainerData 索引
     public static final int DATA_ENERGY = 0;
-    public static final int DATA_ENERGY_CAPACITY = 1;
+    /**
+     * {@link #DATA_ENERGY} 的<b>高 16 位</b>。
+     *
+     * <p><b>这个槽原本是 {@code DATA_ENERGY_CAPACITY}，现已改用途。</b>
+     * 原先这里同步 {@code ENERGY_CAPACITY}（本类的 static final 常量，客户端本来就知道），
+     * 是个纯冗余槽，而且同样会被 16 位通道截断成负数 —— 等于白占一个槽还引入第二个溢出点。
+     * 现在改存能量高 16 位：<b>值不变（1）、{@code DATA_SIZE} 不动</b>，不留下死槽位，
+     * 也不必重编号后面的下标。</p>
+     *
+     * <p>顺带订正一处订正过三轮的错判：第三轮把「缩放修不了」当成「框定过宽、缩放即可」，
+     * 而缩放是<b>有损</b>的；拆两槽才是无损的。详见 {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     */
+    public static final int DATA_ENERGY_HI = 1;
     public static final int DATA_FLUID_AMOUNT = 2;
     public static final int DATA_FLUID_TYPE = 3;
     public static final int DATA_GENERATING = 4;
@@ -208,8 +220,9 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
                 return 0;
             }
             int value = switch (index) {
-                case DATA_ENERGY -> energy.getEnergyStored();
-                case DATA_ENERGY_CAPACITY -> ENERGY_CAPACITY;
+                // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
+                case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
+                case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
                 case DATA_FLUID_AMOUNT -> fluidTank.getFluidAmount();
                 case DATA_FLUID_TYPE -> fluidTypeId();
                 case DATA_GENERATING -> generatingRate;

@@ -5,6 +5,7 @@ import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.SimpleMachineBlockEntity;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.util.MekCkTransfer;
+import cn.ism.mekck.util.WideDataSlot;
 import mekanism.common.inventory.container.IGUIWindow;
 import mekanism.common.inventory.container.slot.IVirtualSlot;
 import net.minecraft.core.BlockPos;
@@ -233,8 +234,20 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
         return maximum == 0 ? 0 : data.get(SimpleMachineBlockEntity.DATA_PROGRESS) * 24 / maximum;
     }
 
+    /**
+     * 当前储能量 —— 从<b>两个</b>槽（{@link SimpleMachineBlockEntity#DATA_ENERGY} 低 16 位 +
+     * {@link SimpleMachineBlockEntity#DATA_ENERGY_HI} 高 16 位）合并回来。
+     *
+     * <p>此前是裸的 {@code data.get(DATA_ENERGY)}，而该通道经
+     * {@code ClientboundContainerSetDataPacket} 只 {@code writeShort}（16 位有符号）——
+     * 能量一过 32767，客户端拿到的就是 {@code (short)0x86A0 = -31072}，
+     * 于是能源条 {@code getLevel()} 为负、条纹为空、tooltip 显示负的 FE。
+     * 拆槽是无损的，见 {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     */
     public int getEnergy() {
-        return data.get(SimpleMachineBlockEntity.DATA_ENERGY);
+        return WideDataSlot.read(data,
+                SimpleMachineBlockEntity.DATA_ENERGY,
+                SimpleMachineBlockEntity.DATA_ENERGY_HI);
     }
 
     public int getEnergyCapacity() {
