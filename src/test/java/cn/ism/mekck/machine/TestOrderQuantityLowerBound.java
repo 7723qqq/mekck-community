@@ -83,14 +83,27 @@ public class TestOrderQuantityLowerBound {
                     Matcher m = SET_ORDER.matcher(src);
                     while (m.find()) {
                         String body = methodBodyFrom(src, m.start());
-                        // 只看「把数量存进字段」的那些实现，排除 hasOrder/orderStateOf 之类
-                        if (body == null || !body.contains("orderQuantity")
-                                || !body.contains("=")) {
+                        if (body == null || !body.contains("=")) {
                             continue;
+                        }
+                        // 两种「已处理」都算：① 体内自有 orderQuantity 字段并夹紧
+                        // ② 体内把活交给 MekCkOrderState.setOrder（第四轮迁移后的 3 个执行器）。
+                        // ② 过去会被这里漏掉（体内没有 orderQuantity 字样），让「搬进公共状态类」
+                        // 这个正确动作反而使 seen 掉到防空转阈值以下 —— 那是判据写窄了，不是缺陷。
+                        boolean ownsField = body.contains("orderQuantity");
+                        boolean delegates = body.contains("order.setOrder")
+                                || body.contains("order.setActiveWithoutRecipe");
+                        if (!ownsField && !delegates) {
+                            continue;   // 不处理份数的（如 orderStateOf、纯 getter）
                         }
                         seen++;
                         String where = root.getFileName() + "/" + file.getFileName()
                                 + " @ " + lineOf(src, m.start());
+                        if (delegates) {
+                            // 委托路径不要求体内出现字面量 max(1,·)，那是 MekCkOrderState 的职责，
+                            // 由 theContractItselfStillClearsOnCancel 反向锚定。
+                            continue;
+                        }
                         if (!CLAMPED.matcher(body).find()) {
                             offenders.add(where + "：setOrder 没有把 quantity 夹到 ≥ 1"
                                     + "（只靠调用方夹过的话，新增调用点就会写进 0/负数 ⇒ 订单永不完成）");
@@ -156,7 +169,16 @@ public class TestOrderQuantityLowerBound {
                     Matcher m = SET_ORDER.matcher(src);
                     while (m.find()) {
                         String body = methodBodyFrom(src, m.start());
-                        if (body == null || !body.contains("orderQuantity") || !body.contains("=")) {
+                        if (body == null || !body.contains("=")) {
+                            continue;
+                        }
+                        // 与 everySetOrderClampsQuantityToAtLeastOne 同一套「算不算」判据：
+                        // 自有 orderQuantity 字段，或委托给 MekCkOrderState。两者都算处理了份数。
+                        boolean ownsField = body.contains("orderQuantity");
+                        boolean delegates = body.contains("order.setOrder")
+                                || body.contains("order.setActiveWithoutRecipe")
+                                || body.contains("order.clear()");
+                        if (!ownsField && !delegates) {
                             continue;
                         }
                         seen++;

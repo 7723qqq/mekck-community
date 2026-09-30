@@ -2,6 +2,7 @@ package cn.ism.mekck.machine.skewering;
 
 import cn.ism.mekck.machine.MekCkBatchPacking;
 import cn.ism.mekck.machine.MekCkMachineTile;
+import cn.ism.mekck.machine.MekCkOrderState;
 import cn.ism.mekck.machine.MekCkRecipeExecutor;
 import cn.ism.mekck.util.CountMath;
 import cn.ism.mekck.util.KaleidoscopeGrillingCompat;
@@ -58,18 +59,29 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
      * 与旧存档<b>逐字同名</b>的键：{@code MekCkLegacyMachineNbt} 只换位置不改名。
      * 前三个与切菜/研磨/烧烤共用同名，机器间不通用，但迁移器按家族分流。
      */
-    public static final String TAG_ORDER_RECIPE = "OrderRecipeId";
-    public static final String TAG_ORDER_QUANTITY = "OrderQuantity";
-    public static final String TAG_ORDER_COMPLETED = "OrderCompleted";
+    public static final String TAG_ORDER_RECIPE = MekCkOrderState.TAG_ORDER_RECIPE;
+    public static final String TAG_ORDER_QUANTITY = MekCkOrderState.TAG_ORDER_QUANTITY;
+    public static final String TAG_ORDER_COMPLETED = MekCkOrderState.TAG_ORDER_COMPLETED;
     /** 自选组合的材料表（旧存档里是 StringTag 列表，每项一个物品 id、各 1 个）。 */
     public static final String TAG_ORDER_CUSTOM = "OrderCustomIngredients";
 
     private SkeweringFactoryTile owner;
     private boolean busy;
 
-    private ResourceLocation orderRecipeId;
-    private int orderQuantity;
-    private int orderCompleted;
+    /**
+     * 订单状态。唯一的持有者。
+     *
+     * <p>第四轮从三个手写字段换成 {@link MekCkOrderState}，与烹饪 / 研磨 / 种植切配 / 烧烤
+     * 对齐（6 个执行器同一份契约）。三个存档键与原有的
+     * {@code OrderRecipeId/OrderQuantity/OrderCompleted} <b>逐字相同</b>，既有存档不受影响。</p>
+     *
+     * <p><b>自选材料（{@link #orderCustomIngredients}）刻意留在本类</b>：它是穿串独有的
+     * 「配方现场拼、因而没有 id 可存」语义。公共状态类用一个 {@code active} 标志表达
+     * 「有单但无配方 id」（见 {@link MekCkOrderState#setActiveWithoutRecipe}），
+     * 而<b>材料清单本身</b>只有这一个家族用，塞进去等于让另外 5 个家族背一个用不到的字段。</p>
+     */
+    private final MekCkOrderState order = new MekCkOrderState();
+
     private final List<String> orderCustomIngredients = new ArrayList<>();
 
     // ── MekCkRecipeExecutor ─────────────────────────────────────────────
@@ -103,9 +115,9 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
         }
         List<IInventorySlot> scan = owner.ingredientSlots();
         int batch = batchSize(recipe, scan);
-        if (orderRecipeId != null || !orderCustomIngredients.isEmpty()) {
+        if (order.isActive()) {
             // 订单剩余量是硬上限：不能做出「比订单多」的东西。
-            batch = Math.min(batch, orderQuantity - orderCompleted);
+            batch = Math.min(batch, order.remainingOrUnlimited(batch));
         }
         return batch > 0;
     }
@@ -129,9 +141,9 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
         }
         List<IInventorySlot> scan = owner.ingredientSlots();
         int batch = batchSize(recipe, scan);
-        if (orderRecipeId != null || !orderCustomIngredients.isEmpty()) {
+        if (order.isActive()) {
             // 订单剩余量是硬上限：不能做出「比订单多」的东西。
-            batch = Math.min(batch, orderQuantity - orderCompleted);
+            batch = Math.min(batch, order.remainingOrUnlimited(batch));
         }
         if (batch <= 0) {
             return;
@@ -146,16 +158,15 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
 
     @Override
     public void save(CompoundTag tag) {
-        // 数量与完成数只要「有任何一种订单」就要写：自选组合订单的
-        // orderRecipeId 恒为 null（配方是现场拼的虚拟配方，没有 id 可存），
-        // 若把数量挂在 orderRecipeId 那个 if 底下，自选组合单在存读档后
-        // 会变成「有材料、有数量以外的空白」——表现为机器不动也不报错。
-        if (hasOrder()) {
-            tag.putInt(TAG_ORDER_QUANTITY, orderQuantity);
-            tag.putInt(TAG_ORDER_COMPLETED, orderCompleted);
-        }
-        if (orderRecipeId != null) {
-            tag.putString(TAG_ORDER_RECIPE, orderRecipeId.toString());
+        // ⚠️ 不能直接用 order.save(tag)：它按「有没有配方 id」决定写不写数量，
+        // 而自选组合单的 recipeId 恒为 null（配方是现场拼的虚拟配方，没有 id 可存）⇒
+        // 数量与完成数会整个丢失，表现为存读档后「有材料、却不动也不报错」。
+        // 所以这里先按「有配方 id」写一次，再在自选组合这条路上补写数量。
+        if (order.hasRecipe()) {
+            order.save(tag);
+        } else if (order.isActive()) {
+            tag.putInt(TAG_ORDER_QUANTITY, order.getQuantity());
+            tag.putInt(TAG_ORDER_COMPLETED, order.getCompleted());
         }
         if (!orderCustomIngredients.isEmpty()) {
             ListTag list = new ListTag();
@@ -168,25 +179,19 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
 
     @Override
     public void load(CompoundTag tag) {
-        orderRecipeId = null;
-        orderQuantity = 0;
-        orderCompleted = 0;
+        // 键不存在即「无订单」（MekCkOrderState.load 内部整体清空）：执行器与方块实体同寿，
+        // 只在键存在时赋值会留下无法取消的幽灵订单。
+        order.load(tag);
         orderCustomIngredients.clear();
         // 契约（MekCkRecipeExecutor#load）：旧存档无此键时必须保持默认态、不得抛异常。
-        // 其余 5 个家族都判了 null，这里也判——今天调用方恒传非 null，但不能靠调用方兜底。
+        // 不能靠调用方兜底，所以这里判 null。
         if (tag == null) {
             return;
         }
-        // getString 对缺失键给空串、getInt 给 0，因此两条路都不需要 contains 分支。
-        // 固定配方与自选组合是互斥的两条路：各自读各自的数量（见 save 的注释）。
-        String raw = tag.getString(TAG_ORDER_RECIPE);
-        if (!raw.isEmpty()) {
-            ResourceLocation parsed = ResourceLocation.tryParse(raw);
-            if (parsed != null) {
-                orderRecipeId = parsed;
-                orderQuantity = Math.max(0, tag.getInt(TAG_ORDER_QUANTITY));
-                orderCompleted = Math.max(0, tag.getInt(TAG_ORDER_COMPLETED));
-            }
+        // getString 对缺失键给空串、getInt 给 0，因此不需要 contains 分支。
+        // 固定配方与自选组合是互斥的两条路：各自读各自的数量。
+        if (order.hasRecipe()) {
+            return;
         }
         Tag list = tag.get(TAG_ORDER_CUSTOM);
         if (list instanceof ListTag items) {
@@ -195,9 +200,14 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
                     orderCustomIngredients.add(text.getAsString());
                 }
             }
-            if (!orderCustomIngredients.isEmpty() && orderRecipeId == null) {
-                orderQuantity = Math.max(0, tag.getInt(TAG_ORDER_QUANTITY));
-                orderCompleted = Math.max(0, tag.getInt(TAG_ORDER_COMPLETED));
+            if (!orderCustomIngredients.isEmpty()) {
+                // 自选组合单：有材料清单但没有配方 id。
+                // setActiveWithoutRecipe 会把 completed 清零，所以 completed 必须
+                // 在它**之后**单独复原 —— 不能用 advance() 顺带推上去：
+                // advance() 顺带判定「是否已满」，completed 恰好等于 quantity 时会
+                // 立刻判定满单，调用方随即 clearOrder()，把一张刚读回来的单清掉。
+                order.setActiveWithoutRecipe(Math.max(1, MekCkOrderState.readQuantity(tag)));
+                order.restoreCompleted(MekCkOrderState.readCompleted(tag));
             }
         }
     }
@@ -216,10 +226,10 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
         if (!orderCustomIngredients.isEmpty()) {
             return buildCustomRecipe();
         }
-        if (orderRecipeId == null) {
+        if (!order.hasRecipe()) {
             return null;
         }
-        return findById(level, orderRecipeId);
+        return findById(level, order.getRecipeId());
     }
 
     /** 按 id 找配方，自有来源优先于外部（逐字对齐旧 {@code getSkeweringRecipeTypes} 的次序）。 */
@@ -437,8 +447,7 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
      * int 会在加法那一刻绕成负数，订单永远完不成。</p>
      */
     private void advanceOrder(int batch) {
-        orderCompleted = (int) Math.min(Integer.MAX_VALUE, (long) orderCompleted + batch);
-        if ((long) orderCompleted >= Math.max(1, orderQuantity)) {
+        if (order.advance(batch)) {
             clearOrder();
         }
     }
@@ -447,21 +456,23 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
 
     @Override
     public boolean hasOrder() {
-        return orderRecipeId != null || !orderCustomIngredients.isEmpty();
+        // isActive() 已覆盖「有配方 id」与「只有自选材料」两种激活方式 ——
+        // 迁移前这里是 orderRecipeId != null || !orderCustomIngredients.isEmpty() 两条路。
+        return order.isActive();
     }
 
     public ResourceLocation getOrderRecipeId() {
-        return orderRecipeId;
+        return order.getRecipeId();
     }
 
     @Override
     public int getOrderQuantity() {
-        return hasOrder() ? orderQuantity : 0;
+        return order.getQuantity();
     }
 
     @Override
     public int getOrderCompleted() {
-        return orderCompleted;
+        return order.getCompleted();
     }
 
     public List<String> getOrderCustomIngredients() {
@@ -475,14 +486,12 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
             clearOrder();
             return;
         }
-        orderRecipeId = recipeId;
-        orderQuantity = Math.max(1, quantity);
-        orderCompleted = 0;
+        order.setOrder(recipeId, quantity);
     }
 
     /** 下自选组合单（森罗物语「烟火」）。材料按物品 id 存，各 1 个。 */
     public void setCustomOrder(List<String> itemIds, int quantity) {
-        orderRecipeId = null;
+        order.clear();
         orderCustomIngredients.clear();
         if (itemIds == null || itemIds.isEmpty()) {
             clearOrder();
@@ -493,15 +502,19 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
                 orderCustomIngredients.add(id);
             }
         }
-        orderQuantity = Math.max(1, quantity);
-        orderCompleted = 0;
+        if (orderCustomIngredients.isEmpty()) {
+            clearOrder();
+            return;
+        }
+        // 有材料、但没有配方 id ⇒ 走 setActiveWithoutRecipe（active=true / recipeId=null）。
+        // 这一步是穿串能正确表达「有单却无 id」的关键：判「有没有单」必须用
+        // isActive()，判「要不要卡配方门禁」才用 hasRecipe()。
+        order.setActiveWithoutRecipe(quantity);
     }
 
-    /** 取消订单：四个字段<b>全清</b>（旧实现第 500-508 行同款）。 */
+    /** 取消订单：公共状态与自选材料<b>全清</b>（旧实现第 500-508 行同款）。 */
     public void clearOrder() {
-        orderRecipeId = null;
-        orderQuantity = 0;
-        orderCompleted = 0;
+        order.clear();
         orderCustomIngredients.clear();
     }
 

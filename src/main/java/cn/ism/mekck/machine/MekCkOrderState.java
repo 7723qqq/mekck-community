@@ -147,6 +147,29 @@ public final class MekCkOrderState {
         return Math.min(Integer.MAX_VALUE, sum) >= Math.max(1, quantity);
     }
 
+    /**
+     * 复原「已完成份数」—— 供<b>无配方 id 的订单</b>（穿串的自选组合单）读档用。
+     *
+     * <h3>为什么需要这个方法</h3>
+     * {@link #setActiveWithoutRecipe(int)} 会把 {@code completed} 清零，这是「下新单」的语义。
+     * 但穿串工厂的自选组合单<b>同样把已完成数写进存档</b>，读档时必须复原 ——
+     * 否则一台跑到一半的自选组合单会被当成「刚下的新单」重头再来。
+     *
+     * <p><b>不能用 {@link #advance(int)} 顺带推上去</b>：{@code advance} 顺带判定
+     * 「是否已满」，当 {@code completed >= quantity}（比如存读档发生在最后一批刚做完、
+     * 还没来得及 clear 的那个 tick 窗口）会立刻判定满单，调用方随即 {@link #clear()}，
+     * <b>把一张刚读回来的单抹掉</b>。这里只赋值、绝不判定「已满」。</p>
+     *
+     * <p>仅在订单已激活时生效；{@code completed} 夹到 {@code ≥ 0}，且不超过
+     * {@link Integer#MAX_VALUE}（int 里无处可放更大的数，而 MAX 已是可表示的最大进度）。</p>
+     */
+    public void restoreCompleted(int completed) {
+        if (!active) {
+            return;
+        }
+        this.completed = (int) Math.min(Integer.MAX_VALUE, Math.max(0, completed));
+    }
+
     // ── 读侧 ────────────────────────────────────────────────────────────
 
     /** 是否有一张单在跑（自选组合单也为真）。 */

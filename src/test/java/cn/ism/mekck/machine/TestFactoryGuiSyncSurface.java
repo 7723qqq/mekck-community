@@ -219,8 +219,16 @@ public class TestFactoryGuiSyncSurface {
         String setBody = methodBody(src, "public void setOrder(ResourceLocation recipeId, int quantity, String seasoningId) {");
         assertTrue("setOrder(null, …) 必须走 clearOrder()，否则取消按钮只清 id 而留下调味料",
                 setBody.contains("clearOrder()"));
-        assertTrue("setOrder 的份数下界必须是 max(1,·)（0 份订单会让批量夹成 0 而永久惰性）",
-                setBody.contains("Math.max(1, quantity)"));
+        // 份数下界仍须是 max(1,·)。第四轮把三个订单字段换成了 MekCkOrderState，
+        // 夹紧因此**不在 setOrder 里**了 —— 这里不再断言「写在哪」，只断言「夹成什么」：
+        // setOrder 必须把 (recipeId, quantity) 交给公共状态类，夹紧由它保证。
+        // 断言 setOrder 里出现字面量 Math.max(1, quantity) 是在锁「实现形状」，
+        // 换个等价实现就会假失败（第四轮已踩过一次）。
+        assertTrue("setOrder 必须把订单交给 MekCkOrderState.setOrder（份数下界由它夹到 max(1,·)）",
+                setBody.contains("order.setOrder(recipeId, quantity)"));
+        String state = read("src/main/java/cn/ism/mekck/machine/MekCkOrderState.java");
+        assertTrue("MekCkOrderState.setOrder 必须把份数夹到 >= 1（0 份订单会让批量夹成 0 而永久惰性）",
+                state.contains("this.quantity = Math.max(1, quantity)"));
     }
 
     /**

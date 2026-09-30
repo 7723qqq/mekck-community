@@ -4,6 +4,7 @@ import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.machine.MekCkBatchPacking;
 import cn.ism.mekck.machine.MekCkMachineTile;
+import cn.ism.mekck.machine.MekCkOrderState;
 import cn.ism.mekck.machine.MekCkRecipeExecutor;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.upgrade.MekCkUpgradeTypes;
@@ -50,9 +51,9 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
     public static final int SEASONING_SLOTS = 3;
 
     /** 与旧存档<b>逐字同名</b>的键：{@code MekCkLegacyMachineNbt} 只换位置不改名。 */
-    public static final String TAG_ORDER_RECIPE = "OrderRecipeId";
-    public static final String TAG_ORDER_QUANTITY = "OrderQuantity";
-    public static final String TAG_ORDER_COMPLETED = "OrderCompleted";
+    public static final String TAG_ORDER_RECIPE = MekCkOrderState.TAG_ORDER_RECIPE;
+    public static final String TAG_ORDER_QUANTITY = MekCkOrderState.TAG_ORDER_QUANTITY;
+    public static final String TAG_ORDER_COMPLETED = MekCkOrderState.TAG_ORDER_COMPLETED;
     public static final String TAG_ORDER_SEASONING = "OrderSeasoning";
     public static final String TAG_WORK_MODE = "WorkMode";
     public static final String TAG_SEASONING_ENABLED = "SeasoningEnabled";
@@ -69,9 +70,21 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
 
     // ── 执行器自有状态 ──────────────────────────────────────────────────
 
-    private ResourceLocation orderRecipeId;
-    private int orderQuantity;
-    private int orderCompleted;
+    /**
+     * 订单状态。唯一的持有者。
+     *
+     * <p>第四轮从三个手写字段（{@code orderRecipeId/orderQuantity/orderCompleted}）换成
+     * {@link MekCkOrderState}，与烹饪 / 研磨 / 种植切配对齐（6 个执行器同一份契约）。
+     * 值与语义都没变 —— {@link MekCkOrderState} 的三个存档键与此处原有的
+     * {@code OrderRecipeId/OrderQuantity/OrderCompleted} <b>逐字相同</b>，
+     * 所以既有存档不受影响。</p>
+     *
+     * <p><b>调味料（{@link #orderSeasoning}）刻意留在本类</b>：它是烧烤独有的
+     * 「订单附带指定调味」语义，塞进公共状态类就得让另外 5 个家族背一个用不到的字段。
+     * 它与订单生命周期绑定（清订单必清调味），故读写两侧都紧挨着订单代码。</p>
+     */
+    private final MekCkOrderState order = new MekCkOrderState();
+
     private String orderSeasoning;
     private WorkMode workMode = WorkMode.DEFAULT;
     private final boolean[] seasoningEnabled = new boolean[SEASONING_SLOTS];
@@ -153,11 +166,8 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
 
     @Override
     public void save(CompoundTag tag) {
-        if (orderRecipeId != null) {
-            tag.putString(TAG_ORDER_RECIPE, orderRecipeId.toString());
-            tag.putInt(TAG_ORDER_QUANTITY, orderQuantity);
-            tag.putInt(TAG_ORDER_COMPLETED, orderCompleted);
-        }
+        // 三个订单键由 MekCkOrderState 一处写；键名与迁移前逐字相同，既有存档不受影响。
+        order.save(tag);
         if (orderSeasoning != null && !orderSeasoning.isEmpty()) {
             tag.putString(TAG_ORDER_SEASONING, orderSeasoning);
         }
@@ -177,17 +187,12 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
     @Override
     public void load(CompoundTag tag) {
         invalidateCache();
-        if (tag != null && tag.contains(TAG_ORDER_RECIPE, Tag.TAG_STRING)) {
-            ResourceLocation parsed = ResourceLocation.tryParse(tag.getString(TAG_ORDER_RECIPE));
-            if (parsed != null) {
-                orderRecipeId = parsed;
-                orderQuantity = Math.max(0, tag.getInt(TAG_ORDER_QUANTITY));
-                orderCompleted = Math.max(0, tag.getInt(TAG_ORDER_COMPLETED));
-            } else {
-                clearOrder();
-            }
-        } else {
-            clearOrder();
+        // 键不存在即「无订单」（整体清空）：执行器与方块实体同寿，只在 contains 为真时
+        // 赋值会留下无法取消的幽灵订单。
+        order.load(tag);
+        if (!order.isActive()) {
+            // 无订单时不得残留调味料：它会在「自由投料」下强制调味，且会被 save 持久化。
+            orderSeasoning = null;
         }
         if (tag != null) {
             orderSeasoning = tag.contains(TAG_ORDER_SEASONING, Tag.TAG_STRING)
@@ -206,17 +211,17 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
     // ── 订单 ────────────────────────────────────────────────────────────
 
     public ResourceLocation getOrderRecipeId() {
-        return orderRecipeId;
+        return order.getRecipeId();
     }
 
     @Override
     public int getOrderQuantity() {
-        return orderRecipeId == null ? 0 : orderQuantity;
+        return order.getQuantity();
     }
 
     @Override
     public int getOrderCompleted() {
-        return orderCompleted;
+        return order.getCompleted();
     }
 
     /** 订单指定的调味料 id；{@code null} / 空串表示不指定。 */
@@ -241,14 +246,12 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
             // 取消按钮发的正是 (null, 0, null) —— 若这里只清 id 而留下 orderSeasoning，
             // 「无订单」状态就会残留一份调味料；而 currentSeasoningFor() 在**无订单**时
             // 也会拿它去强制调味，于是玩家刚点的「取消」看起来毫无效果。
+            // MekCkOrderState.setOrder(null, ·) 本身即 clear()，但「清调味」是烧烤独有的
+            // 语义、状态类里没有这个字段，仍要显式做。
             clearOrder();
             return;
         }
-        this.orderRecipeId = recipeId;
-        // 下界用 max(1,·) 而不是旧实现的 max(0,·)：0 份的订单会让
-        // 「batch = min(batch, quantity - completed)」夹出 0 而永久惰性。
-        this.orderQuantity = Math.max(1, quantity);
-        this.orderCompleted = 0;
+        order.setOrder(recipeId, quantity);
         this.orderSeasoning = (seasoningId == null || seasoningId.isEmpty()) ? null : seasoningId;
     }
 
@@ -265,9 +268,7 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
      * 也就是说一次订单跑完，调味料会永久赖在机器上影响后续自由加工。</p>
      */
     public void clearOrder() {
-        this.orderRecipeId = null;
-        this.orderQuantity = 0;
-        this.orderCompleted = 0;
+        order.clear();
         this.orderSeasoning = null;
     }
 
@@ -280,7 +281,7 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
      * </p>
      */
     static boolean advanceOrder(int completed, int quantity) {
-        return (long) completed + 1 >= Math.max(1, quantity);
+        return MekCkOrderState.advancedTo(completed, quantity, 1);
     }
 
     // ── 工作模式与调味料开关 ────────────────────────────────────────────
@@ -383,7 +384,7 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
         } else {
             found = lookup(level, input);
         }
-        if (orderRecipeId != null && (found.isEmpty() || !orderRecipeId.equals(found.get().getId()))) {
+        if (order.hasRecipe() && (found.isEmpty() || !order.getRecipeId().equals(found.get().getId()))) {
             return Optional.empty();
         }
         return found;
@@ -473,9 +474,8 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
 
         MekCkBatchPacking.insertOutput(outputs, multiplied);
 
-        if (orderRecipeId != null) {
-            orderCompleted++;
-            if (advanceOrder(orderCompleted, orderQuantity)) {
+        if (order.isActive()) {
+            if (order.advance(1)) {
                 clearOrder();
             }
         }
