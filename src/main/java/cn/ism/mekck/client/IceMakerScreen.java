@@ -8,13 +8,11 @@ import cn.ism.mekck.menu.IceMakerMenu;
 import cn.ism.mekck.network.IceAttackConfigPacket;
 import cn.ism.mekck.network.ModMessages;
 import net.minecraft.world.item.crafting.Recipe;
-import cn.ism.mekck.network.NetworkOrderPacket;
 import cn.ism.mekck.network.RedstoneControlPacket;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import mekanism.client.SpecialColors;
 import mekanism.client.gui.GuiMekanism;
-import mekanism.client.gui.element.GuiElement;
 import mekanism.client.gui.element.bar.GuiBar.IBarInfoHandler;
 import mekanism.client.gui.element.bar.GuiVerticalPowerBar;
 import mekanism.client.gui.element.progress.GuiProgress;
@@ -47,14 +45,15 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
  */
 public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements NetworkOrderHost {
     private final cn.ism.mekck.client.BigStackHud bigStackHud = new cn.ism.mekck.client.BigStackHud();
-    /** 「ME 下单」面板开关（本屏没有本机下单列表 ⇒ 面板恒为 ME 模式）。 */
-    private boolean orderMode = false;
-    private static final int ORDER_TAB_Y = 34; // 侧配 tab 下方 28px（与其它屏一致）
-    private static final int ORDER_PANEL_LEFT = 10;
-    private static final int ORDER_PANEL_TOP = 10;
-    /** 下单 tab 图标：自绘「清单 + 向下箭头」（原来借用的 Mekanism sorting.png 像音符、且语义不符）。 */
-    private static final ResourceLocation ORDER_TEXTURE = MachineTabIcons.ORDER;
-    private final NetworkOrderPanel mePanel = new NetworkOrderPanel(true, true);
+    /** 下单 tab 的 y —— 侧配 tab 下方 28px（与其它屏一致）。 */
+    private static final int ORDER_TAB_Y = 34;
+    /**
+     * 「下单」标签页 —— 点开 {@link NetworkOrderWindow}。
+     *
+     * <p>必须留引用：{@code GuiWindowCreatorTab} 关闭窗口时靠 {@code elementSupplier.get()}
+     * 把同一实例重新激活，宿主屏幕也靠它取「正在显示的那一个」面板。</p>
+     */
+    private NetworkOrderTab orderTab;
     // Mekanism 风格 tab 布局（与其他机器一致）
     private static final int TAB_X = -26;
     private static final int CONFIG_TAB_Y = 6;
@@ -73,9 +72,6 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
     private static final ResourceLocation UPGRADE_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "upgrade.png");
     /** 攻击控制行 / 温度控制行的按钮仍走这张 Mekanism button.png（非 tab 部分，勿删）。 */
     private static final ResourceLocation BUTTON_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "button.png");
-
-    /** 侧栏 tab（MekCkTabElement）——供 {@link #clickTabElement} 在覆盖层分支里做优先派发。 */
-    private final List<GuiElement> tabElements = new java.util.ArrayList<>();
 
     // 攻击控制行布局
     private static final int TARGET_X = IceMakerMenu.INPUT_X;
@@ -108,7 +104,6 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
         imageHeight = IceMakerMenu.IMAGE_HEIGHT;
         inventoryLabelY = IceMakerMenu.INV_TOP - 12;
         dynamicSlots = true;
-        wireLocalOrderSource();
     }
 
     @Override
@@ -230,9 +225,11 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
                 () -> false, SpecialColors.TAB_CONFIGURATION,
                 "tooltip.mekck.side_config", this::openSideConfigWindow);
 
-        addTab(ORDER_TEXTURE, TAB_X, ORDER_TAB_Y, true,
-                () -> orderMode, SpecialColors.TAB_CONTAINER_EDIT_MODE,
-                "tooltip.mekck.order_panel", this::toggleOrderMode);
+        // ME 下单在 Mek 里无对应图标：保留本模组自绘的「清单 + 向下箭头」图标，只取官方染色。
+        // 面板本体已从「屏幕手绘覆盖层」迁进 Mek 虚拟窗口（NetworkOrderWindow），
+        // 本机数据源在窗口创建时注入（见 localOrderSource()）。
+        orderTab = addRenderableWidget(new NetworkOrderTab(this, menu.getBlockPos(),
+                TAB_X, ORDER_TAB_Y, true, localOrderSource(), () -> orderTab));
 
         // ── 右列（2 个）──
         addTab(UPGRADE_TEXTURE, imageWidth, UPGRADE_TAB_Y, false,
@@ -246,19 +243,17 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
         if (cn.ism.mekck.client.NetworkPullButton.isVisible()) {
             for (var tab : cn.ism.mekck.client.NetworkPullButton.register(this, menu.getBlockPos())) {
                 addRenderableWidget(tab);
-                tabElements.add(tab);
             }
         }
     }
 
-    /** 注册一个侧栏 tab（几何 24/16，MekCkTabElement 常量）并记入 {@link #tabElements}。 */
+    /** 注册一个侧栏 tab（几何 26/18，MekCkTabElement 常量）。 */
     private MekCkTabElement addTab(ResourceLocation icon, int relX, int relY, boolean left,
             BooleanSupplier selected, ColorRegistryObject tint, String tooltipKey, Runnable action) {
         MekCkTabElement tab = new MekCkTabElement(this, icon, relX, relY, left,
                 MekCkTabElement.OUTER, MekCkTabElement.INNER,
                 selected, tint, () -> List.of(Component.translatable(tooltipKey)), action, null);
         addRenderableWidget(tab);
-        tabElements.add(tab);
         return tab;
     }
 
@@ -302,33 +297,7 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
             }
         });
         addRenderableWidget(tab);
-        tabElements.add(tab);
         return tab;
-    }
-
-    /** ME 下单面板开关（原在 mouseClicked 内联，迁出为 tab 动作）。 */
-    private void toggleOrderMode() {
-        orderMode = !orderMode;
-        if (!orderMode) {
-            mePanel.onClosed();
-        }
-    }
-
-    /**
-     * 侧栏 tab 的**优先**派发：只在本屏的 tab 列表里倒序找第一个命中者。
-     * <p>旧手绘版的 tab 命中分支写在 {@code mouseClicked} 里、优先于 {@code orderMode} 那个
-     * 「吞掉整次左键」的覆盖层分支；tab 变成 widget 后该分支会先于 {@code super.mouseClicked} 返回，
-     * 因此这里必须补一次定向派发，否则「下单面板开着时点侧栏 tab 关面板 / 开升级窗 / 开侧配」就废了。
-     * 命中判定与动作完全走 {@link MekCkTabElement} 自己的 {@code mouseClicked}，与框架对
-     * {@code children()} 的派发同语义（含 tab 之间的优先级：越晚注册越优先）。</p>
-     */
-    private boolean clickTabElement(double mouseX, double mouseY, int button) {
-        for (int i = tabElements.size() - 1; i >= 0; i--) {
-            if (tabElements.get(i).mouseClicked(mouseX, mouseY, button)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static String formatItemCount(int count) {
@@ -423,14 +392,6 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
 
         // 侧栏 4 个 tab 的 tooltip 已迁到 MekCkTabElement#renderToolTip，
         // 由 GuiMekanism#renderLabels 在渲染管线最后一层统一派发。
-
-        // ME 下单面板最后画（在 GUI 文字 / 槽位之上；本屏没有本机下单列表 ⇒ 只有 ME 一侧）
-        if (orderMode) {
-            mePanel.bind(menu.getBlockPos());
-            mePanel.render(guiGraphics, font, leftPos + ORDER_PANEL_LEFT, topPos + ORDER_PANEL_TOP,
-                    imageWidth - ORDER_PANEL_LEFT * 2, imageHeight - ORDER_PANEL_TOP * 2,
-                    mouseX, mouseY, partialTick);
-        }
     }
 
     private void cycleTarget() {
@@ -452,12 +413,6 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
         }
     }
 
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (orderMode && mePanel.keyPressed(keyCode, scanCode, modifiers)) return true;
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
     /** 提交目标温度：本机只降温，取 -|输入| 钳制到 [-273.15, 0]，×100 四舍五入后以 type3 发送。 */
     private void commitTempInput() {
         String text = tempField.getText();
@@ -475,25 +430,19 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
     }
 
     @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        if (orderMode && mePanel.charTyped(codePoint, modifiers)) return true;
-        return super.charTyped(codePoint, modifiers);
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (orderMode) return mePanel.mouseScrolled(delta);
-        return super.mouseScrolled(mouseX, mouseY, delta);
-    }
-
-    @Override
     public NetworkOrderPanel networkOrderPanel() {
-        return orderMode ? mePanel : null;
+        // 窗口开着 ⇒ 返回窗口里的面板；关着 ⇒ null（回包丢弃，不再灌进已销毁的面板）。
+        return orderTab == null ? null : orderTab.panel();
     }
 
-    /** 本机一侧：配方 / 可做份数按机器输入槽里的材料算，下单走通用订单包。 */
-    private void wireLocalOrderSource() {
-        mePanel.setLocalSource(new NetworkOrderPanel.LocalSource() {
+    /**
+     * 本机一侧：配方 / 可做份数按机器输入槽里的材料算，下单走通用订单包。
+     *
+     * <p>迁到窗口创建时注入（{@link NetworkOrderTab#createWindow()} → {@code setLocalSource}）：
+     * 面板随窗口每次打开重建，数据源必须跟着重建，否则新面板的本机模式是空的。</p>
+     */
+    private NetworkOrderPanel.LocalSource localOrderSource() {
+        return new NetworkOrderPanel.LocalSource() {
             @Override
             public List<Recipe<?>> recipes() {
                 return menu.getMachine().getAvailableRecipes();
@@ -509,7 +458,7 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
                 ModMessages.sendToServer(new cn.ism.mekck.network.OrderRecipePacket(
                         menu.getBlockPos(), recipe.getId(), quantity));
             }
-        });
+        };
     }
 
     private void openSideConfigWindow() {
@@ -557,31 +506,10 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
                 return true;
             }
         }
-        // ME 下单：面板点击（面板外点击关闭；左键）
-        // 旧手绘版的 tab 命中分支在这个覆盖层之前；tab 变成 widget 后这里要先补一次定向派发，
-        // 否则「面板开着时点侧栏 tab 关面板 / 开升级窗 / 开侧配」会被面板吞掉。语义与旧版逐条一致。
-        if (button == 0) {
-            if (orderMode) {
-                if (clickTabElement(mouseX, mouseY, button)) {
-                    return true;
-                }
-                int panelX = leftPos + ORDER_PANEL_LEFT;
-                int panelY = topPos + ORDER_PANEL_TOP;
-                int panelW = imageWidth - ORDER_PANEL_LEFT * 2;
-                int panelH = imageHeight - ORDER_PANEL_TOP * 2;
-                mePanel.bind(menu.getBlockPos());
-                if (mouseX >= panelX && mouseX <= panelX + panelW && mouseY >= panelY && mouseY <= panelY + panelH) {
-                    return mePanel.mouseClicked(mouseX, mouseY, button, panelX, panelY, panelW, panelH,
-                            (recipeId, qty) -> ModMessages.sendToServer(new NetworkOrderPacket(
-                                    menu.getBlockPos(), recipeId.toString(), qty)));
-                }
-                orderMode = false;
-                mePanel.onClosed();
-                return true;
-            }
-        }
         // 侧栏 4 个 tab（侧配 / 下单 / 升级 / 红石）的点击交给 MekCkTabElement#onClick —— 它们是
         // renderable widget，由框架在 super.mouseClicked(...) 里统一派发（含红石 tab 的右键上一档）。
+        // 「下单」tab 开的是 Mek 窗口，窗口内的点击由 GuiMekanism#mouseClicked 先遍历 windows 派发
+        // （窗口在 children() 之前），所以旧版那份「面板开着时先定向派发 tab」的补丁已随面板一起删除。
         return super.mouseClicked(mouseX, mouseY, button);
     }
 }

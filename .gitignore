@@ -66,3 +66,8 @@ __pycache__/
 
 # ── 构建日志（放在 build/ 外，否则 clean 会因文件占用失败）──
 .logs/
+
+# 3D/Blender 工作副本与临时脚本目录（本地产物，不入库）
+.blender-backup/
+.blender-preview/
+scratch/

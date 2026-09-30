@@ -38,10 +38,11 @@ BG = (24, 27, 32)
 # 相机要放在 -Z 一侧；控制台在 MC +X，从 -Z 看过去正好落在观者左手边（对齐参考图）。
 # z 分量为正 = 相机在机器上方。
 VIEWS = {
-    "front": (0.10, 0.17, -0.980),  # 正面：看视窗与控制台
-    "hero":  (0.50, 0.55, -0.670),  # 3/4 视角
-    "side":  (0.980, -0.13, 0.150), # 侧面（控制台一侧）
-    "top":   (0.04, 0.06, 0.997),   # 顶视：遮阳板与四臂
+    "front": (0.00, 0.35, -0.93),   # 正面：看视窗与控制台
+    "hero":  (0.55, 0.50, -0.67),   # 3/4 俯视英雄视角
+    "side":  (0.95, 0.25, 0.15),    # 侧面：Mek 八角接口
+    "back":  (0.00, 0.25, 0.96),    # 背面：排污口与后视窗
+    "top":   (0.01, 0.999, 0.01),   # 顶视：俯视压力盖与吊耳
 }
 
 
@@ -114,13 +115,21 @@ def write_png(path, w, h, px):
 
 # ────────────────────────────── 读取 OBJ ──────────────────────────────
 def read_obj(path):
-    verts, uvs, norms, tris, group = [], [], [], [], None
+    raw_verts, uvs, norms, tris = [], [], [], []
+    verts = []
+    v_map = {}
+    group = None
+    LAYER_OFFSETS = {
+        "bioreactor_layer0": 0.0,
+        "bioreactor_layer1": 1.0,
+        "bioreactor_layer2": 2.0,
+    }
     for line in open(path, encoding="utf-8"):
         p = line.split()
         if not p:
             continue
         if p[0] == "v":
-            verts.append((float(p[1]), float(p[2]), float(p[3])))
+            raw_verts.append((float(p[1]), float(p[2]), float(p[3])))
         elif p[0] == "vt":
             uvs.append((float(p[1]), float(p[2])))
         elif p[0] == "vn":
@@ -128,9 +137,19 @@ def read_obj(path):
         elif p[0] == "g":
             group = p[1]
         elif p[0] == "f":
+            y_off = LAYER_OFFSETS.get(group, 0.0)
             idx = [tuple(int(t) for t in tok.split("/")) for tok in p[1:]]
-            for k in range(1, len(idx) - 1):          # 扇形三角化，与 ObjMesh 一致
-                tris.append((group, (idx[0], idx[k], idx[k + 1])))
+            remapped_idx = []
+            for tok in idx:
+                vi, vti, vni = tok
+                key = (vi, y_off)
+                if key not in v_map:
+                    orig_v = raw_verts[vi - 1]
+                    verts.append((orig_v[0], orig_v[1] + y_off, orig_v[2]))
+                    v_map[key] = len(verts)
+                remapped_idx.append((v_map[key], vti, vni))
+            for k in range(1, len(remapped_idx) - 1):          # 扇形三角化，与 ObjMesh 一致
+                tris.append((group, (remapped_idx[0], remapped_idx[k], remapped_idx[k + 1])))
     return verts, uvs, norms, tris
 
 

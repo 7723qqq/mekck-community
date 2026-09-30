@@ -3,8 +3,6 @@ package cn.ism.mekck.client;
 import cn.ism.mekck.blockentity.GrillBlockEntity;
 import cn.ism.mekck.menu.GrillMenu;
 import cn.ism.mekck.network.ModMessages;
-import cn.ism.mekck.network.NetworkOrderPacket;
-import mekanism.client.SpecialColors;
 import mekanism.client.gui.GuiConfigurableTile;
 import mekanism.client.gui.element.GuiUpArrow;
 import mekanism.client.gui.element.bar.GuiVerticalPowerBar;
@@ -14,7 +12,6 @@ import mekanism.client.gui.element.progress.ProgressType;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.crafting.Recipe;
@@ -56,14 +53,6 @@ public final class GrillScreen extends GuiConfigurableTile<GrillBlockEntity, Gri
 
     private final BigStackHud bigStackHud = new BigStackHud();
 
-    /** 「ME 下单」面板开关（本屏没有本机下单列表 ⇒ 面板恒为 ME 模式）。 */
-    private boolean orderMode = false;
-    private static final int ORDER_PANEL_LEFT = 10;
-    private static final int ORDER_PANEL_TOP = 10;
-    /** 下单 tab 图标：自绘「清单 + 向下箭头」（原来借用的 Mekanism sorting.png 像音符、且语义不符）。 */
-    private static final ResourceLocation ORDER_TEXTURE = MachineTabIcons.ORDER;
-    private final NetworkOrderPanel mePanel = new NetworkOrderPanel(true, true);
-
     /**
      * 下单 tab 的 y。
      *
@@ -76,6 +65,14 @@ public final class GrillScreen extends GuiConfigurableTile<GrillBlockEntity, Gri
      */
     private static final int ORDER_TAB_Y = 34;
 
+    /**
+     * 「下单」标签页 —— 点开 {@link NetworkOrderWindow}。
+     *
+     * <p>必须留引用：{@code GuiWindowCreatorTab} 关闭窗口时靠 {@code elementSupplier.get()}
+     * 把同一实例重新激活，宿主屏幕也靠它取「正在显示的那一个」面板。</p>
+     */
+    private NetworkOrderTab orderTab;
+
     public GrillScreen(GrillMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
         // 面板尺寸与 Mek 基础电力熔炼炉（GuiElectricMachine）一致：176×166。
@@ -87,7 +84,6 @@ public final class GrillScreen extends GuiConfigurableTile<GrillBlockEntity, Gri
         // imageHeight - 94 = 72，必须显式对齐到 84，否则「Inventory」标签会浮在背包上方 12px。
         inventoryLabelY = 84;
         dynamicSlots = true;
-        wireLocalOrderSource();
     }
 
     @Override
@@ -123,13 +119,10 @@ public final class GrillScreen extends GuiConfigurableTile<GrillBlockEntity, Gri
                 Component.translatable("gui.mekck.energy_per_tick", GrillBlockEntity.ENERGY_PER_TICK))));
 
         // ME 下单 tab（右列 y=34，理由见 ORDER_TAB_Y）。
-        addRenderableWidget(new MekCkTabElement(this, ORDER_TEXTURE, imageWidth, ORDER_TAB_Y, false,
-                MekCkTabElement.OUTER, MekCkTabElement.INNER,
-                () -> orderMode,
-                SpecialColors.TAB_CONTAINER_EDIT_MODE,
-                () -> List.of(Component.translatable("tooltip.mekck.order_panel")),
-                this::toggleOrderMode,
-                null));
+        // 面板本体已从「屏幕手绘覆盖层」迁进 Mek 虚拟窗口（NetworkOrderWindow），
+        // 本机数据源在窗口创建时注入（见 localOrderSource()）。
+        orderTab = addRenderableWidget(new NetworkOrderTab(this, menu.getBlockPos(),
+                imageWidth, ORDER_TAB_Y, false, localOrderSource(), () -> orderTab));
 
         // 自动补料 / 网络拉料两枚 tab **最后注册**：Mek 的 GuiMekanism#mouseClicked 对
         // children() 倒序遍历、命中即返回，即越晚注册命中优先（tab 才能压过同区域的虚拟槽）。
@@ -137,14 +130,6 @@ public final class GrillScreen extends GuiConfigurableTile<GrillBlockEntity, Gri
             for (var tab : NetworkPullButton.register(this, menu.getBlockPos())) {
                 addRenderableWidget(tab);
             }
-        }
-    }
-
-    /** ME 下单面板开关。 */
-    private void toggleOrderMode() {
-        orderMode = !orderMode;
-        if (!orderMode) {
-            mePanel.onClosed();
         }
     }
 
@@ -185,71 +170,24 @@ public final class GrillScreen extends GuiConfigurableTile<GrillBlockEntity, Gri
             }
         }
 
-        // ME 下单面板最后画（在 GUI 文字 / 槽位之上；本屏没有本机下单列表 ⇒ 只有 ME 一侧）
-        if (orderMode) {
-            int x = leftPos;
-            int y = topPos;
-            mePanel.bind(menu.getBlockPos());
-            mePanel.render(guiGraphics, font, x + ORDER_PANEL_LEFT, y + ORDER_PANEL_TOP,
-                    imageWidth - ORDER_PANEL_LEFT * 2, imageHeight - ORDER_PANEL_TOP * 2,
-                    mouseX, mouseY, partialTick);
-        }
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (orderMode && mePanel.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        if (orderMode && mePanel.charTyped(codePoint, modifiers)) {
-            return true;
-        }
-        return super.charTyped(codePoint, modifiers);
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (orderMode) {
-            return mePanel.mouseScrolled(delta);
-        }
-        return super.mouseScrolled(mouseX, mouseY, delta);
-    }
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && orderMode) {
-            int panelX = leftPos + ORDER_PANEL_LEFT;
-            int panelY = topPos + ORDER_PANEL_TOP;
-            int panelW = imageWidth - ORDER_PANEL_LEFT * 2;
-            int panelH = imageHeight - ORDER_PANEL_TOP * 2;
-            mePanel.bind(menu.getBlockPos());
-            if (mouseX >= panelX && mouseX <= panelX + panelW
-                    && mouseY >= panelY && mouseY <= panelY + panelH) {
-                return mePanel.mouseClicked(mouseX, mouseY, button, panelX, panelY, panelW, panelH,
-                        (recipeId, qty) -> ModMessages.sendToServer(new NetworkOrderPacket(
-                                menu.getBlockPos(), recipeId.toString(), qty)));
-            }
-            // 面板外的左键：关掉面板并吞掉这次点击（与旧行为一致，不落到槽位）。
-            orderMode = false;
-            mePanel.onClosed();
-            return true;
-        }
-        return super.mouseClicked(mouseX, mouseY, button);
+        // ME 下单面板已迁进 Mek 虚拟窗口（NetworkOrderWindow），由 GuiMekanism#render
+        // 在 windows 通道里绘制，本屏不再手绘覆盖层。
     }
 
     @Override
     public NetworkOrderPanel networkOrderPanel() {
-        return orderMode ? mePanel : null;
+        // 窗口开着 ⇒ 返回窗口里的面板；关着 ⇒ null（回包丢弃，不再灌进已销毁的面板）。
+        return orderTab == null ? null : orderTab.panel();
     }
 
-    /** 本机一侧：配方 / 可做份数按机器输入槽里的材料算，下单走通用订单包。 */
-    private void wireLocalOrderSource() {
-        mePanel.setLocalSource(new NetworkOrderPanel.LocalSource() {
+    /**
+     * 本机一侧：配方 / 可做份数按机器输入槽里的材料算，下单走通用订单包。
+     *
+     * <p>迁到窗口创建时注入（{@link NetworkOrderTab#createWindow()} → {@code setLocalSource}）：
+     * 面板随窗口每次打开重建，数据源必须跟着重建，否则新面板的本机模式是空的。</p>
+     */
+    private NetworkOrderPanel.LocalSource localOrderSource() {
+        return new NetworkOrderPanel.LocalSource() {
             @Override
             public List<Recipe<?>> recipes() {
                 return menu.getMachine().getAvailableRecipes();
@@ -265,6 +203,6 @@ public final class GrillScreen extends GuiConfigurableTile<GrillBlockEntity, Gri
                 ModMessages.sendToServer(new cn.ism.mekck.network.OrderRecipePacket(
                         menu.getBlockPos(), recipe.getId(), quantity));
             }
-        });
+        };
     }
 }

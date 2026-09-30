@@ -1533,6 +1533,14 @@ public final class UniversalCuttingMachine {
         PLANTING_CUTTING_FACTORY_BLOCKS_REG.register(bus);
         PLANTING_CUTTING_FACTORY_TILES_REG.register(bus);
         PLANTING_CUTTING_FACTORY_CONTAINERS_REG.register(bus);
+        // 电力烧烤架（阶段 3）：同上，三件套必须成组出现。
+        // 少了这三行的症状与 planting 那次逐字相同：静态块里的 register(...) 只造出
+        // RegistryObject 壳子（字段非 null、编译通过），真正写进 Forge 注册表的是这里；
+        // 缺了就是「方块放下去变空气 + 客户端 MenuScreens.register(GRILL_CONTAINER.get(), ...)
+        // 抛 Registry Object not present」。
+        GRILL_BLOCKS_REG.register(bus);
+        GRILL_TILES_REG.register(bus);
+        GRILL_CONTAINERS_REG.register(bus);
         bus.addListener(this::addCreativeTabContents);
         bus.addListener(this::onCommonSetup);
         // 配置文件生成到 config/mekck/mekck-common.toml（与 planting 等配置文件同目录）

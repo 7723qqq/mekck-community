@@ -8,7 +8,6 @@ import cn.ism.mekck.menu.IUpgradeMenu;
 import cn.ism.mekck.menu.ElectricGrindingMachineMenu;
 import cn.ism.mekck.network.ModMessages;
 import net.minecraft.world.item.crafting.Recipe;
-import cn.ism.mekck.network.NetworkOrderPacket;
 import cn.ism.mekck.network.RedstoneControlPacket;
 import java.util.List;
 import java.util.function.BooleanSupplier;
@@ -42,14 +41,15 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
 public final class ElectricGrindingMachineScreen extends GuiMekanism<ElectricGrindingMachineMenu> implements NetworkOrderHost {
     private final cn.ism.mekck.client.BigStackHud bigStackHud = new cn.ism.mekck.client.BigStackHud();
-    /** 「ME 下单」面板开关（本屏没有本机下单列表 ⇒ 面板恒为 ME 模式）。 */
-    private boolean orderMode = false;
-    private static final int ORDER_TAB_Y = 34; // 侧配 tab 下方 28px（与其它屏一致）
-    private static final int ORDER_PANEL_LEFT = 10;
-    private static final int ORDER_PANEL_TOP = 10;
-    /** 下单 tab 图标：自绘「清单 + 向下箭头」（原来借用的 Mekanism sorting.png 像音符、且语义不符）。 */
-    private static final ResourceLocation ORDER_TEXTURE = MachineTabIcons.ORDER;
-    private final NetworkOrderPanel mePanel = new NetworkOrderPanel(true, true);
+    /** 下单 tab 的 y —— 侧配 tab 下方 28px（与其它屏一致）。 */
+    private static final int ORDER_TAB_Y = 34;
+    /**
+     * 「下单」标签页 —— 点开 {@link NetworkOrderWindow}。
+     *
+     * <p>必须留引用：{@code GuiWindowCreatorTab} 关闭窗口时靠 {@code elementSupplier.get()}
+     * 把同一实例重新激活，宿主屏幕也靠它取「正在显示的那一个」面板。</p>
+     */
+    private NetworkOrderTab orderTab;
 
     // Mekanism-style tab positions
     // Left side: config tab
@@ -80,7 +80,6 @@ public final class ElectricGrindingMachineScreen extends GuiMekanism<ElectricGri
         imageHeight = 184;
         inventoryLabelY = 89;
         dynamicSlots = true;
-        wireLocalOrderSource();
     }
 
     @Override
@@ -174,11 +173,11 @@ public final class ElectricGrindingMachineScreen extends GuiMekanism<ElectricGri
                 () -> List.of(Component.translatable("tooltip.mekck.side_config")),
                 this::openSideConfigWindow));
 
-        addRenderableWidget(tab(ORDER_TEXTURE, TAB_X, ORDER_TAB_Y, true,
-                SpecialColors.TAB_CONTAINER_EDIT_MODE,
-                () -> orderMode,
-                () -> List.of(Component.translatable("tooltip.mekck.order_panel")),
-                this::toggleOrderMode));
+        // ME 下单在 Mek 里无对应图标：保留本模组自绘的「清单 + 向下箭头」图标，只取官方染色。
+        // 面板本体已从「屏幕手绘覆盖层」迁进 Mek 虚拟窗口（NetworkOrderWindow），
+        // 本机数据源在窗口创建时注入（见 localOrderSource()）。
+        orderTab = addRenderableWidget(new NetworkOrderTab(this, menu.getBlockPos(),
+                TAB_X, ORDER_TAB_Y, true, localOrderSource(), () -> orderTab));
 
         // ── 右列（2 个）──
         addRenderableWidget(tab(UPGRADE_TEXTURE, imageWidth, UPGRADE_TAB_Y, false,
@@ -243,14 +242,6 @@ public final class ElectricGrindingMachineScreen extends GuiMekanism<ElectricGri
         return rsTab;
     }
 
-    /** ME 下单面板开关（原在 mouseClicked 内联，迁出为 tab 动作）。 */
-    private void toggleOrderMode() {
-        orderMode = !orderMode;
-        if (!orderMode) {
-            mePanel.onClosed();
-        }
-    }
-
     private static String formatItemCount(int count) {
         // 统一走 CountFormat（含十亿档；21 亿不再显示成 2147.5M）
         return cn.ism.mekck.client.CountFormat.compact(count);
@@ -304,42 +295,22 @@ public final class ElectricGrindingMachineScreen extends GuiMekanism<ElectricGri
 
         // 侧栏 4 个 tab 的 tooltip 已迁到 MekCkTabElement#renderToolTip，
         // 由 GuiMekanism#renderLabels 在渲染管线最后一层统一派发。
-
-        // ME 下单面板最后画（在 GUI 文字 / 槽位之上；本屏没有本机下单列表 ⇒ 只有 ME 一侧）
-        if (orderMode) {
-            mePanel.bind(menu.getBlockPos());
-            mePanel.render(guiGraphics, font, leftPos + ORDER_PANEL_LEFT, topPos + ORDER_PANEL_TOP,
-                    imageWidth - ORDER_PANEL_LEFT * 2, imageHeight - ORDER_PANEL_TOP * 2,
-                    mouseX, mouseY, partialTick);
-        }
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (orderMode && mePanel.keyPressed(keyCode, scanCode, modifiers)) return true;
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        if (orderMode && mePanel.charTyped(codePoint, modifiers)) return true;
-        return super.charTyped(codePoint, modifiers);
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (orderMode) return mePanel.mouseScrolled(delta);
-        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     @Override
     public NetworkOrderPanel networkOrderPanel() {
-        return orderMode ? mePanel : null;
+        // 窗口开着 ⇒ 返回窗口里的面板；关着 ⇒ null（回包丢弃，不再灌进已销毁的面板）。
+        return orderTab == null ? null : orderTab.panel();
     }
 
-    /** 本机一侧：配方 / 可做份数按机器输入槽里的材料算，下单走通用订单包。 */
-    private void wireLocalOrderSource() {
-        mePanel.setLocalSource(new NetworkOrderPanel.LocalSource() {
+    /**
+     * 本机一侧：配方 / 可做份数按机器输入槽里的材料算，下单走通用订单包。
+     *
+     * <p>迁到窗口创建时注入（{@link NetworkOrderTab#createWindow()} → {@code setLocalSource}）：
+     * 面板随窗口每次打开重建，数据源必须跟着重建，否则新面板的本机模式是空的。</p>
+     */
+    private NetworkOrderPanel.LocalSource localOrderSource() {
+        return new NetworkOrderPanel.LocalSource() {
             @Override
             public List<Recipe<?>> recipes() {
                 return menu.getMachine().getAvailableRecipes();
@@ -355,7 +326,7 @@ public final class ElectricGrindingMachineScreen extends GuiMekanism<ElectricGri
                 ModMessages.sendToServer(new cn.ism.mekck.network.OrderRecipePacket(
                         menu.getBlockPos(), recipe.getId(), quantity));
             }
-        });
+        };
     }
 
     private void openSideConfigWindow() {
@@ -384,22 +355,8 @@ public final class ElectricGrindingMachineScreen extends GuiMekanism<ElectricGri
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         // 侧栏 4 个 tab 的点击已交给 MekCkTabElement#onClick —— 它们是 renderable widget，
         // 由框架在 super.mouseClicked(...) 里统一派发（含红石 tab 的右键上一档）。
-        // ME 下单：面板点击（面板外点击关闭；左键）。tab 切换已交给 MekCkTabElement。
-        if (button == 0 && orderMode) {
-            int panelX = leftPos + ORDER_PANEL_LEFT;
-            int panelY = topPos + ORDER_PANEL_TOP;
-            int panelW = imageWidth - ORDER_PANEL_LEFT * 2;
-            int panelH = imageHeight - ORDER_PANEL_TOP * 2;
-            mePanel.bind(menu.getBlockPos());
-            if (mouseX >= panelX && mouseX <= panelX + panelW && mouseY >= panelY && mouseY <= panelY + panelH) {
-                return mePanel.mouseClicked(mouseX, mouseY, button, panelX, panelY, panelW, panelH,
-                        (recipeId, qty) -> ModMessages.sendToServer(new NetworkOrderPacket(
-                                menu.getBlockPos(), recipeId.toString(), qty)));
-            }
-            orderMode = false;
-            mePanel.onClosed();
-            return true;
-        }
+        // 「下单」tab 同理：它开的是 Mek 窗口，窗口内的点击由 GuiMekanism#mouseClicked
+        // 先遍历 windows 派发（窗口在 children() 之前），本屏不再需要任何命中矩形。
         return super.mouseClicked(mouseX, mouseY, button);
     }
 }

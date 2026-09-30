@@ -7,7 +7,6 @@ import cn.ism.mekck.menu.ISideConfigurableMenu;
 import cn.ism.mekck.menu.IUpgradeMenu;
 import cn.ism.mekck.menu.SkeweringMachineMenu;
 import cn.ism.mekck.network.ModMessages;
-import cn.ism.mekck.network.NetworkOrderPacket;
 import cn.ism.mekck.network.OrderRecipePacket;
 import cn.ism.mekck.network.RedstoneControlPacket;
 import cn.ism.mekck.network.SideConfigPacket;
@@ -27,8 +26,6 @@ import mekanism.client.gui.element.slot.GuiVirtualSlot;
 import mekanism.client.gui.element.slot.SlotType;
 import mekanism.common.inventory.container.slot.SlotOverlay;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
-import mekanism.client.gui.element.text.GuiTextField;
-import mekanism.common.util.text.InputValidator;
 import mekanism.client.render.MekanismRenderer;
 import mekanism.client.render.lib.ColorAtlas.ColorRegistryObject;
 import mekanism.common.util.MekanismUtils;
@@ -47,22 +44,16 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMenu> implements NetworkOrderHost {
     private final cn.ism.mekck.client.BigStackHud bigStackHud = new cn.ism.mekck.client.BigStackHud();
     private boolean configMode = false;
-    private boolean orderMode = false;
-    /** 「ME 来源」下单面板（AE 终端风格，未装 AE2 时只显示本机模式）。 */
-    private final NetworkOrderPanel mePanel = new NetworkOrderPanel();
     private static final int AUTO_DIST_Y = 34;
     private static final ResourceLocation SORTING_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "sorting.png");
-    private List<Recipe<?>> availableRecipes;
-    private Recipe<?> selectedRecipe;
-    private int orderQuantity = 1;
-    private int orderScrollOffset = 0;
-    private boolean orderListDirty = true;
-    // §F23：「自定义数量」输入改 Mekanism GuiTextField（同 §F22 范式）；customInputMode 仅作编辑态标记。
-    private boolean customInputMode = false;
-    private GuiTextField qtyField;
 
-    /** 侧栏 tab（MekCkTabElement）——供 {@link #clickTabElement} 在覆盖层分支里做优先派发。 */
-    private final List<MekCkTabElement> tabElements = new java.util.ArrayList<>();
+    /**
+     * 「下单」标签页 —— 点开 {@link NetworkOrderWindow}。
+     *
+     * <p>必须留引用：{@code GuiWindowCreatorTab} 关闭窗口时靠 {@code elementSupplier.get()}
+     * 把同一实例重新激活，宿主屏幕也靠它取「正在显示的那一个」面板。</p>
+     */
+    private NetworkOrderTab orderTab;
 
     // ================== 存储区「单列纵向滚动」（拍板 F1·方案 5） ==================
     /** 存储列相对 GUI 左缘的 x（与左侧 tab 同列，宽 ~24px，塞进缩放 4 的左边距）。 */
@@ -85,14 +76,6 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
     private int orderCancelBtnY = -1;
     private int orderCancelBtnW = 30;
     private int orderCancelBtnH = 14;
-
-    // Order panel layout
-    private static final int ORDER_PANEL_LEFT = 10;
-    private static final int ORDER_PANEL_TOP = 10;
-    private static final int ORDER_PANEL_WIDTH = 150;
-    private static final int ORDER_ENTRY_HEIGHT = 20;
-    private static final int ORDER_LIST_ROWS = 6;
-    private static final int ORDER_LIST_HEIGHT = ORDER_ENTRY_HEIGHT * ORDER_LIST_ROWS;
 
     // Mekanism-style tab positions
     // Left side: config tab
@@ -165,15 +148,6 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
     @Override
     protected void addGuiElements() {
         super.addGuiElements();
-
-        // §F23：自定义数量输入框（敲数字回车提交，DIGIT；默认隐藏，位置由 renderOrderMode resize）
-        qtyField = new GuiTextField(this, 14, 176, 80, 14)
-                .setInputValidator(InputValidator.DIGIT)
-                .configureDigitalBorderInput(this::commitQty);
-        qtyField.setMaxLength(9);
-        qtyField.setText("");
-        qtyField.setVisible(false);
-        addRenderableWidget(qtyField);
 
         // 3 input slots: 1 row x 3 columns
         for (int col = 0; col < INPUT_COLS; col++) {
@@ -285,9 +259,27 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
                 () -> configMode, SpecialColors.TAB_CONFIGURATION,
                 "tooltip.mekck.side_config", () -> configMode = !configMode);
 
-        addTab(MachineTabIcons.ORDER, TAB_X, AUTO_DIST_Y, true,
-                () -> orderMode, SpecialColors.TAB_CONTAINER_EDIT_MODE,
-                "tooltip.mekck.order_panel", this::toggleOrderMode);
+        // ME 下单在 Mek 里无对应图标：保留本模组自绘的「清单 + 向下箭头」图标，只取官方染色。
+        // 面板本体已从「屏幕手绘覆盖层」迁进 Mek 虚拟窗口（NetworkOrderWindow）。
+        // 旧版「本机」一侧是 renderOrderMode/handleOrderClick 手绘的深色列表，现已删除：
+        // 面板的「本机 / ME」两档共用同一套网格 / 搜索 / 数量 / 缺料 UI，本机档改由
+        // localOrderSource() 供数据（配方 / 可做份数 / 下单通道与旧手绘版逐条同源）。
+        // 顺带修掉一个旧缺陷：旧 mePanel 是 new NetworkOrderPanel()（localMode=true）却从未
+        // setLocalSource，所以它的「本机」档恒显示「机器里没有可做的材料」。
+        orderTab = addRenderableWidget(new NetworkOrderTab(this, menu.getBlockPos(),
+                TAB_X, AUTO_DIST_Y, true, localOrderSource(), () -> orderTab) {
+            /**
+             * 旧 {@code toggleOrderMode} 在开/关下单面板时顺带把配置覆盖层收起
+             * （{@code configMode = false}）。窗口化后 tab 的点击由 {@code GuiWindowCreatorTab#onClick}
+             * 处理，屏幕拿不到这个时机，所以在这里补回同一副作用 —— 否则配置覆盖层会留在
+             * 下单窗口背后，两层 UI 叠在一起。
+             */
+            @Override
+            public void onClick(double mouseX, double mouseY, int button) {
+                configMode = false;
+                super.onClick(mouseX, mouseY, button);
+            }
+        });
 
         // ── 右列（2 个）──
         addTab(UPGRADE_TEXTURE, imageWidth, UPGRADE_TAB_Y, false,
@@ -300,14 +292,13 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
         redstoneTab();
     }
 
-    /** 注册一个侧栏 tab（几何 24/16，MekCkTabElement 常量）并记入 {@link #tabElements}。 */
+    /** 注册一个侧栏 tab（几何 26/18，MekCkTabElement 常量）。 */
     private MekCkTabElement addTab(ResourceLocation icon, int relX, int relY, boolean left,
             BooleanSupplier selected, ColorRegistryObject tint, String tooltipKey, Runnable action) {
         MekCkTabElement tab = new MekCkTabElement(this, icon, relX, relY, left,
                 MekCkTabElement.OUTER, MekCkTabElement.INNER,
                 selected, tint, () -> List.of(Component.translatable(tooltipKey)), action, null);
         addRenderableWidget(tab);
-        tabElements.add(tab);
         return tab;
     }
 
@@ -351,36 +342,7 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
             }
         });
         addRenderableWidget(tab);
-        tabElements.add(tab);
         return tab;
-    }
-
-    /** ME 下单面板开关（原在 mouseClicked 内联，迁出为 tab 动作）。 */
-    private void toggleOrderMode() {
-        orderMode = !orderMode;
-        if (orderMode) {
-            orderListDirty = true;
-        } else {
-            mePanel.onClosed();
-        }
-        configMode = false;
-    }
-
-    /**
-     * 侧栏 tab 的**优先**派发：只在本屏的 tab 列表里倒序找第一个命中者。
-     * <p>旧手绘版的 tab 命中分支写在 {@code mouseClicked} 最前面，优先于 {@code orderMode} 那个
-     * 「吞掉整次左键」的覆盖层分支；tab 变成 widget 后该分支会先于 {@code super.mouseClicked} 返回，
-     * 因此这里必须补一次定向派发，否则「下单面板开着时点侧栏 tab 关面板 / 开升级窗」就废了。
-     * 命中判定与动作完全走 {@link MekCkTabElement} 自己的 {@code mouseClicked}，与框架对
-     * {@code children()} 的派发同语义（含 tab 之间的优先级：越晚注册越优先）。</p>
-     */
-    private boolean clickTabElement(double mouseX, double mouseY, int button) {
-        for (int i = tabElements.size() - 1; i >= 0; i--) {
-            if (tabElements.get(i).mouseClicked(mouseX, mouseY, button)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -564,15 +526,8 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
         int x = leftPos;
         int y = topPos;
 
-        // Order mode overlay
-        if (orderMode) {
-            renderOrderMode(guiGraphics, x, y, mouseX, mouseY);
-        } else if (qtyField != null) {
-            qtyField.setVisible(false); // 退下单面板时收起自定义输入框
-        }
-
-        // Order progress display (when order is active and not in order mode)
-        if (!orderMode && menu.getOrderQuantity() > 0) {
+        // Order progress display
+        if (menu.getOrderQuantity() > 0) {
             int orderPanelX = x + 5;
             int orderPanelY = y + 5;
             int orderQty = menu.getOrderQuantity();
@@ -604,130 +559,6 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
 
         // 侧栏 4 个 tab 的 tooltip 已迁到 MekCkTabElement#renderToolTip，
         // 由 GuiMekanism#renderLabels 在渲染管线最后一层统一派发。
-    }
-
-    private void renderOrderMode(GuiGraphics guiGraphics, int x, int y, int mouseX, int mouseY) {
-        int panelX = x + ORDER_PANEL_LEFT;
-        int panelY = y + ORDER_PANEL_TOP;
-        int panelW = imageWidth - ORDER_PANEL_LEFT * 2;
-        int panelH = imageHeight - ORDER_PANEL_TOP * 2;
-
-        // ME 来源：整块换成 AE 终端风格面板（本机模式代码原样保留在下面）
-        mePanel.bind(menu.getBlockPos());
-        if (mePanel.isMe()) {
-            mePanel.render(guiGraphics, font, panelX, panelY, panelW, panelH, mouseX, mouseY, 0f);
-            return;
-        }
-
-        guiGraphics.fill(panelX, panelY, panelX + panelW, panelY + panelH, 0xCC000000);
-        guiGraphics.drawString(font, "下单", panelX + 4, panelY + 4, 0xFFFFFFFF);
-
-        if (orderListDirty) {
-            availableRecipes = menu.getMachine().getAvailableRecipes();
-            orderListDirty = false;
-            // 列表可能在两次刷新之间变短（玩家把材料取走），偏移必须跟着回夹，
-            // 否则下面的 recipeIdx 会变成负数。
-            orderScrollOffset = clampOrderScroll(orderScrollOffset, availableRecipes.size());
-        }
-
-        int listTop = panelY + 16;
-        int listBottom = listTop + ORDER_LIST_HEIGHT;
-        int listWidth = panelW - 8;
-
-        int visibleCount = Math.min(ORDER_LIST_ROWS, availableRecipes.size() - orderScrollOffset);
-        for (int i = 0; i < visibleCount; i++) {
-            int recipeIdx = orderScrollOffset + i;
-            // 上下界都要判：只判上界时，负的 orderScrollOffset 会直接落到 List.get(负数)。
-            if (recipeIdx < 0 || recipeIdx >= availableRecipes.size()) continue;
-
-            Recipe<?> recipe = availableRecipes.get(recipeIdx);
-            int entryY = listTop + i * ORDER_ENTRY_HEIGHT;
-            boolean isSelected = recipe == selectedRecipe;
-
-            int entryColor = isSelected ? 0x884488FF : 0x44444444;
-            guiGraphics.fill(panelX + 2, entryY, panelX + listWidth, entryY + ORDER_ENTRY_HEIGHT - 1, entryColor);
-
-            ItemStack result = recipe.getResultItem(minecraft.level.registryAccess());
-            if (!result.isEmpty()) {
-                guiGraphics.renderItem(result, panelX + 4, entryY + 2);
-            }
-
-            String name = result.isEmpty() ? "Unknown" : result.getHoverName().getString();
-            if (font.width(name) > listWidth - 50) {
-                name = font.plainSubstrByWidth(name, listWidth - 50) + "...";
-            }
-            guiGraphics.drawString(font, name, panelX + 24, entryY + 4, 0xFFFFFFFF);
-        }
-
-        if (orderScrollOffset > 0) {
-            guiGraphics.drawString(font, "↑", panelX + listWidth - 10, listTop, 0xFFFFFFFF);
-        }
-        if (orderScrollOffset + ORDER_LIST_ROWS < availableRecipes.size()) {
-            guiGraphics.drawString(font, "↓", panelX + listWidth - 10, listBottom - 10, 0xFFFFFFFF);
-        }
-
-        int qtyY = listBottom + 4;
-        guiGraphics.drawString(font, "数量: " + orderQuantity, panelX + 4, qtyY, 0xFFFFFFFF);
-
-        int qtyBtnX = panelX + 4;
-        int qtyBtnY = qtyY + 10;
-        int qtyBtnW = 24;
-        int qtyBtnH = 14;
-        String[] qtyLabels = {"1", "16", "32", "64", "自", "Max"};
-        int[] qtyValues = {1, 16, 32, 64, -1, -2};
-        for (int i = 0; i < qtyLabels.length; i++) {
-            int bx = qtyBtnX + i * (qtyBtnW + 2);
-            boolean hovered = mouseX >= bx && mouseX < bx + qtyBtnW && mouseY >= qtyBtnY && mouseY < qtyBtnY + qtyBtnH;
-            int color = hovered ? 0xFF4488FF : 0xFF444444;
-            // Highlight current custom input mode
-            if (qtyValues[i] == -1 && customInputMode) {
-                color = 0xFF44AA44;
-            }
-            guiGraphics.fill(bx, qtyBtnY, bx + qtyBtnW, qtyBtnY + qtyBtnH, color);
-            String label = qtyLabels[i];
-            int labelW = font.width(label);
-            guiGraphics.drawString(font, label, bx + (qtyBtnW - labelW) / 2, qtyBtnY + 3, 0xFFFFFFFF);
-        }
-
-        // Custom input text field（§F23：DIY 白框改 GuiTextField 自绘，这里同步可见性并按本面板位移动）
-        if (qtyField != null) {
-            qtyField.setVisible(customInputMode);
-            if (customInputMode) {
-                qtyField.resize(qtyBtnX - leftPos, qtyBtnY + qtyBtnH + 2 - topPos, 80, 14);
-            }
-        }
-
-        // Max quantity hint
-        if (selectedRecipe != null) {
-            int maxQty = menu.getMachine().getMaxConsumableCountForOrder(selectedRecipe);
-            if (maxQty > 0) {
-                String maxText = "最大: " + maxQty;
-                guiGraphics.drawString(font, maxText, qtyBtnX, qtyBtnY + qtyBtnH + 2, 0xFFAAAAAA);
-            }
-        }
-
-        int confirmBtnY = qtyBtnY + qtyBtnH + 6;
-        int confirmBtnW = 60;
-        int confirmBtnH = 18;
-        int confirmBtnX = panelX + (panelW - confirmBtnW) / 2;
-        boolean confirmHovered = mouseX >= confirmBtnX && mouseX < confirmBtnX + confirmBtnW
-                && mouseY >= confirmBtnY && mouseY < confirmBtnY + confirmBtnH;
-        int confirmColor = confirmHovered ? 0xFF44AA44 : 0xFF228822;
-        guiGraphics.fill(confirmBtnX, confirmBtnY, confirmBtnX + confirmBtnW, confirmBtnY + confirmBtnH, confirmColor);
-        String confirmText = "确认下单";
-        int confirmTextW = font.width(confirmText);
-        guiGraphics.drawString(font, confirmText, confirmBtnX + (confirmBtnW - confirmTextW) / 2, confirmBtnY + 4, 0xFFFFFFFF);
-
-        int cancelBtnX = confirmBtnX + confirmBtnW + 4;
-        boolean cancelHovered = mouseX >= cancelBtnX && mouseX < cancelBtnX + confirmBtnW
-                && mouseY >= confirmBtnY && mouseY < confirmBtnY + confirmBtnH;
-        int cancelColor = cancelHovered ? 0xFFAA4444 : 0xFF882222;
-        guiGraphics.fill(cancelBtnX, confirmBtnY, cancelBtnX + confirmBtnW, confirmBtnY + confirmBtnH, cancelColor);
-        String cancelText = "取消";
-        int cancelTextW = font.width(cancelText);
-        guiGraphics.drawString(font, cancelText, cancelBtnX + (confirmBtnW - cancelTextW) / 2, confirmBtnY + 4, 0xFFFFFFFF);
-        // 来源切换按钮**最后画**（本机列表会盖住它，点击判定仍在前面）
-        mePanel.renderModeButtons(guiGraphics, font, panelX, panelY, panelW, mouseX, mouseY);
     }
 
     private void openSideConfigWindow() {
@@ -765,9 +596,6 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
-            int x = leftPos;
-            int y = topPos;
-
             // configMode 下左键必被消费（与旧 handleConfigClick 一致）：方向格 / 「完成」是真
             // widget，由 super.mouseClicked 命中（注册在虚拟槽之后，见 addGuiElements）；
             // 空白处的左键则被这里吞掉，不落到主界面的输入 / 电源虚拟槽。
@@ -775,16 +603,6 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
             if (configMode) {
                 super.mouseClicked(mouseX, mouseY, button);
                 return true;
-            }
-
-            // If in order mode, handle order clicks
-            // 旧手绘版的 tab 命中分支在覆盖层之前；tab 变成 widget 后这里要先补一次定向派发，
-            // 否则「面板开着时点侧栏 tab 关面板 / 开升级窗 / 切侧配」会被面板吞掉。语义与旧版逐条一致。
-            if (orderMode) {
-                if (clickTabElement(mouseX, mouseY, button)) {
-                    return true;
-                }
-                return handleOrderClick(mouseX, mouseY, x, y);
             }
 
             // Cancel order button
@@ -796,64 +614,20 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
         }
         // 侧栏 4 个 tab（侧配 / 下单 / 升级 / 红石）的点击交给 MekCkTabElement#onClick —— 它们是
         // renderable widget，由框架在 super.mouseClicked(...) 里统一派发（含红石 tab 的右键上一档）。
+        // 「下单」tab 开的是 Mek 窗口，窗口内的点击由 GuiMekanism#mouseClicked 先遍历 windows 派发
+        // （窗口在 children() 之前），所以旧版那份「面板开着时先定向派发 tab」的补丁已随面板一起删除。
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (orderMode && mePanel.isMe() && mePanel.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        // §F23：Enter/Backspace/数字全交 GuiTextField（回车经 configureDigitalBorderInput → commitQty）；
-        // 只保留 Escape 取消（与旧 DIY 一致，并阻止原版 Esc 直接关 GUI）。
-        if (customInputMode && keyCode == 256) {
-            exitCustomInput();
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (orderMode && mePanel.isMe() && mePanel.charTyped(codePoint, modifiers)) {
-            return true;
-        }
-        // §F23：数字接收改由 GuiTextField（DIGIT 校验）处理。
         return super.charTyped(codePoint, modifiers);
-    }
-
-    /** §F23：敲数字回车提交：正整数且 >0 生效；空/非法/0 保持原值并退出编辑（等价旧 DIY Enter 行为）。 */
-    private void commitQty() {
-        String t = qtyField.getText();
-        if (!t.isEmpty()) {
-            try {
-                int val = Integer.parseInt(t);
-                if (val > 0) {
-                    orderQuantity = val;
-                }
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        exitCustomInput();
-    }
-
-    /** 退出自定义输入态：清文本、隐控件、交还焦点。 */
-    private void exitCustomInput() {
-        customInputMode = false;
-        if (qtyField != null) {
-            qtyField.setText("");
-            qtyField.setVisible(false);
-            qtyField.setFocused(false);
-        }
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (orderMode && mePanel.isMe()) {
-            return mePanel.mouseScrolled(delta);
-        }
-        // 存储单列滚动：仅在非各 overlay 模式且鼠标悬停列上时接，避免与 ME 面板抢滚轮。
-        if (!orderMode && !configMode && storageMaxScroll > 0 && isMouseOverStorageColumn(mouseX, mouseY)) {
+        // 存储单列滚动：仅在非配置覆盖层且鼠标悬停列上时接，避免与 Mek 窗口抢滚轮。
+        if (!configMode && storageMaxScroll > 0 && isMouseOverStorageColumn(mouseX, mouseY)) {
             int step = delta > 0 ? -1 : 1; // 向上滚看更早的行
             int next = Math.max(0, Math.min(storageMaxScroll, storageScrollOffset + step));
             if (next != storageScrollOffset) {
@@ -867,152 +641,35 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
 
     @Override
     public NetworkOrderPanel networkOrderPanel() {
-        return orderMode ? mePanel : null;
+        // 窗口开着 ⇒ 返回窗口里的面板；关着 ⇒ null（回包丢弃，不再灌进已销毁的面板）。
+        return orderTab == null ? null : orderTab.panel();
     }
 
     /**
-     * 把下单列表的滚动偏移夹进合法区间 {@code [0, max(0, size - ORDER_LIST_ROWS)]}。
+     * 本机一侧：配方 / 可做份数按机器输入槽里的材料算，下单走通用订单包。
      *
-     * <p><b>下界不能省</b>：配方数少于 {@link #ORDER_LIST_ROWS} 时
-     * {@code size - ORDER_LIST_ROWS} 是负数，直接 {@code Math.min} 会把偏移写成负数，
-     * 下一帧渲染就 {@code List.get(负数)} 抛 {@code IndexOutOfBoundsException} 崩客户端。
-     * 上界同理——列表变短（玩家取走材料）后旧偏移会越界。</p>
+     * <p>与旧手绘本机列表（{@code renderOrderMode} / {@code handleOrderClick}）逐条同源：
+     * 列表取 {@code getAvailableRecipes()}、上限取 {@code getMaxConsumableCountForOrder()}、
+     * 确认下单发 {@code OrderRecipePacket}。迁到窗口创建时注入
+     * （{@link NetworkOrderTab#createWindow()} → {@code setLocalSource}）：面板随窗口每次打开重建，
+     * 数据源必须跟着重建，否则新面板的本机模式是空的。</p>
      */
-    private static int clampOrderScroll(int offset, int size) {
-        return Math.max(0, Math.min(Math.max(0, size - ORDER_LIST_ROWS), offset));
-    }
-
-    private boolean handleOrderClick(double mouseX, double mouseY, int x, int y) {
-        int panelX = x + ORDER_PANEL_LEFT;
-        int panelY = y + ORDER_PANEL_TOP;
-        int panelW = imageWidth - ORDER_PANEL_LEFT * 2;
-        int panelH = imageHeight - ORDER_PANEL_TOP * 2;
-
-        if (mouseX < panelX || mouseX > panelX + panelW || mouseY < panelY || mouseY > panelY + panelH) {
-            orderMode = false;
-            mePanel.onClosed();
-            return true;
-        }
-
-        // ME 来源：整块交给共用面板（几何与渲染共用）
-        mePanel.bind(menu.getBlockPos());
-        if (mePanel.isMe()) {
-            return mePanel.mouseClicked(mouseX, mouseY, 0, panelX, panelY, panelW, panelH,
-                    (recipeId, qty) -> ModMessages.sendToServer(
-                            new NetworkOrderPacket(menu.getBlockPos(), recipeId.toString(), qty)));
-        }
-        if (mePanel.handleModeClick(mouseX, mouseY, panelX, panelY, panelW)) {
-            return true;
-        }
-
-        int listTop = panelY + 16;
-        int listWidth = panelW - 8;
-
-        for (int i = 0; i < ORDER_LIST_ROWS; i++) {
-            int recipeIdx = orderScrollOffset + i;
-            // 与渲染循环同一条判据：负下标同样会落到 List.get(负数)。
-            if (recipeIdx < 0 || recipeIdx >= availableRecipes.size()) continue;
-
-            int entryY = listTop + i * ORDER_ENTRY_HEIGHT;
-            if (mouseX >= panelX + 2 && mouseX < panelX + listWidth
-                    && mouseY >= entryY && mouseY < entryY + ORDER_ENTRY_HEIGHT - 1) {
-                selectedRecipe = availableRecipes.get(recipeIdx);
-                orderQuantity = 1;
-                return true;
+    private NetworkOrderPanel.LocalSource localOrderSource() {
+        return new NetworkOrderPanel.LocalSource() {
+            @Override
+            public List<Recipe<?>> recipes() {
+                return menu.getMachine().getAvailableRecipes();
             }
-        }
 
-        // Scroll up
-        if (mouseX >= panelX + listWidth - 12 && mouseX < panelX + listWidth
-                && mouseY >= listTop && mouseY < listTop + 10) {
-            orderScrollOffset = Math.max(0, orderScrollOffset - 1);
-            return true;
-        }
-        // Scroll down
-        int listBottom = listTop + ORDER_LIST_HEIGHT;
-        if (mouseX >= panelX + listWidth - 12 && mouseX < panelX + listWidth
-                && mouseY >= listBottom - 10 && mouseY < listBottom) {
-            // 必须走 clampOrderScroll：配方数少于 ORDER_LIST_ROWS 时
-            // `size - ORDER_LIST_ROWS` 是负数，直接 Math.min 会把偏移写成负数，
-            // 下一帧渲染就 List.get(负数) 崩客户端。热区在配方行下方、行循环提前 break
-            // 之后才判，所以这条路径是可达的。
-            orderScrollOffset = clampOrderScroll(orderScrollOffset + 1, availableRecipes.size());
-            return true;
-        }
-
-        // Quantity buttons
-        int qtyY = listBottom + 4;
-        int qtyBtnX = panelX + 4;
-        int qtyBtnY = qtyY + 10;
-        int qtyBtnW = 24;
-        int qtyBtnH = 14;
-        int[] qtyValues = {1, 16, 32, 64, -1, -2};
-        for (int i = 0; i < qtyValues.length; i++) {
-            int bx = qtyBtnX + i * (qtyBtnW + 2);
-            if (mouseX >= bx && mouseX < bx + qtyBtnW && mouseY >= qtyBtnY && mouseY < qtyBtnY + qtyBtnH) {
-                int val = qtyValues[i];
-                if (val == -1) {
-                    // §F23：切换编辑态；显示控件并把焦点交给文本框
-                    customInputMode = !customInputMode;
-                    if (qtyField != null) {
-                        qtyField.setVisible(customInputMode);
-                        qtyField.setFocused(customInputMode);
-                        if (!customInputMode) {
-                            qtyField.setText("");
-                        }
-                    }
-                } else if (val == -2) {
-                    // Max - calculate from available materials
-                    if (selectedRecipe != null) {
-                        int maxQty = menu.getMachine().getMaxConsumableCountForOrder(selectedRecipe);
-                        orderQuantity = Math.max(1, maxQty);
-                    }
-                } else {
-                    exitCustomInput();
-                    orderQuantity = val;
-                }
-                return true;
+            @Override
+            public int maxCraftable(Recipe<?> recipe) {
+                return menu.getMachine().getMaxConsumableCountForOrder(recipe);
             }
-        }
 
-        // Handle custom input click
-        if (customInputMode) {
-            int inputX = qtyBtnX;
-            int inputY = qtyBtnY + qtyBtnH + 2;
-            int inputW = 80;
-            int inputH = 14;
-            if (mouseX >= inputX && mouseX < inputX + inputW && mouseY >= inputY && mouseY < inputY + inputH) {
-                // Focus already on custom input
-                return true;
+            @Override
+            public void order(Recipe<?> recipe, int quantity) {
+                ModMessages.sendToServer(new OrderRecipePacket(menu.getBlockPos(), recipe.getId(), quantity));
             }
-        }
-
-        int confirmBtnY = qtyBtnY + qtyBtnH + 6;
-        int confirmBtnW = 60;
-        int confirmBtnH = 18;
-        int confirmBtnX = panelX + (panelW - confirmBtnW) / 2;
-
-        if (mouseX >= confirmBtnX && mouseX < confirmBtnX + confirmBtnW
-                && mouseY >= confirmBtnY && mouseY < confirmBtnY + confirmBtnH) {
-            if (selectedRecipe != null && orderQuantity > 0) {
-                ResourceLocation recipeId = selectedRecipe.getId();
-                ModMessages.sendToServer(new OrderRecipePacket(menu.getBlockPos(), recipeId, orderQuantity));
-                orderMode = false;
-                selectedRecipe = null;
-                orderQuantity = 1;
-            }
-            return true;
-        }
-
-        int cancelBtnX = confirmBtnX + confirmBtnW + 4;
-        if (mouseX >= cancelBtnX && mouseX < cancelBtnX + confirmBtnW
-                && mouseY >= confirmBtnY && mouseY < confirmBtnY + confirmBtnH) {
-            orderMode = false;
-            selectedRecipe = null;
-            orderQuantity = 1;
-            return true;
-        }
-
-        return true;
+        };
     }
 }

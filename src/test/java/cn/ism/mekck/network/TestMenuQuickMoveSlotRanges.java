@@ -51,6 +51,11 @@ import static org.junit.Assert.assertTrue;
  * {@code SkeweringMachineMenu} / {@code SmartCookingPotMenu} 拿 <b>handler 常量</b>
  * {@code SLOT_POWER}（=5 / 5 / 89 / 92）当<b>菜单下标</b>，于是区间落在玩家背包第 0 格。
  *
+ * <p><b>{@code GrillMenu} 已不在 {@link #MENUS} 表里</b>：烧烤架迁到 Mek 原生
+ * {@code TileEntityConfigurableMachine} 体系后，{@code GrillMenu} 不再手写
+ * {@code quickMoveStack}（由 {@code MekanismContainer} 接管），本类的四条断言对它已无对象。
+ * 它上面的历史缺陷记录保留，因为那是 A3 这条规则的来源。</p>
+ *
  * <h3>为什么一部分断言只能读源码</h3>
  * 真菜单造不出来：{@code AbstractContainerMenu} 的子类构造链要 {@code MenuType}、
  * {@code BlockEntityType} 与 Mek 的 {@code Attribute} 注册表，裸 JVM 里到不了。
@@ -250,7 +255,6 @@ public class TestMenuQuickMoveSlotRanges {
      */
     private static final Set<String> POWER_SLOT_TARGET_MUST_BE_CAPTURED_FIELD = set(
             "ElectricGrindingMachineMenu.java",
-            "GrillMenu.java",
             "SimpleMachineMenu.java",
             "SkeweringMachineMenu.java",
             "SmartCookingPotMenu.java",
@@ -330,8 +334,6 @@ public class TestMenuQuickMoveSlotRanges {
                             + "target = FERRERO_SLOT_BASE(6) + 档位序号，上界由 ferreroTargetStaysInsideBoundary 数值验证"),
             new Menu("ElectricGrindingMachineMenu.java", 5, set("powerSlotIndex"), map(),
                     "输入/输出/速度/能量/能源"),
-            new Menu("GrillMenu.java", 5, set("powerSlotIndex"), map(),
-                    "输入/输出/速度/能量/能源（能源槽曾被漏算，见 A3）"),
             new Menu("IceFactoryMenu.java", -1, set("powerSlotIndex", "creativeSlotIndex"),
                     map("speedIdx", "int speedIdx = processes * 2;",
                             "energyIdx", "int energyIdx = speedIdx + 1;",

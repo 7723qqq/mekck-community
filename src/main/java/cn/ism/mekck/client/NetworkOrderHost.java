@@ -12,8 +12,10 @@ import javax.annotation.Nullable;
  *
  * <p>两种实现方式：</p>
  * <ul>
- *   <li>共用面板（烧烤工厂 / 智能穿串机 / 智能厨锅 / 中央厨房下单窗）：返回
- *       {@link NetworkOrderPanel} 实例，回包直接投给面板；</li>
+ *   <li>共用面板（烧烤架 / 智能穿串机 / 智能厨锅 / 中央厨房下单窗…）：面板装在 Mek 虚拟窗口
+ *       （{@link NetworkOrderWindow}）里，由 {@link NetworkOrderTab} 打开。屏幕返回
+ *       {@code orderTab.panel()} —— <b>窗口开着才有面板，关着返回 null</b>，
+ *       回包直接投给面板；</li>
  *   <li>自绘 ME 面板（烹饪工厂 / 穿串工厂，代码已验收）：{@link #networkOrderPanel()} 返回
  *       {@code null}，改为覆写 {@link #setNetworkMissing} 接收缺料清单回包。</li>
  * </ul>

@@ -85,6 +85,51 @@
                   "op": "replace",
                   "source": "MekckPlacerUuid",
                   "target": "mekData.MekckPlacerUuid"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekckAe2Main",
+                  "target": "mekData.MekckAe2Main"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekckAe2Extra1",
+                  "target": "mekData.MekckAe2Extra1"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekckAe2Extra2",
+                  "target": "mekData.MekckAe2Extra2"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekckAe2Extra3",
+                  "target": "mekData.MekckAe2Extra3"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekckAe2Extra4",
+                  "target": "mekData.MekckAe2Extra4"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekckAe2Extra5",
+                  "target": "mekData.MekckAe2Extra5"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekckAe2Extra6",
+                  "target": "mekData.MekckAe2Extra6"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekckAe2Extra7",
+                  "target": "mekData.MekckAe2Extra7"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekCkAutoSel",
+                  "target": "mekData.MekCkAutoSel"
                 }
               ]
             }

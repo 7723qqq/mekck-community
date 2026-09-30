@@ -62,12 +62,12 @@ public class TestBioreactorObjAsset {
 
     @Test
     public void triangleCountsMatchTheSourceJsonModels() throws IOException {
-        // Deep Mek 高精硬表面模型（各层在降面不减配下的三角形数）
+        // True Mek 高精硬表面重工业模型（各层在重构优化下的三角形数）
         Map<String, float[]> groups = parseAsset();
-        assertEquals(4778, countTriangles(groups, "bioreactor_layer0"));
-        assertEquals(2529, countTriangles(groups, "bioreactor_layer1"));
-        assertEquals(3707, countTriangles(groups, "bioreactor_layer2"));
-        assertEquals(11014, countTriangles(groups));
+        assertEquals(928, countTriangles(groups, "bioreactor_layer0"));
+        assertEquals(1190, countTriangles(groups, "bioreactor_layer1"));
+        assertEquals(1228, countTriangles(groups, "bioreactor_layer2"));
+        assertEquals(3346, countTriangles(groups));
     }
 
     @Test
