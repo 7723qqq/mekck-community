@@ -40,6 +40,10 @@ public class NetworkMissingPacket {
         NetworkEvent.Context ctx = context.get();
         // ⚠️ 同 NetworkRecipeListPacket：本类在双端都要链接，客户端符号必须隔离。
         // 背景与同类事故见 util/ClientPacketBridge 的类注释。
+        if (!PacketGuard.fromServer("NetworkMissingPacket", ctx)) {
+            ctx.setPacketHandled(true);
+            return;
+        }
         ctx.enqueueWork(() -> ClientPacketBridge.applyMissing(
                 packet.pos, packet.recipeId, packet.quantity, packet.text));
         ctx.setPacketHandled(true);

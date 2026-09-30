@@ -541,18 +541,16 @@ public class JEIPlugin implements IModPlugin {
         registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.WINE_CELLAR_BLOCK.get()), WINE_CELLAR_TYPE);
 
         // Register all cutting machines as catalysts for the cutting recipe type
+        //
+        // 一律走 FACTORY_BLOCKS 遍历，**不要**改成逐档枚举常量：这里原本手写了 11 行
+        // BASIC…SINGULARITY，唯独漏了 BLAZE ⇒ 烈焰等级的切菜工厂在 JEI 里查不到催化剂。
+        // 同一个「手写档位清单漏 BLAZE」的缺陷在 IceFactoryBlock 已经炸过一次
+        // （2026-09-16，放置时抛 IllegalArgumentException），此处是第二次复现。
+        // 护栏：TestJeiCatalystCoverage#cuttingCatalystsCoverEveryTier。
         registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.MACHINE_BLOCK.get()), CUTTING_TYPE);
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.BASIC_FACTORY_BLOCK.get()), CUTTING_TYPE);
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.ADVANCED_FACTORY_BLOCK.get()), CUTTING_TYPE);
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.ELITE_FACTORY_BLOCK.get()), CUTTING_TYPE);
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.ULTIMATE_FACTORY_BLOCK.get()), CUTTING_TYPE);
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.ABSOLUTE_FACTORY_BLOCK.get()), CUTTING_TYPE);
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.SUPREME_FACTORY_BLOCK.get()), CUTTING_TYPE);
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.COSMIC_FACTORY_BLOCK.get()), CUTTING_TYPE);
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.INFINITE_FACTORY_BLOCK.get()), CUTTING_TYPE);
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.CRYSTAL_MATRIX_FACTORY_BLOCK.get()), CUTTING_TYPE);
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.NEBULA_FACTORY_BLOCK.get()), CUTTING_TYPE);
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.SINGULARITY_FACTORY_BLOCK.get()), CUTTING_TYPE);
+        for (var entry : UniversalCuttingMachine.FACTORY_BLOCKS.entrySet()) {
+            registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), CUTTING_TYPE);
+        }
 
         // Register all cooking machines as catalysts for the cooking recipe type
         registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.COOKING_POT_BLOCK.get()), COOKING_TYPE);

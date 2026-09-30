@@ -835,10 +835,15 @@ public final class UniversalCuttingMachine {
     // ⚠️ 切菜工厂的**实际注册**在下面 CUTTING_FACTORY_*_REG 那一组（Mek 的 BlockDeferredRegister /
     //    TileEntityTypeDeferredRegister / ContainerTypeDeferredRegister），注册 ID 不变
     //    （仍是 mekck:<tier>_cutting_factory），因此旧存档里已放置的方块不会变成空气。
-    //    下面这三个 map/字段保留旧类型不变，是**给本任务之外的文件用的兼容面**：
-    //    TierInstallerHandler 按 Map<..., RegistryObject<Block>> 读 FACTORY_BLOCKS，
-    //    JEIPlugin 按 .get() 读 BASIC_FACTORY_BLOCK 等。它们现在装的是
-    //    registryView(...) 造出来的同名注册项视图，语义与原来完全一致。
+    //    下面这两个 map 保留旧类型不变，是**给本任务之外的文件用的兼容面**：
+    //    TierInstallerHandler 与 JEIPlugin 一律按 Map<..., RegistryObject<Block>> 遍历读取。
+    //    它们现在装的是 registryView(...) 造出来的同名注册项视图，语义与原来完全一致。
+    //
+    // ⚠️ 这里**没有** 11 个 BASIC_FACTORY_BLOCK / ADVANCED_FACTORY_BLOCK 之类的逐档别名字段。
+    //    它们此前存在且恰好只有 11 个（唯独没有 BLAZE），于是 JEPlugin 的切菜催化剂注册
+    //    顺着手写成了 11 行 —— 烈焰等级的切菜工厂在 JEI 里查不到。别名字段一旦没人读，
+    //    留着就只会诱导下一个人再手写一遍档位清单。要单档引用请写
+    //    `FACTORY_BLOCKS.get(CuttingMachineFactoryTier.XXX)`。
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Block>> FACTORY_BLOCKS = new LinkedHashMap<>();
     public static final Map<CuttingMachineFactoryTier, RegistryObject<Item>> FACTORY_ITEMS = new LinkedHashMap<>();
 
@@ -855,38 +860,9 @@ public final class UniversalCuttingMachine {
     //    全部仍被其余 6 个家族的旧 BlockEntity 真实使用（各 XxxFactoryBlock.getTileType
     //    与 XxxFactoryBlockEntity 构造都按名读它们），删任何一个都会编译断。
 
-    public static final RegistryObject<Block> BASIC_FACTORY_BLOCK;
-    public static final RegistryObject<Item> BASIC_FACTORY_ITEM;
-
-    public static final RegistryObject<Block> ADVANCED_FACTORY_BLOCK;
-    public static final RegistryObject<Item> ADVANCED_FACTORY_ITEM;
-
-    public static final RegistryObject<Block> ELITE_FACTORY_BLOCK;
-    public static final RegistryObject<Item> ELITE_FACTORY_ITEM;
-
-    public static final RegistryObject<Block> ULTIMATE_FACTORY_BLOCK;
-    public static final RegistryObject<Item> ULTIMATE_FACTORY_ITEM;
-
-    public static final RegistryObject<Block> ABSOLUTE_FACTORY_BLOCK;
-    public static final RegistryObject<Item> ABSOLUTE_FACTORY_ITEM;
-
-    public static final RegistryObject<Block> SUPREME_FACTORY_BLOCK;
-    public static final RegistryObject<Item> SUPREME_FACTORY_ITEM;
-
-    public static final RegistryObject<Block> COSMIC_FACTORY_BLOCK;
-    public static final RegistryObject<Item> COSMIC_FACTORY_ITEM;
-
-    public static final RegistryObject<Block> INFINITE_FACTORY_BLOCK;
-    public static final RegistryObject<Item> INFINITE_FACTORY_ITEM;
-
-    public static final RegistryObject<Block> CRYSTAL_MATRIX_FACTORY_BLOCK;
-    public static final RegistryObject<Item> CRYSTAL_MATRIX_FACTORY_ITEM;
-
-    public static final RegistryObject<Block> NEBULA_FACTORY_BLOCK;
-    public static final RegistryObject<Item> NEBULA_FACTORY_ITEM;
-
-    public static final RegistryObject<Block> SINGULARITY_FACTORY_BLOCK;
-    public static final RegistryObject<Item> SINGULARITY_FACTORY_ITEM;
+    // 逐档别名字段（BASIC_FACTORY_BLOCK / … / SINGULARITY_FACTORY_ITEM 共 22 个）已删除：
+    // 实测全仓零读取方，且恰好缺 BLAZE 一档，是 JEI 切菜催化剂漏档的直接诱因。
+    // 需要单档引用时写 FACTORY_BLOCKS.get(CuttingMachineFactoryTier.XXX)。
 
     public static final RegistryObject<MenuType<CuttingMachineFactoryMenu>> FACTORY_MENU;
 
@@ -1017,39 +993,9 @@ public final class UniversalCuttingMachine {
             FACTORY_ITEMS.put(tier, registryView(id, ForgeRegistries.ITEMS));
         }
 
-        // Assign specific references
-        BASIC_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.BASIC);
-        BASIC_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.BASIC);
-
-        ADVANCED_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.ADVANCED);
-        ADVANCED_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.ADVANCED);
-
-        ELITE_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.ELITE);
-        ELITE_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.ELITE);
-
-        ULTIMATE_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.ULTIMATE);
-        ULTIMATE_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.ULTIMATE);
-
-        ABSOLUTE_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.ABSOLUTE);
-        ABSOLUTE_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.ABSOLUTE);
-
-        SUPREME_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.SUPREME);
-        SUPREME_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.SUPREME);
-
-        COSMIC_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.COSMIC);
-        COSMIC_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.COSMIC);
-
-        INFINITE_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.INFINITE);
-        INFINITE_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.INFINITE);
-
-        CRYSTAL_MATRIX_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.CRYSTAL_MATRIX);
-        CRYSTAL_MATRIX_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.CRYSTAL_MATRIX);
-
-        NEBULA_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.NEBULA);
-        NEBULA_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.NEBULA);
-
-        SINGULARITY_FACTORY_BLOCK = FACTORY_BLOCKS.get(CuttingMachineFactoryTier.SINGULARITY);
-        SINGULARITY_FACTORY_ITEM = FACTORY_ITEMS.get(CuttingMachineFactoryTier.SINGULARITY);
+        // 逐档别名赋值（原 24 行 BASIC_FACTORY_BLOCK = FACTORY_BLOCKS.get(...) 等）已删除，
+        // 理由同字段声明处：全仓零读取方，且缺 BLAZE 档导致 JEI 漏注册催化剂。
+        // 单档引用请直接写 FACTORY_BLOCKS.get(CuttingMachineFactoryTier.XXX)。
 
         // 切菜各档的 tile 句柄在 CUTTING_FACTORY_TILES（见上面的注册循环）。
         // 原先这里还有 11 行 BASIC_FACTORY_BLOCK_ENTITY = FACTORY_BLOCK_ENTITIES.get(...)，

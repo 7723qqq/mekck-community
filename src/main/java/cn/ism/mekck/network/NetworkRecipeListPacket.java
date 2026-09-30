@@ -60,6 +60,10 @@ public class NetworkRecipeListPacket {
         // 也要被链接，而服务端 classpath 上没有 net.minecraft.client.*。
         // 客户端逻辑全部关在 ClientPacketBridgeImpl（@OnlyIn(CLIENT)，由门面反射加载）。
         // 背景与同类事故见 util/ClientPacketBridge 的类注释。
+        if (!PacketGuard.fromServer("NetworkRecipeListPacket", ctx)) {
+            ctx.setPacketHandled(true);
+            return;
+        }
         ctx.enqueueWork(() -> ClientPacketBridge.applyRecipeList(
                 packet.pos, packet.recipeIds, packet.maxCraftable));
         ctx.setPacketHandled(true);

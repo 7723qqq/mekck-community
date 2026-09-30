@@ -4,6 +4,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraftforge.network.NetworkDirection;
+import net.minecraftforge.network.NetworkEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 客户端 → 服务端包的访问校验。
@@ -16,8 +20,12 @@ import net.minecraft.world.level.block.entity.BlockEntity;
  * <p><b>半径取 64.0（8 格）</b>：与本模组所有菜单的 {@code stillValid} 和原版
  * {@code AbstractContainerMenu} 的判定一致。取同一数值可保证「菜单还开着 ⟺ 包被接受」，
  * 不会出现「GUI 能操作但按钮无效」的空隙。</p>
+ *
+ * <p><b>方向断言见 {@link #fromServer}</b>：反向（客户端伪造 S2C 包）此前完全没有校验。</p>
  */
 public final class PacketGuard {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PacketGuard.class);
 
     /**
      * 允许交互的距离平方上限（8 格）。
@@ -143,5 +151,40 @@ public final class PacketGuard {
      */
     public static BlockEntity target(ServerPlayer player, BlockPos pos) {
         return allowed(player, pos) ? player.level().getBlockEntity(pos) : null;
+    }
+
+    // ==================== 方向断言（服务端 → 客户端包）====================
+
+    /**
+     * 「这是不是真的来自服务端」—— S2C 包处理器的第一行。
+     *
+     * <h3>为什么需要它</h3>
+     * Forge 的 {@code SimpleChannel} 不会因为包在 {@code ModMessages} 里登记的方向而拒绝
+     * 反向投递：客户端完全可以构造一个本该由服务端下发的包发给服务端，
+     * 于是 {@code handle} 里的<b>客户端分支代码会在服务端执行</b>。
+     * 对专用服务端而言这是一条从未被审过的路径（写静态表 / 反射加载客户端桥 / 空实现）。
+     *
+     * <p>这与 {@link #allowed} 是<b>互补</b>而非重复：{@code allowed} 回答
+     * 「客户端能不能碰这台机器」，本方法回答「这个包该不该由这一侧处理」。
+     * C2S 包靠前者，S2C 包靠后者 —— 此前 24 个 C2S 有 23 个走了 {@code allowed}，
+     * 而 5 个 S2C 一个方向校验都没有。</p>
+     *
+     * <p>被拒时只记一次 WARN 并返回 false，调用方应立刻 {@code setPacketHandled(true)}
+     * 并返回 —— <b>不要</b>继续 enqueueWork。</p>
+     *
+     * @param packetName 仅用于日志，取 {@code getClass().getSimpleName()} 或字面量
+     * @return true = 方向正确，可以处理；false = 客户端伪造的 S2C 包，应丢弃
+     */
+    public static boolean fromServer(String packetName, NetworkEvent.Context ctx) {
+        if (ctx == null) {
+            return false;
+        }
+        if (ctx.getDirection() == NetworkDirection.PLAY_TO_CLIENT) {
+            return true;
+        }
+        LOGGER.warn("丢弃方向错误的包 {}：期望 PLAY_TO_CLIENT，实际 {} —— "
+                        + "多半是客户端伪造了 S2C 包（本模组所有 S2C 包都应由服务端下发）",
+                packetName, ctx.getDirection());
+        return false;
     }
 }

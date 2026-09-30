@@ -38,6 +38,10 @@ public final class KitchenOrderResultPacket {
 
     public void handle(Supplier<NetworkEvent.Context> contextSupplier) {
         NetworkEvent.Context context = contextSupplier.get();
+        if (!PacketGuard.fromServer("KitchenOrderResultPacket", context)) {
+            context.setPacketHandled(true);
+            return;
+        }
         context.enqueueWork(() -> {
             if (mode == 0) lastPreview = message;
             else lastResult = message;

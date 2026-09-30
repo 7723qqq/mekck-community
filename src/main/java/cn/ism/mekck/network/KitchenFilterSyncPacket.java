@@ -81,6 +81,10 @@ public final class KitchenFilterSyncPacket {
 
     public void handle(Supplier<NetworkEvent.Context> contextSupplier) {
         NetworkEvent.Context context = contextSupplier.get();
+        if (!PacketGuard.fromServer("KitchenFilterSyncPacket", context)) {
+            context.setPacketHandled(true);
+            return;
+        }
         context.enqueueWork(() -> CLIENT_CACHE.put(
                 familyOrdinal, new Cached(mode, new ArrayList<>(items), autoMode)));
         context.setPacketHandled(true);
