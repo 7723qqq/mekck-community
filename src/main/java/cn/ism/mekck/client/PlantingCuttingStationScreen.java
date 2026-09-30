@@ -292,11 +292,11 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
         if (hovering) {
             String tierText = tier.isEmpty() ? "" : (tier + " ");
             guiGraphics.renderTooltip(font, java.util.List.of(
-                    net.minecraft.network.chat.Component.literal("生长方块格"),
+                    net.minecraft.network.chat.Component.translatable("gui.mekck.ui.growth_block_slot"),
                     net.minecraft.network.chat.Component.literal(missing
                             ? ("需要 " + tierText + "级及以上的生长方块")
                             : ("等级不足：需要 " + tierText + "级及以上的生长方块")),
-                    net.minecraft.network.chat.Component.literal("（只有神秘农业种子受此格约束）")),
+                    net.minecraft.network.chat.Component.translatable("gui.mekck.ui.growth_block_slot.note")),
                     java.util.Optional.empty(), mouseX, mouseY);
         }
     }
@@ -395,7 +395,7 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
 
         // Gas upgrade slot (right column, top)
         guiGraphics.blit(SlotType.INPUT.getTexture(), rightSlotX - 1, gasY - 1, 0, 0, 18, 18, 18, 18);
-        guiGraphics.drawString(font, "Gas", rightSlotX + 18 + 2, gasY + 4, 0xFFFFFFFF);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.slot.gas").getString(), rightSlotX + 18 + 2, gasY + 4, 0xFFFFFFFF);
 
         // Creative upgrade slot (right column, middle)
         // ⚠️ 原先这里是 `boolean hasCreative = menu.getEnergyCapacity() > ENERGY_CAPACITY;`
@@ -418,11 +418,11 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
         // ORE / INNER_HOLDER_SLOT —— **没有 CREATIVE**，拿 POWER 顶替会给出误导性的图标。
         boolean hasCreative = menu.getCreativeUpgradeCount() > 0;
         guiGraphics.blit(SlotType.INPUT.getTexture(), rightSlotX - 1, creativeY - 1, 0, 0, 18, 18, 18, 18);
-        guiGraphics.drawString(font, "Creative", rightSlotX + 18 + 2, creativeY + 4,
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.slot.creative").getString(), rightSlotX + 18 + 2, creativeY + 4,
                 hasCreative ? 0xFFFF55 : 0xFFFFFFFF);
 
         // Label at top
-        guiGraphics.drawString(font, "Upgrades", x + 10, y + 10, 0xFFFFFFFF);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.upgrades").getString(), x + 10, y + 10, 0xFFFFFFFF);
     }
 
     @Override

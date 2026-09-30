@@ -114,7 +114,7 @@ public class KitchenOrderWindow extends GuiWindow {
             return;
         }
         refresh();
-        drawTitleText(guiGraphics, Component.literal("下单"), 5);
+        drawTitleText(guiGraphics, Component.translatable("gui.mekck.ui.order"), 5);
 
         int px = relativeX + LIST_X;
         int py = relativeY + LIST_Y;
@@ -147,7 +147,8 @@ public class KitchenOrderWindow extends GuiWindow {
         drawSmallButton(guiGraphics, px + 84, by, BTN_W, BTN_H, "上一页");
         drawSmallButton(guiGraphics, px + 84 + BTN_W + 2, by, BTN_W, BTN_H, "下一页");
         drawSmallButton(guiGraphics, px + 84 + (BTN_W + 2) * 2, by, BTN_W - 6, BTN_H, "预览");
-        drawSmallButton(guiGraphics, px + 84 + (BTN_W + 2) * 2 + BTN_W - 4, by, BTN_W - 6, BTN_H, "下单");
+        drawSmallButton(guiGraphics, px + 84 + (BTN_W + 2) * 2 + BTN_W - 4, by, BTN_W - 6, BTN_H,
+                Component.translatable("gui.mekck.ui.order").getString());
 
         // 结果文本
         String result = KitchenOrderResultPacket.lastPreview;

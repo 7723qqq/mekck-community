@@ -149,10 +149,10 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
         if (mouseX >= x + SAMPLE_X && mouseX < x + SAMPLE_X + 18
                 && mouseY >= y + SAMPLE_Y && mouseY < y + SAMPLE_Y + 18) {
             guiGraphics.renderTooltip(font, java.util.List.of(
-                    net.minecraft.network.chat.Component.literal("三明治样品槽"),
-                    net.minecraft.network.chat.Component.literal("§7放入一个手工做好的三明治"),
-                    net.minecraft.network.chat.Component.literal("§7机器会照它的材料清单从存储区量产"),
-                    net.minecraft.network.chat.Component.literal("§8需要安装「三明治」模组")
+                    net.minecraft.network.chat.Component.translatable("gui.mekck.ui.sandwich_sample_slot"),
+                    net.minecraft.network.chat.Component.translatable("gui.mekck.ui.sandwich_sample_slot.desc"),
+                    net.minecraft.network.chat.Component.translatable("gui.mekck.ui.sandwich_sample_slot.central_desc"),
+                    net.minecraft.network.chat.Component.translatable("gui.mekck.ui.sandwich_sample_slot.requires_mod")
             ), java.util.Optional.empty(), mouseX, mouseY);
         }
         // 模块窗口按钮
@@ -160,19 +160,19 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
                 x + MODULE_BTN_X + MODULE_BTN_W, y + MODULE_BTN_Y + MODULE_BTN_H, 0xFF5A5A5A);
         guiGraphics.fill(x + MODULE_BTN_X + 1, y + MODULE_BTN_Y + 1,
                 x + MODULE_BTN_X + MODULE_BTN_W - 1, y + MODULE_BTN_Y + MODULE_BTN_H - 1, 0xFF9A9A9A);
-        guiGraphics.drawString(font, "可安装模块", x + MODULE_BTN_X + 2, y + MODULE_BTN_Y + 2, 0xFF101010, false);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.modules").getString(), x + MODULE_BTN_X + 2, y + MODULE_BTN_Y + 2, 0xFF101010, false);
         // 侧面配置按钮
         guiGraphics.fill(x + SIDE_BTN_X, y + SIDE_BTN_Y,
                 x + SIDE_BTN_X + SIDE_BTN_W, y + SIDE_BTN_Y + SIDE_BTN_H, 0xFF5A5A5A);
         guiGraphics.fill(x + SIDE_BTN_X + 1, y + SIDE_BTN_Y + 1,
                 x + SIDE_BTN_X + SIDE_BTN_W - 1, y + SIDE_BTN_Y + SIDE_BTN_H - 1, 0xFF9A9A9A);
-        guiGraphics.drawString(font, "侧面配置", x + SIDE_BTN_X + 5, y + SIDE_BTN_Y + 2, 0xFF101010, false);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.side_config").getString(), x + SIDE_BTN_X + 5, y + SIDE_BTN_Y + 2, 0xFF101010, false);
         // 下单按钮
         guiGraphics.fill(x + ORDER_BTN_X, y + ORDER_BTN_Y,
                 x + ORDER_BTN_X + MODULE_BTN_W, y + ORDER_BTN_Y + MODULE_BTN_H, 0xFF5A5A5A);
         guiGraphics.fill(x + ORDER_BTN_X + 1, y + ORDER_BTN_Y + 1,
                 x + ORDER_BTN_X + MODULE_BTN_W - 1, y + ORDER_BTN_Y + MODULE_BTN_H - 1, 0xFFD0B080);
-        guiGraphics.drawString(font, "下单", x + ORDER_BTN_X + 18, y + ORDER_BTN_Y + 2, 0xFF101010, false);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.order").getString(), x + ORDER_BTN_X + 18, y + ORDER_BTN_Y + 2, 0xFF101010, false);
     }
 
     private void drawSlotBg(GuiGraphics guiGraphics, int sx, int sy, int inner) {
@@ -184,19 +184,23 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
         renderTitleText(guiGraphics);
         drawString(guiGraphics, playerInventoryTitle, 39, inventoryLabelY, titleTextColor());
         var machine = menu.getMachine();
-        guiGraphics.drawString(font, String.format("发热侧 %.1f℃", machine.getHeatTemperature() - 273.15),
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.heat_side", machine.getHeatTemperature() - 273.15).getString(),
                 12, 6, 0xFFFF5555);
-        String sortName = switch (menu.getSortMode()) {
-            case NAME -> "名称";
-            case COUNT -> "数量";
-            default -> "默认";
+        // switch 出**键**而不是文案：Component 不是常量、不能当 switch 表达式的分支值，
+        // 而且「键 → 文案」这一步放在 switch 外面，排序模式也只有一处翻译点。
+        String sortNameKey = switch (menu.getSortMode()) {
+            case NAME -> "gui.mekck.ui.sort_mode.name";
+            case COUNT -> "gui.mekck.ui.sort_mode.count";
+            default -> "gui.mekck.ui.sort_mode.default";
         };
-        guiGraphics.drawString(font, "排序:" + sortName, leftPos + SORT_X - leftPos + 2, 6, 0xFF204080);
-        guiGraphics.drawString(font, "线程 " + machine.runningThreads() + "/" + machine.totalThreads(),
+        guiGraphics.drawString(font,
+                Component.translatable("gui.mekck.ui.sort", Component.translatable(sortNameKey)).getString(),
+                leftPos + SORT_X - leftPos + 2, 6, 0xFF204080);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.threads", machine.runningThreads(), machine.totalThreads()).getString(),
                 12, 84, 0xFF006000);
         int milli = menu.getOrderProgressMilli();
         if (milli > 0) {
-            guiGraphics.drawString(font, "订单进度 " + (milli / 10) + "%", 12, 138, 0xFF604000, false);
+            guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.order_progress", milli / 10).getString(), 12, 138, 0xFF604000, false);
         }
         super.drawForegroundText(guiGraphics, mouseX, mouseY);
     }

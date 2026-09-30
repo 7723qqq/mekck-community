@@ -100,6 +100,7 @@
 | I-6 | 种植切配站的模型硬依赖未声明的 `mekmm`（18 处引用 + 30 条配方） | 需决定：声明依赖 / 换自有模型 / 条件化 |
 | I-1(生成器) | 配方生成器在主线程跑 + 强制 `/reload`，大整合包首开服可能超 60 s 看门狗 | 需幂等短路 + 分摊到若干 tick |
 | — | 18 个方块把 `getDrops` 覆写成 `List.of()`、物品只在 `onRemove` 掉 ⇒ **TNT/爆炸摧毁时一件不掉** | 需确认是否有意 |
+| **I-N6** | `client/` 下仍有 **98 处硬编码 UI 文案 / 21 个文件**（第四轮实测）⇒ **英文客户端看到中文** |   第四轮已迁 45 处（10 个文件）。**剩余 53 处 / 11 个文件**，逐个文件计数：   `SkeweringMachineScreen`12 `KitchenModuleWindow`12 `GuiMekCkSideConfiguration`11 `KitchenOrderWindow`7   `SandwichAssemblerScreen`7 `NutRoasterScreen`6 `PlantingCuttingStationScreen`6   `ChocolateCannonScreen`5 `IceFactoryScreen`5 `IceMakerScreen`4，其余 8 个文件各 1~2 处。   多数是**跨文件复用的短词**（敌对/全部/动物/开/关/上·下·正·背·左·右/温度/当前订单），   **应先加共享键再替换**，不要逐处新造同义键 —— 否则会得到一堆语义重复的 `xxx_target_mode_1` 之类。   另约 47 处是 `LOGGER` 诊断与 `MekCkOutlineRenderer` 的预览日志，**玩家读不到，不属本条**   （这也说明「全域不许有中文」的判据必须能区分日志与 UI，否则只能挂一个不断变长的豁免清单）。   护栏 `TestNoHardcodedUiText` 现阶段只守已迁走的 45 处；全域清零后应把它升级回全域扫描 |
 | — | `MixinExtremeSmithingMenu.INFINITY_UPGRADE` 的求值时机存疑 | 需对 Avaritia 做 `javap -v`，该模组不在本地缓存 |
 
 ### 新增护栏（337 → 359 测试）

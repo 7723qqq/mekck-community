@@ -31,10 +31,10 @@ public final class OrderSearchBox {
 
     /** 创建并定位搜索框（在 {@code Screen#init()} 里调用）。 */
     public void init(Font font, int x, int y, int width) {
-        EditBox created = new EditBox(font, x, y, width, 14, Component.literal("搜索"));
+        EditBox created = new EditBox(font, x, y, width, 14, Component.translatable("gui.mekck.ui.search"));
         created.setMaxLength(48);
         created.setBordered(true);
-        created.setHint(Component.literal("搜索配方…"));
+        created.setHint(Component.translatable("gui.mekck.ui.search.hint"));
         created.setValue(query);
         this.box = created;
     }

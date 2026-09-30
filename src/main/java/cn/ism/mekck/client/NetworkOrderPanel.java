@@ -394,7 +394,7 @@ public final class NetworkOrderPanel {
             }
             if (hovered) {
                 guiGraphics.renderTooltip(font, List.of(
-                                result.isEmpty() ? Component.literal("Unknown") : result.getHoverName(),
+                                result.isEmpty() ? Component.translatable("gui.mekck.ui.unknown") : result.getHoverName(),
                                 Component.literal(craftable ? ("\u53EF\u505A " + maxQty + " \u6B21")
                                         : "\u6750\u6599\u4E0D\u8DB3")),
                         Optional.empty(), mouseX, mouseY);
@@ -415,7 +415,7 @@ public final class NetworkOrderPanel {
 
         // 数量区
         int qtyBtnX = rowX;
-        guiGraphics.drawString(font, "\u6570\u91CF: " + quantity, qtyBtnX, layoutQtyBtnY - 12, AE_TEXT_YELLOW);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.quantity", quantity).getString(), qtyBtnX, layoutQtyBtnY - 12, AE_TEXT_YELLOW);
         String[] qtyLabels = {"1", "16", "32", "64", "\u81EA", "Max"};
         for (int i = 0; i < qtyLabels.length; i++) {
             int bx = qtyBtnX + i * (layoutQtyBtnW + 2);
@@ -447,7 +447,7 @@ public final class NetworkOrderPanel {
             } else if (selected != null) {
                 int maxQty = maxOf(selected);
                 if (maxQty > 0) {
-                    guiGraphics.drawString(font, "\u6700\u5927: " + maxQty, qtyBtnX, hintY, AE_TEXT_DIM);
+                    guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.maximum", maxQty).getString(), qtyBtnX, hintY, AE_TEXT_DIM);
                 }
             }
         }

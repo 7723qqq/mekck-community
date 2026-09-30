@@ -337,11 +337,11 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
         boolean tHovered = mouseX >= tX && mouseX < tX + TARGET_W && mouseY >= attackY && mouseY < attackY + ATTACK_BTN_H;
         guiGraphics.blit(BUTTON_TEXTURE, tX, attackY, 0, tHovered ? 20 : 0, TARGET_W, ATTACK_BTN_H, 200, 60);
         guiGraphics.fill(tX + 1, attackY + 1, tX + TARGET_W - 1, attackY + ATTACK_BTN_H - 1, color);
-        String label = "目标:" + targetName;
+        String label = Component.translatable("gui.mekck.ui.target", targetName).getString();
         guiGraphics.drawString(font, label, tX + (TARGET_W - font.width(label)) / 2, attackY + 4, 0xFFFFFFFF);
 
         // 半径标签（数值编辑交给右侧 Mekanism 输入框）
-        guiGraphics.drawString(font, "半径:", x + MINUS_X - 4, attackY + 4, 0xFFFFFFFF);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.radius").getString(), x + MINUS_X - 4, attackY + 4, 0xFFFFFFFF);
     }
 
     /** 温度控制行：控温开关按钮 + 目标温度输入标签 + 当前温度读数（目标值编辑交给 Mekanism GuiTextField）。 */
@@ -359,7 +359,7 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
         guiGraphics.drawString(font, toggleLabel,
                 toggleX + (TEMP_TOGGLE_W - font.width(toggleLabel)) / 2, rowY + 4, 0xFFFFFFFF);
         // 目标输入标签 + 当前温度读数（目标值本身显示/编辑在中间输入框内）
-        guiGraphics.drawString(font, "目标:", toggleX + TEMP_TOGGLE_W + 2, rowY + 4, 0xFFFFFFFF);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.target").getString(), toggleX + TEMP_TOGGLE_W + 2, rowY + 4, 0xFFFFFFFF);
         String curText = String.format("%.1f℃", menu.getCurrentTemperature() / 100.0);
         guiGraphics.drawString(font, curText, x + TEMP_FIELD_X + TEMP_FIELD_W + 2, rowY + 4, 0xFFAAAAAA);
     }

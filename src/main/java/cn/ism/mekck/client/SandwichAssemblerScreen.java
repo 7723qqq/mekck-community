@@ -62,10 +62,10 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
         // 样品槽悬停说明
         if (mouseX >= x + 169 && mouseX < x + 169 + 18 && mouseY >= y + 79 && mouseY < y + 79 + 18) {
             guiGraphics.renderTooltip(font, java.util.List.of(
-                    net.minecraft.network.chat.Component.literal("三明治样品槽"),
-                    net.minecraft.network.chat.Component.literal("§7放入一个手工做好的三明治"),
-                    net.minecraft.network.chat.Component.literal("§7机器会照它的材料清单自动量产同款"),
-                    net.minecraft.network.chat.Component.literal("§8需要安装「三明治」模组")
+                    net.minecraft.network.chat.Component.translatable("gui.mekck.ui.sandwich_sample_slot"),
+                    net.minecraft.network.chat.Component.translatable("gui.mekck.ui.sandwich_sample_slot.desc"),
+                    net.minecraft.network.chat.Component.translatable("gui.mekck.ui.sandwich_sample_slot.assembler_desc"),
+                    net.minecraft.network.chat.Component.translatable("gui.mekck.ui.sandwich_sample_slot.requires_mod")
             ), java.util.Optional.empty(), mouseX, mouseY);
         }
         drawSlot(guiGraphics, x + 199, y + 79, 0xFFA0D0A0);
@@ -126,9 +126,9 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
                 : ("剩余: " + menu.getTargetCount());
         guiGraphics.drawString(font, countText, x + MODE_BTN_X + 24, y + COUNT_Y + 4, 0xFF202020, false);
         if (!SandwichAssemblerBlockEntity.hasSar()) {
-            guiGraphics.drawString(font, "§c需要安装 Some Assembly Required", 8, 96, 0xFFFF5555, false);
+            guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.sandwich_sample_slot.requires_sar").getString(), 8, 96, 0xFFFF5555, false);
         }
-        guiGraphics.drawString(font, "层数: " + menu.getMachine().currentLayers(),
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.layers", menu.getMachine().currentLayers()).getString(),
                 8, 106, 0xFF404040, false);
         super.drawForegroundText(guiGraphics, mouseX, mouseY);
     }

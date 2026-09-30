@@ -66,7 +66,7 @@ public class KitchenModuleWindow extends GuiWindow {
     @Override
     public void renderForeground(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         super.renderForeground(guiGraphics, mouseX, mouseY);
-        drawTitleText(guiGraphics, Component.literal("可安装模块"), 5);
+        drawTitleText(guiGraphics, Component.translatable("gui.mekck.ui.modules"), 5);
 
         int mask = menu.getFamilyMask();
         for (int i = 0; i < ROWS; i++) {
@@ -95,7 +95,7 @@ public class KitchenModuleWindow extends GuiWindow {
         // 可安装模块条：每系列 1 个基础机器图标
         int stripY = relativeY + 18 + ROWS * ROW_H + 8;
         guiGraphics.fill(relativeX + 5, stripY - 2, relativeX + 195, stripY + 14, 0x60000000);
-        guiGraphics.drawString(getFont(), "可安装模块（每系列任意等级机器）",
+        guiGraphics.drawString(getFont(), Component.translatable("gui.mekck.ui.modules.desc").getString(),
                 relativeX + 7, stripY - 11, 0xFF404040, false);
         for (int i = 0; i < families.size(); i++) {
             KitchenFamily family = families.get(i);
@@ -118,9 +118,9 @@ public class KitchenModuleWindow extends GuiWindow {
     private void renderFilterSection(GuiGraphics guiGraphics) {
         int px = relativeX + LIST_X;
         int py = relativeY + FILTER_TITLE_Y;
-        guiGraphics.drawString(getFont(), "—— 过滤设置 ——", px, py, 0xFF404040, false);
+        guiGraphics.drawString(getFont(), Component.translatable("gui.mekck.ui.filter_section").getString(), px, py, 0xFF404040, false);
         if (selectedRow < 0 || selectedRow >= families.size()) {
-            guiGraphics.drawString(getFont(), "先在上方点选一个系列", relativeX + LIST_X, relativeY + FILTER_MODE_Y,
+            guiGraphics.drawString(getFont(), Component.translatable("gui.mekck.ui.filter.pick_series_first").getString(), relativeX + LIST_X, relativeY + FILTER_MODE_Y,
                     0xFF808080, false);
             return;
         }
@@ -142,12 +142,12 @@ public class KitchenModuleWindow extends GuiWindow {
         int by = relativeY + FILTER_MODE_Y;
         guiGraphics.fill(bx, by, bx + 70, by + 12, 0xFF5A5A5A);
         guiGraphics.fill(bx + 1, by + 1, bx + 69, by + 11, 0xFFB0B0B0);
-        guiGraphics.drawString(getFont(), "过滤：" + modeName, bx + 4, by + 2, modeColor, false);
+        guiGraphics.drawString(getFont(), Component.translatable("gui.mekck.ui.filter.label", modeName).getString(), bx + 4, by + 2, modeColor, false);
         // 清空按钮
         int cbx = bx + 74;
         guiGraphics.fill(cbx, by, cbx + 34, by + 12, 0xFF5A5A5A);
         guiGraphics.fill(cbx + 1, by + 1, cbx + 33, by + 11, 0xFFB0B0B0);
-        guiGraphics.drawString(getFont(), "清空", cbx + 6, by + 2, 0xFF303030, false);
+        guiGraphics.drawString(getFont(), Component.translatable("gui.mekck.ui.clear").getString(), cbx + 6, by + 2, 0xFF303030, false);
 
         // 自动加工开关（第三轮补：此前整个自动加工引擎没有任何入口）
         //
@@ -181,7 +181,7 @@ public class KitchenModuleWindow extends GuiWindow {
         String hint = mode == 0 ? "关闭时处理该系列全部配方"
                 : (mode == 1 ? "只处理材料全部在列表内的配方" : "跳过用到列表内任一材料的配方");
         guiGraphics.drawString(getFont(), hint, relativeX + LIST_X, relativeY + FILTER_SLOT_Y + 20, 0xFF606060, false);
-        guiGraphics.drawString(getFont(), "手上拿物品点槽位=添加；空手点已有=移除",
+        guiGraphics.drawString(getFont(), Component.translatable("gui.mekck.ui.modules.hint").getString(),
                 relativeX + LIST_X, relativeY + FILTER_SLOT_Y + 31, 0xFF808080, false);
     }
 

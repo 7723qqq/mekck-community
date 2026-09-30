@@ -368,7 +368,7 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
                 CONFIG_START_X,
                 CONFIG_START_Y + 3 * CONFIG_ROW_GAP + 4,
                 DONE_BUTTON_W, DONE_BUTTON_H,
-                Component.literal("完成"),
+                Component.translatable("gui.mekck.ui.done"),
                 () -> configMode = false);
         MekCkButtons.setShown(configDoneButton, false);
         addRenderableWidget(configDoneButton);
@@ -471,7 +471,7 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
 
         // 存储区（单列纵向滚动）：标签 + 滚动条（轨道 + 滑块）
         int storageLblX = x + STORAGE_COL_X;
-        guiGraphics.drawString(font, "存储", storageLblX, y + STORAGE_COL_TOP - 10, 0xFFAAAAAA);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.slot_window.storage").getString(), storageLblX, y + STORAGE_COL_TOP - 10, 0xFFAAAAAA);
         if (storageMaxScroll > 0) {
             int trackX = x + STORAGE_COL_X + STORAGE_SLOT_PITCH + 2;
             int trackTop = y + STORAGE_COL_TOP;
@@ -545,7 +545,7 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
                     && mouseY >= cancelBtnY && mouseY < cancelBtnY + cancelBtnH;
             int cancelColor = cancelHovered ? 0xFFAA4444 : 0xFF882222;
             guiGraphics.fill(cancelBtnX, cancelBtnY, cancelBtnX + cancelBtnW, cancelBtnY + cancelBtnH, cancelColor);
-            guiGraphics.drawString(font, "取消", cancelBtnX + 4, cancelBtnY + 3, 0xFFFFFFFF);
+            guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.cancel").getString(), cancelBtnX + 4, cancelBtnY + 3, 0xFFFFFFFF);
 
             // Store cancel button bounds for click handling
             this.orderCancelBtnX = cancelBtnX;
