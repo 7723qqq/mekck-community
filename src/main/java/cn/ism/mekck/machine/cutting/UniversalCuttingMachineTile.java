@@ -17,6 +17,8 @@ import mekanism.common.capabilities.energy.MachineEnergyContainer;
 import mekanism.common.capabilities.holder.energy.EnergyContainerHelper;
 import mekanism.common.capabilities.holder.energy.IEnergyContainerHolder;
 import mekanism.common.capabilities.holder.slot.IInventorySlotHolder;
+import mekanism.common.inventory.container.MekanismContainer;
+import mekanism.common.inventory.container.sync.SyncableInt;
 import mekanism.common.capabilities.holder.slot.InventorySlotHelper;
 import mekanism.common.inventory.slot.EnergyInventorySlot;
 import mekanism.common.lib.transmitter.TransmissionType;
@@ -236,7 +238,6 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
     @Override
     public void writeSustainedData(CompoundTag tag) {
         tag.putInt("Progress", progress);
-        tag.putInt("OrderRecipeId", orderRecipeId == null ? 0 : orderRecipeId.hashCode());
         if (orderRecipeId != null) {
             tag.putString("OrderRecipeIdKey", orderRecipeId.toString());
         }
@@ -464,9 +465,6 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
 
     // ── 订单 / 进度（供菜单与 AE2 读）──────────────────────────────────
 
-    public int getProgress() {
-        return progress;
-    }
 
     public ResourceLocation getOrderRecipeId() {
         return orderRecipeId;
@@ -505,9 +503,19 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
         return upgradeComponent;
     }
 
-    /** 本机物品槽的容器视图（AE2 自动补料用）。 */
+    /**
+     * 本机物品槽的容器视图（AE2 自动补料用）—— <b>缓存在字段里</b>。
+     *
+     * <p>旧实现返回同一个 {@code ItemStackHandler} 字段；这里每次 {@code new} 会让 AE2
+     * 在每次拉料时分配一个新 handler，既浪费也让「同一台机器前后拿到不同对象」
+     * 这类比较失效。槽位对象在 {@code getInitialInventory} 里建好后就固定了，
+     * 所以这里可以安全缓存。</p>
+     */
     public net.minecraftforge.items.ItemStackHandler getItems() {
-        return new cn.ism.mekck.machine.MekCkSlotHandler(List.of(inputSlot, outputSlot));
+        if (ae2View == null) {
+            ae2View = new cn.ism.mekck.machine.MekCkSlotHandler(List.of(inputSlot, outputSlot));
+        }
+        return ae2View;
     }
 
     /**
@@ -530,6 +538,45 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
      *  本机没有分面能量，直接返回唯一那只。 */
     public IEnergyContainer getEnergyContainer() {
         return energyContainer;
+    }
+
+    // ── 客户端同步镜像（容器同步通道）──────────────────────────────────
+
+    /**
+     * 客户端侧的进度镜像 —— 服务端 {@link #progress} 不跨网，客户端那份只作兜底。
+     *
+     * <p>为什么必须有这个字段：<b>客户端的 tile 上 {@code progress} 永远是 0</b> ——
+     * 它只在 {@link #onUpdateServer} 里递增，而那只在服务端跑。GUI 读的
+     * {@link #getProgress()} 若直接返回它，进度条就会永远停在 0。
+     * 旧实现靠 {@code ContainerData} 同步，Mek 体系下对应的正规入口是
+     * {@code addContainerTrackers}（见下）。</p>
+     */
+    private int clientProgress;
+    /** AE2 拉料用的槽位视图缓存（见 {@link #getItems()}）。 */
+    private net.minecraftforge.items.ItemStackHandler ae2View;
+
+    /**
+     * 把进度挂进 Mek 的容器同步通道 —— <b>不做这件事进度条就永远是 0</b>。
+     *
+     * <p>这是 Mek 机器同步数据的<b>唯一</b正规入口：{@code MekanismTileContainer.addContainerTrackers()}
+     * 会调本方法，{@code MekanismContainer.track} 把条目收进 {@code trackedData}，
+     * 由 Mek 自己的容器属性包按脏值增量下发。自己发包要另写一套
+     * 「谁在什么时候发、玩家关屏后怎么办」的状态机。</p>
+     */
+    @Override
+    public void addContainerTrackers(MekanismContainer container) {
+        super.addContainerTrackers(container);
+        container.track(SyncableInt.create(
+                () -> getLevel() != null && getLevel().isClientSide ? clientProgress : progress,
+                value -> clientProgress = value));
+    }
+
+    /** 进度（tick）。服务端读真值、客户端读同步镜像。 */
+    public int getProgress() {
+        if (getLevel() != null && getLevel().isClientSide) {
+            return clientProgress;
+        }
+        return progress;
     }
 
 }

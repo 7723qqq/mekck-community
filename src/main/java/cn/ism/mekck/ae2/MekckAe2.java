@@ -1812,7 +1812,9 @@ public final class MekckAe2 {
                 return new int[]{sm.OUTPUT_SLOT};
             }
             if (owner instanceof cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile) {
-                return new int[]{1};   // 输出槽：Mek 槽顺序为 [输入, 输出, 升级, 电源]
+                // 输出槽下标 = 1。顺序由 tile 侧 getInitialInventory 的 addSlot 次序决定：
+                // 本机是 [输入, 输出, 速度卡, 能量卡, 电源]（见 UniversalCuttingMachineTile）。
+                return new int[]{1};
             }
             if (owner instanceof cn.ism.mekck.blockentity.SkeweringMachineBlockEntity) {
                 return new int[]{cn.ism.mekck.blockentity.SkeweringMachineBlockEntity.OUTPUT_SLOT};
