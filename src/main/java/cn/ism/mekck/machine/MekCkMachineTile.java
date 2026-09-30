@@ -1830,6 +1830,32 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
     }
 
     /**
+     * 本机是否接受旧格式存档的自动迁移 —— 默认是。
+     *
+     * <h3>为什么需要这个开关</h3>
+     * {@link MekCkLegacyMachineNbt#migrate} 是<b>按并行方阵的槽位下标</b>推算的：
+     * 它用 {@code inputSlotCount * 2} 划出「输入 + 输出」那一段，把紧随其后的
+     * 几格当成升级卡槽、把最后一格当成能源槽。穿串工厂的排布不是这样：
+     * <pre>
+     *   [0, 3)   输入（签 / 主料 / 辅料）
+     *   [3, 5)   输出（产物 + 返还）
+     *   [5, 9)   速度 / 能量 / 堆叠 / 创造 升级卡（有没有堆叠看档位）
+     *   [9, 88)  存储 81 格
+     *   Size-1   能源槽
+     * </pre>
+     * 拿 {@code 3 * 2 = 6} 当机器段末端，<b>第 5 号格（速度升级卡）会被当成普通机器槽
+     * 灌进新 tile 的能源槽</b>。这不是「迁移得不完美」，是静默把内容放错格子。
+     *
+     * <p>因此家族形态与并行方阵不同时必须覆写成本方法返回 {@code false}：
+     * 旧存档的内容不搬（机器读档后是空的），比放错格子安全。
+     * 与 {@code mekckfactory} 那 84 个死命名空间方块同款——它们本来就没有兜底，
+     * 留到阶段 4 统一处理。</p>
+     */
+    protected boolean migratesLegacyNbt() {
+        return true;
+    }
+
+    /**
      * {@inheritDoc}
      *
      * <p>1.20.1 的读档入口是 {@code load}，<b>没有</b> 1.20.4+ 的 {@code loadAdditional}。</p>
@@ -1864,32 +1890,6 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
      * 顺序反了等于没写这一层——而这正是本缺陷的形态：静默丢数据、没有任何日志。
      * 另有 {@code TestMekCkSlotNbt#mekckSlotReadIsAppliedAfterSuperLoad} 把这条顺序钉死。</p>
      */
-    /**
-     * 本机是否接受旧格式存档的自动迁移 —— 默认是。
-     *
-     * <h3>为什么需要这个开关</h3>
-     * {@link MekCkLegacyMachineNbt#migrate} 是<b>按并行方阵的槽位下标</b>推算的：
-     * 它用 {@code inputSlotCount * 2} 划出「输入 + 输出」那一段，把紧随其后的
-     * 几格当成升级卡槽、把最后一格当成能源槽。穿串工厂的排布不是这样：
-     * <pre>
-     *   [0, 3)   输入（签 / 主料 / 辅料）
-     *   [3, 5)   输出（产物 + 返还）
-     *   [5, 9)   速度 / 能量 / 堆叠 / 创造 升级卡（有没有堆叠看档位）
-     *   [9, 88)  存储 81 格
-     *   Size-1   能源槽
-     * </pre>
-     * 拿 {@code 3 * 2 = 6} 当机器段末端，<b>第 5 号格（速度升级卡）会被当成普通机器槽
-     * 灌进新 tile 的能源槽</b>。这不是「迁移得不完美」，是静默把内容放错格子。
-     *
-     * <p>因此家族形态与并行方阵不同时必须覆写成本方法返回 {@code false}：
-     * 旧存档的内容不搬（机器读档后是空的），比放错格子安全。
-     * 与 {@code mekckfactory} 那 84 个死命名空间方块同款——它们本来就没有兜底，
-     * 留到阶段 4 统一处理。</p>
-     */
-    protected boolean migratesLegacyNbt() {
-        return true;
-    }
-
     @Override
     public void load(CompoundTag tag) {
         CompoundTag legacyTag = migratesLegacyNbt() && MekCkLegacyMachineNbt.isLegacy(tag) ? tag : null;

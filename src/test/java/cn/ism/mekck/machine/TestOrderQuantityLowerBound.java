@@ -1,0 +1,215 @@
+package cn.ism.mekck.machine;
+
+import org.junit.Test;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+/**
+ * 「订单数量下界」这条契约的覆盖面护栏 —— 13 个 {@code setOrder} 实现必须<b>口径一致</b>。
+ *
+ * <h3>为什么这条契约重要</h3>
+ * <b>取消订单时清零、激活时夹到 ≥ 1</b>（与 {@link MekCkOrderState#setOrder} 同口径）。
+ * 写坏之后是<b>完全静默</b>的故障，不会抛异常也不会打日志：
+ * <ul>
+ *   <li>{@code quantity ≤ 0} ⇒ {@code orderQuantity > 0} 的订单门禁与
+ *       {@code orderCompleted >= orderQuantity} 的推进判定<b>同时失效</b>，
+ *       于是 {@code orderRecipeId} 永久非 null、订单<b>永远不完成</b>；</li>
+ *   <li>AE2 侧 {@code MekckAe2.orderStateOf} 读到 {@code OrderState(true, 负数)}，
+ *       {@code processJob} 永久早退，<b>job 永不释放</b>（会一直占着机器的自动处理位）。</li>
+ * </ul>
+ *
+ * <h3>为什么是「覆盖 13 个」而不是「覆盖 1 个」</h3>
+ * 历史上 13 个实现里只有 9 个自己夹紧（{@code Math.max(1, quantity)}），
+ * 另外 4 个是 {@code orderQuantity = quantity} 原样存 —— 它们<b>只靠调用方恰好夹过</b>才
+ * 没出事：{@code OrderRecipePacket} 与 {@code NetworkOrderPacket} 两个 C2S 入口
+ * 都在入口做了 {@code max(1, ·)}。
+ *
+ * <p>这种「靠调用方」的保护是<b>隐式依赖</b>，最脆的地方在于：将来新增一个
+ * 不经包的调用点（AE2 内部反射分派 {@code MekckAe2.setOrderReflectively}、
+ * 命令、未来重构）就会把 0 或负数直接写进去，而且没有任何测试会拦住它。
+ * 第四轮已把这 4 个统一成自夹。</p>
+ *
+ * <p>护栏按<b>方法体</b>判定：菜单/机器里别处出现 {@code Math.max} 很正常，
+ * 只有 {@code setOrder} 自己夹了才算数。</p>
+ */
+public class TestOrderQuantityLowerBound {
+
+    private static final List<Path> ROOTS = List.of(
+            Path.of("src/main/java/cn/ism/mekck/blockentity"),
+            Path.of("src/main/java/cn/ism/mekck/machine"),
+            Path.of("src/main/java/cn/ism/mekck/kitchen"));
+
+    /** 匹配 setOrder 的方法体起始（含静态与实例两种）。 */
+    private static final Pattern SET_ORDER = Pattern.compile(
+            "(?:public|protected|private|static|final|\\s)*\\bsetOrder\\s*\\(");
+
+    /**
+     * 认这两种「已夹紧」写法：
+     * <ul>
+     *   <li>{@code Math.max(1, quantity)} —— 最常见；</li>
+     *   <li>{@code recipeId == null ? 0 : Math.max(1, quantity)} —— 取消清零 + 激活夹紧，
+     *       这是第四轮统一后的形态（{@link MekCkOrderState#setOrder} 的口径）。</li>
+     * </ul>
+     * 只认 {@code Math.max(1, ...)} 这个精确形状是有意的：写成
+     * {@code Math.max(0, ...)} 或 {@code if (q < 1) q = 1;} 的实现会在这里被判失败，
+     * 需要时把它改写成上面的形状 —— <b>口径统一本身就是这条测试的目的</b>。
+     */
+    private static final Pattern CLAMPED = Pattern.compile(
+            "Math\\.max\\s*\\(\\s*1\\s*,[\\s\\S]{0,60}?quantity");
+
+    @Test
+    public void everySetOrderClampsQuantityToAtLeastOne() throws IOException {
+        List<String> offenders = new ArrayList<>();
+        int seen = 0;
+
+        for (Path root : ROOTS) {
+            if (!Files.isDirectory(root)) continue;
+            try (Stream<Path> files = Files.walk(root)) {
+                for (Path file : files.filter(p -> p.toString().endsWith(".java")).sorted().toList()) {
+                    String src = Files.readString(file, StandardCharsets.UTF_8);
+                    Matcher m = SET_ORDER.matcher(src);
+                    while (m.find()) {
+                        String body = methodBodyFrom(src, m.start());
+                        // 只看「把数量存进字段」的那些实现，排除 hasOrder/orderStateOf 之类
+                        if (body == null || !body.contains("orderQuantity")
+                                || !body.contains("=")) {
+                            continue;
+                        }
+                        seen++;
+                        String where = root.getFileName() + "/" + file.getFileName()
+                                + " @ " + lineOf(src, m.start());
+                        if (!CLAMPED.matcher(body).find()) {
+                            offenders.add(where + "：setOrder 没有把 quantity 夹到 ≥ 1"
+                                    + "（只靠调用方夹过的话，新增调用点就会写进 0/负数 ⇒ 订单永不完成）");
+                        }
+                    }
+                }
+            }
+        }
+
+        assertTrue("一条 setOrder 都没扫到，护栏空转了（seen=" + seen + "）", seen >= 10);
+        assertEquals("这些 setOrder 未夹数量下界：\n  " + String.join("\n  ", offenders),
+                List.of(), offenders);
+    }
+
+    /**
+     * 反向锚定：{@link MekCkOrderState} 自己必须保持那份基准口径。
+     *
+     * <p>上面那条是「实现向契约看齐」，这条是「契约本身没被改坏」——
+     * 万一有人把 {@code setOrder} 的 null 分支删了、只留 {@code max(1, ·)}，
+     * 取消订单就会留下 {@code quantity = 1} 的残留（{@link MekCkOrderState#clear}
+     * 的注释里记过这个坑：读侧靠 null 判断兜住，于是<b>永远看不出来</b>）。</p>
+     */
+    @Test
+    public void theContractItselfStillClearsOnCancel() throws IOException {
+        Path state = Path.of("src/main/java/cn/ism/mekck/machine/MekCkOrderState.java");
+        String src = Files.readString(state, StandardCharsets.UTF_8);
+        assertTrue("MekCkOrderState 丢了「recipeId == null 即 clear()」的分支",
+                src.contains("if (recipeId == null)"));
+        assertTrue("MekCkOrderState.setOrder 不再夹紧数量下界",
+                src.contains("this.quantity = Math.max(1, quantity)"));
+        assertTrue("MekCkOrderState.clear() 不再把数量清零",
+                src.contains("this.quantity = 0;"));
+    }
+
+    /**
+     * 取消订单时不能把数量夹成 1 —— 即「取消」这一侧必须显式清零。
+     *
+     * <p>接受<b>两种等价写法</b>，因为它们在语义上完全相同且仓库里本来就有两种风格：</p>
+     * <ol>
+     *   <li>三元式：{@code orderQuantity = recipeId == null ? 0 : Math.max(1, quantity);}
+     *       —— 遗留 BE 统一后的形态；</li>
+     *   <li>前置 null 分支：{@code if (recipeId == null) { clearOrder(); return; }}
+     *       —— {@link MekCkOrderState#setOrder} 与两个手搓执行器
+     *       （GrillFactoryExecutor / SkeweringFactoryExecutor）的形态。
+     *       它们额外还要清调味料、自选材料，所以用显式分支反而更清楚。</li>
+     * </ol>
+     * <p>判据只看「有没有把 0 这一侧写出来」：写成
+     * {@code orderQuantity = Math.max(1, quantity)} 且没有 null 分支时，
+     * 取消（{@code recipeId == null}）之后会留下 {@code quantity == 1} 的残留态 ——
+     * 读侧目前靠判 {@code orderRecipeId} 为 null 兜住，于是<b>永远看不出来</b>，
+     * 直到某个读数侧忘了判 null 才暴露成「无订单却卡着 1 份不加工」。</p>
+     */
+    @Test
+    public void cancelPathDoesNotBecomeAOneItemOrder() throws IOException {
+        Set<String> missingCancelBranch = new TreeSet<>();
+        int seen = 0;
+
+        for (Path root : ROOTS) {
+            if (!Files.isDirectory(root)) continue;
+            try (Stream<Path> files = Files.walk(root)) {
+                for (Path file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+                    String src = Files.readString(file, StandardCharsets.UTF_8);
+                    Matcher m = SET_ORDER.matcher(src);
+                    while (m.find()) {
+                        String body = methodBodyFrom(src, m.start());
+                        if (body == null || !body.contains("orderQuantity") || !body.contains("=")) {
+                            continue;
+                        }
+                        seen++;
+                        // 「清零」写出来了吗？三元式的 ? 0 :，或前置 null 分支里的清零/返回
+                        boolean explicitZero = body.contains("? 0 :")
+                                || body.contains("clearOrder()")
+                                || body.contains("clear()");
+                        if (!explicitZero) {
+                            missingCancelBranch.add(root.getFileName() + "/" + file.getFileName()
+                                    + " @ " + lineOf(src, m.start()));
+                        }
+                    }
+                }
+            }
+        }
+
+        assertTrue("一条 setOrder 都没扫到，护栏空转了（seen=" + seen + "）", seen >= 10);
+        assertEquals("这些 setOrder 取消订单后会留下 quantity 的残留"
+                        + "（应写成 recipeId == null ? 0 : Math.max(1, quantity)，"
+                        + "或前置 if (recipeId == null) { clearOrder(); return; }）：\n  "
+                        + String.join("\n  ", missingCancelBranch),
+                Set.of(), missingCancelBranch);
+    }
+
+    // ── 小工具 ────────────────────────────────────────────────────────────
+
+    private static int lineOf(String src, int offset) {
+        int line = 1;
+        for (int i = 0; i < offset && i < src.length(); i++) {
+            if (src.charAt(i) == '\n') line++;
+        }
+        return line;
+    }
+
+    /** 从 {@code from} 处的第一个 {@code {}（或 {@code ()} 后的第一个 {@code {}）起按花括号配对截取。 */
+    private static String methodBodyFrom(String src, int from) {
+        int paren = src.indexOf('(', from);
+        if (paren < 0) return null;
+        int close = src.indexOf(')', paren);
+        if (close < 0) return null;
+        int brace = src.indexOf('{', close);
+        if (brace < 0) return null;
+        int depth = 0;
+        for (int i = brace; i < src.length(); i++) {
+            char c = src.charAt(i);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                if (--depth == 0) {
+                    return src.substring(brace, i + 1);
+                }
+            }
+        }
+        return null;
+    }
+}

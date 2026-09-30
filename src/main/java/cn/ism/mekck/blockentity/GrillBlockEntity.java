@@ -713,10 +713,21 @@ public final class GrillBlockEntity extends TileEntityConfigurableMachine
         setChanged();
     }
 
-    /** 下单：{@code recipeId == null} 表示取消订单（两个 GUI 都发 (null, 0)）。 */
+    /**
+     * 下单：{@code recipeId == null} 表示取消订单（两个 GUI 都发 (null, 0)）。
+     *
+     * <p>数量下界与 {@link MekCkOrderState#setOrder} 对齐：<b>取消时清零、激活时夹到 ≥ 1</b>。
+     * 本类原先是 {@code orderQuantity = quantity} 原样存，与其余 9 台实现的契约不一致 ——
+     * 它<b>只靠调用方恰好夹过</b>（{@code OrderRecipePacket} 与
+     * {@code NetworkOrderPacket} 都在入口做了 {@code max(1, ·)}）才没出事。
+     * 那种隐式依赖很脆：下次新增一个不经包的调用点（AE2 内部反射分派、命令、未来重构）
+     * 就会把 0 或负数直接写进来，而后果是<b>永久静默</b>的：
+     * {@code orderQuantity > 0} 门禁与 {@code orderCompleted >= orderQuantity} 同时失效，
+     * 订单永远不完成、AE2 job 永不释放（见 {@code MekckAe2.orderStateOf}）。</p>
+     */
     public void setOrder(@Nullable ResourceLocation recipeId, int quantity) {
         this.orderRecipeId = recipeId;
-        this.orderQuantity = quantity;
+        this.orderQuantity = recipeId == null ? 0 : Math.max(1, quantity);
         this.orderCompleted = 0;
         setChanged();
     }

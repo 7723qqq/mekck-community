@@ -490,7 +490,7 @@ public final class UniversalCuttingMachineBlockEntity extends BlockEntity implem
 
     public void setOrder(ResourceLocation recipeId, int quantity) {
         this.orderRecipeId = recipeId;
-        this.orderQuantity = Math.max(1, quantity);
+        this.orderQuantity = recipeId == null ? 0 : Math.max(1, quantity);
         this.orderCompleted = 0;
         setChanged();
     }

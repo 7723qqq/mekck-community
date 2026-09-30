@@ -1415,9 +1415,17 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         setChanged();
     }
 
+    /**
+     * 下单。数量下界与 {@link MekCkOrderState#setOrder} 对齐：
+     * <b>取消（{@code recipeId == null}）时清零、激活时夹到 ≥ 1</b>。
+     *
+     * <p>本类原先是 {@code orderQuantity = quantity} 原样存，与其余实现契约不一致 ——
+     * 只靠 {@code OrderRecipePacket} / {@code NetworkOrderPacket} 入口恰好夹过才没出事。
+     * 写坏之后是<b>静默</b>故障：门禁与推进同时失效，订单永不完成。</p>
+     */
     public void setOrder(@Nullable net.minecraft.resources.ResourceLocation recipeId, int quantity) {
         this.orderRecipeId = recipeId;
-        this.orderQuantity = quantity;
+        this.orderQuantity = recipeId == null ? 0 : Math.max(1, quantity);
         this.orderCompleted = 0;
         setChanged();
     }

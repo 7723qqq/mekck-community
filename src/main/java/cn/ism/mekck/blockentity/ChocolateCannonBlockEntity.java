@@ -853,9 +853,18 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
         return this.orderQuantity;
     }
 
+    /**
+     * 下单。数量下界与 {@link MekCkOrderState#setOrder} 对齐：
+     * <b>取消（{@code recipeId == null}）时清零、激活时夹到 ≥ 1</b>。
+     *
+     * <p>原先只写了 {@code Math.max(1, quantity)}：那会把<b>取消</b>也变成「一份订单」，
+     * 留下 {@code orderRecipeId == null && orderQuantity == 1} 的残留态。
+     * 读侧目前靠判 {@code orderRecipeId} 为 null 兜住了，于是<b>永远看不出来</b>，
+     * 直到某个读数侧忘了判 null 才暴露成「无订单却卡着 1 份不加工」。</p>
+     */
     public void setOrder(net.minecraft.resources.ResourceLocation recipeId, int quantity) {
         this.orderRecipeId = recipeId;
-        this.orderQuantity = Math.max(1, quantity);
+        this.orderQuantity = recipeId == null ? 0 : Math.max(1, quantity);
         this.orderCompleted = 0;
         setChanged();
     }
