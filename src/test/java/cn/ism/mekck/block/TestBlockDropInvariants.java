@@ -7,7 +7,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.Assert.assertTrue;
@@ -100,6 +104,75 @@ public class TestBlockDropInvariants {
             }
         }
         assertTrue("以下方块的掉落路径不完整：\n  " + String.join("\n  ", offenders),
+                offenders.isEmpty());
+    }
+
+    /**
+     * 抑制战利品表的方块<b>不许</b>同时又带一张战利品表。
+     *
+     * <h3>为什么</h3>
+     * 前面两个测试确立了契约：这些方块靠 {@code onRemove} 自掉落。
+     * 实测 1.20.1 的破坏链路是
+     * {@code Block.dropResources} → {@code BlockStateBase.getDrops(Builder)} →
+     * {@code BlockBehaviour.getDrops(BlockState, LootParams.Builder)} ——
+     * 正是被覆写成 {@code List.of()} 的那个方法，所以<b>战利品表永不被查询</b>。
+     *
+     * <p>于是同时存在一张表是<b>纯误导</b>：文件在那里、格式正确、JSON 合法，
+     * 但永远不生效。第四轮就在这上面栽过 —— 代码注释据此断定
+     * 「制冰工厂缺 12 张战利品表 ⇒ 开了开关方块破坏后什么都不掉」，
+     * 而真实原因是它走 {@code onRemove} 根本不需要表。</p>
+     *
+     * <p>更糟的是它同时是个<b>地雷</b>：哪天有人删掉 {@code getDrops} 覆写想「恢复标准掉落」，
+     * 就会变成 {@code onRemove} 掉一个 + 战利品表再掉一个 = <b>双倍掉落</b>。</p>
+     *
+     * <p>方块类 → 注册 id 的映射从 {@code UniversalCuttingMachine} 的
+     * {@code register("<id>", XxxBlock::new)} 现场解析，不写死名单 ——
+     * 写死名单的话新增方块就漏检。</p>
+     */
+    @Test
+    public void blocksThatSuppressLootTableMustNotAlsoShipOne() throws IOException {
+        Path lootDir = Path.of("src", "main", "resources", "data", "mekck", "loot_tables", "blocks");
+        Path registrySrc = Path.of("src", "main", "java", "cn", "ism", "mekck", "UniversalCuttingMachine.java");
+        if (!Files.isDirectory(BLOCK_DIR) || !Files.isRegularFile(registrySrc)) {
+            fail("找不到源码或战利品表目录（测试需在项目根目录运行）");
+        }
+
+        // 方块类简名 → 注册 id
+        Map<String, String> classToId = new HashMap<>();
+        Matcher reg = Pattern.compile("register\\(\\s*\"([a-z0-9_]+)\"\\s*,\\s*(\\w+)\\s*::\\s*new")
+                .matcher(Files.readString(registrySrc, StandardCharsets.UTF_8));
+        while (reg.find()) {
+            classToId.put(reg.group(2), reg.group(1));
+        }
+
+        List<String> offenders = new ArrayList<>();
+        int checked = 0;
+        try (Stream<Path> files = Files.walk(BLOCK_DIR)) {
+            for (Path file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+                String name = file.getFileName().toString();
+                String src = Files.readString(file, StandardCharsets.UTF_8);
+                if (!src.contains(SUPPRESS_LOOT)) continue;      // 用战利品表，不在本测试范围
+                if (ALLOWED_WITHOUT_SELF_DROP.contains(name)) continue;
+
+                String simpleName = name.substring(0, name.length() - ".java".length());
+                String id = classToId.get(simpleName);
+                if (id == null) {
+                    // 注册用的是全限定名（如 cn.ism.mekck.block.SimpleMachineBlock::new 包在
+                    // lambda 里），简名解析不出来。这类方块的掉落契约由上面两个测试覆盖
+                    // （getDrops 返空 + onRemove 自掉落），这里跳过而不是硬凑映射 ——
+                    // 硬凑一个错的映射比漏检更糟，会把不相干的表误判成死表。
+                    continue;
+                }
+                checked++;
+                if (Files.isRegularFile(lootDir.resolve(id + ".json"))) {
+                    offenders.add(name + "（注册名 " + id + "）：抑制了战利品表，却又带了一张"
+                            + "永不被查询的表 —— 既误导，又在 getDrops 覆写被删时会变成双倍掉落");
+                }
+            }
+        }
+
+        assertTrue("护栏空转了：一张表都没检查到（checked=" + checked + "）", checked >= 10);
+        assertTrue("以下方块抑制战利品表却又带着一张死表：\n  " + String.join("\n  ", offenders),
                 offenders.isEmpty());
     }
 }

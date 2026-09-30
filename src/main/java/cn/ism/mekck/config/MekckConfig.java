@@ -89,6 +89,9 @@ public final class MekckConfig {
     private static volatile Set<ResourceLocation> iceAttackHostileCache;
     /** 是否自动扫描全部注册的敌对生物（继承 Monster / 实现 Enemy）并入名单。 */
     private static final ForgeConfigSpec.BooleanValue ICE_ATTACK_AUTO_SCAN;
+
+    /** 制冰工厂整族注册开关，见 {@link #isIceFactoryEnabled()}。 */
+    private static final ForgeConfigSpec.BooleanValue ENABLE_ICE_FACTORY;
     /** F10 攻击增益彩虹连线渲染开关（默认：开）。 */
     private static final ForgeConfigSpec.BooleanValue BUFF_CONNECTION_RENDER;
     private static final ForgeConfigSpec.BooleanValue CRYSTAL_MATRIX_GRILL_FURNACE;
@@ -282,6 +285,30 @@ public final class MekckConfig {
                 .comment("自动扫描全部注册的敌对生物（继承 Monster 或实现 Enemy 的实体）并入敌对名单。",
                         "关闭后仅使用上方 ice_attack_hostile_entities 列表（可手动剔除个别生物）。")
                 .define("auto_scan_hostile_entities", true);
+        BUILDER.pop();
+
+        // ─── Ice factory (content toggle) ──────────────
+        BUILDER.comment("制冰工厂（急冻制冰工厂，12 档）注册开关。",
+                "enable_ice_factory：true = 注册全部 12 档制冰工厂的方块/物品/方块实体/菜单/",
+                "创造栏条目/客户端屏幕/战利品与合成；false = 整族不注册（只保留急冻制冰机单机）。",
+                "",
+                "⚠️ 这不是纯显示开关，它决定**注册表内容**。Forge 要求客户端与服务端的注册表完全一致，",
+                "所以**服务端与客户端必须配成同一个值**，否则登录时会被注册表同步校验直接拒绝",
+                "（表现为「Registry Object 未找到 / 登录失败」这类难懂的报错）。",
+                "多人游戏请只在服务端改，或确保整合包强制同版本。",
+                "",
+                "历史上这里曾是一个写死的 static final 常量，并把开关注释成「缺 12 张战利品表 +",
+                "byte 下标存档会丢数据 ⇒ 不能开」。第四轮逐条查证后确认**两条理由都不成立**：",
+                "  ① 制冰工厂走 IceFactoryBlock.onRemove 自行掉落（saveToItem + dropItemStack），",
+                "     且 getDrops 被覆写成空 ⇒ 战利品表根本不会被查询，补表反而会变成死文件；",
+                "  ② 槽位下标在 BigStackItemHandler 里是 putInt/getInt + 越界检查，不是 byte。",
+                "     MekCkSlotNbt 那层兜底是给 Mek 自己的 DataHandlerUtils(putByte) 准备的，",
+                "     遗留 BE 路径本来就没有这个病。",
+                "换言之该功能早已掉落与存档齐备，只是没人把开关翻开。")
+                .push("ice_factory");
+        ENABLE_ICE_FACTORY = BUILDER
+                .comment("是否注册制冰工厂整族（默认：否，与此前 static final=false 的行为一致）")
+                .define("enable_ice_factory", false);
         BUILDER.pop();
 
         // ─── Chocolate Cannon settings ───────
@@ -590,6 +617,24 @@ public final class MekckConfig {
     public static int getAutoPullStackLimit() {
         ForgeConfigSpec.IntValue val = AUTO_PULL_STACK_LIMIT;
         return val != null ? val.get() : 64;
+    }
+
+    /**
+     * 制冰工厂整族是否注册 —— 在<b>注册期</b>被读，所以是内容开关而非显示开关。
+     *
+     * <p><b>刻意不做成缓存常量</b>：原先那是 {@code public static final boolean}，
+     * 字段初始化式会在<b>类首次加载</b>时求值，而那可能早于配置文件被读取，
+     * 于是即使加了配置也永远读到默认值、开关形同虚设。这里改成每次现读，
+     * 调用点分别是 {@code UniversalCuttingMachine} 的注册方法、创造栏构建与客户端屏幕绑定 ——
+     * 三处都发生在 {@code ModConfigEvent.Loading} 之后，读到的就是玩家的真实设置。</p>
+     *
+     * <p>取值口径与同文件其它 accessor 一致：{@code val == null} 只可能出现在
+     * {@code MekckConfig} 自身类初始化期间（静态块还没执行到这一行），
+     * 此时返回默认值 {@code false}，即「不注册」—— 这是安全的一侧。</p>
+     */
+    public static boolean isIceFactoryEnabled() {
+        ForgeConfigSpec.BooleanValue val = ENABLE_ICE_FACTORY;
+        return val != null ? val.get() : false;
     }
 
     /**

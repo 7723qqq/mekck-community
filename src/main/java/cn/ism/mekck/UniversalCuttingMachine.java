@@ -327,27 +327,33 @@ public final class UniversalCuttingMachine {
     public static final RegistryObject<MenuType<cn.ism.mekck.menu.SandwichAssemblerMenu>> SANDWICH_ASSEMBLER_MENU = MENUS.register(
             "sandwich_assembler", () -> IForgeMenuType.create(cn.ism.mekck.menu.SandwichAssemblerMenu::new));
 
-    /**
-     * 制冰工厂总开关：{@code false} = <b>12 档制冰工厂全部不注册</b>（仅保留急冻制冰机基础机器）。
-     *
-     * <p><b>改回 {@code true} 并不足以恢复</b>——本条注释此前写的是「改回 true 即恢复注册
-     * （方块/物品/方块实体/菜单/创造栏/客户端屏幕全部重新生效）」，那是错的，漏了两件事：</p>
-     * <ol>
-     *   <li><b>缺 12 张战利品表</b>。迁到 Mek 的 {@code BlockTile} 之后，破坏走战利品表、
-     *       而 Mek 的 {@code BlockMekanism.onRemove} 本身<b>不产生任何掉落</b>。
-     *       {@code data/mekck/loot_tables/blocks/} 下现在只有 6 个家族 × 12 档 = 72 张，
-     *       <b>没有一张 {@code *_ice_factory.json}</b>。开了开关就是 12 个方块破坏后什么都不掉。</li>
-     *   <li><b>缺 int 下标槽位存档的验收</b>。制冰工厂还没迁到 {@code MekCkMachineTile}，
-     *       走的是遗留 BE + 旧 {@code BigStackItemHandler}；那条路径没有
-     *       {@code MekCkSlotNbt} 那层兜底，高并行档的 byte 下标上限问题会原样复发。</li>
-     * </ol>
-     * 资源侧（blockstate / 模型 / 语言键 / 配方）已经在仓库里，缺的是上面前两项。
-     * 恢复顺序：补 12 张战利品表 → 迁到 {@code MekCkMachineTile} → 才把本开关改回 {@code true}。
-     *
-     * @see cn.ism.mekck.machine.MekCkMachineTile#getInitialInventory
-     * @see docs/audit/2026-09-30-details/legacy-conservation.md
-     */
-    public static final boolean ICE_FACTORY_ENABLED = false;
+    // 制冰工厂开关：原先是 `public static final boolean ICE_FACTORY_ENABLED = false`，
+    // 现改为读 MekckConfig 的 `ice_factory.enable_ice_factory`（默认 false，行为与从前一致）。
+    // 刻意**不留**一个 static 缓存字段 —— 字段初始化式在类首次加载时求值，可能早于配置文件
+    // 被读取，那样加了配置也永远拿到默认值、开关形同虚设。三个使用点见下方各处。
+    //
+    // ⚠️ 这是**注册表开关**，不是显示开关：客户端与服务端必须配成同一个值，
+    // 否则注册表同步校验会在登录时直接拒绝（详见 MekckConfig 里该配置项的注释）。
+    //
+    // 【勘误】原先这段注释给出的两条「不能开」的理由，第四轮逐条查证后**都不成立**：
+    //   ① 「缺 12 张战利品表 ⇒ 破坏后什么都不掉」——错。制冰工厂走
+    //      IceFactoryBlock.onRemove 自行掉落（machine.saveToItem(stack) + Containers.dropItemStack），
+    //      且 getDrops 被覆写成 List.of()。实测破坏链路为
+    //      Block.dropResources → BlockStateBase.getDrops(LootParams.Builder) →
+    //      BlockBehaviour.getDrops(BlockState, LootParams.Builder)，
+    //      正是被覆写的那个方法 ⇒ **战利品表根本不会被查询**，补 12 张表只会变成死文件。
+    //      （顺带一提：data/mekck/loot_tables/blocks/ 下那 5 张遗留机器的表——planting_cutting_station、
+    //      electric_grill、electric_grinding_machine、universal_cutting_machine、smart_skewering_machine
+    //      ——同样因为这个覆写而从未生效，属于另一个待清理项。）
+    //   ② 「byte 下标上限会静默丢存档」——错。BigStackItemHandler.serializeNBT 写的是
+    //      putInt("Slot", i)，反序列用 getInt 并带 0 ≤ slot < getSlots() 越界检查。
+    //      MekCkSlotNbt 那层兜底针对的是**Mek 自己的** mekanism.api.DataHandlerUtils
+    //      （javap 实测 putByte/getByte），遗留 BE 路径本来就不经过它，也就没有那个病。
+    // 换言之该族早已掉落与存档齐备，缺的只是一个能被翻开的开关。
+    //
+    // @see cn.ism.mekck.config.MekckConfig#isIceFactoryEnabled
+    // @see cn.ism.mekck.block.IceFactoryBlock#onRemove
+    // @see cn.ism.mekck.util.BigStackItemHandler#serializeNBT
 
     // Chocolate Cannon (巧克力大炮：费列罗巧克力加工 + 攻击机器，无工厂版本)
     public static final RegistryObject<Block> CHOCOLATE_CANNON_BLOCK = BLOCKS.register("chocolate_cannon", ChocolateCannonBlock::new);
@@ -952,6 +958,26 @@ public final class UniversalCuttingMachine {
     public static final java.util.Map<CuttingMachineFactoryTier, RegistryObject<Block>> ICE_FACTORY_BLOCKS = new java.util.EnumMap<>(CuttingMachineFactoryTier.class);
     public static final java.util.Map<CuttingMachineFactoryTier, RegistryObject<Item>> ICE_FACTORY_ITEMS = new java.util.EnumMap<>(CuttingMachineFactoryTier.class);
     public static final java.util.Map<CuttingMachineFactoryTier, RegistryObject<BlockEntityType<IceFactoryBlockEntity>>> ICE_FACTORY_BLOCK_ENTITIES = new java.util.EnumMap<>(CuttingMachineFactoryTier.class);
+
+    /**
+     * 制冰工厂菜单类型 —— <b>在 {@link MekckConfig#isIceFactoryEnabled()} 为 false 时为 {@code null}</b>。
+     *
+     * <p>这个 {@code null} 是<b>刻意保留的空哨兵</b>，不是「忘了赋值」：整族禁用时
+     * 12 个方块与方块实体都不注册，若仍注册一个 {@code MenuType}，
+     * 就会往注册表里塞一个没有任何方块能打开的条目 —— 而本开关的语义是
+     * 「关掉整族」，注册表里就不该留残迹。</p>
+     *
+     * <p><b>唯一读取方是 {@link IceFactoryMenu} 的 {@code super(...)} 调用</b>，
+     * 而它为 null 时不可能被构造（两道门）：</p>
+     * <ol>
+     *   <li>服务端：只有 {@code IceFactoryBlockEntity} 的 {@code createMenu} 会 new 它，
+     *       而那个方块实体挂在 {@code IceFactoryBlock} 上 —— 禁用时方块不存在；</li>
+     *   <li>客户端：只能由本字段注册出的 {@code MenuType} 反射构造，
+     *       而禁用时 {@code MenuType} 同样没注册。</li>
+     * </ol>
+     * <p>所以那个 {@code .get()} 不会真的抛 NPE。护栏：
+     * {@code TestIceFactoryToggle} 会核对「为 null ⇔ 开关为关」这两个分支同时成立。</p>
+     */
     public static final RegistryObject<MenuType<IceFactoryMenu>> ICE_FACTORY_MENU;
 
     static {
@@ -1209,7 +1235,7 @@ public final class UniversalCuttingMachine {
             GRINDING_FACTORY_ITEMS.put(tier, registryView(id, ForgeRegistries.ITEMS));
         }
 
-        if (ICE_FACTORY_ENABLED) {
+        if (MekckConfig.isIceFactoryEnabled()) {
             // Register all ice factory blocks (急冻制冰工厂) —— 禁用时整段跳过，代码保留
             for (CuttingMachineFactoryTier tier : CuttingMachineFactoryTier.values()) {
                 String id = tier.getIceMakerBlockId();
@@ -1639,7 +1665,7 @@ public final class UniversalCuttingMachine {
             event.accept(WINE_CELLAR_ITEM.get());
             event.accept(CENTRAL_KITCHEN_ITEM.get());
             event.accept(SANDWICH_ASSEMBLER_ITEM.get());
-            if (ICE_FACTORY_ENABLED) {
+            if (MekckConfig.isIceFactoryEnabled()) {
                 for (RegistryObject<Item> factoryItem : ICE_FACTORY_ITEMS.values()) {
                     event.accept(factoryItem.get());
                 }
@@ -2136,7 +2162,7 @@ public final class UniversalCuttingMachine {
                 MenuScreens.register(WINE_CELLAR_MENU.get(), WineCellarScreen::new);
                 MenuScreens.register(CENTRAL_KITCHEN_MENU.get(), cn.ism.mekck.client.CentralKitchenScreen::new);
                 MenuScreens.register(SANDWICH_ASSEMBLER_MENU.get(), cn.ism.mekck.client.SandwichAssemblerScreen::new);
-                if (ICE_FACTORY_ENABLED) {
+                if (MekckConfig.isIceFactoryEnabled()) {
                     MenuScreens.register(ICE_FACTORY_MENU.get(), IceFactoryScreen::new);
                 }
                 MenuScreens.register(CHOCOLATE_CANNON_MENU.get(), ChocolateCannonScreen::new);
