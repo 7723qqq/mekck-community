@@ -10,6 +10,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.vertex.PoseStack;
 
 /**
  * 中央厨房界面：左侧 20 模块槽、中部 6×9 存储区视图（滚轮滚动 / 搜索 / 排序）、右侧输出区，
@@ -18,6 +19,48 @@ import org.lwjgl.glfw.GLFW;
 @OnlyIn(Dist.CLIENT)
 public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<CentralKitchenMenu>
         implements NetworkOrderHost {
+
+    /**
+     * 存储浏览器自动重建的间隔（tick）。
+     *
+     * <p><b>为什么需要它（第三轮补）</b>：{@code CentralKitchenMenu.refreshDisplay()} 是
+     * 54 个可见存储格映射的<b>唯一</b>数据来源，而它此前只在构造器、搜索/排序变更、
+     * quickMoveStack 成功时被调 —— 也就是说存储区在<b>开界面之后</b>发生的一切变化
+     * （AutoIO 拉入、订单交付、AE2 补料、弹出）都反映不到界面上：
+     * 新到的物品永远不出现，被消耗掉的格子还占着一个可见位置。
+     * 搜索框能绕过（重新输入会触发 refresh），但浏览器语义本身已失效。</p>
+     *
+     * <p><b>为什么放客户端而不是服务端菜单</b>：菜单的 {@code tick} 侧对<b>每个</b>观察者
+     * 都会跑，而重建要扫 300 格存储区 + 每格算一次 hoverName（不便宜）。
+     * 只有真正看着界面的玩家需要它，所以按屏幕节流。</p>
+     *
+     * <p>1 秒一次是权衡：够跟上肉眼可辨的变化，又不至于每帧重扫。
+     * 玩家主动操作（搜索/排序/滚动）仍然立即重建，不受这个节流影响。</p>
+     */
+    private static final int BROWSER_REFRESH_INTERVAL = 20;
+
+    /** 距离下一次自动重建还有几次渲染。 */
+    private int browserRefreshCountdown = BROWSER_REFRESH_INTERVAL;
+
+    /**
+     * 挂在 {@code render} 而不是 {@code tick} 上。
+     *
+     * <p>原因：{@code AbstractContainerScreen#tick()} 是 <b>final</b>（覆写会编译失败），
+     * 而 {@code tickClient} 钩子要走到 {@code AbstractContainerScreen#tick} 才会执行。
+     * {@code GuiMekanism#render(GuiGraphics, int, int, float)}（Mek 覆写后的签名，
+     * 不是原版的 {@code render(PoseStack, …)}）每帧都跑，用计数器节流到 1 秒一次，
+     * 效果与「每秒重建一次」等价，而且在 GUI 打开期间必然被调用。</p>
+     */
+    @Override
+    public void render(net.minecraft.client.gui.GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        if (--browserRefreshCountdown <= 0) {
+            browserRefreshCountdown = BROWSER_REFRESH_INTERVAL;
+            // 读全在客户端侧：容器槽的 ItemStack 由方块更新包 / 槽位同步持续刷新，
+            // 这里读到的就是当前状态，不需要额外向服务端查询。
+            menu.refreshDisplay();
+        }
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
+    }
 
     private static final int WIDTH = 348;
     private static final int HEIGHT = 236;

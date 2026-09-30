@@ -355,6 +355,17 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
      */
     @Override
     protected IInventorySlotHolder getInitialInventory(IContentsListener listener) {
+        // ⚠️ 这里把 Mek 传进来的 listener 包一层，好让槽位变化也能触发家族钩子
+        // （种植切配靠它把营养液槽里的容器灌进罐）。
+        //
+        // 刻意**不**用「字段保存一个 IContentsListener 再传下去」：本方法由
+        // TileEntityMekanism 的构造器调用，而字段初始化器在 super(...) 之后才跑，
+        // 那一刻读到的 final 字段是 null ⇒ 所有槽位都拿到 null listener
+        // ⇒ 内容变化回调静默失效。局部变量没有这个时序问题。
+        final IContentsListener combined = () -> {
+            listener.onContentsChanged();
+            onFamilyContentsChanged();
+        };
         CuttingMachineFactoryTier tier = getTier();
         if (tier == null) {
             // 显式失败优于 NPE：旧实现在这里是 "Cannot read field processes because this.tier is null"，
@@ -408,12 +419,12 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
             // 交叉加入（进0/出0/进1/出1…）会让两份下标对不上 → 存读档错位。
             for (int i = 0; i < inputCount; i++) {
                 int x = cn.ism.mekck.menu.MekCkFactoryLayout.oneRowSlotX(i, inputCount);
-                inputSlots.add(builder.addSlot(MekCkSlot.input(slotLimit, listener, x,
+                inputSlots.add(builder.addSlot(MekCkSlot.input(slotLimit, combined, x,
                         cn.ism.mekck.menu.MekCkFactoryLayout.ONE_ROW_INPUT_Y)));
             }
             for (int i = 0; i < outputCount; i++) {
                 int x = cn.ism.mekck.menu.MekCkFactoryLayout.oneRowSlotX(i, outputCount);
-                outputSlots.add(builder.addSlot(MekCkSlot.output(slotLimit, listener, x,
+                outputSlots.add(builder.addSlot(MekCkSlot.output(slotLimit, combined, x,
                         cn.ism.mekck.menu.MekCkFactoryLayout.ONE_ROW_OUTPUT_Y)));
             }
         } else if (windowLayout) {
@@ -425,26 +436,26 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
                 int x = INPUT_START_X + (i % inputColumns) * SLOT_STEP;
                 int y = GRID_START_Y + (i / inputColumns) * SLOT_STEP;
                 inputSlots.add(builder.addSlot(
-                        MekCkSlot.windowInput(slotLimit, SLOT_WINDOW, listener, x, y)));
+                        MekCkSlot.windowInput(slotLimit, SLOT_WINDOW, combined, x, y)));
             }
             for (int i = 0; i < outputCount; i++) {
                 int x = INPUT_START_X + (i % outputColumns) * SLOT_STEP;
                 int y = GRID_START_Y + (i / outputColumns) * SLOT_STEP;
                 outputSlots.add(builder.addSlot(
-                        MekCkSlot.windowOutput(slotLimit, SLOT_WINDOW, listener, x, y)));
+                        MekCkSlot.windowOutput(slotLimit, SLOT_WINDOW, combined, x, y)));
             }
         } else {
             // 方阵：输入在左、输出整体右移「**输入**方阵宽度 + 间隔」。
             // 间隔按输入宽度算而不是各自宽度：并行方阵两者相等，穿串工厂的
             // 「3 宽输入 + 1 宽输出」也正好是旧版 38/130 的间距。
-            addSlotGrid(builder, listener, INPUT_START_X, inputCount, inputColumns, slotLimit, true);
-            addSlotGrid(builder, listener, INPUT_START_X + inputColumns * SLOT_STEP + GRID_GAP,
+            addSlotGrid(builder, combined, INPUT_START_X, inputCount, inputColumns, slotLimit, true);
+            addSlotGrid(builder, combined, INPUT_START_X + inputColumns * SLOT_STEP + GRID_GAP,
                     outputCount, outputColumns, slotLimit, false);
         }
-        energySlot = EnergyInventorySlot.fillOrConvert(energyContainer, this::getLevel, listener,
+        energySlot = EnergyInventorySlot.fillOrConvert(energyContainer, this::getLevel, combined,
                 ENERGY_SLOT_X, ENERGY_SLOT_Y);
         builder.addSlot(energySlot);
-        appendExtraSlots(builder, listener);
+        appendExtraSlots(builder, combined);
         registerExtraSlotsAsDataType(extraSlotsForConfig());
         return builder.build();
     }
@@ -1154,6 +1165,80 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
      * 也就是说 {@link #isPowered()} / {@link #wasPowered()} 在本方法里读到的确实是
      * 「本 tick / 上一 tick」两值，PULSE 的上升沿判定成立。</p>
      */
+    /**
+     * 本机是否带热能力 —— <b>默认不带</b>，需要发热的家族覆写。
+     *
+     * <p>刻意不放上基类：阶段 3 迁移前只有<b>烧烤</b>与<b>烹饪</b>两个工厂有真正的
+     * 热容（切菜 / 研磨 / 种植切配 / 穿串从来没有）。给另外 4 个白送一套热容与散热
+     * 行为是<b>平衡变更</b>，不是修复。</p>
+     */
+    protected boolean hasHeatSupport() {
+        return false;
+    }
+
+    /**
+     * 把本 tick 耗掉的电转成废热 —— <b>默认什么都不做</b>。
+     *
+     * <p>有热容的家族（烧烤 / 烹饪）覆写它，把 {@code energyUsed} 按发电效率注入热容。
+     * 调用点在 {@link #workCycle} 的扣能量之后，顺序与迁移前逐字一致
+     * （旧 BE：{@code extractEnergy(...); addHeatFromEnergy(...); progress++;}）。</p>
+     */
+    protected void addHeatFromEnergy(int energyUsed) {
+    }
+
+    /**
+     * 构造本机的热容容器 —— <b>Mek 原生钩子</b>，与 {@link #getInitialFluidTanks} /
+     * {@link #getInitialEnergyContainers} 同一族。
+     *
+     * <h3>为什么不需要自己实现 {@code getHeatCapacitors}</h3>
+     * {@code TileEntityMekanism} 已经：① {@code implements ITileHeatHandler}
+     * （而 {@code ITileHeatHandler extends IMekanismHeatHandler}，
+     * 所以「第三方按 {@code blockEntity instanceof IMekanismHeatHandler} 识别本机为热处理器」
+     * 这条路径<b>一直是通的</b>，例如气动工艺 PNC:R）；② 在构造器里<b>无条件</b>调本方法
+     * 并据此建 {@code HeatHandlerManager}；③ 声明了 {@code final} 的
+     * {@code getHeatCapacitors(Direction)}（所以子类<b>不能</b>覆写它，只能提供容器）；
+     * ④ 通过 {@code addContainerTrackers} 把电容温度自动同步给 GUI。
+     *
+     * <p>所以迁移真正丢掉的只是<b>热容本身</b>：默认实现给出空容器 ⇒ 机器「声称能处理热」
+     * 却没有任何容量，旁边的加热线圈灌进来的热量无处可去、机器也不向环境散热。
+     * 覆写本方法即可把整条链路接回来。</p>
+     *
+     * <p>返回 {@code null} 表示「本机不处理热」，与 {@link #hasHeatSupport()} 一致。</p>
+     */
+    protected mekanism.common.capabilities.holder.heat.IHeatCapacitorHolder getInitialHeatCapacitors(
+            IContentsListener listener,
+            mekanism.common.capabilities.heat.CachedAmbientTemperature ambient) {
+        return null;
+    }
+
+    /**
+     * 每 tick 推进热系统（环境回归 + 与相邻热容器交换）。
+     *
+     * <p>{@code TileEntityMekanism} 的 {@code ITileHeatHandler.updateHeatCapacitors} 已经在
+     * 它自己的 tick 链里做这件事，所以默认实现是 no-op；本钩子只为需要额外处理的家族留口。</p>
+     */
+    protected void tickHeatSupport() {
+    }
+
+    /**
+     * 槽位内容变化时的家族钩子。
+     *
+     * <p>用途：种植切配靠它把「营养液槽里容器的内容」自动灌进营养液罐 ——
+     * 那是玩家喂这台机器的主要入口，迁移时漏掉了（见
+     * {@code PlantingCuttingFactoryTile#fillTankFromSlot}）。
+     * 挂在内容变化回调而不是 tick 里，是因为只在「真的有人动了那个槽」时才需要灌，
+     * 逐 tick 轮询是白烧 CPU。</p>
+     */
+    protected void onFamilyContentsChanged() {
+    }
+
+    /**
+     * 本机温度（K）。默认环境温度 —— 供 GUI 读数用，避免各家族各写一份。
+     */
+    public double getTemperatureK() {
+        return mekanism.api.heat.HeatAPI.AMBIENT_TEMP;
+    }
+
     @Override
     protected void onUpdateServer() {
         super.onUpdateServer();
@@ -1166,6 +1251,9 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
             refillEnergyBuffer();
         }
         workCycle();
+        // 热推进排在 workCycle() 之后：热是「本 tick 耗能的副产物」，
+        // 迁移前旧 BE 的次序同样是先 extractEnergy/addHeatFromEnergy 再 progress++。
+        tickHeatSupport();
         // AE2 放在 workCycle() 之后：本 tick 刚产出的物品要先落到产物槽，
         // MEckAe2 的产物回写才能在同一 tick 看到它们（与旧
         // CuttingMachineFactoryBlockEntity.serverTick 里「先干活、后
@@ -1192,6 +1280,10 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
                 // 本行原先写死 EXTERNAL，被容器的 canExtract=notExternal 整条拒掉，
                 // 于是机器加工了一整个阶段却一 FE 都没扣（阶段 2 Task 4 交付的既有问题）。
                 deductEnergy(energyContainer, cost);
+                // 耗能转废热：迁移前旧 BE 在「extractEnergy 之后、progress++ 之前」
+                // 调 addHeatFromEnergy(energyPerTick)，这里保持同一次序。
+                // 没有热能力的家族该钩子是 no-op。
+                addHeatFromEnergy(cost);
             }
             if (++workProgress >= cycle) {
                 workProgress = 0;

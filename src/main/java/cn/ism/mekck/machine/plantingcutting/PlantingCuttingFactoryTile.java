@@ -143,6 +143,87 @@ public class PlantingCuttingFactoryTile extends MekCkMachineTile implements IMek
         return this.nutrientTank;
     }
 
+    /**
+     * 从营养液槽里的容器灌注营养液罐（第三轮补回）。
+     *
+     * <p>迁移前 {@code PlantingCuttingFactoryBlockEntity.fillTankFromSlot()} 是
+     * {@code onContentsChanged} 路径上的一步：玩家把一个装了营养液的流体容器
+     * 放进营养液槽，罐就自动补满。删掉整份旧 BE 时这一段没有重建，
+     * 而它是玩家给这台机器喂营养液的<b>主要入口</b>（另一个入口是侧配/管道灌
+     * {@code GAS_HANDLER} 能力，机制上仍然通）。</p>
+     *
+     * <p>逐字沿用旧实现的语义：只在<b>模拟</b>能灌进去时才执行（{@code Action.SIMULATE}
+     * 先问一遍），逐个罐位跳过「不是营养液」或「罐不收」的化学品，
+     * 避免把别的气体灌进机器。</p>
+     *
+     * @return 是否发生了实际转移（调用方据此决定要不要 setChanged）
+     */
+    public boolean fillTankFromSlot() {
+        if (nutrientTank == null || nutrientSlot == null) {
+            return false;
+        }
+        var container = nutrientSlot.getStack();
+        if (container.isEmpty() || nutrientTank.getNeeded() <= 0) {
+            return false;
+        }
+        var handler = container.getCapability(mekanism.common.capabilities.Capabilities.GAS_HANDLER)
+                .resolve().orElse(null);
+        if (handler == null) {
+            return false;
+        }
+        boolean didTransfer = false;
+        for (int tank = 0; tank < handler.getTanks(); tank++) {
+            GasStack inItem = handler.getChemicalInTank(tank);
+            if (inItem.isEmpty() || !nutrientTank.isValid(inItem)) {
+                continue;
+            }
+            // 先模拟再执行：模拟能装下的量才是「罐还收得下」的量，
+            // 避免「先从容器抽干、后发现罐满了」把容器掏空却灌不进去。
+            GasStack simulated = nutrientTank.insert(inItem, Action.SIMULATE, AutomationType.MANUAL);
+            long amount = inItem.getAmount();
+            long remainder = simulated.getAmount();
+            if (remainder >= amount) {
+                continue; // 罐满了，这一个罐位灌不进去
+            }
+            GasStack extracted = handler.extractChemical(tank, amount - remainder, Action.EXECUTE);
+            if (extracted.isEmpty()) {
+                continue;
+            }
+            nutrientTank.insert(extracted, Action.EXECUTE, AutomationType.MANUAL);
+            didTransfer = true;
+            if (nutrientTank.getNeeded() == 0) {
+                break; // 罐灌满了，剩下的容器留着（玩家还能取出来用）
+            }
+        }
+        if (didTransfer) {
+            setChanged();
+        }
+        return didTransfer;
+    }
+
+    /**
+     * 营养液槽只接受<b>带气体能力的容器</b>（迁移前 {@code isValidGasContainer} 的语义）。
+     *
+     * <p>不加这道校验的后果不是崩，而是「玩家放了个普通物品进去、界面照收不误、
+     * 但永远不生效」—— 比直接拒绝更让人困惑。</p>
+     */
+    public static boolean isValidGasContainer(net.minecraft.world.item.ItemStack stack) {
+        return stack != null && !stack.isEmpty()
+                && stack.getCapability(mekanism.common.capabilities.Capabilities.GAS_HANDLER).isPresent();
+    }
+
+    /**
+     * 槽位内容变化 → 若动的是营养液槽，就把槽里容器的内容灌进罐。
+     *
+     * <p>迁移前这一步在旧 BE 的 {@code onContentsChanged} 里（{@code hasNutrient &&
+     * fillTankFromSlot()}），删掉整份旧 BE 时没有重建。挂在基类的家族钩子上而不是
+     * 逐 tick 轮询，是因为只在「真的有人动了那个槽」时才需要灌。</p>
+     */
+    @Override
+    protected void onFamilyContentsChanged() {
+        fillTankFromSlot();
+    }
+
     /** 罐里够不够本次批次用。罐不存在（mekmm 未装）时恒 false。 */
     public boolean hasNutrient(long millibuckets) {
         return nutrientTank != null && millibuckets > 0 && nutrientTank.getStored() >= millibuckets;
@@ -250,7 +331,10 @@ public class PlantingCuttingFactoryTile extends MekCkMachineTile implements IMek
         // 机器槽区最左在 x=27（一行式）或 x=38（方阵）—— 它会**压住第一个输入槽**。
         // 收敛成单列后这个重叠不存在。
         boolean oneRow = usesOneRowLayout();
-        nutrientSlot = MekCkSlot.input(slotLimitPerSlot(getTier()), listener,
+        // 营养液槽用带准入谓词的变体：只接受带 GAS_HANDLER 能力的容器
+        // （迁移前 isItemValid 的语义，见 MekCkSlot#inputFiltered 的说明）。
+        nutrientSlot = MekCkSlot.inputFiltered(slotLimitPerSlot(getTier()),
+                (stack, type) -> isValidGasContainer(stack), listener,
                 cn.ism.mekck.menu.MekCkFactoryLayout.EXTRA_SLOT_X, cn.ism.mekck.menu.MekCkFactoryLayout.extraSlotY(0, oneRow));
         builder.addSlot(nutrientSlot);
         growthSlot = MekCkSlot.input(slotLimitPerSlot(getTier()), listener,

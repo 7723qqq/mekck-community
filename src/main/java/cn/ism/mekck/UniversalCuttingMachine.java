@@ -1543,6 +1543,16 @@ public final class UniversalCuttingMachine {
             }
         });
 
+        // 玩家登出：清掉其「昂贵请求节流」记录（第三轮补）。
+        //
+        // 不清也不影响正确性（key 是 UUID，重新登录自然重新计时），但那是个
+        // ConcurrentHashMap，长期服务器 + 大量进出服会无界增长。顺手清掉。
+        MinecraftForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedOutEvent event) -> {
+            if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
+                cn.ism.mekck.network.PacketGuard.forgetCooldown(serverPlayer);
+            }
+        });
+
         // 创造升级：向首位进服的玩家提示本局 49 种食物已随机生成
         MinecraftForge.EVENT_BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
             if (creativeUpgradeHintSent) {

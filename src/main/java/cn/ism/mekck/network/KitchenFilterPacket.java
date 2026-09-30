@@ -68,6 +68,19 @@ public final class KitchenFilterPacket {
                 case 4 -> {
                     // 仅请求同步，不做修改
                 }
+                case 5 -> {
+                    // 切换该系列的自动加工开关（第三轮补：此前 setAutoMode 零调用方，
+                    // 整个自动加工引擎都是死代码）。
+                    //
+                    // **必须挡住「没装模块」**：tickAutoMode 只遍历 installedAbilities()，
+                    // 没有模块的系列即便把开关置真也永远不会被 tick 到 ——
+                    // 玩家会看到「按钮开了但什么都不发生」，而那正是本功能此前
+                    // 「不可达」的状态换个形式复现。直接忽略并回同步，
+                    // 客户端下一包就会把按钮画回「关」。
+                    if (kitchen.abilityOf(families[familyOrdinal]) != null) {
+                        kitchen.setAutoMode(families[familyOrdinal], !kitchen.isAutoMode(families[familyOrdinal]));
+                    }
+                }
                 default -> {
                 }
             }

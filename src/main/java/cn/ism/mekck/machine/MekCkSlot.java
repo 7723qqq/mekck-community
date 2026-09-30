@@ -197,6 +197,28 @@ public final class MekCkSlot extends BasicInventorySlot {
     }
 
     /**
+     * 带<b>物品准入谓词</b>的输入槽。
+     *
+     * <p>存在的理由：{@link #input} 的 {@code canInsert} 是 {@code alwaysTrueBi}
+     * （与 Mek 的 {@code InputInventorySlot.at(listener,x,y)} 逐位一致），
+     * 所以<b>任何</b>东西都能被丢进去。绝大多数槽这没问题，但「营养液槽」那类槽位
+     * 如果不校验，玩家放个普通物品进去、界面照收不误、却永远不生效 ——
+     * 比直接拒绝更让人困惑。</p>
+     *
+     * <p>迁移前的 {@code PlantingCuttingFactoryBlockEntity.isItemValid} 正是
+     * {@code slot == nutrientSlot → isValidGasContainer(stack)}，删旧 BE 时没重建；
+     * 本工厂把这个语义补回来。</p>
+     *
+     * <p>{@code canExtract} 仍与 {@link #input} 一致（{@code notExternal}），
+     * {@code canInsert} 额外要求谓词为真。</p>
+     */
+    public static MekCkSlot inputFiltered(int limit,
+                                           java.util.function.BiPredicate<ItemStack, AutomationType> canInsert,
+                                           IContentsListener listener, int x, int y) {
+        return new MekCkSlot(limit, notExternal, canInsert, listener, x, y, ContainerSlotType.INPUT, null);
+    }
+
+    /**
      * 输出槽。
      *
      * <p>逐字复刻 {@code OutputInventorySlot.at(listener, x, y)} 的谓词配置——

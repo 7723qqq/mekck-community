@@ -196,7 +196,16 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
     // ================== 显示序列（搜索 / 排序 / 滚动） ==================
 
-    /** 重建过滤 + 排序后的序列，并刷新可见槽映射。 */
+    /**
+     * 重建过滤 + 排序后的序列，并刷新可见槽映射。
+     *
+     * <p><b>这是浏览器唯一的数据来源</b>，调用点必须覆盖「内容变了」的所有时机。
+     * 第三轮审查发现它此前只在构造器、{@code setSearchText}、{@code setSortMode}
+     * 和 quickMoveStack 成功后被调 —— 也就是说存储区在<b>开界面之后</b>发生的
+     * 任何变化（AutoIO 拉入、订单交付、AE2 补料、弹出）都不会反映到界面上：
+     * 新到的物品永远不出现，被消耗掉的物品还占着一个可见的空格。
+     * 现补上滚动时重建与客户端周期性重建（见 {@code CentralKitchenScreen#tick}）。</p>
+     */
     public void refreshDisplay() {
         filtered.clear();
         String needle = searchText == null ? "" : searchText.trim().toLowerCase();
@@ -216,6 +225,12 @@ public class CentralKitchenMenu extends AbstractContainerMenu
             case COUNT -> filtered.sort(Comparator.comparingInt(
                     (Integer i) -> -machine.items.getStackInSlot(i).getCount()));
             default -> { }
+        }
+        // 内容变少时把滚动位置夹回合法范围：否则 applyScroll 会整页渲染成空，
+        // 而屏幕上的页码指示还会停在旧的 (scrollRow+1)/maxScrollRow 上。
+        int max = maxScrollRow();
+        if (scrollRow > max) {
+            scrollRow = max;
         }
         applyScroll();
     }
@@ -248,7 +263,12 @@ public class CentralKitchenMenu extends AbstractContainerMenu
         int next = Math.max(0, Math.min(maxRow, scrollRow + delta));
         if (next == scrollRow) return;
         this.scrollRow = next;
-        applyScroll();
+        // ⚠️ 这里原本只调 applyScroll()，也就是**只重切上一次算好的 filtered**。
+        // 于是「开界面之后才进存储区的东西」永远不出现，而被消耗掉的格子还占着位置 ——
+        // 屏幕上的页码指示也跟着错（它读的是同一个陈旧 filtered）。
+        // 改为整段重建：scroll 的语义本来就包含「翻到下一页」，而下一页的内容
+        // 必须是**当下**的存储区内容。
+        refreshDisplay();
     }
 
     public int maxScrollRow() {

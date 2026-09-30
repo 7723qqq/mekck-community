@@ -148,6 +148,24 @@ public class KitchenModuleWindow extends GuiWindow {
         guiGraphics.fill(cbx, by, cbx + 34, by + 12, 0xFF5A5A5A);
         guiGraphics.fill(cbx + 1, by + 1, cbx + 33, by + 11, 0xFFB0B0B0);
         guiGraphics.drawString(getFont(), "清空", cbx + 6, by + 2, 0xFF303030, false);
+
+        // 自动加工开关（第三轮补：此前整个自动加工引擎没有任何入口）
+        //
+        // 放在过滤模式右边同一行 —— 它和过滤器是同一粒度（按系列）的设置，
+        // 而自动模式**正是按过滤器的结果挑配方**的（见 CentralKitchenBlockEntity.startThread），
+        // 拆到别处反而割裂。
+        //
+        // 只对**已装模块**的系列画：没有模块时服务端会忽略这个开关（case 5 里的
+        // abilityOf 判空），画一个点了没反应的按钮就是「把不可达换个形式复现」。
+        boolean installed = (menu.getFamilyMask() & (1 << family.ordinal())) != 0;
+        if (installed) {
+            boolean auto = cached != null && cached.autoMode;
+            int abx = bx + 112;
+            guiGraphics.fill(abx, by, abx + 76, by + 12, auto ? 0xFF2E6B2E : 0xFF5A5A5A);
+            guiGraphics.fill(abx + 1, by + 1, abx + 75, by + 11, auto ? 0xFF9CE09C : 0xFFB0B0B0);
+            guiGraphics.drawString(getFont(), auto ? "自动：开" : "自动：关", abx + 6, by + 2,
+                    auto ? 0xFF103010 : 0xFF303030, false);
+        }
         // 幽灵槽
         for (int i = 0; i < cn.ism.mekck.kitchen.KitchenFilter.MAX_ITEMS; i++) {
             int sx = relativeX + FILTER_SLOT_X + i * FILTER_SLOT_STEP;
@@ -217,6 +235,13 @@ public class KitchenModuleWindow extends GuiWindow {
             // 清空按钮
             if (mouseX >= bx + 74 && mouseX < bx + 108 && mouseY >= by && mouseY < by + 12) {
                 sendFilter((byte) 3, family, 0, net.minecraft.world.item.ItemStack.EMPTY);
+                return this;
+            }
+            // 自动加工开关：与服务端一样只对已装模块的系列响应，
+            // 否则点了会被服务端忽略（本地却像生效了）。
+            if ((menu.getFamilyMask() & (1 << family.ordinal())) != 0
+                    && mouseX >= bx + 112 && mouseX < bx + 188 && mouseY >= by && mouseY < by + 12) {
+                sendFilter((byte) 5, family, 0, net.minecraft.world.item.ItemStack.EMPTY);
                 return this;
             }
             // 幽灵槽：手上拿物品 = 添加；空手点已有 = 移除

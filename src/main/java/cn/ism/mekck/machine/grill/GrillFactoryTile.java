@@ -23,6 +23,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * 烧烤工厂的机器 —— 并行方阵 + 3 个调味料槽。
@@ -34,7 +35,84 @@ import java.util.List;
  * <p>调味料的语义（启用开关、默认模式下挑剩余次数最多的、工作模式、订单指定）
  * 全在 {@link GrillFactoryExecutor} 里——它们是配方侧的决策，不是机器侧的能力。
  */
+/**
+ * 烧烤工厂。
+ *
+ * <h3>热能力（第三轮补回）</h3>
+ * 迁移前 {@code GrillFactoryBlockEntity} 有一份真正的热容：每 tick 跑
+ * {@code tickHeat()}（环境回归 + 与相邻热容器交换）、把耗掉的电按
+ * {@code addHeatFromEnergy} 转成废热、并把温度显示在 GUI 上。迁到 Mek 原生体系时
+ * {@code getInitialHeatCapacitors} 落回默认的<b>空容器</b> ⇒ 机器「声称能处理热」
+ * 却没有容量：旁边的加热线圈灌进来的热量无处可去，本机也不向环境散热。
+ *
+ * <p><b>不需要自己实现 {@code getHeatCapacitors}</b> —— 它在
+ * {@code TileEntityMekanism} 里是 {@code final}。基类已经：
+ * ① {@code implements ITileHeatHandler}（而它 {@code extends IMekanismHeatHandler}，
+ * 所以「第三方按 {@code blockEntity instanceof IMekanismHeatHandler} 识别本机为热处理器」
+ * 这条路径<b>一直是通的</b>，例如气动工艺 PNC:R）；② 在构造器里<b>无条件</b>调本钩子
+ * 并据此建 {@code HeatHandlerManager}；③ 已把电容温度挂进容器追踪。
+ * 子类只需<b>提供热容</b>。详见 {@link MekCkMachineTile#getInitialHeatCapacitors}。</p>
+ *
+ * <p>热在本家族是<b>纯增量</b>：温度不参与速度 / 耗能 / 配方门禁，只用于与外部热设备交换热量。</p>
+ */
 public class GrillFactoryTile extends MekCkMachineTile implements IMekCkPorted {
+
+    /** 与 {@code MekCkHeatComponent} 同组的热学参数（该类的 44/46 行是 private，这里取同值）。 */
+    private static final double INVERSE_CONDUCTION = 5.0;
+    private static final double INVERSE_INSULATION = 100.0;
+
+    /**
+     * 本机热容。
+     *
+     * <p><b>只能在 {@link #getInitialHeatCapacitors} 里赋值</b>，不能写成字段初始化器 ——
+     * 该钩子由 {@code TileEntityMekanism} 的构造器调用，而字段初始化器在
+     * {@code super(...)} <b>之后</b>才跑，所以初始化器里建的电容永远是 null。
+     * 这与本仓库既有的「槽位列表不能在字段初始化器里 new」是同一条铁律
+     * （见 {@link MekCkMachineTile} 的类注释）。</p>
+     */
+    @Nullable
+    private mekanism.common.capabilities.heat.BasicHeatCapacitor heatCapacitor;
+
+    @Override
+    protected mekanism.common.capabilities.holder.heat.IHeatCapacitorHolder getInitialHeatCapacitors(
+            IContentsListener listener,
+            mekanism.common.capabilities.heat.CachedAmbientTemperature ambient) {
+        // forSideWithConfig：让热容走侧配（与物品/流体同一套 TileComponentConfig），
+        // 与本家族其他能力口径一致。
+        var builder = mekanism.common.capabilities.holder.heat.HeatCapacitorHelper
+                .forSideWithConfig(this::getDirection, this::getConfig);
+        heatCapacitor = mekanism.common.capabilities.heat.BasicHeatCapacitor.create(
+                cn.ism.mekck.util.MekCkHeatComponent.HEAT_CAPACITY,
+                INVERSE_CONDUCTION,
+                INVERSE_INSULATION,
+                ambient,
+                listener::onContentsChanged);
+        builder.addCapacitor(heatCapacitor);
+        return builder.build();
+    }
+
+    /**
+     * 把本 tick 耗掉的电按<b>发电效率</b>转成废热。
+     *
+     * <p>与迁移前逐字同款：旧 {@code GrillFactoryBlockEntity.serverTick} 里是
+     * {@code machine.energy.extractEnergy(energyPerTick, false);
+     * machine.addHeatFromEnergy(energyPerTick); machine.progress++;}，
+     * 而 {@code MekCkHeatComponent.addHeatFromEnergy} 内部按
+     * {@code HEAT_EFFICIENCY = 0.6} 折算 —— 这里显式用同一个常数，避免两处漂移。</p>
+     */
+    @Override
+    protected void addHeatFromEnergy(int energyUsed) {
+        if (energyUsed > 0 && heatCapacitor != null) {
+            heatCapacitor.handleHeat(energyUsed
+                    * cn.ism.mekck.util.MekCkHeatComponent.HEAT_EFFICIENCY);
+        }
+    }
+
+    @Override
+    public double getTemperatureK() {
+        return heatCapacitor == null ? mekanism.api.heat.HeatAPI.AMBIENT_TEMP
+                : heatCapacitor.getTemperature();
+    }
 
     /** 一个批次的基础耗时（tick）。与旧 {@code BASE_PROCESS_TIME} 同值。 */
     public static final int PROCESS_TIME = 200;

@@ -52,6 +52,76 @@ public final class PacketGuard {
         return Math.max(0, Math.min(raw, MAX_DECODE_ELEMENTS));
     }
 
+    // ==================== 昂贵只读请求的节流（第三轮补）====================
+
+    /**
+     * 昂贵请求的最小间隔（tick）。
+     *
+     * <p>5 = 250 ms。取值理由：人类在 GUI 上点「预览」或改数量的节奏远快于这个值，
+     * 所以对正常玩家是<b>不可感知</b>的；而它把一个玩家可无限触发的昂贵操作
+     * 压到每秒 4 次。</p>
+     */
+    private static final int EXPENSIVE_COOLDOWN_TICKS = 5;
+
+    /** 玩家 UUID → (上次放行时的游戏时刻, 上次放行的请求指纹)。 */
+    private static final java.util.Map<java.util.UUID, long[]> EXPENSIVE_COOLDOWN =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 「昂贵只读/预览」请求的节流闸：同一玩家在冷却期内<b>只放行与上次完全相同</b>的请求。
+     *
+     * <h3>为什么需要它</h3>
+     * {@code CentralKitchenBlockEntity.previewOrder} 与 {@code placeOrder} 都会走
+     * {@code KitchenCraftingPlan.solve} → {@code buildReverseIndex}，对已安装系列的
+     * <b>全部</b> {@code recipeTypes} 逐条取 {@code recipe.getResultItem(...)} 并新建 HashMap。
+     * {@code RecipeCache} 只缓存了配方<b>列表</b>，{@code getResultItem} 每次都真调。
+     * 装满 18 个系列时这是每包一次全模组配方扫描。
+     *
+     * <p>而 {@code mode == 0} 的<b>预览不消耗任何材料</b>，客户端可以纯刷 ——
+     * 一个玩家发几百个包就能把服务端主线程打满。</p>
+     *
+     * <h3>为什么是「同请求去重」而不是「一律拒绝」</h3>
+     * 一律拒绝会让「连点两次预览」第二次没反应，看起来像 bug。而 GUI 的自然操作里
+     * <b>重复同一个请求</b>本来就是幂等的（结果一样），所以：冷却期内只有
+     * <b>与上次完全相同</b>的请求被静默放行（省掉重复计算），任何<b>不同</b>的请求被拒。
+     * 玩家的下一次真实操作（换了配方/数量）仍然立即生效。</p>
+     *
+     * <p>被拒时<b>不回错误提示</b>：节流是内部实现细节，不是玩家的错误。
+     * 静默丢弃即可（客户端下一次真实操作自然会拿到新结果）。</p>
+     *
+     * @param fingerprint 请求指纹；同指纹在冷却期内视为重复，直接放行
+     * @return true = 放行；false = 冷却中且请求不同，应静默忽略
+     */
+    public static boolean expensiveRequest(ServerPlayer player, long fingerprint) {
+        if (player == null) {
+            return false;
+        }
+        long now = player.level() == null ? 0 : player.level().getGameTime();
+        long[] slot = EXPENSIVE_COOLDOWN.get(player.getUUID());
+        if (slot == null) {
+            EXPENSIVE_COOLDOWN.put(player.getUUID(), new long[]{now, fingerprint});
+            return true;
+        }
+        if (slot[1] == fingerprint) {
+            // 重复请求：结果必然相同，放行但**不刷新时刻**。
+            // 刷新时刻会让「连点」变成永远通不过（每次都被当成新请求）的反面极端。
+            return true;
+        }
+        if (now - slot[0] < EXPENSIVE_COOLDOWN_TICKS) {
+            return false;
+        }
+        slot[0] = now;
+        slot[1] = fingerprint;
+        return true;
+    }
+
+    /** 玩家离开时清掉其节流记录（不清理也不影响正确性，只是回收 Map）。 */
+    public static void forgetCooldown(ServerPlayer player) {
+        if (player != null) {
+            EXPENSIVE_COOLDOWN.remove(player.getUUID());
+        }
+    }
+
     /**
      * 该玩家是否有权操作此坐标上的方块实体。
      *

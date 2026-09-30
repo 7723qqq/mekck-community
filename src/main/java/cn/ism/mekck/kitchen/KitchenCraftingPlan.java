@@ -257,18 +257,34 @@ public final class KitchenCraftingPlan {
         return null;
     }
 
-    /** 从配方重建一个步骤（供订单持久化读取）。 */
+    /**
+     * 从配方重建一个步骤（供订单持久化读取）。
+     *
+     * @param batches **执行次数**，不是产出件数（第三轮修，见方法体注释）
+     */
     public static Step rebuildStep(Level level, ResourceLocation recipeId, int batches, Recipe<?> recipe) {
         try {
             List<ItemStack> inputs = new ArrayList<>();
-            int perCraft = Math.max(1, recipe.getResultItem(level.registryAccess()).getCount());
-            int need = (int) Math.ceil((double) Math.max(1, batches) / perCraft);
+            // ⚠️ batches 是**执行次数**，这里曾经又除了一次 perCraft（第三轮修）。
+            //
+            // 写入侧 expand 的口径是：`need = ceil(要求产出的件数 / perCraft)`，
+            // 然后 `new Step(..., need, ...)` —— 所以 `Step.batches` 存的就是执行次数；
+            // 同一个值被 save 写进 "Batches"、由 load 原样传回这里。
+            //
+            // 而本方法原先又做了一次 `ceil(batches / perCraft)` ⇒ **每次读档把订单量再除一遍
+            // perCraft**：400 件（perCraft=4）→ 100 → 25 → 7 → 2 → 1，逐次缩水直至 1 批。
+            // 玩家看到的是「订单量对不上 + 输出一堆莫名其妙的多余原料」
+            // —— 剩余预留材料最后被 deliverOrder 整体倒进输出区。
+            //
+            // 正确口径：每次执行消耗每种 ingredient 各 1 份，所以输入数量就等于执行次数
+            // （与 expand 里 `sample.setCount(need)` 完全一致）。
+            int executions = Math.max(1, batches);
             for (Ingredient ing : recipe.getIngredients()) {
                 if (ing.isEmpty()) continue;
                 ItemStack[] matches = ing.getItems();
                 if (matches.length == 0) continue;
                 ItemStack sample = matches[0].copy();
-                sample.setCount(need);
+                sample.setCount(executions);
                 inputs.add(sample);
             }
             ItemStack output = recipe.getResultItem(level.registryAccess()).copy();
@@ -282,7 +298,7 @@ public final class KitchenCraftingPlan {
             if (family == null) return null;
             cn.ism.mekck.util.FluidIngredientHelper.FluidInfo fluidNeed =
                     cn.ism.mekck.util.FluidIngredientHelper.sumFluids(recipe.getIngredients());
-            Step rebuilt = new Step(family, recipeId, inputs, output, need,
+            Step rebuilt = new Step(family, recipeId, inputs, output, executions,
                     fluidNeed.isEmpty() ? null : fluidNeed);
             try {
                 for (ItemStack candidate : cn.ism.mekck.kitchen.KitchenRecipeMatcher

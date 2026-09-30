@@ -48,6 +48,18 @@ public final class KitchenOrderPacket {
             var level = player.level();
             var be = PacketGuard.target(player, pos);
             if (!(be instanceof CentralKitchenBlockEntity kitchen)) return;
+            // 节流：previewOrder / placeOrder 每次都走 solve → buildReverseIndex，
+            // 对已安装系列的**全部** recipeTypes 逐条取 getResultItem 并新建 HashMap
+            // （RecipeCache 只缓存了配方列表，getResultItem 每次都真调）。
+            // 而 mode==0 的预览不消耗任何材料 ⇒ 客户端可以纯刷打满主线程。
+            // 同指纹（同样的配方 + 同样的数量 + 同样的模式）在冷却期内直接放行，
+            // 因为重复请求的结果必然相同、不同请求才拒。详见 PacketGuard#expensiveRequest。
+            long fingerprint = (long) mode * 31L * 1_000_003L
+                    + recipeId.hashCode() * 31L
+                    + Math.max(1, count);
+            if (!PacketGuard.expensiveRequest(player, fingerprint)) {
+                return;
+            }
             String result;
             if (mode == 0) {
                 result = kitchen.previewOrder(level, net.minecraft.resources.ResourceLocation.tryParse(recipeId),

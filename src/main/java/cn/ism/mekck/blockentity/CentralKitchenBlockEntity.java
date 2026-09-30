@@ -602,7 +602,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
             cn.ism.mekck.network.ModMessages.sendToPlayer(
                     new cn.ism.mekck.network.KitchenFilterSyncPacket(
                             getBlockPos(), family.ordinal(), filter.mode().ordinal(),
-                            new java.util.ArrayList<>(filter.items())),
+                            new java.util.ArrayList<>(filter.items()), isAutoMode(family)),
                     player);
         }
     }
@@ -612,10 +612,22 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         for (var ability : installedAbilities()) {
             if (!isAutoMode(ability.family())) continue;
             var list = threads.computeIfAbsent(ability.family(), f -> new java.util.ArrayList<>());
-            while (list.size() < ability.threads()) list.add(new KitchenThread());
-            for (KitchenThread t : list) {
-                if (t.busy()) advanceThread(level, pos, ability, t);
-                else startThread(level, ability, t);
+            int capacity = Math.max(1, ability.threads());
+            while (list.size() < capacity) list.add(new KitchenThread());
+            for (int i = 0; i < list.size(); i++) {
+                KitchenThread t = list.get(i);
+                if (t.busy()) {
+                    // 在跑的**一律推进到完成**，包括超编的那些。
+                    // 读档缩容时不能删 busy 线程（材料已扣），所以列表可能暂时长于
+                    // 模块提供的容量；让它们跑完是唯一不丢材料的做法。
+                    advanceThread(level, pos, ability, t);
+                } else if (i < capacity) {
+                    startThread(level, ability, t);
+                }
+                // i >= capacity 且空闲 = 缩容留下的余量：**不开工**。
+                // 否则换个低等级模块反而凭空多出线程（每个余量线程都会去
+                // startThread 抢料），而模块明明只提供了 capacity 条。
+                // 它晾着等下一次 load 的缩容回收。
             }
         }
         // 方块激活态：任一线程在跑即为激活。这段原先写在 tickThreads 里，而该方法全仓
@@ -643,6 +655,61 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
 
     public boolean isAutoMode(cn.ism.mekck.kitchen.KitchenFamily family) {
         return Boolean.TRUE.equals(autoMode.get(family));
+    }
+
+    /**
+     * 某系列的模块被拆掉时，把该系列<b>正在加工</b>的线程原样退回共享存储区。
+     *
+     * <h3>为什么必须退款而不是丢弃</h3>
+     * {@code startThread} 在<b>开工那一刻</b>就把材料从存储区扣走了
+     * （{@code KitchenRecipeMatcher.consume(items, match.consumes())}），
+     * 而产物要到 {@code advanceThread} 跑完才落进输出区。所以一条 busy 线程代表
+     * 「一份已经从玩家手里拿走的材料 + 一份还没产出的东西」。模块一被拆掉，
+     * 这条线程在本机就再无加工能力 —— 丢弃它等于<b>凭空销毁</b>玩家那份材料。
+     *
+     * <p>退款是逐槽精确退的：{@link KitchenThread#consumes} 记的就是当初扣料的
+     * {@code [槽位, 数量]} 对，所以不需要猜「原来是什么」——
+     * 槽里现在是什么就退什么，退不进去的部分由 {@link #insertIntoStorage} 交给调用方处理。</p>
+     */
+    private void refundOrphanedThreads(cn.ism.mekck.kitchen.KitchenFamily family) {
+        var list = threads.remove(family);
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        int refunded = 0;
+        for (KitchenThread t : list) {
+            if (!t.busy() || t.consumes == null) {
+                continue;
+            }
+            for (int[] pair : t.consumes) {
+                // 槽位索引可能因换机器而失效（load 时已逐条校验过，这里再兜一次，
+                // 因为退款发生在「模块被拆」这条与索引校验不同的路径上）。
+                if (pair == null || pair.length < 2 || pair[0] < 0 || pair[0] >= items.getSlots()) {
+                    continue;
+                }
+                var stack = items.getStackInSlot(pair[0]);
+                if (stack.isEmpty()) {
+                    continue;
+                }
+                int amount = Math.min(stack.getCount(), pair[1]);
+                if (amount <= 0) {
+                    continue;
+                }
+                var give = stack.copy();
+                give.setCount(amount);
+                stack.shrink(amount);
+                if (stack.isEmpty()) {
+                    items.setStackInSlot(pair[0], net.minecraft.world.item.ItemStack.EMPTY);
+                } else {
+                    items.setStackInSlot(pair[0], stack);
+                }
+                insertIntoStorage(give);
+                refunded++;
+            }
+        }
+        if (refunded > 0) {
+            setChanged();
+        }
     }
 
     public void setAutoMode(cn.ism.mekck.kitchen.KitchenFamily family, boolean enabled) {
@@ -1343,12 +1410,45 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
             for (cn.ism.mekck.kitchen.KitchenFamily f : cn.ism.mekck.kitchen.KitchenFamily.values()) {
                 if (!threadTag.contains(f.id, net.minecraft.nbt.Tag.TAG_LIST)) continue;
                 var ability = abilityOf(f);
-                if (ability == null) continue;   // 该系列模块已不在机器里，存档中的线程无处安放
+                if (ability == null) {
+                    // 该系列模块已不在机器里。
+                    //
+                    // ⚠️ 这里**不能**直接丢线程：busy 线程的材料在 startThread 开工那一刻
+                    // 就扣了，产物还没出。丢掉它 = 材料凭空消失、产物永远不会出现。
+                    // 所以把它们**原样退回共享存储区**——玩家至少拿回材料。
+                    refundOrphanedThreads(f);
+                    continue;
+                }
                 var list = threads.computeIfAbsent(f, k -> new java.util.ArrayList<>());
-                // 线程数由当前已安装模块决定（可能因拆模块 / 换机器而变化），先对齐到应有长度
+                // 线程数由当前已安装模块决定（可能因拆模块 / 换机器而变化），先对齐到应有长度。
                 int want = Math.max(1, ability.threads());
                 while (list.size() < want) list.add(new KitchenThread());
-                while (list.size() > want) list.remove(list.size() - 1);
+                // ⚠️ 缩容**只能删空闲线程**。
+                //
+                // 原来的写法是 `while (list.size() > want) list.remove(list.size() - 1);` ——
+                // 无条件从尾部删。而 busy 线程的材料已扣、产物未出，删它就是静默销毁在制品：
+                // 8 线程的高等级模块开工后换成 1 线程的基础模块，读档一次就丢 7 条线程的材料。
+                //
+                // 讽刺的是同文件 tickAutoMode 上方那段注释明确写着
+                // 「在 tick 路径上缩容会把正在加工的线程直接删掉 ⇒ 材料凭空损失」，
+                // 然后在读档路径上做了同一件被自己禁止的事（只是被「自动模式不可达」掩盖着，
+                // 补上开关后立刻升级为 Critical）。
+                while (list.size() > want) {
+                    int victim = -1;
+                    for (int i = list.size() - 1; i >= 0; i--) {
+                        if (!list.get(i).busy()) {
+                            victim = i;
+                            break;
+                        }
+                    }
+                    if (victim < 0) {
+                        // 全在忙：一条都不删。多出来的线程这一轮不参与 tickAutoMode
+                        // （它按 ability.threads() 只推进前 want 条），但会继续推进到完成
+                        // —— 完成后自然变空闲，下一次读档/缩容才被回收。
+                        break;
+                    }
+                    list.remove(victim);
+                }
                 var src = threadTag.getList(f.id, net.minecraft.nbt.Tag.TAG_COMPOUND);
                 for (int i = 0; i < src.size() && i < list.size(); i++) {
                     var tt = src.getCompound(i);

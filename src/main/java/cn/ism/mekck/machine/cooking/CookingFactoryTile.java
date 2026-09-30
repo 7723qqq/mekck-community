@@ -72,6 +72,68 @@ import java.util.List;
  */
 public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted {
 
+    /**
+     * 本机热容。
+     *
+     * <p><b>只能在 {@link #getInitialHeatCapacitors} 里赋值</b>，不能写成字段初始化器 ——
+     * 该钩子由 {@code TileEntityMekanism} 的构造器调用，而字段初始化器在
+     * {@code super(...)} <b>之后</b>才跑。与本类 {@code fluidTanks} 必须就地
+     * {@code new} 是同一条铁律（见类注释的构造期顺序陷阱）。</p>
+     */
+    @org.jetbrains.annotations.Nullable
+    private mekanism.common.capabilities.heat.BasicHeatCapacitor heatCapacitor;
+
+    /**
+     * 接回热容（第三轮补）。
+     *
+     * <p>迁移前 {@code CookingFactoryBlockEntity} 有真正的热容：每 tick 跑
+     * {@code tickHeat()}、把耗掉的电按 {@code addHeatFromEnergy} 转成废热、温度显示在
+     * GUI 上。迁到 Mek 原生体系后 {@code getInitialHeatCapacitors} 落回默认空容器 ⇒
+     * 机器「声称能处理热」却没有容量，旁边的加热线圈无处可灌、本机也不散热。
+     * 而 README 的「产热机器可与通用机械的热力设备互通」正是承诺这个。</p>
+     *
+     * <p>基类已经 {@code implements ITileHeatHandler}（它 {@code extends IMekanismHeatHandler}）、
+     * 已建好 {@code HeatHandlerManager}、已把温度挂进容器追踪，且
+     * {@code getHeatCapacitors} 是 {@code final} —— 所以子类只需提供热容。
+     * 详见 {@link MekCkMachineTile#getInitialHeatCapacitors}。</p>
+     */
+    @Override
+    protected mekanism.common.capabilities.holder.heat.IHeatCapacitorHolder getInitialHeatCapacitors(
+            mekanism.api.IContentsListener listener,
+            mekanism.common.capabilities.heat.CachedAmbientTemperature ambient) {
+        var builder = mekanism.common.capabilities.holder.heat.HeatCapacitorHelper
+                .forSideWithConfig(this::getDirection, this::getConfig);
+        heatCapacitor = mekanism.common.capabilities.heat.BasicHeatCapacitor.create(
+                cn.ism.mekck.util.MekCkHeatComponent.HEAT_CAPACITY,
+                5.0,   // 传导：与 MekCkHeatComponent.INVERSE_CONDUCTION 同值
+                100.0, // 保温：与 MekCkHeatComponent.INVERSE_INSULATION 同值
+                ambient,
+                listener::onContentsChanged);
+        builder.addCapacitor(heatCapacitor);
+        return builder.build();
+    }
+
+    /**
+     * 把本 tick 耗掉的电按发电效率转成废热。
+     *
+     * <p>与迁移前逐字同款：旧 {@code CookingFactoryBlockEntity.serverTick} 里是
+     * {@code machine.energy.extractEnergy(energyPerTick, false);
+     * machine.addHeatFromEnergy(energyPerTick); machine.progress++;}。</p>
+     */
+    @Override
+    protected void addHeatFromEnergy(int energyUsed) {
+        if (energyUsed > 0 && heatCapacitor != null) {
+            heatCapacitor.handleHeat(energyUsed
+                    * cn.ism.mekck.util.MekCkHeatComponent.HEAT_EFFICIENCY);
+        }
+    }
+
+    @Override
+    public double getTemperatureK() {
+        return heatCapacitor == null ? mekanism.api.heat.HeatAPI.AMBIENT_TEMP
+                : heatCapacitor.getTemperature();
+    }
+
     /** 输入槽数：3 列 × 2 行。编译期常量，与等级无关。 */
     public static final int INPUT_SLOTS = 6;
     /** 输入方阵列数。 */
