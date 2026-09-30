@@ -998,7 +998,7 @@ public final class UniversalCuttingMachine {
             // BlockType 需要 tile 与容器，但两者都必须先有方块 —— 用延迟 Supplier 破这个环。
             // 三个 Supplier 都只在 Mek 真正求值的时刻（放置 / 开 GUI）才被调用，那时注册早已完成。
             mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.cutting.CuttingFactoryTile> blockType =
-                    CuttingMachineFactoryBlock.blockTypeFor(tier, () -> FACTORY_CONTAINER, () -> findCuttingFactoryTile(tier));
+                    CuttingMachineFactoryBlock.blockTypeFor(tier, () -> FACTORY_CONTAINER, () -> findFactoryTile(CUTTING_FACTORY_TILES, tier, "切菜工厂"));
 
             mekanism.common.registration.impl.BlockRegistryObject<CuttingMachineFactoryBlock, MekCkBlockItem> handle =
                     CUTTING_FACTORY_BLOCKS_REG.register(id,
@@ -1043,7 +1043,7 @@ public final class UniversalCuttingMachine {
             // BlockType 需要 tile 与容器，但两者都必须先有方块 —— 用延迟 Supplier 破这个环。
             mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.cooking.CookingFactoryTile> blockType =
                     CookingFactoryBlock.blockTypeFor(tier, () -> COOKING_FACTORY_CONTAINER,
-                            () -> findCookingFactoryTile(tier));
+                            () -> findFactoryTile(COOKING_FACTORY_TILES, tier, "烹饪工厂"));
 
             // 末位 true = MekCkBlockItem 的 isCooking 标志（tooltip 用），旧实现同款。
             mekanism.common.registration.impl.BlockRegistryObject<CookingFactoryBlock, MekCkBlockItem> handle =
@@ -1079,7 +1079,7 @@ public final class UniversalCuttingMachine {
             // BlockType 需要 tile 与容器，但两者都必须先有方块 —— 用延迟 Supplier 破这个环。
             mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.skewering.SkeweringFactoryTile> blockType =
                     SkeweringFactoryBlock.blockTypeFor(tier, () -> SKEWERING_FACTORY_CONTAINER,
-                            () -> findSkeweringFactoryTile(tier));
+                            () -> findFactoryTile(SKEWERING_FACTORY_TILES, tier, "穿串工厂"));
 
             // 末位 true = MekCkBlockItem 的 isCooking 标志（tooltip 用），旧实现同款。
             mekanism.common.registration.impl.BlockRegistryObject<SkeweringFactoryBlock, MekCkBlockItem> handle =
@@ -1115,7 +1115,7 @@ public final class UniversalCuttingMachine {
             // BlockType 需要 tile 与容器，但两者都必须先有方块 —— 用延迟 Supplier 破这个环。
             mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.grill.GrillFactoryTile> blockType =
                     GrillFactoryBlock.blockTypeFor(tier, () -> GRILL_FACTORY_CONTAINER,
-                            () -> findGrillFactoryTile(tier));
+                            () -> findFactoryTile(GRILL_FACTORY_TILES, tier, "烧烤工厂"));
 
             mekanism.common.registration.impl.BlockRegistryObject<GrillFactoryBlock, MekCkBlockItem> handle =
                     GRILL_FACTORY_BLOCKS_REG.register(id,
@@ -1179,7 +1179,7 @@ public final class UniversalCuttingMachine {
             // BlockType 需要 tile 与容器，但两者都必须先有方块 —— 用延迟 Supplier 破这个环。
             mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.plantingcutting.PlantingCuttingFactoryTile> blockType =
                     PlantingCuttingFactoryBlock.blockTypeFor(tier, () -> PLANTING_CUTTING_CONTAINER,
-                            () -> findPlantingCuttingFactoryTile(tier));
+                            () -> findFactoryTile(PLANTING_CUTTING_FACTORY_TILES, tier, "种植切配工厂"));
 
             mekanism.common.registration.impl.BlockRegistryObject<PlantingCuttingFactoryBlock, MekCkBlockItem> handle =
                     PLANTING_CUTTING_FACTORY_BLOCKS_REG.register(id,
@@ -1215,7 +1215,7 @@ public final class UniversalCuttingMachine {
             };
             // BlockType 需要 tile 与容器，但两者都必须先有方块 —— 用延迟 Supplier 破这个环。
             mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.grinding.GrindingFactoryTile> blockType =
-                    GrindingFactoryBlock.blockTypeFor(tier, () -> GRINDING_FACTORY_CONTAINER, () -> findGrindingFactoryTile(tier));
+                    GrindingFactoryBlock.blockTypeFor(tier, () -> GRINDING_FACTORY_CONTAINER, () -> findFactoryTile(GRINDING_FACTORY_TILES, tier, "研磨工厂"));
 
             mekanism.common.registration.impl.BlockRegistryObject<GrindingFactoryBlock, MekCkBlockItem> handle =
                     GRINDING_FACTORY_BLOCKS_REG.register(id,
@@ -1334,84 +1334,13 @@ public final class UniversalCuttingMachine {
     private static <T, U extends T> RegistryObject<U> registryView(String id, net.minecraftforge.registries.IForgeRegistry<T> registry) {
         return RegistryObject.create(new ResourceLocation(MOD_ID, id), registry);
     }
-    /**
-     * 按等级取回已注册的切菜 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
-     *
-     * <p>必须延迟：{@code TILE_ENTITIES.register(block, ...)} 要求先有方块，而方块的
-     * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。这里用一个
-     * 延迟查找破环：Supplier 只在 Mek 真正需要它时才求值，那时注册已完成。</p>
-     */
-    private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.plantingcutting.PlantingCuttingFactoryTile> findPlantingCuttingFactoryTile(
-            CuttingMachineFactoryTier tier) {
-        mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.plantingcutting.PlantingCuttingFactoryTile> found =
-                PLANTING_CUTTING_FACTORY_TILES.get(tier);
-        if (found == null) {
-            throw new IllegalStateException("种植切配工厂 tile 尚未注册：tier=" + tier
-                    + "（BlockTypeTile 的 Supplier 被过早求值）");
-        }
-        return found;
-    }
-
-    /**
-     * 按等级取回已注册的烧烤 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
-     *
-     * <p>必须延迟：{@code TILE_ENTITIES.register(block, ...)} 要求先有方块，而方块的
-     * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。理由同
-     * {@link #findPlantingCuttingFactoryTile}。</p>
-     */
-    /**
-     * 按等级取回已注册的穿串 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
-     *
-     * <p>必须延迟：{@code TILE_ENTITIES.register(block, ...)} 要求先有方块，而方块的
-     * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。理由同
-     * {@link #findGrillFactoryTile}。</p>
-     */
-    /**
-     * 按等级取回已注册的烹饪 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
-     *
-     * <p>必须延迟：{@code TILE_ENTITIES.register(block, ...)} 要求先有方块，而方块的
-     * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。理由同
-     * {@link #findGrillFactoryTile}。</p>
-     */
-    private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cooking.CookingFactoryTile> findCookingFactoryTile(
-            CuttingMachineFactoryTier tier) {
-        mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cooking.CookingFactoryTile> found =
-                COOKING_FACTORY_TILES.get(tier);
-        if (found == null) {
-            throw new IllegalStateException("烹饪工厂 tile 尚未注册：tier=" + tier
-                    + "（BlockTypeTile 的 Supplier 被过早求值）");
-        }
-        return found;
-    }
-
-    private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.skewering.SkeweringFactoryTile> findSkeweringFactoryTile(
-            CuttingMachineFactoryTier tier) {
-        mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.skewering.SkeweringFactoryTile> found =
-                SKEWERING_FACTORY_TILES.get(tier);
-        if (found == null) {
-            throw new IllegalStateException("穿串工厂 tile 尚未注册：tier=" + tier
-                    + "（BlockTypeTile 的 Supplier 被过早求值）");
-        }
-        return found;
-    }
-
-    private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.grill.GrillFactoryTile> findGrillFactoryTile(
-            CuttingMachineFactoryTier tier) {
-        mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.grill.GrillFactoryTile> found =
-                GRILL_FACTORY_TILES.get(tier);
-        if (found == null) {
-            throw new IllegalStateException("烧烤工厂 tile 尚未注册：tier=" + tier
-                    + "（BlockTypeTile 的 Supplier 被过早求值）");
-        }
-        return found;
-    }
 
     /**
      * 取回已注册的烧烤架 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
      *
      * <p>必须延迟：{@code TILE_ENTITIES.register(block, ...)} 要求先有方块，而方块的
      * {@code BlockType} 构造时就要 tile 的 Supplier，形成先后依赖。理由同
-     * {@link #findGrillFactoryTile}。</p>
+     * {@link #findFactoryTile}。</p>
      */
     private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<GrillBlockEntity> findGrillTile() {
         if (GRILL_TILE == null) {
@@ -1420,29 +1349,37 @@ public final class UniversalCuttingMachine {
         return GRILL_TILE;
     }
 
-    private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cutting.CuttingFactoryTile> findCuttingFactoryTile(
-            CuttingMachineFactoryTier tier) {
-        mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.cutting.CuttingFactoryTile> found =
-                CUTTING_FACTORY_TILES.get(tier);
-        if (found == null) {
-            throw new IllegalStateException("切菜工厂 tile 尚未注册：tier=" + tier
-                    + "（BlockTypeTile 的 Supplier 被过早求值）");
-        }
-        return found;
-    }
-
     /**
-     * 按等级取回已注册的研磨 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
+     * 按等级取回某家族已注册的 tile 类型 —— 给 {@code BlockTypeTile} 的延迟 Supplier 用。
      *
-     * <p>与 {@link #findCuttingFactoryTile} 同理：必须延迟，因为 {@code TileEntityTypeDeferredRegister} 要求先有方块，
-     * 而方块的 {@code BlockType} 构造时就要 tile 的 Supplier。
+     * <h3>为什么必须延迟</h3>
+     * Mek 的 {@code TILES_REG.register(blockHandle, …)} 要求<b>先有方块</b>，
+     * 而方块的 {@code BlockType} 构造时就已经要 tile 的 {@code Supplier} —— 先后依赖成环，
+     * 只能靠延迟 Supplier 打破。两个 Supplier 都只在 Mek 真正求值的时刻
+     * （放置 / 开 GUI）才被调用，那时注册早已完成。
+     *
+     * <h3>为什么值得抽成一个方法</h3>
+     * 原先 5 个家族各有一份手抄的 {@code findXxxFactoryTile}，正文<b>逐字相同</b>、
+     * 只有报错里的中文家族名不同。手抄 5 遍的错误信息本身就是隐患：某天把家族名拼错，
+     * 排查的人会被指向错误的模块，而真正出错的是另一处。现在家族名由调用点传入。
+     *
+     * <p>这里的 {@code null} 检查不是防御性冗余，而是<b>唯一</b>能把「Supplier 被过早求值」
+     * 这类注册顺序错误变成可读异常的地方 —— 静默返回 null 会让 Mek 在远端才 NPE，
+     * 堆栈指向完全无关的类。</p>
+     *
+     * @param tiles  该家族的 {@code <tier, TileEntityTypeRegistryObject>} 表
+     * @param tier   正在注册的档位
+     * @param family 中文家族名，仅用于报错信息
      */
-    private static mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.grinding.GrindingFactoryTile> findGrindingFactoryTile(
-            CuttingMachineFactoryTier tier) {
-        mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.grinding.GrindingFactoryTile> found =
-                GRINDING_FACTORY_TILES.get(tier);
+    private static <T extends net.minecraft.world.level.block.entity.BlockEntity>
+            mekanism.common.registration.impl.TileEntityTypeRegistryObject<T> findFactoryTile(
+                    java.util.Map<CuttingMachineFactoryTier,
+                            mekanism.common.registration.impl.TileEntityTypeRegistryObject<T>> tiles,
+                    CuttingMachineFactoryTier tier,
+                    String family) {
+        mekanism.common.registration.impl.TileEntityTypeRegistryObject<T> found = tiles.get(tier);
         if (found == null) {
-            throw new IllegalStateException("研磨工厂 tile 尚未注册：tier=" + tier
+            throw new IllegalStateException(family + " tile 尚未注册：tier=" + tier
                     + "（BlockTypeTile 的 Supplier 被过早求值）");
         }
         return found;
