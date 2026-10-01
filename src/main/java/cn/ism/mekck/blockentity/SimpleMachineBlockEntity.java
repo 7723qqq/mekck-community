@@ -98,7 +98,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     public static final int JUICE_SLOT = EXT_INPUT_START;
     /**
      * 智能陈酿机（winery）专用返还槽索引：复用 winery 空闲的扩展槽 11（仅陈酿机启用），
-     * 收果汁流体桶灌入 inputTank 抽空后返还的空桶（铁桶）。OutputSlot 语义（只出不进）。
+     * 收果汁流体桶灌入 fluids.getInputTank() 抽空后返还的空桶（铁桶）。OutputSlot 语义（只出不进）。
      * winery 不启用扩展输入槽 → 该索引本就为空，不改总槽数、旧存档天然兼容。
      */
     public static final int RETURN_SLOT = EXT_INPUT_START + 1;
@@ -137,9 +137,9 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     /** 陈酿机：果汁类型编号（VineryJuice.TYPES 下标；-1 = 空桶）。 */
     public static final int DATA_JUICE_TYPE = 14;
     /**
-     * 陈酿机：inputTank 当前流体的 registry id（空流体为 {@code minecraft:empty}）。
+     * 陈酿机：fluids.getInputTank() 当前流体的 registry id（空流体为 {@code minecraft:empty}）。
      * <p>必须与 {@link #DATA_INPUT_FLUID}（只给量）配套：本类没覆写任何 BE 同步（getUpdateTag /
-     * sendUpdatePacket），客户端那份 inputTank 只在区块加载时随存档到达一次、之后永不更新，
+     * sendUpdatePacket），客户端那份 fluids.getInputTank() 只在区块加载时随存档到达一次、之后永不更新，
      * 所以 GUI 的液位条光读客户端 BE 永远是空（用户 2026-09-24：抽取已正常但格子里看不到流体）。
      * 做法与 Mekanism 一致：把 FluidStack 挂进容器同步数据口（它用 dynamic container，我们这里用
      * 原版 ContainerData 的 id+量两个 int，与果汁类型 DATA_JUICE_TYPE 同一路子）。</p>
@@ -163,8 +163,6 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     public static final int DATA_ENERGY_HI = 16;
     public static final int DATA_SIZE = 17;
 
-    /** 发酵机流体罐容量（mb）。 */
-    public static final int FLUID_CAPACITY = 16_000;
 
     private final MachineKind kind;
 
@@ -223,7 +221,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
                 }
                 return !isAnyUpgrade(stack) && acceptsInput(slot, stack);
             }
-            // winery 果汁格（10）：一格两用——既收 vinery 瓶装果汁（→液位池），也收带流体的果汁容器桶（→抽入 inputTank）。
+            // winery 果汁格（10）：一格两用——既收 vinery 瓶装果汁（→液位池），也收带流体的果汁容器桶（→抽入 fluids.getInputTank()）。
             // 两路在 absorbWineryJuice 里按 juiceTypeOf 判定天然互斥，不会争抢同一物品。
             // 放宽到 isWineryJuiceInput：任何被认定为果汁的物品（含果汁名物品、其它模组的果汁流体容器）
             // 都先落到这一格，避免无家可归（用户 2026-09-24：酒馆流体桶放不进流体输入格）。
@@ -308,23 +306,16 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     /** 桶内果汁类型（空串 = 未装果汁）。 */
     private String juiceType = "";
 
-    private final net.minecraftforge.fluids.capability.templates.FluidTank inputTank = new net.minecraftforge.fluids.capability.templates.FluidTank(FLUID_CAPACITY);
-    private final net.minecraftforge.fluids.capability.templates.FluidTank outputTank = new net.minecraftforge.fluids.capability.templates.FluidTank(FLUID_CAPACITY);
+    /** 物品主动输入输出（抽取至输入格 / 弹出产物），与工厂类机器的 AutoIO 一致。 */
+    private final cn.ism.mekck.util.AutoIO itemAutoIO;
 
     private LazyOptional<IItemHandler> fullItemCapability;
     private LazyOptional<IItemHandler> inputItemCapability;
     private LazyOptional<IItemHandler> outputItemCapability;
     private LazyOptional<IEnergyStorage> energyCapability;
-    private LazyOptional<net.minecraftforge.fluids.capability.IFluidHandler> fluidCapability;
-    private LazyOptional<net.minecraftforge.fluids.capability.IFluidHandler> inputFluidCapability;
-    private LazyOptional<net.minecraftforge.fluids.capability.IFluidHandler> outputFluidCapability;
-    /** 流体侧面配置（与物品侧配独立的模式数组）。 */
-    private final SideMode[] fluidSideConfig = new SideMode[6];
-    /** 流体自动输入输出（抽取/弹出，与物品 AutoIO 语义一致）。 */
-    private final cn.ism.mekck.util.AutoFluidIO fluidAutoIO =
-            new cn.ism.mekck.util.AutoFluidIO(this, inputTank, outputTank);
-    /** 物品主动输入输出（抽取至输入格 / 弹出产物），与工厂类机器的 AutoIO 一致。 */
-    private final cn.ism.mekck.util.AutoIO itemAutoIO;
+
+    /** 流体子系统（两个罐 + capability + 侧配 + 自动 IO）。初始化见构造器。 */
+    private final SimpleMachineFluids fluids;
 
     /** 陈酿机是否正处于酒馆批次陈化中（只有这种状态下要接管进度柱）。 */
     private boolean tavernBatchDrivesBar() {
@@ -373,13 +364,13 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
                 case DATA_ENERGY_UPGRADE -> getEnergyUpgradeCount();
                 case DATA_CREATIVE_UPGRADE -> hasCreativeUpgrade() ? 1 : 0;
                 case DATA_REDSTONE_CONTROL -> redstoneControl.ordinal();
-                case DATA_INPUT_FLUID -> inputTank.getFluidAmount();
+                case DATA_INPUT_FLUID -> fluids.getInputTank().getFluidAmount();
                 case DATA_INPUT_FLUID_ID -> net.minecraft.core.registries.BuiltInRegistries.FLUID
-                        .getId(inputTank.getFluid().getFluid());
-                case DATA_OUTPUT_FLUID -> outputTank.getFluidAmount();
+                        .getId(fluids.getInputTank().getFluid().getFluid());
+                case DATA_OUTPUT_FLUID -> fluids.getOutputTank().getFluidAmount();
                 case DATA_TEMPERATURE -> (int) Math.round((getTemperatureK() - 273.15) * 100.0);
                 case DATA_UPGRADE_PROGRESS -> (int) Math.round(getUpgradeInstallProgress() * 100.0);
-                case DATA_FLUID_SIDE_CONFIG -> encodeSideConfig(fluidSideConfig);
+                case DATA_FLUID_SIDE_CONFIG -> encodeSideConfig(fluids.getFluidSideConfig());
                 case DATA_JUICE_LEVEL -> juiceLevel;
                 case DATA_JUICE_TYPE -> cn.ism.mekck.util.VineryJuice.indexOf(juiceType);
                 default -> 0;
@@ -415,11 +406,9 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         this.inputItemCapability = LazyOptional.of(() -> new InputItemHandler());
         this.outputItemCapability = LazyOptional.of(() -> new OutputItemHandler());
         this.energyCapability = LazyOptional.of(() -> energy);
-        this.fluidCapability = LazyOptional.of(() -> new CombinedFluidHandler());
-        this.inputFluidCapability = LazyOptional.of(() -> new InputOnlyFluidHandler());
-        this.outputFluidCapability = LazyOptional.of(() -> new OutputOnlyFluidHandler());
-        for (int i = 0; i < 6; i++) fluidSideConfig[i] = SideMode.NONE;
+
         // 物品主动 IO：抽取范围为有效输入槽（含扩展槽），弹出范围为产物槽
+        this.fluids = new SimpleMachineFluids(this);
         this.itemAutoIO = new cn.ism.mekck.util.AutoIO(this,
                 new int[][]{{0, INPUT_COUNT}, {EXT_INPUT_START, EXT_INPUT_COUNT}},
                 new int[][]{{OUTPUT_SLOT, 1}});
@@ -763,7 +752,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
 
     /**
      * 实现 Mekanism {@link mekanism.common.tile.interfaces.IHasDumpButton}：供 Metallurgic Infuser 同款
-     * 清空按钮（{@code GuiDumpButton}）复用。除清空果汁液位池外，**还排空 inputTank**。
+     * 清空按钮（{@code GuiDumpButton}）复用。除清空果汁液位池外，**还排空 fluids.getInputTank()**。
      * <p>
      * 排罐是本机必需的自救手段（用户 2026-09-24）：果汁格抽液要求罐内为空或同种流体（{@code FluidTank} 不混装），
      * 一旦误投一桶水就会把整罐占住、后续果汁桶永远抽不动。而本机的流体入口只有「往里灌」一条路
@@ -781,15 +770,15 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     public void dump() {
         boolean did = clearJuicePool();
         if (kind == MachineKind.WINERY && !tavernBatch.isBrewing() && !tavernBatch.isStalled()
-                && !inputTank.isEmpty()) {
-            inputTank.setFluid(net.minecraftforge.fluids.FluidStack.EMPTY);
+                && !fluids.getInputTank().isEmpty()) {
+            fluids.getInputTank().setFluid(net.minecraftforge.fluids.FluidStack.EMPTY);
             did = true;
         }
         if (did) setChanged();
     }
 
     /**
-     * 手持流体容器（桶/罐）对 winery 方块右键：把其内流体灌进内部 inputTank（复刻 Mekanism「手持流体桶右键灌机器」）。
+     * 手持流体容器（桶/罐）对 winery 方块右键：把其内流体灌进内部 fluids.getInputTank()（复刻 Mekanism「手持流体桶右键灌机器」）。
      * 全程 simulate 预演；成功后空容器（crafting remainder，如铁桶）放回玩家手（创造模式不返还）。非 winery 返回 false。
      */
     public boolean tryInsertHeldFluid(ItemStack held, Player player, InteractionHand hand) {
@@ -801,11 +790,11 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         net.minecraftforge.fluids.FluidStack sim = handler.drain(Integer.MAX_VALUE,
                 net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.SIMULATE);
         if (sim == null || sim.isEmpty()) return false;
-        int filled = inputTank.fill(sim, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.SIMULATE);
+        int filled = fluids.getInputTank().fill(sim, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.SIMULATE);
         if (filled <= 0) return false;
         net.minecraftforge.fluids.FluidStack real = handler.drain(filled,
                 net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
-        int done = inputTank.fill(real, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
+        int done = fluids.getInputTank().fill(real, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
         if (done <= 0) return false;
         ItemStack remainder = handler.getContainer();
         if (!player.isCreative() && remainder != null && !remainder.isEmpty()) {
@@ -1166,18 +1155,16 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
 
     /** 流体侧面配置（独立于物品侧配）。 */
     public void setFluidSideMode(Direction dir, SideMode mode) {
-        if (dir == null) return;
-        fluidSideConfig[dir.ordinal()] = mode;
-        setChanged();
+        fluids.setFluidSideMode(dir, mode);
     }
 
     public SideMode getFluidSideMode(Direction dir) {
-        return fluidSideConfig[dir.ordinal()];
+        return fluids.getFluidSideMode(dir);
     }
 
     /** 本机是否具备流体处理能力（SimpleMachine 均内置输入/输出流体罐）。 */
     public boolean hasFluidHandler() {
-        return true;
+        return fluids.hasFluidHandler();
     }
 
     private int encodeSideConfig() {
@@ -1263,7 +1250,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         // 物品主动输入输出（抽取至输入格 / 弹出产物）
         if (machine.itemAutoIO.run(level, pos, machine.sideConfig, machine.items)) machine.setChanged();
         // 流体自动输入输出（抽取/弹出）
-        if (machine.fluidAutoIO.run(level, pos, machine.fluidSideConfig)) machine.setChanged();
+        if (machine.fluids.getAutoIO().run(level, pos, machine.fluids.getFluidSideConfig())) machine.setChanged();
 
         // 温度系统：加热类机器每 tick 与相邻 Mekanism 热力设备传导并自然回归环境
         if (machine.isHeatingMachine()) {
@@ -1986,12 +1973,12 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
 
                 // 流体校验：输入罐有足量且匹配的流体；输出罐可容纳
                 if (inFluid != null && !inFluid.isEmpty()) {
-                    net.minecraftforge.fluids.FluidStack stored = inputTank.getFluid();
+                    net.minecraftforge.fluids.FluidStack stored = fluids.getInputTank().getFluid();
                     if (!stored.isFluidEqual(inFluid) || stored.getAmount() < inFluid.getAmount()) continue;
                 }
                 if (outFluid != null && !outFluid.isEmpty()) {
-                    if (!outputTank.isEmpty() && !outputTank.getFluid().isFluidEqual(outFluid)) continue;
-                    if (outputTank.getFluidAmount() + outFluid.getAmount() > outputTank.getCapacity()) continue;
+                    if (!fluids.getOutputTank().isEmpty() && !fluids.getOutputTank().getFluid().isFluidEqual(outFluid)) continue;
+                    if (fluids.getOutputTank().getFluidAmount() + outFluid.getAmount() > fluids.getOutputTank().getCapacity()) continue;
                 }
 
                 List<Integer> slots = matchIngredients(ings);
@@ -2020,7 +2007,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
      * 智能萃取机匹配：读 {@code create:mixing}，按用户拍板口径过滤——产物必须是流体，且
      * 命名空间 {@code createcafe:} 且产物流体属茶/咖啡/溶糖/糖浆系；另白名单破例收录
      * {@code createcafe:oreo_filling_mixing}（奥利奥夹心酱，Q13）。{@code heatRequirement} 忽略不校验（我方电热）。
-     * 输入 = 物品（getIngredients）+ 输入流体（getFluidIngredients）；输出 = 流体（getFluidResults）→ outputTank。
+     * 输入 = 物品（getIngredients）+ 输入流体（getFluidIngredients）；输出 = 流体（getFluidResults）→ fluids.getOutputTank()。
      * Create 非编译期依赖，一律反射（{@code Reflect.call}）。
      */
     private MatchedRecipe matchExtractor() {
@@ -2042,14 +2029,14 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
                     if (f != null && !f.isEmpty()) { outFluid = f; break; }
                 }
                 if (outFluid.isEmpty()) continue;
-                if (!outputTank.isEmpty() && !outputTank.getFluid().isFluidEqual(outFluid)) continue;
-                if (outputTank.getFluidAmount() + outFluid.getAmount() > outputTank.getCapacity()) continue;
+                if (!fluids.getOutputTank().isEmpty() && !fluids.getOutputTank().getFluid().isFluidEqual(outFluid)) continue;
+                if (fluids.getOutputTank().getFluidAmount() + outFluid.getAmount() > fluids.getOutputTank().getCapacity()) continue;
                 // 输入流体（首个需者）：不足则本 tick 不匹配
                 net.minecraftforge.fluids.FluidStack inFluid = net.minecraftforge.fluids.FluidStack.EMPTY;
                 for (Object fi : mixingFluidIngredients(r)) {
                     net.minecraftforge.fluids.FluidStack req = firstRequiredFluid(fi);
                     if (req != null && !req.isEmpty()) {
-                        net.minecraftforge.fluids.FluidStack stored = inputTank.getFluid();
+                        net.minecraftforge.fluids.FluidStack stored = fluids.getInputTank().getFluid();
                         if (!stored.isFluidEqual(req) || stored.getAmount() < req.getAmount()) { inFluid = null; break; }
                         inFluid = req;
                         break;
@@ -2065,8 +2052,8 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
 
     /**
      * §F19 C+E 半：{@code mekck:extracting} 自有匹配——1..5 物品输入（{@link #matchIngredients} 无序）
-     * + 可选流体输入（精确 id 或 {@code #tag}，对 inputTank 比对）→ 产物二选一：
-     * 流体产物进 outputTank（同型/容量预检），物品产物走通用 result 通道进产物槽 5。
+     * + 可选流体输入（精确 id 或 {@code #tag}，对 fluids.getInputTank() 比对）→ 产物二选一：
+     * 流体产物进 fluids.getOutputTank()（同型/容量预检），物品产物走通用 result 通道进产物槽 5。
      */
     private MatchedRecipe matchExtracting() {
         RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(
@@ -2081,7 +2068,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
                 net.minecraftforge.fluids.FluidStack drain = net.minecraftforge.fluids.FluidStack.EMPTY;
                 cn.ism.mekck.recipe.ExtractingRecipe.FluidInput inNeed = er.getInputFluid();
                 if (inNeed != null) {
-                    net.minecraftforge.fluids.FluidStack stored = inputTank.getFluid();
+                    net.minecraftforge.fluids.FluidStack stored = fluids.getInputTank().getFluid();
                     if (!inNeed.matches(stored.getFluid()) || stored.getAmount() < inNeed.amount) continue;
                     drain = stored.copy();
                     drain.setAmount(inNeed.amount);
@@ -2089,8 +2076,8 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
                 int time = er.getProcessTime() > 0 ? er.getProcessTime() : kind.processTime;
                 if (!er.getFluidResult().isEmpty()) {
                     net.minecraftforge.fluids.FluidStack outFluid = er.getFluidResult();
-                    if (!outputTank.isEmpty() && !outputTank.getFluid().isFluidEqual(outFluid)) continue;
-                    if (outputTank.getFluidAmount() + outFluid.getAmount() > outputTank.getCapacity()) continue;
+                    if (!fluids.getOutputTank().isEmpty() && !fluids.getOutputTank().getFluid().isFluidEqual(outFluid)) continue;
+                    if (fluids.getOutputTank().getFluidAmount() + outFluid.getAmount() > fluids.getOutputTank().getCapacity()) continue;
                     return new MatchedRecipe(slots, ItemStack.EMPTY, time, drain, outFluid);
                 }
                 ItemStack res = er.getResultItem(level.registryAccess());
@@ -2175,7 +2162,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
                 if (slots == null) continue;
                 net.minecraftforge.fluids.FluidStack need = bar.getFluid();
                 if (need == null || need.isEmpty()) continue;
-                net.minecraftforge.fluids.FluidStack stored = inputTank.getFluid();
+                net.minecraftforge.fluids.FluidStack stored = fluids.getInputTank().getFluid();
                 if (!stored.isFluidEqual(need) || stored.getAmount() < need.getAmount()) continue;
                 ItemStack result = bar.getResultItem(level.registryAccess());
                 if (result.isEmpty()) continue;
@@ -2453,8 +2440,8 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
             h = h * 31L + itemHash;
             h = h * 31L + st.getCount();
         }
-        net.minecraftforge.fluids.FluidStack fluid = inputTank.getFluid();
-        h = h * 31L + inputTank.getFluidAmount();
+        net.minecraftforge.fluids.FluidStack fluid = fluids.getInputTank().getFluid();
+        h = h * 31L + fluids.getInputTank().getFluidAmount();
         h = h * 31L + (fluid.isEmpty() ? 0 : fluid.getFluid().hashCode());
         return h;
     }
@@ -2525,7 +2512,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         }
         int need = tavernBatch.getHoldFluidAmount();
         if (need > 0) {
-            net.minecraftforge.fluids.FluidStack cur = inputTank.getFluid();
+            net.minecraftforge.fluids.FluidStack cur = fluids.getInputTank().getFluid();
             if (cur.isEmpty() || cur.getAmount() < need) return false;
             net.minecraft.resources.ResourceLocation fid =
                     net.minecraftforge.registries.ForgeRegistries.FLUIDS.getKey(cur.getFluid());
@@ -2554,12 +2541,12 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         }
         int need = tavernBatch.getHoldFluidAmount();
         if (need > 0) {
-            net.minecraftforge.fluids.FluidStack drained = inputTank.drain(need,
+            net.minecraftforge.fluids.FluidStack drained = fluids.getInputTank().drain(need,
                     net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
             if (drained.getAmount() != need) {
                 // 同 tick 刚验证过足够量：不可达；防御回滚并进入故障（批次作废，槽内配料回填同 tick 状态）
                 if (!drained.isEmpty()) {
-                    inputTank.fill(drained, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
+                    fluids.getInputTank().fill(drained, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
                 }
                 tavernStartFault = true;
                 tavernBatch.reset();
@@ -2713,8 +2700,8 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         }
         // 流体仍满且种类匹配（参考 matches 用 isSame）
         net.minecraftforge.fluids.FluidStack planFluid = plan.getFluid();
-        if (inputTank.getFluidAmount() < planFluid.getAmount()) return false;
-        if (!inputTank.getFluid().getFluid().isSame(planFluid.getFluid())) return false;
+        if (fluids.getInputTank().getFluidAmount() < planFluid.getAmount()) return false;
+        if (!fluids.getInputTank().getFluid().getFluid().isSame(planFluid.getFluid())) return false;
         // 配料槽与计划快照严格复核（同物、同 NBT、同数量——完工扣料口径下起批不扣料，但建批时数量必须与计划一致，
         // 否则瓶数（= 最少配料数）与持守比对基准都会歧义）：
         java.util.List<Integer> consumeSlots = plan.getConsumeSlots();
@@ -2780,8 +2767,8 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         net.minecraft.world.item.crafting.RecipeType<?> barrelT = cn.ism.mekck.compat.TavernBarrelCompat.type();
         if (barrelT == null) return null; // tavern 未安装 → 保持 Vinery 原样
         // 流体：必须满 4000mB
-        if (inputTank.getFluidAmount() < TavernBarrelPlan.MAX_FLUID_AMOUNT) return null;
-        net.minecraftforge.fluids.FluidStack tankFluid = inputTank.getFluid();
+        if (fluids.getInputTank().getFluidAmount() < TavernBarrelPlan.MAX_FLUID_AMOUNT) return null;
+        net.minecraftforge.fluids.FluidStack tankFluid = fluids.getInputTank().getFluid();
         if (tankFluid.isEmpty()) return null;
         // 输入槽（0..3 配料；槽 4 预留不参与——参考 MAX_ITEM_SLOTS=4）
         java.util.List<ItemStack> ingredientStacks = new java.util.ArrayList<>();
@@ -2950,7 +2937,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         if (kind != MachineKind.WINERY || level == null || level.isClientSide) return;
         for (int s = 0; s < INPUT_COUNT; s++) absorbJuiceFromSlot(s);
         absorbJuiceFromSlot(JUICE_SLOT);
-        // 流体桶（与瓶装果汁共用果汁格）→ 抽入 inputTank 服务 tavern barrel；vinery 瓶装果汁走上面的液位池
+        // 流体桶（与瓶装果汁共用果汁格）→ 抽入 fluids.getInputTank() 服务 tavern barrel；vinery 瓶装果汁走上面的液位池
         absorbJuiceFluidFromSlot(JUICE_SLOT);
     }
 
@@ -3156,7 +3143,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         return false;
     }
 
-    /** winery 果汁格里的流体容器 → 灌入 inputTank（服务 kaleidoscope_tavern barrel 批次），
+    /** winery 果汁格里的流体容器 → 灌入 fluids.getInputTank()（服务 kaleidoscope_tavern barrel 批次），
      * 抽空后把空容器返还到 RETURN_SLOT。
      * <p>
      * <b>不筛流体种类</b>（用户 2026-09-24 二次反馈定稿）：取证发现 vinery 与森罗酒馆两个模组
@@ -3189,14 +3176,14 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
             return;
         }
         ResourceLocation fluidId = ForgeRegistries.FLUIDS.getKey(probe.fluid.getFluid());
-        // 预演①：inputTank 能否完整接收这只桶的流体（同种流体或空罐；FluidTank 不混装）
-        if (inputTank.fill(probe.fluid, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.SIMULATE)
+        // 预演①：fluids.getInputTank() 能否完整接收这只桶的流体（同种流体或空罐；FluidTank 不混装）
+        if (fluids.getInputTank().fill(probe.fluid, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.SIMULATE)
                 != probe.fluid.getAmount()) {
-            net.minecraftforge.fluids.FluidStack cur = inputTank.getFluid();
+            net.minecraftforge.fluids.FluidStack cur = fluids.getInputTank().getFluid();
             ResourceLocation curId = cur.isEmpty() ? null : ForgeRegistries.FLUIDS.getKey(cur.getFluid());
             noteFluidIntake(st, "储罐收不下 " + probe.fluid.getAmount() + "mB " + fluidId + "（罐内现有 "
                     + (curId == null ? "空" : curId + " ×" + cur.getAmount())
-                    + "，容量 " + inputTank.getCapacity() + "mB；异种流体不可混装，需先用管道抽走或等配方消耗）");
+                    + "，容量 " + fluids.getInputTank().getCapacity() + "mB；异种流体不可混装，需先用管道抽走或等配方消耗）");
             return; // 罐满或类型冲突：整桶不动
         }
         // 预演②：RETURN_SLOT 能否放得下空容器（空容器为空集 = 容器自消耗，无需返还）
@@ -3205,7 +3192,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
             return; // 空桶无处安放：整桶不动
         }
         // ── 提交：罐收一只桶的流体，槽位留剩余满桶，空容器并入 RETURN_SLOT ──
-        inputTank.fill(probe.fluid, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
+        fluids.getInputTank().fill(probe.fluid, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
         int left = st.getCount() - 1;
         items.setStackInSlot(s, left > 0 ? st.copyWithCount(left) : ItemStack.EMPTY);
         if (!probe.container.isEmpty()) insertReturn(probe.container);
@@ -4219,8 +4206,8 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
             }
         }
         if (!recipe.drainFluid.isEmpty()) {
-            if (inputTank.getFluidAmount() < recipe.drainFluid.getAmount()) return false;
-            if (!inputTank.isEmpty() && !inputTank.getFluid().isFluidEqual(recipe.drainFluid)) return false;
+            if (fluids.getInputTank().getFluidAmount() < recipe.drainFluid.getAmount()) return false;
+            if (!fluids.getInputTank().isEmpty() && !fluids.getInputTank().getFluid().isFluidEqual(recipe.drainFluid)) return false;
         }
         return true;
     }
@@ -4238,21 +4225,21 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         if (!canInsertOutput(recipe.result)) return false;
         if (!recipe.fillFluid.isEmpty()) {
             // 输出罐必须为空或流体兼容，且剩余容量足够容纳完整产物（模拟填充为准）
-            if (!outputTank.isEmpty() && !outputTank.getFluid().isFluidEqual(recipe.fillFluid)) return false;
-            if (outputTank.fill(recipe.fillFluid, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.SIMULATE)
+            if (!fluids.getOutputTank().isEmpty() && !fluids.getOutputTank().getFluid().isFluidEqual(recipe.fillFluid)) return false;
+            if (fluids.getOutputTank().fill(recipe.fillFluid, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.SIMULATE)
                     != recipe.fillFluid.getAmount()) {
                 return false;
             }
         }
         if (!recipe.drainFluid.isEmpty()) {
             // 输入流体抽取量必须充足（加工中途可能被抽走）
-            if (inputTank.getFluidAmount() < recipe.drainFluid.getAmount()) return false;
+            if (fluids.getInputTank().getFluidAmount() < recipe.drainFluid.getAmount()) return false;
             // 类型必须在这里就判，与 validateInputsFor 逐字同口径（那里也有这一条）：
             // 只判量会让 canWork 恒真 —— 每 tick 扣电、progress 推满，complete() 再被
             // validateInputsFor 的类型比较挡回、progress 归零，表现为「机器亮着、电一直掉、
             // 产物永远不出」的静默空转。触发路径有二：matchHeatedMultiInput 匹配时根本不看罐，
             // 以及匹配结果被 matchCached 缓存而缓存键不含罐内容（换液不换物品）。
-            if (!inputTank.isEmpty() && !inputTank.getFluid().isFluidEqual(recipe.drainFluid)) return false;
+            if (!fluids.getInputTank().isEmpty() && !fluids.getInputTank().getFluid().isFluidEqual(recipe.drainFluid)) return false;
         }
         return true;
     }
@@ -4332,10 +4319,10 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         insertOutputDirectly(recipe.result);
         // 流体：消耗输入流体、产出输出流体（真实提交，与验证同一份配方）
         if (!recipe.drainFluid.isEmpty()) {
-            inputTank.drain(recipe.drainFluid.getAmount(), net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
+            fluids.getInputTank().drain(recipe.drainFluid.getAmount(), net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
         }
         if (!recipe.fillFluid.isEmpty()) {
-            outputTank.fill(recipe.fillFluid, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
+            fluids.getOutputTank().fill(recipe.fillFluid, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
         }
         // ME 订单进度：仅在本次生产全部真实提交成功后计数
         if (orderRecipeId != null) {
@@ -4424,11 +4411,11 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
             if (cap == ForgeCapabilities.FLUID_HANDLER) {
                 // 流体侧配：PULL_INPUT 只暴露输入罐（可注入）、PUSH_OUTPUT 只暴露输出罐（可抽取）
                 if (side != null) {
-                    SideMode fluidMode = fluidSideConfig[side.ordinal()];
-                    if (fluidMode == SideMode.PULL_INPUT) return inputFluidCapability.cast();
-                    if (fluidMode == SideMode.PUSH_OUTPUT) return outputFluidCapability.cast();
+                    SideMode fluidMode = fluids.getFluidSideConfig()[side.ordinal()];
+                    if (fluidMode == SideMode.PULL_INPUT) return fluids.getInputFluidCapability().cast();
+                    if (fluidMode == SideMode.PUSH_OUTPUT) return fluids.getOutputFluidCapability().cast();
                 }
-                return fluidCapability.cast();
+                return fluids.getFluidCapability().cast();
             }
             // 加热类机器：暴露 Mekanism 热能力，供热力设备（电阻加热器/热导管等）传导
             if (isHeatingMachine() && cap == mekanism.common.capabilities.Capabilities.HEAT_HANDLER) {
@@ -4445,139 +4432,19 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         inputItemCapability.invalidate();
         outputItemCapability.invalidate();
         energyCapability.invalidate();
-        fluidCapability.invalidate();
-        inputFluidCapability.invalidate();
-        outputFluidCapability.invalidate();
+        fluids.invalidateCaps();
     }
 
     /** 输入/输出流体罐合并能力（发酵机用；输入 0 号罐，输出 1 号罐）。 */
     /** 只允许注入（供 PULL_INPUT 侧）。 */
-    private class InputOnlyFluidHandler implements net.minecraftforge.fluids.capability.IFluidHandler {
-        @Override
-        public int getTanks() {
-            return 1;
-        }
 
-        @Override
-        public net.minecraftforge.fluids.FluidStack getFluidInTank(int tank) {
-            return inputTank.getFluid();
-        }
-
-        @Override
-        public int getTankCapacity(int tank) {
-            return FLUID_CAPACITY;
-        }
-
-        @Override
-        public boolean isFluidValid(int tank, net.minecraftforge.fluids.FluidStack stack) {
-            return true;
-        }
-
-        @Override
-        public int fill(net.minecraftforge.fluids.FluidStack resource,
-                        net.minecraftforge.fluids.capability.IFluidHandler.FluidAction action) {
-            return inputTank.fill(resource, action);
-        }
-
-        @Override
-        public net.minecraftforge.fluids.FluidStack drain(net.minecraftforge.fluids.FluidStack resource,
-                        net.minecraftforge.fluids.capability.IFluidHandler.FluidAction action) {
-            return net.minecraftforge.fluids.FluidStack.EMPTY;
-        }
-
-        @Override
-        public net.minecraftforge.fluids.FluidStack drain(int maxDrain,
-                        net.minecraftforge.fluids.capability.IFluidHandler.FluidAction action) {
-            return net.minecraftforge.fluids.FluidStack.EMPTY;
-        }
-    }
-
-    /** 只允许抽取（供 PUSH_OUTPUT 侧）。 */
-    private class OutputOnlyFluidHandler implements net.minecraftforge.fluids.capability.IFluidHandler {
-        @Override
-        public int getTanks() {
-            return 1;
-        }
-
-        @Override
-        public net.minecraftforge.fluids.FluidStack getFluidInTank(int tank) {
-            return outputTank.getFluid();
-        }
-
-        @Override
-        public int getTankCapacity(int tank) {
-            return FLUID_CAPACITY;
-        }
-
-        @Override
-        public boolean isFluidValid(int tank, net.minecraftforge.fluids.FluidStack stack) {
-            return false;
-        }
-
-        @Override
-        public int fill(net.minecraftforge.fluids.FluidStack resource,
-                        net.minecraftforge.fluids.capability.IFluidHandler.FluidAction action) {
-            return 0;
-        }
-
-        @Override
-        public net.minecraftforge.fluids.FluidStack drain(net.minecraftforge.fluids.FluidStack resource,
-                        net.minecraftforge.fluids.capability.IFluidHandler.FluidAction action) {
-            return outputTank.drain(resource, action);
-        }
-
-        @Override
-        public net.minecraftforge.fluids.FluidStack drain(int maxDrain,
-                        net.minecraftforge.fluids.capability.IFluidHandler.FluidAction action) {
-            return outputTank.drain(maxDrain, action);
-        }
-    }
-
-    private class CombinedFluidHandler implements net.minecraftforge.fluids.capability.IFluidHandler {
-        private final net.minecraftforge.fluids.capability.IFluidHandler[] handlers = {inputTank, outputTank};
-
-        @Override
-        public int getTanks() {
-            return 2;
-        }
-
-        @Override
-        public net.minecraftforge.fluids.FluidStack getFluidInTank(int tank) {
-            return tank == 0 ? inputTank.getFluid() : outputTank.getFluid();
-        }
-
-        @Override
-        public int getTankCapacity(int tank) {
-            return FLUID_CAPACITY;
-        }
-
-        @Override
-        public boolean isFluidValid(int tank, net.minecraftforge.fluids.FluidStack stack) {
-            return true;
-        }
-
-        @Override
-        public int fill(net.minecraftforge.fluids.FluidStack resource, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction action) {
-            return inputTank.fill(resource, action);
-        }
-
-        @Override
-        public net.minecraftforge.fluids.FluidStack drain(net.minecraftforge.fluids.FluidStack resource, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction action) {
-            return outputTank.drain(resource, action);
-        }
-
-        @Override
-        public net.minecraftforge.fluids.FluidStack drain(int maxDrain, net.minecraftforge.fluids.capability.IFluidHandler.FluidAction action) {
-            return outputTank.drain(maxDrain, action);
-        }
-    }
 
     public net.minecraftforge.fluids.capability.templates.FluidTank getInputTank() {
-        return inputTank;
+        return fluids.getInputTank();
     }
 
     public net.minecraftforge.fluids.capability.templates.FluidTank getOutputTank() {
-        return outputTank;
+        return fluids.getOutputTank();
     }
 
     private class InputItemHandler implements IItemHandler {
@@ -4656,7 +4523,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         }
         tag.putInt("Redstone", redstoneControl.ordinal());
         tag.putInt("SideConfig", encodeSideConfig());
-        tag.putInt("FluidSideConfig", encodeSideConfig(fluidSideConfig));
+        tag.putInt("FluidSideConfig", encodeSideConfig(fluids.getFluidSideConfig()));
         if (orderRecipeId != null) {
             tag.putString("OrderRecipeId", orderRecipeId.toString());
             tag.putInt("OrderQuantity", orderQuantity);
@@ -4664,8 +4531,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         }
         // ME 自动下单开关与订单无关：必须无条件写出，否则无订单时重载会静默复位为默认 true。
         tag.putBoolean("MeOrderEnabled", meOrderEnabled);
-        tag.put("InputFluid", inputTank.writeToNBT(new CompoundTag()));
-        tag.put("OutputFluid", outputTank.writeToNBT(new CompoundTag()));
+        fluids.writeTanks(tag);
         if (customName != null) {
             tag.putString("CustomName", Component.Serializer.toJson(customName));
         }
@@ -4713,7 +4579,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         if (rs >= 0 && rs < RedstoneControl.values().length) redstoneControl = RedstoneControl.values()[rs];
         decodeSideConfig(tag.getInt("SideConfig"));
         if (tag.contains("FluidSideConfig")) {
-            decodeSideConfig(fluidSideConfig, tag.getInt("FluidSideConfig"));
+            decodeSideConfig(fluids.getFluidSideConfig(), tag.getInt("FluidSideConfig"));
         }
         if (tag.contains("OrderRecipeId")) {
             orderRecipeId = net.minecraft.resources.ResourceLocation.tryParse(tag.getString("OrderRecipeId"));
@@ -4721,8 +4587,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
             orderCompleted = tag.getInt("OrderCompleted");
         }
         meOrderEnabled = !tag.contains("MeOrderEnabled") || tag.getBoolean("MeOrderEnabled");
-        inputTank.readFromNBT(tag.getCompound("InputFluid"));
-        outputTank.readFromNBT(tag.getCompound("OutputFluid"));
+        fluids.readTanks(tag);
         if (tag.contains("CustomName")) {
             customName = Component.Serializer.fromJson(tag.getString("CustomName"));
         }
@@ -4761,13 +4626,12 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         }
         tag.putInt("Redstone", redstoneControl.ordinal());
         tag.putInt("SideConfig", encodeSideConfig());
-        tag.putInt("FluidSideConfig", encodeSideConfig(fluidSideConfig));
+        tag.putInt("FluidSideConfig", encodeSideConfig(fluids.getFluidSideConfig()));
         // 以下三项必须与 saveAdditional 保持一致，否则挖下来的机器与留在世界里的状态不同：
         // 流体罐内容会直接蒸发，ME 自动下单开关会静默复位。
         // MachineKind 不在此列：kind 是 final 字段、构造期从方块读出，load 从不读该键。
         tag.putBoolean("MeOrderEnabled", meOrderEnabled);
-        tag.put("InputFluid", inputTank.writeToNBT(new CompoundTag()));
-        tag.put("OutputFluid", outputTank.writeToNBT(new CompoundTag()));
+        fluids.writeTanks(tag);
         // 同理必须调用两个外部持久化助手：AE2 的自动补料清单（缺失会丢玩家逐条配的补料规则）
         // 与放置器 UUID（缺失会让已放置的机器被当成新机器）。load 侧两者都会读回，
         // 此处不写就等于「挖起来再放下」必丢，而 getDrops 为空时物品是状态的唯一载体。
