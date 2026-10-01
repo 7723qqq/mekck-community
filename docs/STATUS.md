@@ -89,17 +89,60 @@
 `TestIceFactoryToggle` 是个例外：它的「三个使用点」里有一个随事件类搬进了 `client/`，所以显式拼两面来数 ——
 **为了让断言变绿而缩小扫描面，是拆分之后最容易犯的错**（缩小扫描面会把真实回归一起放过）。
 
-### 三、本轮刻意没做的事
+### 三、遗留单机 BE 的三次抽取（`36f996a` / `84973f3` / `a6f75c4`）
 
-- **`SimpleMachineBlockEntity.java` 4841 行** —— 全仓最大文件，比拆分前的注册中枢还大。
-  它是遗留 BE 的上帝类（NBT / 物品守恒 / 流体守恒 / 侧配置都在里面），拆它要按状态域切分并逐域验证，
-  风险等级与「纯注册项搬家」不同。**列为下一轮的独立目标**，不要顺手带上。
+`SimpleMachineBlockEntity` 原是全仓最大文件（**4841 行**），本轮按关注点抽了三次：
+
+| 提交 | 抽了什么 | 结果 |
+|---|---|---|
+| `36f996a` | `MatchedRecipe`（配方匹配结果）从私有内嵌类升为 `machine/MatchedRecipe` | 34 处构造、6 个字段外部可读；为后续搬适配器铺路 |
+| `84973f3` | 流体子系统 → `blockentity/SimpleMachineFluids` | 两个罐 + 三组 capability + 侧配 + `AutoFluidIO` + 3 个 `IFluidHandler` + 罐 NBT（**键名原样**）；BE 4841 → 4650 |
+| `a6f75c4` | 配方适配器族 → `blockentity/SimpleMachineRecipes` | 38 个 `matchXxx`/`absorb*`/`complete` + 28 个仅在它们内部被调用的辅助方法 + `DrainProbe`，共 67 段；BE 4651 → **2783** |
+
+**搬迁规则**：一个辅助方法**只有全部调用点都在搬移集合内**时才跟着搬；否则留在 BE，
+伴生类用 `be.xxx()` 调。这条规则杜绝了「同一个方法两个类里各有一份」，
+也是这三刀能靠编译器验证的根本原因。三个伴生类都**不持有自己的状态**，
+所有机器状态都从 `be` 取 ⇒ 搬运不改变任何读写时序。
+
+**只有真拆才会撞上的四条约束**（都写进了提交信息）
+
+1. `level` 是 `BlockEntity` 的**继承字段且 protected** ⇒ 跨类访问不到，必须走 `be.getLevel()`；
+   而某些方法里 `level` 又被**局部 int** 遮蔽，那里不能加前缀（加错会变成 `int be.getLevel() = …`）。
+2. `setChanged()` 同理是继承方法。
+3. 被搬方法里的 `static` 方法需要 `be.` ⇒ 一律改成实例方法（本来就不是 override）。
+4. **字段声明与赋值必须同居一处** —— blank final 不能跨类赋值，编译期就拦下
+   「字段在 A 类、赋值在 B 类」这种拆法（弹射物注册因此搬回 `MekCkEntities` 自己的静态块）。
+
+**方法论：区间必须来自编译器，不要用正则猜行号**
+
+搬运脚本改用 `JavacTask.parse()`（只解析不归因，不需要 classpath）拿成员区间。
+前几版用正则 + 括号配对猜，连踩四个坑，其中一个卡了两轮：
+
+- `enumerate(masked, 1)` 拿 **1-based 序号**查 **0-based 集合** ⇒ 每个区间「首行被删、末行被留」，
+  BE 里凭空多出一串孤立 `}`、类体提前闭合（102 个语法错误）；
+- 自己向后找 `    }` 定位方法结束行 ⇒ 跨过嵌套层级，把 `matchSushi` 的结束算到文件末尾；
+- 调用点改写命中了**方法声明** ⇒ 现在靠一个不变量解决：被搬方法的声明已从 BE 消失，
+  剩下的同名出现必然是调用点；
+- 「局部变量遮蔽」必须**逐方法**算：BE 成员那次统计为 0，但 `level` 是继承字段、不在那份名单里。
+
+脚本现在自带三道断言（声明行必须落在删除集、行数守恒、区间不重叠），
+并在写盘后**用 javac 重新 parse 两个文件做语法门禁**。一次性脚本仍留在本地 `.logs/`
+（`move.py` / `JavaPos.java` / `recipes-header.txt`），未入库。
+
+### 四、本轮刻意没做的事
+
 - **实机验证** —— 本仓 dev 环境起不来（Farmer's Delight 自己的 mixin 注入失败，见第二轮报告），
-  所以拆分只做到了「编译 + 457 测试」。**注册顺序相关的行为（类初始化、事件注册）必须有能启动 MC 的
-  环境做一次实机确认**，清单见 `superpowers/handoff/2026-09-29-phase1-runtime-verification.md`。
-- **拆分脚本未入库** —— 是一次性搬迁工具（从 git HEAD 的主类出发按行区间搬运 + 改写引用），
-  留在本地 `.logs/`；入库的是**护栏**（`TestRegistryInitContract` + `TestSourceText.readRegistry`），
-  因为它们保护的是「以后」的改动，不是这一次。
+  所以以上拆分只做到了「编译 + 457 测试」。**接手后优先实机验证三条路径**：
+  ① 陈酿机批次（Tavern，`matchTavernBarrelPlan` → `absorbJuice*` → `complete`）；
+  ② 制冰工厂开关（`ICE_FACTORY_MENU` 的 null 哨兵 + 客户端屏幕绑定）；
+  ③ 发酵机流体（配方流体搬进罐 + `SimpleMachineFluids` 的 cap 暴露）。
+  这三条恰好是配方与流体交叉最多的地方，也是机械改写最容易改错语义而测试察觉不到的地方。
+- **`SimpleMachineRecipes` 仍偏大**（2009 行）—— 内部可再按配方族细分（酒饮 / 食品加工 / 特殊工艺），
+  但每族都要一份状态上下文，适合作为单独一轮。
+- **`SimpleMachineBlockEntity` 仍有 2783 行** —— 剩下的主要是 NBT 三件套（162 行）、
+  侧配置 / 能量 / 红石、tick 主循环、AE2 胶水层；按状态域继续切是同一套工具的活。
+- **拆分脚本未入库** —— 一次性搬迁工具留在本地 `.logs/`；入库的是**护栏**
+  （`TestRegistryInitContract` + `TestSourceText.readRegistry`），因为它们保护的是「以后」的改动。
 
 ---
 
