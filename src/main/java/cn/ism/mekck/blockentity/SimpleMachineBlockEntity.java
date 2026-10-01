@@ -1,6 +1,7 @@
 package cn.ism.mekck.blockentity;
 
 import cn.ism.mekck.MachineKind;
+import cn.ism.mekck.machine.MatchedRecipe;
 import cn.ism.mekck.RedstoneControl;
 import cn.ism.mekck.SideMode;
 import cn.ism.mekck.UniversalCuttingMachine;
@@ -1202,63 +1203,6 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
 
     // ================== 处理 ==================
 
-    private static final class MatchedRecipe {
-        final List<Integer> consumeSlots;
-        /** 每个消耗槽的消耗数量（null = 兼容旧行为，每槽扣 1）。 */
-        final List<Integer> consumeCounts;
-        /** 每个消耗槽的输入匹配条件（null = 沿用旧“槽非空即扣”行为）。 */
-        final List<net.minecraft.world.item.crafting.Ingredient> inputIngredients;
-        final ItemStack result;
-        /** 配方自带处理时长（tick），0 = 用机器默认。 */
-        final int processTime;
-        /** 发酵机：需消耗的输入流体（可为空）。 */
-        final net.minecraftforge.fluids.FluidStack drainFluid;
-        /** 发酵机：产出的流体（可为空）。 */
-        final net.minecraftforge.fluids.FluidStack fillFluid;
-        /** 真实配方 ID（可为 null = 不参与配方身份跟踪，沿用旧行为）。 */
-        final net.minecraft.resources.ResourceLocation recipeId;
-
-        MatchedRecipe(List<Integer> consumeSlots, ItemStack result) {
-            this(consumeSlots, result, 0, net.minecraftforge.fluids.FluidStack.EMPTY, net.minecraftforge.fluids.FluidStack.EMPTY);
-        }
-
-        MatchedRecipe(List<Integer> consumeSlots, ItemStack result, int processTime,
-                      net.minecraftforge.fluids.FluidStack drainFluid, net.minecraftforge.fluids.FluidStack fillFluid) {
-            this(consumeSlots, null, null, result, processTime, drainFluid, fillFluid, null);
-        }
-
-        /** 陈酿机：提交后桶内果汁液位（-1 = 本次不涉及果汁池）。 */
-        final int juiceLevelAfter;
-        /** 陈酿机：提交后桶内果汁类型（配合 juiceLevelAfter）。 */
-        final String juiceTypeAfter;
-
-        MatchedRecipe(List<Integer> consumeSlots, List<Integer> consumeCounts,
-                      List<net.minecraft.world.item.crafting.Ingredient> inputIngredients,
-                      ItemStack result, int processTime,
-                      net.minecraftforge.fluids.FluidStack drainFluid, net.minecraftforge.fluids.FluidStack fillFluid,
-                      net.minecraft.resources.ResourceLocation recipeId) {
-            this(consumeSlots, consumeCounts, inputIngredients, result, processTime, drainFluid, fillFluid,
-                    recipeId, -1, null);
-        }
-
-        MatchedRecipe(List<Integer> consumeSlots, List<Integer> consumeCounts,
-                      List<net.minecraft.world.item.crafting.Ingredient> inputIngredients,
-                      ItemStack result, int processTime,
-                      net.minecraftforge.fluids.FluidStack drainFluid, net.minecraftforge.fluids.FluidStack fillFluid,
-                      net.minecraft.resources.ResourceLocation recipeId,
-                      int juiceLevelAfter, String juiceTypeAfter) {
-            this.consumeSlots = consumeSlots;
-            this.consumeCounts = consumeCounts;
-            this.inputIngredients = inputIngredients;
-            this.result = result;
-            this.processTime = processTime;
-            this.drainFluid = drainFluid;
-            this.fillFluid = fillFluid;
-            this.recipeId = recipeId;
-            this.juiceLevelAfter = juiceLevelAfter;
-            this.juiceTypeAfter = juiceTypeAfter;
-        }
-    }
 
     public static void clientTick(Level level, BlockPos pos, BlockState state, SimpleMachineBlockEntity machine) {
     }
