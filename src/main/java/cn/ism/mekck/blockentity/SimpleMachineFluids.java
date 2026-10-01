@@ -109,7 +109,8 @@ public final class SimpleMachineFluids {
 
     /** 罐内容读回存档（键名与 {@link #writeTanks} 对称）。 */
     public void readTanks(CompoundTag tag) {
-
+        inputTank.readFromNBT(tag.getCompound("InputFluid"));
+        outputTank.readFromNBT(tag.getCompound("OutputFluid"));
     }
 
     /** capability 失效（方块卸载 / 降级时由 BE 调用）。 */
