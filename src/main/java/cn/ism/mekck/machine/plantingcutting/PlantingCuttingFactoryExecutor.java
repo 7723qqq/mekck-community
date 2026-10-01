@@ -15,7 +15,6 @@ import cn.ism.mekck.UniversalCuttingMachine;
 import mekanism.api.Upgrade;
 import mekanism.api.inventory.IInventorySlot;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
@@ -317,42 +316,6 @@ public final class PlantingCuttingFactoryExecutor implements MekCkRecipeExecutor
     }
 
     // ── 批量执行 ────────────────────────────────────────────────────────
-
-    /** 本批次真正能动的槽，以及它们各自的配方。 */
-    private record Batch(List<Integer> slots, List<PlantingCuttingRecipe> recipes) {
-    }
-
-    /**
-     * 扫出本批次真正能动的槽 —— 判定（{@link #canProcess}）与执行（{@link #process}）
-     * <b>共用同一份扫描</b>，否则「判定说能做、执行时按另一套规则做」会静默漂移。
-     *
-     * <p>装不下 / 土不合格的槽都不计入：跳过这一槽，而不是让所有槽一起停摆
-     * （与旧实现同口径）。</p>
-     */
-    private Batch collectBatch(List<IInventorySlot> inputs, int budget) {
-        List<Integer> active = new ArrayList<>();
-        List<PlantingCuttingRecipe> recipes = new ArrayList<>();
-        for (int i = 0; i < inputs.size(); i++) {
-            ItemStack input = inputs.get(i).getStack();
-            if (input.isEmpty()) {
-                continue;
-            }
-            Optional<PlantingCuttingRecipe> found = findRecipe(i);
-            if (found.isEmpty()) {
-                continue;
-            }
-            PlantingCuttingRecipe recipe = found.get();
-            if (!canFitAll(recipe, budget)) {
-                continue;
-            }
-            if (!hasValidGrowthSoil(recipe)) {
-                continue;
-            }
-            active.add(i);
-            recipes.add(recipe);
-        }
-        return new Batch(active, recipes);
-    }
 
     /**
      * 一次配方的全部潜在产出：主产物 + 次级产物（按最坏情况，次级也全中）。

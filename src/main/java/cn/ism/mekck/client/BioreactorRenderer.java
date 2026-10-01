@@ -39,8 +39,6 @@ import java.util.List;
  */
 public final class BioreactorRenderer implements BlockEntityRenderer<BioreactorBlockEntity> {
 
-    /** 层数（每层 16px 高）；与 OBJ 中的分组数一致。 */
-    private static final int LAYER_COUNT = 3;
 
     private static final ResourceLocation MESH =
             new ResourceLocation(UniversalCuttingMachine.MOD_ID, "models/mesh/bioreactor.obj");

@@ -23,7 +23,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.Containers;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
@@ -584,13 +583,6 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
         int v = 0;
         for (int i = 0; i < 6; i++) v |= (sideConfig[i].ordinal() & 0xF) << (i * 4);
         return v;
-    }
-
-    private void decodeSideConfig(int v) {
-        for (int i = 0; i < 6; i++) {
-            int ord = (v >> (i * 4)) & 0xF;
-            if (ord >= 0 && ord < SideMode.values().length) sideConfig[i] = SideMode.values()[ord];
-        }
     }
 
     // ================== 处理与攻击 ==================

@@ -21,7 +21,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.Containers;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -339,15 +338,6 @@ public final class ElectricGrindingMachineBlockEntity extends BlockEntity implem
             encoded |= (sideConfig[i].ordinal() << (i * 2));
         }
         return encoded;
-    }
-
-    private void decodeSideConfig(int encoded) {
-        for (int i = 0; i < 6; i++) {
-            int ordinal = (encoded >> (i * 2)) & 0x3;
-            if (ordinal >= 0 && ordinal < SideMode.values().length) {
-                sideConfig[i] = SideMode.values()[ordinal];
-            }
-        }
     }
 
     public void setSideMode(Direction direction, SideMode mode) {

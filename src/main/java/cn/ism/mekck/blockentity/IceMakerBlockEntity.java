@@ -23,7 +23,6 @@ import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.Containers;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
@@ -97,8 +96,6 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     public static final double HEAT_CAPACITY = 100.0;
     /** 制冷能量效率：为电阻型加热器效率（0.6）的 1/3，即 1 FE → 0.2 J 热量转移。 */
     public static final double COOLING_EFFICIENCY = 0.2;
-    /** 每 tick 自然回归环境温度的比例。 */
-    private static final double AMBIENT_LOSS_RATE = 0.01;
     /** 自身制冷最大功率（FE/t）：按需调节，不超过该值。 */
     public static final int COOLING_MAX_ENERGY_PER_TICK = 4000;
     private cn.ism.mekck.util.MekCkHeatComponent heatComponent;
@@ -825,13 +822,6 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
         int v = 0;
         for (int i = 0; i < 6; i++) v |= (sideConfig[i].ordinal() & 0xF) << (i * 4);
         return v;
-    }
-
-    private void decodeSideConfig(int v) {
-        for (int i = 0; i < 6; i++) {
-            int ord = (v >> (i * 4)) & 0xF;
-            if (ord >= 0 && ord < SideMode.values().length) sideConfig[i] = SideMode.values()[ord];
-        }
     }
 
     // ================== 处理与攻击 ==================

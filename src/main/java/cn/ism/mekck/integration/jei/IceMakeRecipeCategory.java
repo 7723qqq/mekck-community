@@ -1,17 +1,10 @@
 package cn.ism.mekck.integration.jei;
 
 import cn.ism.mekck.recipe.IceMakeRecipe;
-import mekanism.client.SpecialColors;
-import mekanism.common.util.text.TextUtils;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Recipe;
-import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraft.world.level.material.Fluids;
 
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
@@ -148,7 +141,4 @@ public class IceMakeRecipeCategory implements IRecipeCategory<IceMakeRecipe> {
         guiGraphics.fill(x + 1, y + 1, x + w - 1, y + h - 1, fillColor);
     }
 
-    private Font getFont() {
-        return Minecraft.getInstance().font;
-    }
 }

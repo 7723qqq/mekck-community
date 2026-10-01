@@ -64,7 +64,6 @@ import vectorwing.farmersdelight.common.crafting.ingredient.ChanceResult;
 public final class PlantingRecipeGenerator {
    public static final Logger LOGGER = LoggerFactory.getLogger(PlantingRecipeGenerator.class);
    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-   private static final double SECONDARY_CHANCE = 0.8;
 
    /** BotanyPots 作物配方类型 ID 与生成时使用的默认生长时间（tick）。 */
    private static final ResourceLocation BOTANY_CROP_TYPE_ID = new ResourceLocation("botanypots", "crop");
@@ -397,100 +396,6 @@ public final class PlantingRecipeGenerator {
       return blacklist;
    }
 
-   /**
-    * 已废弃：从独立的 planting_blacklist.json 读取黑名单（2026-09-16 前的旧实现）。
-    * <p>保留原文仅作对照，不再被调用；现行实现见 {@link #loadBlacklist(MinecraftServer)}。</p>
-    */
-   @Deprecated
-   private static Set<Item> loadBlacklistFromLegacyJson(MinecraftServer server) {
-      Set<Item> blacklist = new HashSet<>();
-      Path configDir = server.getServerDirectory().toPath().resolve("config/mekck");
-      Path configFile = configDir.resolve("planting_blacklist.json");
-      if (!Files.exists(configFile)) {
-         try {
-            Files.createDirectories(configDir);
-            JsonObject defaultConfig = new JsonObject();
-            JsonArray blacklistArray = new JsonArray();
-            String[] defaultBlacklist = new String[]{
-               "vinery:spruce_lattice",
-               "vinery:mangrove_lattice",
-               "vinery:bamboo_lattice",
-               "vinery:cherry_lattice",
-               "vinery:oak_lattice",
-               "vinery:birch_lattice",
-               "vinery:dark_oak_lattice",
-               "vinery:acacia_lattice",
-               "vinery:dark_cherry_lattice",
-               "vinery:jungle_lattice",
-               "minecraft:stick",
-               "trailandtales_delight:curd_block",
-               "trailandtales_delight:cherry_curd_block",
-               "trailandtales_delight:raw_bamboo_tube_rice",
-               "trailandtales_delight:bamboo_tube_rice_block"
-            };
-
-            for (String item : defaultBlacklist) {
-               blacklistArray.add(item);
-            }
-
-            defaultConfig.add("blacklist", blacklistArray);
-            Files.writeString(configFile,
-               "# 种植配方黑名单：列表中的物品/方块注册名（如 vinery:spruce_lattice）不会被自动生成种植配方（mekmm:planting / immersiveengineering:cloche / mekck:plantcut）。修改后需重启游戏或服务器生效。\n"
-                     + GSON.toJson(defaultConfig));
-            LOGGER.info("Created default blacklist config at {} with {} items", configFile, defaultBlacklist.length);
-
-            for (String itemId : defaultBlacklist) {
-               try {
-                  ResourceLocation id = new ResourceLocation(itemId);
-                  Item item = (Item)ForgeRegistries.ITEMS.getValue(id);
-                  if (item != null) {
-                     blacklist.add(item);
-                  }
-               } catch (Exception var13) {
-                  LOGGER.warn("Default blacklist contains invalid item ID: {}", itemId);
-               }
-            }
-         } catch (IOException var15) {
-            LOGGER.error("Failed to create default blacklist config", var15);
-         }
-
-         return blacklist;
-      } else {
-         try {
-            JsonObject config = (JsonObject)GSON.fromJson(stripJsonComments(Files.readString(configFile)), JsonObject.class);
-            if (config == null || !config.has("blacklist")) {
-               LOGGER.warn("Blacklist config is empty or malformed, skipping.");
-               return blacklist;
-            }
-
-            JsonArray blacklistArray = config.getAsJsonArray("blacklist");
-            if (blacklistArray != null) {
-               for (int i = 0; i < blacklistArray.size(); i++) {
-                  String itemId = blacklistArray.get(i).getAsString();
-                  if (itemId != null && !itemId.isEmpty()) {
-                     try {
-                        ResourceLocation id = new ResourceLocation(itemId);
-                        Item item = (Item)ForgeRegistries.ITEMS.getValue(id);
-                        if (item != null) {
-                           blacklist.add(item);
-                        } else {
-                           LOGGER.warn("Blacklist contains unknown item: {}", itemId);
-                        }
-                     } catch (Exception var14) {
-                        LOGGER.warn("Blacklist contains invalid item ID: {}", itemId);
-                     }
-                  }
-               }
-            }
-         } catch (Exception var16) {
-            LOGGER.error("Failed to read blacklist config", var16);
-         }
-
-         LOGGER.debug("Loaded {} blacklisted seeds: {}", blacklist.size(), blacklist.stream().map(s -> ForgeRegistries.ITEMS.getKey(s)).toList());
-         return blacklist;
-      }
-   }
-
    private static Map<Item, Integer> filterOutSeedItems(Map<Item, Integer> items) {
       Map<Item, Integer> result = new LinkedHashMap<>();
 
@@ -512,40 +417,6 @@ public final class PlantingRecipeGenerator {
       return cn.ism.mekck.config.MekckConfig.getPlantingDebugToChat();
    }
 
-   /**
-    * 已废弃：从独立的 planting_debug.json 读取调试开关（2026-09-16 前的旧实现）。
-    * <p>保留原文仅作对照，不再被调用；现行实现见 {@link #isDebugEnabled(MinecraftServer)}。</p>
-    */
-   @Deprecated
-   private static boolean isDebugEnabledFromLegacyJson(MinecraftServer server) {
-      Path configDir = server.getServerDirectory().toPath().resolve("config/mekck");
-      Path configFile = configDir.resolve("planting_debug.json");
-      if (Files.exists(configFile)) {
-         try {
-            JsonObject json = (JsonObject)GSON.fromJson(stripJsonComments(Files.readString(configFile)), JsonObject.class);
-            if (json != null && json.has("enabled")) {
-               return json.get("enabled").getAsBoolean();
-            }
-         } catch (Exception var5) {
-            LOGGER.warn("Failed to read planting debug config", var5);
-         }
-      } else {
-         try {
-            Files.createDirectories(configDir);
-            JsonObject defaultConfig = new JsonObject();
-            defaultConfig.addProperty("enabled", false);
-            Files.writeString(configFile,
-               "# 种植配方生成调试开关：设为 true 后，第一名玩家进入世界时会在聊天栏显示调试信息，并生成 config/mekck/planting_generator_debug.log 调试日志。\n"
-                     + GSON.toJson(defaultConfig));
-            LOGGER.info("Created default planting debug config at {} with enabled=false", configFile);
-         } catch (IOException var4) {
-            LOGGER.error("Failed to create default planting debug config", var4);
-         }
-      }
-
-      return false;
-   }
-
    private static String getDisplayName(ResourceLocation rl) {
       Item item = (Item)ForgeRegistries.ITEMS.getValue(rl);
       if (item != null && item != Items.AIR) {
@@ -553,16 +424,6 @@ public final class PlantingRecipeGenerator {
       } else {
          Block block = (Block)ForgeRegistries.BLOCKS.getValue(rl);
          return block != null && block != Blocks.AIR ? Component.translatable(block.getDescriptionId()).getString() : rl.toString();
-      }
-   }
-
-   private static Component getDisplayNameComponent(ResourceLocation rl) {
-      Item item = (Item)ForgeRegistries.ITEMS.getValue(rl);
-      if (item != null && item != Items.AIR) {
-         return Component.translatable(item.getDescriptionId());
-      } else {
-         Block block = (Block)ForgeRegistries.BLOCKS.getValue(rl);
-         return block != null && block != Blocks.AIR ? Component.translatable(block.getDescriptionId()) : Component.literal(rl.toString());
       }
    }
 

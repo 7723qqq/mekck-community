@@ -1,15 +1,8 @@
 package cn.ism.mekck.item;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
-import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.TooltipFlag;
-import net.minecraft.world.level.Level;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
 
 /**
  * MekCK 自有的工厂安装器（第 9/10/11 级）：
@@ -41,13 +34,4 @@ public class MekCkTierInstallerItem extends Item {
         return tier;
     }
 
-    private String tierName() {
-        return switch (tier) {
-            case BLAZE -> "烈焰炽焱";
-            case CRYSTAL_MATRIX -> "晶钛矩阵";
-            case NEBULA -> "星云塑造";
-            case SINGULARITY -> "奇点创世";
-            default -> tier.name();
-        };
-    }
 }

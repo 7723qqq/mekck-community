@@ -122,9 +122,6 @@ public class GrillFactoryTile extends MekCkMachineTile implements IMekCkPorted {
     /** 调味料槽数。与旧实现同名常量同值。 */
     public static final int SEASONING_SLOTS = GrillFactoryExecutor.SEASONING_SLOTS;
 
-    private static final int SEASONING_SLOT_X = 8;
-    private static final int SEASONING_SLOT_Y = 55;
-    private static final int SEASONING_SLOT_STEP = 18;
 
     /**
      * 3 个调味料槽。

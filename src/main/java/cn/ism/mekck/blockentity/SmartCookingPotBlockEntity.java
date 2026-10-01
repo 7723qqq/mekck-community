@@ -8,7 +8,6 @@ import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.menu.SmartCookingPotMenu;
 import cn.ism.mekck.util.RecipeInputMatcher;
 import cn.ism.mekck.util.AutoIO;
-import cn.ism.mekck.util.FastTransfer;
 import cn.ism.mekck.util.FluidContainerInteract;
 import cn.ism.mekck.util.FluidIngredientHelper;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -70,7 +69,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public final class SmartCookingPotBlockEntity extends BlockEntity implements MenuProvider, IRedstoneControllable, mekanism.api.heat.IMekanismHeatHandler, cn.ism.mekck.ae2.INetworkPullable {
     // ==================== IMekanismHeatHandler ====================
@@ -529,15 +527,6 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
             encoded |= (sideConfig[i].ordinal() << (i * 2));
         }
         return encoded;
-    }
-
-    private void decodeSideConfig(int encoded) {
-        for (int i = 0; i < 6; i++) {
-            int ordinal = (encoded >> (i * 2)) & 0x3;
-            if (ordinal >= 0 && ordinal < SideMode.values().length) {
-                sideConfig[i] = SideMode.values()[ordinal];
-            }
-        }
     }
 
     public void setSideMode(Direction direction, SideMode mode) {

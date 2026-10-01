@@ -133,10 +133,6 @@ public class MekCkBlockItem extends BlockItem {
         }
     }
 
-    private boolean hasStats() {
-        return tier != null || simpleParallel > 0;
-    }
-
     /**
      * 「无限」阈值 —— 达到此值的并行数不再显示数字，改显示「无限」。
      *

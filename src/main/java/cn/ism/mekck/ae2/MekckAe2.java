@@ -38,7 +38,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.Containers;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
@@ -56,7 +55,6 @@ import net.minecraftforge.registries.ForgeRegistries;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
-import vectorwing.farmersdelight.common.crafting.CookingPotRecipe;
 import vectorwing.farmersdelight.common.crafting.CuttingBoardRecipe;
 import vectorwing.farmersdelight.common.registry.ModRecipeTypes;
 
@@ -201,17 +199,6 @@ public final class MekckAe2 {
             out.merge(entry.recipeId.toString(), max, Math::max);
         }
         return out;
-    }
-
-    /** 单配方可做份数（按"每份所需输入"逐项取最小值）。 */
-    private static int maxCraftable(List<InputSpec> specs, Map<AEKey, Long> avail) {
-        int max = Integer.MAX_VALUE;
-        for (InputSpec spec : specs) {
-            long have = countAvailable(spec.ingredient, avail);
-            max = (int) Math.min(max, have / Math.max(1, spec.count));
-            if (max <= 0) return 0;
-        }
-        return max == Integer.MAX_VALUE ? 0 : max;
     }
 
     // ==================================================================
@@ -657,15 +644,6 @@ public final class MekckAe2 {
         return found;
     }
 
-    private static boolean canExtractAll(MEStorage storage, List<InputSpec> specs, int quantity, IActionSource src) {
-        for (InputSpec spec : specs) {
-            long need = (long) spec.count * quantity;
-            if (need <= 0) continue;
-            if (!canExtractFromNetwork(storage, spec.ingredient, need, src)) return false;
-        }
-        return true;
-    }
-
     private static List<GenericStack> extractAll(MEStorage storage, List<InputSpec> specs, int quantity, IActionSource src) {
         // 单遍扫描网络满足全部需求项：原先每个需求项都要遍历一遍网络
         // （81 种材料的配方 + 数千种物品的网络 = 每次下单数十万次遍历，会造成明显卡顿）。
@@ -720,29 +698,6 @@ public final class MekckAe2 {
         return avail;
     }
 
-
-    private static long countAvailable(Ingredient ing, Map<AEKey, Long> avail) {
-        long total = 0;
-        for (Map.Entry<AEKey, Long> e : avail.entrySet()) {
-            AEKey key = e.getKey();
-            if (key instanceof AEItemKey ik && ing.test(ik.toStack())) {
-                total += e.getValue();
-            }
-        }
-        return total;
-    }
-
-    private static boolean canExtractFromNetwork(MEStorage storage, Ingredient ing, long need, IActionSource src) {
-        long total = 0;
-        for (var e : storage.getAvailableStacks()) {
-            if (total >= need) break;
-            AEKey key = e.getKey();
-            if (!(key instanceof AEItemKey ik) || !ing.test(ik.toStack())) continue;
-            long got = storage.extract(key, e.getLongValue(), Actionable.SIMULATE, src);
-            total += got;
-        }
-        return total >= need;
-    }
 
     private static void rollback(MEStorage storage, List<GenericStack> extracted, IActionSource src) {
         for (GenericStack gs : extracted) {

@@ -8,9 +8,7 @@ import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.menu.SkeweringMachineMenu;
 import cn.ism.mekck.util.RecipeInputMatcher;
 import cn.ism.mekck.util.AutoIO;
-import cn.ism.mekck.util.FastTransfer;
 import cn.ism.mekck.util.LagMonitor;
-import cn.ism.mekck.util.MultiFluidHandler;
 import cn.ism.mekck.util.PowerSlotUtil;
 import cn.ism.mekck.util.StorageMerger;
 import cn.ism.mekck.util.UpgradeHelper;
@@ -24,7 +22,6 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.Containers;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -414,15 +411,6 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
             encoded |= (sideConfig[i].ordinal() << (i * 2));
         }
         return encoded;
-    }
-
-    private void decodeSideConfig(int encoded) {
-        for (int i = 0; i < 6; i++) {
-            int ordinal = (encoded >> (i * 2)) & 0x3;
-            if (ordinal >= 0 && ordinal < SideMode.values().length) {
-                sideConfig[i] = SideMode.values()[ordinal];
-            }
-        }
     }
 
     public void setSideMode(Direction direction, SideMode mode) {

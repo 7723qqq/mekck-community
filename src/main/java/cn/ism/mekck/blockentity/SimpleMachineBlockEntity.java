@@ -3370,27 +3370,6 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     }
 
     /**
-     * 某槽对该物品的剩余容量，口径 = {@code min(handler 槽位上限, 该物品 vanilla 一组)}：
-     * <ul>
-     *   <li><b>已超限的同类堆</b>（如还瓶持续并入空瓶槽后形成的 900+ 瓶）按功能槽上限续收 ——
-     *       旧版在这里回 {@code Integer.MAX_VALUE}，与 {@code Integer.MAX_VALUE} 相加后
-     *       {@code returnRoom} <b>溢出成负数</b> ⇒ {@code take} 被负余量钳成 ≤ 0 ⇒ 整条吸收链直接拒绝，
-     *       正是实机日志里「还瓶无处落位（空瓶槽与退还槽均满）」那一条的真病灶（物品数 x937）；</li>
-     *   <li><b>异类占位</b>（如酒馆模式留下的 {@code empty_bottle} 先占了空瓶槽，之后 vinery 还瓶就叠不上去）
-     *       依旧给 0，由写入方改走溢出位，绝不强塞；</li>
-     *   <li>普通输入槽的 vanilla 一组约束保留（防漏斗灌爆，见类注释）。</li>
-     * </ul>
-     */
-    private int slotRoom(int slot, ItemStack stack) {
-        if (slot < 0 || slot >= items.getSlots() || stack.isEmpty()) return 0;
-        long capacity = Math.min((long) items.getSlotLimit(slot), stack.getMaxStackSize());
-        ItemStack in = items.getStackInSlot(slot);
-        if (in.isEmpty()) return (int) Math.min(capacity, cn.ism.mekck.util.CountMath.MAX_COUNT);
-        if (!ItemStack.isSameItemSameTags(in, stack)) return 0;
-        return (int) Math.max(0L, Math.min(capacity, cn.ism.mekck.util.CountMath.MAX_COUNT) - in.getCount());
-    }
-
-    /**
      * §F30：与 {@link #slotRoom} 逐行同构，**唯一差异**是容量不再 {@code min(..., stack.getMaxStackSize())}，
      * 而直取处理器槽上限 {@code items.getSlotLimit(slot)}（返还格 / 空瓶槽 = {@code Integer.MAX_VALUE}）。
      * <p>专供**返还链**（{@link #returnRoom}/{@link #insertReturn}）使用：果汁桶抽空后还进返还格的空桶

@@ -86,7 +86,6 @@ import cn.ism.mekck.recipe.PlantingCuttingRecipe;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.MenuScreens;
-import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.resources.ResourceLocation;
@@ -115,7 +114,6 @@ import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
-import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.event.RenderLivingEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.TickEvent;
@@ -364,9 +362,19 @@ public final class UniversalCuttingMachine {
     //      Block.dropResources → BlockStateBase.getDrops(LootParams.Builder) →
     //      BlockBehaviour.getDrops(BlockState, LootParams.Builder)，
     //      正是被覆写的那个方法 ⇒ **战利品表根本不会被查询**，补 12 张表只会变成死文件。
-    //      （顺带一提：data/mekck/loot_tables/blocks/ 下那 5 张遗留机器的表——planting_cutting_station、
-    //      electric_grill、electric_grinding_machine、universal_cutting_machine、smart_skewering_machine
-    //      ——同样因为这个覆写而从未生效，属于另一个待清理项。）
+    //
+    //      【第六轮更正】本段原注称「data/mekck/loot_tables/blocks/ 下还有 5 张遗留机器的表
+    //      ——planting_cutting_station / electric_grill / electric_grinding_machine /
+    //      universal_cutting_machine / smart_skewering_machine ——同样从未生效，
+    //      属于另一个待清理项」。逐条核实后：
+    //        · 其中 4 张（planting_cutting_station / electric_grinding_machine /
+    //          universal_cutting_machine / smart_skewering_machine）**早已被删**，
+    //          目录里根本不存在；
+    //        · 剩下的 electric_grill 对应的 {@code GrillBlock} **并没有**覆写 getDrops
+    //          （实测 GrillBlock.java 全文无该方法），所以它那张表是**活的**，
+    //          不能按死文件删掉。
+    //      ⇒ 结论：loot_tables/blocks 下现有 73 张表**全部有效**，没有待清理项。
+    //      （17 个方块确实覆写了 getDrops，但它们本来就没有战利品表。）
     //   ② 「byte 下标上限会静默丢存档」——错。BigStackItemHandler.serializeNBT 写的是
     //      putInt("Slot", i)，反序列用 getInt 并带 0 ≤ slot < getSlots() 越界检查。
     //      MekCkSlotNbt 那层兜底针对的是**Mek 自己的** mekanism.api.DataHandlerUtils
