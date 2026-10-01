@@ -5,7 +5,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.Containers;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -172,12 +171,29 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         protected void onContentsChanged(int slot) {
             // 模块槽变化会让"已安装模块列表"失效（该列表原先每 tick 被构造多次）
             if (slot >= MODULE_START && slot < STORAGE_START) moduleVersion++;
+            // 存储区/输出区变化要让存储浏览器重推一页（修 I-N4）。
+            // 用内容版本号而不是直接每 tick 推：AutoIO 可能在开界面期间每 tick 都在
+            // 搬东西，无条件推就是每 tick 54 个 ItemStack 的带宽。
+            if (slot >= STORAGE_START) storageVersion++;
             setChanged();
         }
     };
 
     /** 模块槽内容版本号：只增不减，用于给 installedAbilities() 的结果做缓存失效。 */
     private int moduleVersion;
+    /**
+     * 存储区（含输出区、样品槽）内容版本号：只增不减，<b>不落盘</b>。
+     *
+     * <p>给 {@code CentralKitchenMenu#pushStorageSync} 判断「这一页要不要重发」用。
+     * 刻意不进 NBT——它只是个进程内的推送去重计数，落盘没有意义，
+     * 反而会让人以为它参与了存档兼容。</p>
+     */
+    private int storageVersion;
+
+    /** 存储区内容版本号（见 {@link #storageVersion}）。 */
+    public int storageVersion() {
+        return storageVersion;
+    }
     private java.util.List<cn.ism.mekck.kitchen.KitchenModule.Ability> abilitiesCache;
     private int abilitiesCacheVersion = -1;
 
@@ -243,6 +259,29 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         kitchen.tickOrders(level, pos, state);
         // 自动模式（方案 C，默认关闭；仅对打开开关的系列生效，按模块槽顺序消耗材料）
         kitchen.tickAutoMode(level, pos, state);
+        // 存储浏览器增量同步（修 I-N4）：存储区在开界面期间被 AutoIO / 订单 / AE2
+        // 改动时，把新的一页推给正在看这个界面的玩家。
+        // 版本号没变时 pushStorageSync 立即返回，节流再兜住 AutoIO 每 tick 改动的情形。
+        kitchen.syncOpenStorageBrowsers();
+    }
+
+    /**
+     * 给所有正开着本厨房界面的玩家补推一页存储浏览器快照。
+     *
+     * <p>不缓存玩家列表：中央厨房不是高频方块，遍历 {@code level.players()} 的成本
+     * 远低于维护一份「谁开着哪个界面」的注册表（后者要在菜单关闭时可靠注销，
+     * 漏注销就是给已关界面的人发包）。</p>
+     */
+    private void syncOpenStorageBrowsers() {
+        if (level == null || !(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) {
+            return;
+        }
+        for (var player : serverLevel.players()) {
+            if (player.containerMenu instanceof cn.ism.mekck.menu.CentralKitchenMenu menu
+                    && menu.getMachine() == this) {
+                menu.tickStorageSync();
+            }
+        }
     }
 
     // ================== 订单系统（阶段 4） ==================

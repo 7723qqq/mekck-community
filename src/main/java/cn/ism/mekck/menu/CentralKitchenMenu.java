@@ -2,7 +2,6 @@ package cn.ism.mekck.menu;
 
 import cn.ism.mekck.blockentity.CentralKitchenBlockEntity;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -54,6 +53,31 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
     private final List<StorageSlot> storageSlots = new ArrayList<>();
 
+    // ================== 客户端渲染镜像（修 I-N4） ==================
+    //
+    // 存储浏览器此前在客户端**完全算不出来**：client 侧的 CentralKitchenBlockEntity
+    // 是一个 items 全空的桩（300 格存储从不进 ContainerSynchronizer），
+    // 而 refreshDisplay 遍历的是 machine.items ⇒ filtered 恒空 ⇒
+    // applyScroll 把 54 个 machineIndex 全置 -1 ⇒ 界面一片空白。
+    //
+    // 搜索/排序/滚动的计算**本来就在服务端是对的**（KitchenViewPacket 落地后调的是
+    // 服务端 menu），缺的只是把结果送下去。所以这里只镜像**当前可见的一页**，
+    // 不镜像 300 格全量。
+    //
+    // clientVisible == null 表示「还没收到过快照」，此时按空处理（而不是回退去读
+    // machine.items —— 那是空桩，回退等于什么都不改）。
+    private ItemStack[] clientVisible;
+
+    /** 客户端侧的「共 N 条」，供页码指示用。服务端用 filtered.size()。 */
+    private int clientFilteredCount;
+
+    /** 上次推送的存储区版本号；用于「内容变了才推」，避免 AutoIO 每 tick 都发 54 格。 */
+    private int lastPushedStorageVersion = -1;
+
+    /** 推送节流：AutoIO 可能每 tick 都改存储区，全量推送是带宽灾难。 */
+    private long lastPushGameTime = Long.MIN_VALUE;
+    private static final long PUSH_INTERVAL_TICKS = 4L;
+
     /** 数据槽：0=系列掩码，1=订单数，2=运行线程数，3=总线程数，4/5/6=物品/流体/气体侧配编码。 */
     private final net.minecraft.world.inventory.ContainerData data = new net.minecraft.world.inventory.ContainerData() {
         @Override
@@ -101,38 +125,68 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
         @Override
         public boolean hasItem() {
-            return machineIndex >= 0 && !getItem().isEmpty();
+            return !getItem().isEmpty();
         }
 
+        /**
+         * {@inheritDoc}
+         *
+         * <p><b>分端</b>（修 I-N4）：服务端读真实存储槽，客户端读
+         * {@link CentralKitchenMenu#clientVisible} 里按<b>显示位置</b>索引的镜像。
+         *
+         * <p>客户端<b>不能</b>用 {@code machineIndex} —— 它是服务端过滤/排序后的
+         * 真实存储下标，客户端那份 {@code filtered} 恒空、{@code machineIndex} 恒 -1，
+         * 于是老写法在客户端永远返回 {@code ItemStack.EMPTY}，界面是死的。
+         * 镜像按显示位置索引，正好对应「这一页的第几格」。</p>
+         */
         @Override
         public ItemStack getItem() {
+            if (isClientSide()) {
+                ItemStack[] mirror = clientVisible;
+                if (mirror == null || displayIndex < 0 || displayIndex >= mirror.length) {
+                    return ItemStack.EMPTY;
+                }
+                return mirror[displayIndex];
+            }
             return machineIndex < 0 ? ItemStack.EMPTY : machine.items.getStackInSlot(machineIndex);
         }
 
         @Override
         public void set(ItemStack stack) {
+            // 客户端不写：真实变更由服务端执行，快照会覆盖这里的任何本地预测。
+            // 旧写法在客户端写的是空桩 BE 的 items，写了也没人看，却会让
+            // 「客户端算出的 machine.items 与服务端不一致」这类问题更难查。
+            if (isClientSide()) {
+                return;
+            }
             if (machineIndex >= 0) machine.items.setStackInSlot(machineIndex, stack);
         }
 
         @Override
         public void setChanged() {
+            if (isClientSide()) {
+                return;
+            }
             machine.setChanged();
         }
 
         @Override
         public ItemStack remove(int amount) {
+            if (isClientSide()) {
+                return ItemStack.EMPTY;
+            }
             return machineIndex < 0 ? ItemStack.EMPTY
                     : machine.items.extractItem(machineIndex, amount, false);
         }
 
         @Override
         public boolean mayPlace(ItemStack stack) {
-            return machineIndex >= 0;
+            return !isClientSide() && machineIndex >= 0;
         }
 
         @Override
         public boolean mayPickup(Player player) {
-            return machineIndex >= 0;
+            return !isClientSide() && machineIndex >= 0;
         }
 
         @Override
@@ -207,6 +261,13 @@ public class CentralKitchenMenu extends AbstractContainerMenu
      * 现补上滚动时重建与客户端周期性重建（见 {@code CentralKitchenScreen#tick}）。</p>
      */
     public void refreshDisplay() {
+        // 客户端**不再自行计算**（修 I-N4）：它手里的 machine.items 是空桩，
+        // 算出来的必然是空列表；页面数据一律由 KitchenStorageSyncPacket 下行。
+        // 保留这个提前返回而不是删掉调用点，是为了让 quickMoveStack 等
+        // 服务端路径仍然只调一个入口。
+        if (isClientSide()) {
+            return;
+        }
         filtered.clear();
         String needle = searchText == null ? "" : searchText.trim().toLowerCase();
         for (int i = CentralKitchenBlockEntity.STORAGE_START; i < CentralKitchenBlockEntity.OUTPUT_START; i++) {
@@ -233,6 +294,100 @@ public class CentralKitchenMenu extends AbstractContainerMenu
             scrollRow = max;
         }
         applyScroll();
+        // ⚠️ 这里**不**推送：由调用方决定。构造器调本方法时玩家的 containerMenu
+        // 还没设成本 menu，推了也没有观众；搜索/排序/滚动是玩家直接触发的、必须
+        // 立刻回应；而 BE 每 tick 的补推要节流。三者的推送策略不同，
+        // 所以由调用方各自 pushStorageSync(...)，而不是在这里一刀切。
+    }
+
+    // ================== 客户端快照落地（修 I-N4） ==================
+
+    /**
+     * 应用服务端下行的存储浏览器快照。<b>只在客户端被调用</b>。
+     *
+     * @param sortModeOrdinal 排序模式序号；越界一律落回 {@link SortMode#INDEX}，
+     *                        不抛异常——脏数据不该把客户端界面打崩
+     */
+    public void applyStorageSnapshot(int scrollRow, int sortModeOrdinal, int filteredCount,
+                                     List<ItemStack> visible) {
+        SortMode[] modes = SortMode.values();
+        this.sortMode = (sortModeOrdinal >= 0 && sortModeOrdinal < modes.length)
+                ? modes[sortModeOrdinal] : SortMode.INDEX;
+        this.scrollRow = Math.max(0, scrollRow);
+        this.clientFilteredCount = Math.max(0, filteredCount);
+        ItemStack[] mirror = new ItemStack[VISIBLE_STORAGE];
+        for (int i = 0; i < VISIBLE_STORAGE; i++) {
+            ItemStack src = (visible != null && i < visible.size()) ? visible.get(i) : null;
+            // copy() 而不是直接持有包里的引用：包对象会被 GC，而 Slot 可能长期持有这个
+            // ItemStack；不拷贝的话别名共享会让「取出的量」污染快照本身。
+            mirror[i] = src == null || src.isEmpty() ? ItemStack.EMPTY : src.copy();
+        }
+        this.clientVisible = mirror;
+    }
+
+    /**
+     * 把当前页推给正在看这个界面的玩家。
+     *
+     * @param force {@code true} 跳过「版本没变」与节流（搜索/排序/滚动这类
+     *              由玩家直接触发、必须立刻回应的即时响应）
+     */
+    public void pushStorageSync(boolean force) {
+        if (isClientSide() || machine == null) {
+            return;
+        }
+        var level = machine.getLevel();
+        if (!(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) {
+            return;
+        }
+        long now = serverLevel.getGameTime();
+        int version = machine.storageVersion();
+        if (!force) {
+            if (version == lastPushedStorageVersion
+                    && lastPushGameTime != Long.MIN_VALUE
+                    && now - lastPushGameTime < PUSH_INTERVAL_TICKS) {
+                return;
+            }
+        }
+
+        List<ItemStack> page = new ArrayList<>(VISIBLE_STORAGE);
+        for (int i = 0; i < VISIBLE_STORAGE; i++) {
+            int idx = displayOrder[i];
+            ItemStack stack = idx >= 0 ? machine.items.getStackInSlot(idx) : ItemStack.EMPTY;
+            page.add(stack.copy());
+        }
+        int sent = 0;
+        for (var player : serverLevel.players()) {
+            if (player.containerMenu == this) {
+                cn.ism.mekck.network.ModMessages.sendToPlayer(
+                        new cn.ism.mekck.network.KitchenStorageSyncPacket(
+                                machine.getBlockPos(), scrollRow, sortMode.ordinal(),
+                                filtered.size(), page),
+                        player);
+                sent++;
+            }
+        }
+        if (sent > 0) {
+            lastPushedStorageVersion = version;
+            lastPushGameTime = now;
+        } else {
+            // **没有观众就不记账**。
+            // 构造器里 refreshDisplay() 调本方法时，玩家的 containerMenu 还没被设成
+            // 本 menu（MenuProvider.createMenu 返回后才赋值），此刻 sent 恒为 0。
+            // 若在这里照样记账，首推会被记成「已发」，随后 BE 的第一次 tick 看到
+            // 「版本没变」就直接返回 —— 界面永远收不到第一页。
+            // 不记账则下一 tick 自动重试，且重试成本只是一次 players() 遍历。
+            lastPushGameTime = Long.MIN_VALUE;
+            lastPushedStorageVersion = -1;
+        }
+    }
+
+    /** BE 侧每 tick 调用：内容变了就补推一次（节流在 pushStorageSync 内）。 */
+    public void tickStorageSync() {
+        pushStorageSync(false);
+    }
+
+    private boolean isClientSide() {
+        return machine != null && machine.getLevel() != null && machine.getLevel().isClientSide;
     }
 
     /** 按当前滚动行刷新 54 个可见槽的真实索引。 */
@@ -250,12 +405,15 @@ public class CentralKitchenMenu extends AbstractContainerMenu
         this.searchText = text == null ? "" : text;
         this.scrollRow = 0;
         refreshDisplay();
+        // 搜索框每敲一个键就来一次 ⇒ 强制推送，不走节流。
+        pushStorageSync(true);
     }
 
     public void setSortMode(SortMode mode) {
         this.sortMode = mode;
         this.scrollRow = 0;
         refreshDisplay();
+        pushStorageSync(true);
     }
 
     public void scroll(int delta) {
@@ -269,6 +427,7 @@ public class CentralKitchenMenu extends AbstractContainerMenu
         // 改为整段重建：scroll 的语义本来就包含「翻到下一页」，而下一页的内容
         // 必须是**当下**的存储区内容。
         refreshDisplay();
+        pushStorageSync(true);
     }
 
     public int maxScrollRow() {
@@ -277,6 +436,8 @@ public class CentralKitchenMenu extends AbstractContainerMenu
     }
 
     public int getScrollRow() {
+        // 双端通用：客户端的 scrollRow 由 applyStorageSnapshot 写入，
+        // 服务端由 applyScroll 维护。
         return scrollRow;
     }
 
@@ -288,8 +449,9 @@ public class CentralKitchenMenu extends AbstractContainerMenu
         return sortMode;
     }
 
+    /** 匹配总数。客户端取快照带来的值（客户端算不出来）。 */
     public int getFilteredCount() {
-        return filtered.size();
+        return isClientSide() ? clientFilteredCount : filtered.size();
     }
 
     // ================== 库存包装 ==================
@@ -497,6 +659,7 @@ public class CentralKitchenMenu extends AbstractContainerMenu
             if (machine.canInstallModule(CentralKitchenBlockEntity.MODULE_START, stack)
                     && moveItemStackTo(stack, 0, VISIBLE_MODULES, false)) {
                 refreshDisplay();
+                pushStorageSync(true);
             } else if (!cn.ism.mekck.util.MekCkTransfer.moveItemStackTo(stack, slots,
                     VISIBLE_MODULES, VISIBLE_MODULES + VISIBLE_STORAGE, false)) {
                 // 存储区上限是 BIG_STACK（Integer.MAX_VALUE-1）：走原版会被物品自身的 64 钳制，
@@ -505,6 +668,7 @@ public class CentralKitchenMenu extends AbstractContainerMenu
                 return ItemStack.EMPTY;
             } else {
                 refreshDisplay();
+                pushStorageSync(true);
             }
         }
         if (stack.isEmpty()) slot.set(ItemStack.EMPTY);

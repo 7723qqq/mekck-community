@@ -133,6 +133,12 @@ public final class ModMessages {
                 MekCkSortingTogglePacket::encode,
                 MekCkSortingTogglePacket::decode,
                 MekCkSortingTogglePacket::handle);
+        // 中央厨房存储浏览器快照（修 I-N4：客户端的 BE 是空桩，
+        // 搜索/排序/滚动全在服务端算，没有这个包界面 54 格永远是空的）
+        CHANNEL.registerMessage(29, KitchenStorageSyncPacket.class,
+                KitchenStorageSyncPacket::encode,
+                KitchenStorageSyncPacket::decode,
+                KitchenStorageSyncPacket::handle);
     }
 
     public static void sendToServer(SideConfigPacket message) {
@@ -217,6 +223,11 @@ public final class ModMessages {
     }
 
     public static void sendToPlayer(KitchenOrderResultPacket message,
+                                    net.minecraft.server.level.ServerPlayer player) {
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), message);
+    }
+
+    public static void sendToPlayer(KitchenStorageSyncPacket message,
                                     net.minecraft.server.level.ServerPlayer player) {
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), message);
     }
