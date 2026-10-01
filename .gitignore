@@ -71,3 +71,15 @@ __pycache__/
 .blender-backup/
 .blender-preview/
 scratch/
+
+# 发布仓库目录：build.gradle 的 publishing 写到 file://<projectDir>/mcmodsrepo
+mcmodsrepo/
+
+# 多智能体会话的工作目录（sdd/ 下 39 份轮次报告，docs/ 只保留策展版）。
+# 此前仅靠 .superpowers/sdd/.gitignore 里的一行 '*' 挡住；那份嵌套文件未被跟踪，
+# 一旦丢失，这些会话文件会立刻全部变成未跟踪状态。
+.superpowers/
+
+# 导出器的中途文件：先写 *.part、校验通过才 os.replace 成正式 OBJ。
+# 崩溃残留的 .part 落在 src/main/resources/ 里会被 gradlew build 打进 jar。
+*.part
