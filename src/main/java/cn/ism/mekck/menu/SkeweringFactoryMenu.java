@@ -5,6 +5,7 @@ import cn.ism.mekck.machine.skewering.SkeweringFactoryTile;
 import mekanism.common.inventory.container.tile.MekanismTileContainer;
 import mekanism.common.registration.impl.ContainerTypeRegistryObject;
 import net.minecraft.world.entity.player.Inventory;
+import cn.ism.mekck.registry.MekCkFactories;
 
 
 /**
@@ -56,7 +57,7 @@ public final class SkeweringFactoryMenu extends MekanismTileContainer<SkeweringF
                     "穿串工厂容器拿不到 tile：BlockTypeTile 的 tile Supplier 被过早求值，"
                             + "或方块与 tile 类型不匹配。");
         }
-        ContainerTypeRegistryObject<SkeweringFactoryMenu> container = UniversalCuttingMachine.SKEWERING_FACTORY_CONTAINER;
+        ContainerTypeRegistryObject<SkeweringFactoryMenu> container = MekCkFactories.SKEWERING_FACTORY_CONTAINER;
         if (container == null) {
             throw new IllegalStateException("穿串工厂容器尚未注册（SKEWERING_FACTORY_CONTAINER == null）");
         }

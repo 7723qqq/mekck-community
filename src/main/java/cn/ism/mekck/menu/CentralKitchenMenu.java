@@ -12,6 +12,7 @@ import net.minecraft.world.item.ItemStack;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 中央厨房菜单：模块槽（20）+ 动态存储区视图（6 行 × 9 列 = 54 个可见格，可滚动）
@@ -201,7 +202,7 @@ public class CentralKitchenMenu extends AbstractContainerMenu
     }
 
     public CentralKitchenMenu(int containerId, Inventory playerInventory, CentralKitchenBlockEntity machine) {
-        super(cn.ism.mekck.UniversalCuttingMachine.CENTRAL_KITCHEN_MENU.get(), containerId);
+        super(cn.ism.mekck.registry.MekCkStandaloneMachines.CENTRAL_KITCHEN_MENU.get(), containerId);
         this.machine = machine;
 
         // 模块槽 5×4（左区）

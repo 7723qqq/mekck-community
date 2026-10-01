@@ -48,6 +48,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implements MenuProvider, cn.ism.mekck.ae2.INetworkPullable {
     public static final int INPUT_SLOT_START = 0;
@@ -288,7 +289,7 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
     };
 
     public SkeweringMachineBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK_ENTITY.get(), pos, state,
+        super(MekCkStandaloneMachines.SKEWERING_MACHINE_BLOCK_ENTITY.get(), pos, state,
                 ENERGY_CAPACITY, MAX_RECEIVE);
         for (int i = 0; i < 6; i++) {
             sideConfig[i] = SideMode.NONE;

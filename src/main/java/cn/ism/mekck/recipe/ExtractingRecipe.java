@@ -26,6 +26,7 @@ import org.jetbrains.annotations.NotNull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 /**
  * 智能萃取机专属配方 {@code mekck:extracting}（§F19 C+E 半：原创多入、双产物形态类型）。
@@ -163,12 +164,12 @@ public class ExtractingRecipe implements Recipe<RecipeWrapper> {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return UniversalCuttingMachine.EXTRACTING_RECIPE_SERIALIZER.get();
+        return MekCkRecipeTypes.EXTRACTING_RECIPE_SERIALIZER.get();
     }
 
     @Override
     public @NotNull RecipeType<?> getType() {
-        return UniversalCuttingMachine.EXTRACTING_RECIPE_TYPE.get();
+        return MekCkRecipeTypes.EXTRACTING_RECIPE_TYPE.get();
     }
 
     @Override

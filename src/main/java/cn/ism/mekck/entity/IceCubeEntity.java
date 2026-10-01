@@ -28,6 +28,8 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraftforge.network.NetworkHooks;
 
 import javax.annotation.Nullable;
+import cn.ism.mekck.registry.MekCkEffects;
+import cn.ism.mekck.registry.MekCkEntities;
 
 /**
  * 冰块实体：外观为原版冰块（IBlockDisplayReader 通过 getBlockState 渲染），
@@ -73,7 +75,7 @@ public class IceCubeEntity extends FallingBlockEntity {
     /** 便捷生成方法：完整参数（含溅射伤害与失温升级），生成冰块并播放传送粒子/音效。 */
     public static IceCubeEntity spawn(Level level, double x, double y, double z, float damage, boolean aoe, float splashDamage,
                                       boolean slow, boolean removeAI, boolean hypothermia, @Nullable BlockPos machinePos) {
-        IceCubeEntity cube = new IceCubeEntity(cn.ism.mekck.UniversalCuttingMachine.ICE_CUBE_ENTITY.get(), level);
+        IceCubeEntity cube = new IceCubeEntity(cn.ism.mekck.registry.MekCkEntities.ICE_CUBE_ENTITY.get(), level);
         cube.setPos(x, y, z);
         cube.setDeltaMovement(0, -0.05, 0);
         cube.entityData.set(DATA_DAMAGE, damage);
@@ -204,7 +206,7 @@ public class IceCubeEntity extends FallingBlockEntity {
             } else {
                 e.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 2, false, true));
                 e.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 100, 2, false, true));
-                e.addEffect(new MobEffectInstance(cn.ism.mekck.UniversalCuttingMachine.FROZEN_EFFECT.get(),
+                e.addEffect(new MobEffectInstance(cn.ism.mekck.registry.MekCkEffects.FROZEN_EFFECT.get(),
                         100, 0, false, true));
             }
         }
@@ -240,12 +242,12 @@ public class IceCubeEntity extends FallingBlockEntity {
      */
     private void applyHypothermia(LivingEntity e) {
         if (e.level().isClientSide) return;
-        MobEffectInstance existing = e.getEffect(cn.ism.mekck.UniversalCuttingMachine.HYPOTHERMIA_EFFECT.get());
+        MobEffectInstance existing = e.getEffect(cn.ism.mekck.registry.MekCkEffects.HYPOTHERMIA_EFFECT.get());
         int nextAmplifier = existing == null ? 0 : Math.min(19, existing.getAmplifier() + 1);
-        e.addEffect(new MobEffectInstance(cn.ism.mekck.UniversalCuttingMachine.HYPOTHERMIA_EFFECT.get(),
+        e.addEffect(new MobEffectInstance(cn.ism.mekck.registry.MekCkEffects.HYPOTHERMIA_EFFECT.get(),
                 HYPOTHERMIA_DURATION, nextAmplifier, false, true));
         if (nextAmplifier == 19) {
-            e.addEffect(new MobEffectInstance(cn.ism.mekck.UniversalCuttingMachine.ETERNAL_FREEZE_EFFECT.get(),
+            e.addEffect(new MobEffectInstance(cn.ism.mekck.registry.MekCkEffects.ETERNAL_FREEZE_EFFECT.get(),
                     ETERNAL_FREEZE_DURATION, 0, false, true));
         }
     }

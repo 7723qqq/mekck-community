@@ -37,6 +37,7 @@ import net.minecraftforge.network.NetworkHooks;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 public final class IceMakerBlock extends BaseEntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
@@ -130,9 +131,9 @@ public final class IceMakerBlock extends BaseEntityBlock {
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
         if (level.isClientSide) {
-            return createTickerHelper(type, UniversalCuttingMachine.ICE_MAKER_BLOCK_ENTITY.get(), IceMakerBlockEntity::clientTick);
+            return createTickerHelper(type, MekCkStandaloneMachines.ICE_MAKER_BLOCK_ENTITY.get(), IceMakerBlockEntity::clientTick);
         }
-        return createTickerHelper(type, UniversalCuttingMachine.ICE_MAKER_BLOCK_ENTITY.get(), IceMakerBlockEntity::serverTick);
+        return createTickerHelper(type, MekCkStandaloneMachines.ICE_MAKER_BLOCK_ENTITY.get(), IceMakerBlockEntity::serverTick);
     }
 
     @Override

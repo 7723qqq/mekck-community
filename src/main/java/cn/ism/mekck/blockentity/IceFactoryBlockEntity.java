@@ -54,6 +54,8 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Comparator;
 import java.util.List;
 import cn.ism.mekck.util.IceTargetSearch;
+import cn.ism.mekck.registry.MekCkFactories;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 public final class IceFactoryBlockEntity extends BlockEntity implements MenuProvider, IRedstoneControllable, mekanism.api.heat.IMekanismHeatHandler , cn.ism.mekck.ae2.INetworkPullable {
     // ==================== IMekanismHeatHandler ====================
@@ -241,7 +243,7 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
             net.minecraftforge.common.util.LazyOptional.of(() -> heatComponent.getHandler());
 
     public IceFactoryBlockEntity(CuttingMachineFactoryTier tier, BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.ICE_FACTORY_BLOCK_ENTITIES.get(tier).get(), pos, state);
+        super(MekCkFactories.ICE_FACTORY_BLOCK_ENTITIES.get(tier).get(), pos, state);
         this.tier = tier;
                 // 上限惰性读取 MekckConfig，故 /reload 改配置后立即生效。
                 // 必须在构造器体内初始化：tier 在此处才保证已赋值，字段初始化器里无法引用。
@@ -685,7 +687,7 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
         if (level == null) return null;
         // 仅检查该输入槽
         var probe = new net.minecraftforge.items.wrapper.RecipeWrapper(new SingleSlotHandler(inSlot));
-        var holder = level.getRecipeManager().getRecipeFor(UniversalCuttingMachine.ICE_MAKE_RECIPE_TYPE.get(), probe, level);
+        var holder = level.getRecipeManager().getRecipeFor(MekCkRecipeTypes.ICE_MAKE_RECIPE_TYPE.get(), probe, level);
         IceMakeRecipe r = holder.orElse(null);
         if (r == null) return null;
         return r;

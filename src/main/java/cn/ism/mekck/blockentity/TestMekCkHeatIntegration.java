@@ -9,6 +9,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraftforge.gametest.GameTestHolder;
 import net.minecraftforge.gametest.PrefixGameTestTemplate;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 热能力跨模组识别 gametest。
@@ -29,7 +30,7 @@ public class TestMekCkHeatIntegration {
 
     @GameTest(template = TEMPLATE, timeoutTicks = 100)
     public static void iceMakerIsMekanismHeatHandler(GameTestHelper helper) {
-        helper.setBlock(POS, cn.ism.mekck.UniversalCuttingMachine.ICE_MAKER_BLOCK.get());
+        helper.setBlock(POS, cn.ism.mekck.registry.MekCkStandaloneMachines.ICE_MAKER_BLOCK.get());
         BlockEntity be = helper.getBlockEntity(POS);
         helper.assertTrue(be instanceof IceMakerBlockEntity, "ice_maker 方块实体类型不符: " + be);
 
@@ -62,7 +63,7 @@ public class TestMekCkHeatIntegration {
     /** 加热类机器（坚果爆炒机）走同一条路径。 */
     @GameTest(template = TEMPLATE, timeoutTicks = 100)
     public static void nutRoasterIsMekanismHeatHandler(GameTestHelper helper) {
-        helper.setBlock(POS, cn.ism.mekck.UniversalCuttingMachine.NUT_ROASTER_BLOCK.get());
+        helper.setBlock(POS, cn.ism.mekck.registry.MekCkStandaloneMachines.NUT_ROASTER_BLOCK.get());
         BlockEntity be = helper.getBlockEntity(POS);
         helper.assertTrue(be instanceof NutRoasterBlockEntity, "nut_roaster 方块实体类型不符: " + be);
         helper.assertTrue(be instanceof IMekanismHeatHandler, "NutRoasterBlockEntity 未实现 IMekanismHeatHandler");

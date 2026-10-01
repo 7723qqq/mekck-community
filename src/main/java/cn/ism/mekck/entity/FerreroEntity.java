@@ -28,6 +28,8 @@ import net.minecraftforge.network.NetworkHooks;
 
 import javax.annotation.Nullable;
 import cn.ism.mekck.util.FreezeAiReaper;
+import cn.ism.mekck.registry.MekCkEntities;
+import cn.ism.mekck.registry.MekCkItems;
 
 /**
  * 费列罗巧克力实体：巧克力大炮的攻击弹药。
@@ -84,7 +86,7 @@ public class FerreroEntity extends ThrowableItemProjectile {
 
     /** 便捷生成方法：在目标上方生成费列罗，并在生成位置与机器位置播放传送特效与音效。 */
     public static FerreroEntity spawn(Level level, double x, double y, double z, float damage, byte flags, @Nullable BlockPos machinePos) {
-        FerreroEntity entity = new FerreroEntity(UniversalCuttingMachine.FERRERO_ENTITY.get(), level);
+        FerreroEntity entity = new FerreroEntity(MekCkEntities.FERRERO_ENTITY.get(), level);
         entity.setPos(x, y, z);
         entity.setDeltaMovement(0, -0.05, 0);
         entity.entityData.set(DATA_DAMAGE, damage);
@@ -109,7 +111,7 @@ public class FerreroEntity extends ThrowableItemProjectile {
     @Override
     protected Item getDefaultItem() {
         // 发射物用"裸巧克力球"载体（物品栏那颗是带金箔的 ferrero_chocolate）
-        return UniversalCuttingMachine.FERRERO_PROJECTILE_ITEM.get();
+        return MekCkItems.FERRERO_PROJECTILE_ITEM.get();
     }
 
     private float getDamage() {

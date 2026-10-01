@@ -39,6 +39,7 @@ import net.minecraftforge.network.NetworkHooks;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 生物反应堆方块：2×2×3 多方块结构的主方块（其余 11 格为 Mekanism 绑定方块）。
@@ -118,7 +119,7 @@ public final class BioreactorBlock extends BaseEntityBlock {
         if (!level.isClientSide) {
             org.apache.logging.log4j.LogManager.getLogger("mekck.Multiblock").info("[mekck-bb] BioreactorBlock.setPlacedBy @{}", pos);
         }
-        MekCkMultiblock.placeBoundingBlocks(level, pos, state, BOUNDING_SHAPE, UniversalCuttingMachine.BIOREACTOR_BOUNDING_BLOCK.get());
+        MekCkMultiblock.placeBoundingBlocks(level, pos, state, BOUNDING_SHAPE, MekCkStandaloneMachines.BIOREACTOR_BOUNDING_BLOCK.get());
     }
 
     @Override
@@ -127,8 +128,8 @@ public final class BioreactorBlock extends BaseEntityBlock {
             // 清理绑定方块（整体一起破坏），并掉落方块本体。
             // 除现行 3×3×3 外还要清一遍旧的 2×2×3：改尺寸之前放下的机器仍带旧布局，
             // 只按新形状清会漏掉 3 个绑定块，在世界里留下拿不掉也点不开的残块。
-            MekCkMultiblock.removeBoundingBlocks(level, pos, state, BOUNDING_SHAPE, UniversalCuttingMachine.BIOREACTOR_BOUNDING_BLOCK.get());
-            MekCkMultiblock.removeBoundingBlocks(level, pos, state, MekCkMultiblock.SHAPE_2X2X3_LEGACY, UniversalCuttingMachine.BIOREACTOR_BOUNDING_BLOCK.get());
+            MekCkMultiblock.removeBoundingBlocks(level, pos, state, BOUNDING_SHAPE, MekCkStandaloneMachines.BIOREACTOR_BOUNDING_BLOCK.get());
+            MekCkMultiblock.removeBoundingBlocks(level, pos, state, MekCkMultiblock.SHAPE_2X2X3_LEGACY, MekCkStandaloneMachines.BIOREACTOR_BOUNDING_BLOCK.get());
             if (!level.isClientSide && level.getBlockEntity(pos) instanceof BioreactorBlockEntity machine) {
                 // 必须把 BE 数据（16 个燃料输入槽、动力槽、流体容器、能量、已存流体）
                 // 序列化进物品：getDrops 返回空，所以这一个物品是状态的唯一载体，
@@ -160,7 +161,7 @@ public final class BioreactorBlock extends BaseEntityBlock {
         if (level.isClientSide) {
             return null;
         }
-        return createTickerHelper(type, UniversalCuttingMachine.BIOREACTOR_BLOCK_ENTITY.get(), BioreactorBlockEntity::serverTick);
+        return createTickerHelper(type, MekCkStandaloneMachines.BIOREACTOR_BLOCK_ENTITY.get(), BioreactorBlockEntity::serverTick);
     }
 
     @Override

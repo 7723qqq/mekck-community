@@ -46,6 +46,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import cn.ism.mekck.registry.MekCkFactories;
 
 /**
  * 电力研磨机：处理 kaleidoscope_cookery 石磨配方（每次研磨随机产出）。
@@ -247,7 +248,7 @@ public final class ElectricGrindingMachineBlockEntity extends BlockEntity implem
     };
 
     public ElectricGrindingMachineBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.GRINDING_MACHINE_BLOCK_ENTITY.get(), pos, state);
+        super(MekCkFactories.GRINDING_MACHINE_BLOCK_ENTITY.get(), pos, state);
         for (int i = 0; i < 6; i++) {
             sideConfig[i] = SideMode.NONE;
         }

@@ -24,6 +24,7 @@ import net.minecraftforge.items.SlotItemHandler;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.function.IntSupplier;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 public final class SkeweringMachineMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
     /**
@@ -57,7 +58,7 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
     }
 
     public SkeweringMachineMenu(int containerId, Inventory inventory, SkeweringMachineBlockEntity machine, ContainerData data) {
-        super(UniversalCuttingMachine.SKEWERING_MACHINE_MENU.get(), containerId);
+        super(MekCkStandaloneMachines.SKEWERING_MACHINE_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
 

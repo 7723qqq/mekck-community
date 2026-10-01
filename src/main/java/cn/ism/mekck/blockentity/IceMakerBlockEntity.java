@@ -51,6 +51,8 @@ import net.minecraftforge.items.wrapper.RecipeWrapper;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import cn.ism.mekck.util.IceTargetSearch;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 public final class IceMakerBlockEntity extends BlockEntity implements MenuProvider, IRedstoneControllable, mekanism.api.heat.IMekanismHeatHandler, cn.ism.mekck.ae2.INetworkPullable {
     // ==================== IMekanismHeatHandler ====================
@@ -347,7 +349,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     };
 
     public IceMakerBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.ICE_MAKER_BLOCK_ENTITY.get(), pos, state);
+        super(MekCkStandaloneMachines.ICE_MAKER_BLOCK_ENTITY.get(), pos, state);
         for (int i = 0; i < 6; i++) sideConfig[i] = SideMode.NONE;
         this.fullItemCapability = LazyOptional.of(() -> items);
         this.inputItemCapability = LazyOptional.of(() -> new InputItemHandler());
@@ -932,7 +934,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
         if (level == null) return null;
         var manager = level.getRecipeManager();
         var opts = recipeWrapper();
-        var holder = manager.getRecipeFor(UniversalCuttingMachine.ICE_MAKE_RECIPE_TYPE.get(), opts, level);
+        var holder = manager.getRecipeFor(MekCkRecipeTypes.ICE_MAKE_RECIPE_TYPE.get(), opts, level);
         IceMakeRecipe found = holder.orElse(null);
         // ME 下单：只执行订单指定的配方
         if (orderRecipeId != null) {

@@ -7,6 +7,7 @@ import mekanism.common.inventory.container.tile.MekanismTileContainer;
 import mekanism.common.registration.impl.ContainerTypeRegistryObject;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
+import cn.ism.mekck.registry.MekCkFactories;
 
 /**
  * 切菜机容器（Mek 体系版）—— 第四轮从自研 {@code AbstractContainerMenu} 换成
@@ -45,7 +46,7 @@ public final class UniversalCuttingMachineMenu extends MekanismTileContainer<Uni
                             + "或方块与 tile 类型不匹配。");
         }
         ContainerTypeRegistryObject<UniversalCuttingMachineMenu> container =
-                UniversalCuttingMachine.MACHINE_CONTAINER;
+                MekCkFactories.MACHINE_CONTAINER;
         if (container == null) {
             throw new IllegalStateException("切菜机容器尚未注册（MACHINE_CONTAINER == null）");
         }

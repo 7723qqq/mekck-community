@@ -20,6 +20,7 @@ import net.minecraftforge.registries.ForgeRegistries;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 /**
  * 巧克力大炮使用的 {@code mekck:ferrero} 配方。
@@ -97,12 +98,12 @@ public class FerreroRecipe implements Recipe<RecipeWrapper> {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return UniversalCuttingMachine.FERRERO_RECIPE_SERIALIZER.get();
+        return MekCkRecipeTypes.FERRERO_RECIPE_SERIALIZER.get();
     }
 
     @Override
     public @NotNull RecipeType<?> getType() {
-        return UniversalCuttingMachine.FERRERO_RECIPE_TYPE.get();
+        return MekCkRecipeTypes.FERRERO_RECIPE_TYPE.get();
     }
 
     public static class Serializer implements RecipeSerializer<FerreroRecipe> {

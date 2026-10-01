@@ -28,6 +28,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 /**
  * 种植切配工厂的执行器 —— 种子 →（种植）→（切菜）→ 产物，外加营养液气体与生长方块两道门禁。
@@ -286,7 +287,7 @@ public final class PlantingCuttingFactoryExecutor implements MekCkRecipeExecutor
      * {@code RecipeType<T>} 推断的，调用方给 {@code RecipeType<?>} 会让推断失败。
      */
     private static RecipeType<PlantingCuttingRecipe> recipeType() {
-        return UniversalCuttingMachine.PLANTING_CUTTING_RECIPE_TYPE.get();
+        return MekCkRecipeTypes.PLANTING_CUTTING_RECIPE_TYPE.get();
     }
 
     /**

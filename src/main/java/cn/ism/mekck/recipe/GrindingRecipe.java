@@ -17,6 +17,7 @@ import net.minecraftforge.items.wrapper.RecipeWrapper;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 /**
  * 电力研磨机专属配方 {@code mekck:grinding}（§F19 D 半：磨粉工序）：1 输入 → 1 输出。
@@ -73,12 +74,12 @@ public class GrindingRecipe implements Recipe<RecipeWrapper> {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return UniversalCuttingMachine.GRINDING_RECIPE_SERIALIZER.get();
+        return MekCkRecipeTypes.GRINDING_RECIPE_SERIALIZER.get();
     }
 
     @Override
     public @NotNull RecipeType<?> getType() {
-        return UniversalCuttingMachine.GRINDING_RECIPE_TYPE.get();
+        return MekCkRecipeTypes.GRINDING_RECIPE_TYPE.get();
     }
 
     @Override

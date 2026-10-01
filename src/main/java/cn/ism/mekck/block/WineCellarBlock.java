@@ -32,6 +32,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraftforge.network.NetworkHooks;
 import org.jetbrains.annotations.Nullable;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 陈化窖（时间悖论产生器，F20）方块：独立容器方块（非 SimpleMachine 加工机），
@@ -116,8 +117,8 @@ public final class WineCellarBlock extends BaseEntityBlock {
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
         if (level.isClientSide) {
-            return createTickerHelper(type, UniversalCuttingMachine.WINE_CELLAR_BLOCK_ENTITY.get(), WineCellarBlockEntity::clientTick);
+            return createTickerHelper(type, MekCkStandaloneMachines.WINE_CELLAR_BLOCK_ENTITY.get(), WineCellarBlockEntity::clientTick);
         }
-        return createTickerHelper(type, UniversalCuttingMachine.WINE_CELLAR_BLOCK_ENTITY.get(), WineCellarBlockEntity::serverTick);
+        return createTickerHelper(type, MekCkStandaloneMachines.WINE_CELLAR_BLOCK_ENTITY.get(), WineCellarBlockEntity::serverTick);
     }
 }

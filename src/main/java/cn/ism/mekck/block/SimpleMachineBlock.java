@@ -37,6 +37,7 @@ import net.minecraftforge.network.NetworkHooks;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import cn.ism.mekck.registry.MekCkLegacyMachines;
 
 /** 四合一基础机器方块（寿司卷制机/平均切段机/饭团成型机/凝乳成型机）。 */
 public final class SimpleMachineBlock extends BaseEntityBlock {
@@ -150,9 +151,9 @@ public final class SimpleMachineBlock extends BaseEntityBlock {
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
         if (level.isClientSide) {
-            return createTickerHelper(type, UniversalCuttingMachine.SIMPLE_MACHINE_BLOCK_ENTITY.get(), SimpleMachineBlockEntity::clientTick);
+            return createTickerHelper(type, MekCkLegacyMachines.SIMPLE_MACHINE_BLOCK_ENTITY.get(), SimpleMachineBlockEntity::clientTick);
         }
-        return createTickerHelper(type, UniversalCuttingMachine.SIMPLE_MACHINE_BLOCK_ENTITY.get(), SimpleMachineBlockEntity::serverTick);
+        return createTickerHelper(type, MekCkLegacyMachines.SIMPLE_MACHINE_BLOCK_ENTITY.get(), SimpleMachineBlockEntity::serverTick);
     }
 
     @Override

@@ -25,6 +25,7 @@ import net.minecraftforge.items.SlotItemHandler;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.function.IntSupplier;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 生物反应堆菜单：4×4 输入格（16）+ 能源槽（1）+ 玩家物品栏。
@@ -54,7 +55,7 @@ public final class BioreactorMenu extends AbstractContainerMenu {
     }
 
     public BioreactorMenu(int containerId, Inventory inventory, BioreactorBlockEntity machine, ContainerData data) {
-        super(UniversalCuttingMachine.BIOREACTOR_MENU.get(), containerId);
+        super(MekCkStandaloneMachines.BIOREACTOR_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
 

@@ -24,6 +24,7 @@ import org.jetbrains.annotations.NotNull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 public class PlantingCuttingRecipe implements Recipe<RecipeWrapper> {
 
@@ -125,12 +126,12 @@ public class PlantingCuttingRecipe implements Recipe<RecipeWrapper> {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return UniversalCuttingMachine.PLANTING_CUTTING_RECIPE_SERIALIZER.get();
+        return MekCkRecipeTypes.PLANTING_CUTTING_RECIPE_SERIALIZER.get();
     }
 
     @Override
     public @NotNull RecipeType<?> getType() {
-        return UniversalCuttingMachine.PLANTING_CUTTING_RECIPE_TYPE.get();
+        return MekCkRecipeTypes.PLANTING_CUTTING_RECIPE_TYPE.get();
     }
 
     @Override

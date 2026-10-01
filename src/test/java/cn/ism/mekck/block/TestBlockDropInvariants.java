@@ -1,5 +1,6 @@
 package cn.ism.mekck.block;
 
+import cn.ism.mekck.TestSourceText;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -140,7 +141,7 @@ public class TestBlockDropInvariants {
         // 方块类简名 → 注册 id
         Map<String, String> classToId = new HashMap<>();
         Matcher reg = Pattern.compile("register\\(\\s*\"([a-z0-9_]+)\"\\s*,\\s*(\\w+)\\s*::\\s*new")
-                .matcher(Files.readString(registrySrc, StandardCharsets.UTF_8));
+                .matcher(TestSourceText.readRegistry());
         while (reg.find()) {
             classToId.put(reg.group(2), reg.group(1));
         }

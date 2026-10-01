@@ -5,6 +5,7 @@ import cn.ism.mekck.machine.plantingcutting.PlantingCuttingFactoryTile;
 import mekanism.common.inventory.container.tile.MekanismTileContainer;
 import mekanism.common.registration.impl.ContainerTypeRegistryObject;
 import net.minecraft.world.entity.player.Inventory;
+import cn.ism.mekck.registry.MekCkFactories;
 
 /**
  * 种植切配工厂容器（Mek 体系版）—— 阶段 3。
@@ -59,7 +60,7 @@ public final class PlantingCuttingFactoryMenu extends MekanismTileContainer<Plan
                             + "或方块与 tile 类型不匹配。");
         }
         ContainerTypeRegistryObject<PlantingCuttingFactoryMenu> container =
-                UniversalCuttingMachine.PLANTING_CUTTING_CONTAINER;
+                MekCkFactories.PLANTING_CUTTING_CONTAINER;
         if (container == null) {
             throw new IllegalStateException("种植切配工厂容器尚未注册（PLANTING_CUTTING_CONTAINER == null）");
         }

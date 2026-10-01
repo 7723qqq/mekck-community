@@ -36,7 +36,13 @@ import static org.junit.Assert.assertTrue;
 public class TestMekCkFactoryJeiInitTiming {
 
     private static final String JEI_BRIDGE = "src/main/java/cn/ism/mekck/client/MekCkFactoryJei.java";
-    private static final String MOD = "src/main/java/cn/ism/mekck/UniversalCuttingMachine.java";
+    /**
+     * {@code MekCkFactoryJei.init()} 的调用点。
+     *
+     * <p>原先它写在主类的客户端事件内部类里；注册中枢拆分时那个内部类升格为
+     * {@code cn.ism.mekck.client.ClientEvents}，所以这里的路径跟着搬了一次家。</p>
+     */
+    private static final String MOD = "src/main/java/cn/ism/mekck/client/ClientEvents.java";
 
     /** 桥必须有一个公开的 init() 入口，供客户端初始化时触发 {@code <clinit>}。 */
     @Test

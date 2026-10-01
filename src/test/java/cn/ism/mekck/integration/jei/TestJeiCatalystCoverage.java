@@ -1,5 +1,6 @@
 package cn.ism.mekck.integration.jei;
 
+import cn.ism.mekck.TestSourceText;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -76,7 +77,7 @@ public class TestJeiCatalystCoverage {
      * 对应 {@code block.mekck.singularity_cooking_factory = "Endless Greed Cooking Factory"}。</p>
      */
     private static final Pattern TIER_ALIAS_CATALYST = Pattern.compile(
-            "addRecipeCatalyst\\s*\\(\\s*new ItemStack\\(\\s*UniversalCuttingMachine\\."
+            "addRecipeCatalyst\\s*\\(\\s*new ItemStack\\(\\s*(?:UniversalCuttingMachine|MekCkFactories)\\."
                     + "([A-Z][A-Z_]*)_FACTORY_(?:BLOCK|ITEM)(?![A-Z0-9_])");
 
     private static String read(Path path) throws IOException {
@@ -98,7 +99,7 @@ public class TestJeiCatalystCoverage {
 
     private static Set<String> familyMaps() throws IOException {
         Set<String> maps = new TreeSet<>();
-        Matcher matcher = FAMILY_DECL.matcher(read(REGISTRY));
+        Matcher matcher = FAMILY_DECL.matcher(TestSourceText.readRegistry());
         while (matcher.find()) {
             maps.add(matcher.group(1));
         }

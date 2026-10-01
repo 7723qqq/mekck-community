@@ -38,6 +38,7 @@ import net.minecraftforge.network.NetworkHooks;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import cn.ism.mekck.registry.MekCkFactories;
 
 public final class IceFactoryBlock extends BaseEntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
@@ -152,7 +153,7 @@ public final class IceFactoryBlock extends BaseEntityBlock {
         // 直接查注册表，不再逐个 case 列等级。
         // 原先的 switch 只列了 11 个等级、**漏了 BLAZE** ⇒ 烈焰等级工厂的 ticker
         // 取不到类型，同样会在放置时抛 IllegalArgumentException（2026-09-16 修复）。
-        return cn.ism.mekck.UniversalCuttingMachine.ICE_FACTORY_BLOCK_ENTITIES.get(tier).get();
+        return cn.ism.mekck.registry.MekCkFactories.ICE_FACTORY_BLOCK_ENTITIES.get(tier).get();
     }
 
     @Override

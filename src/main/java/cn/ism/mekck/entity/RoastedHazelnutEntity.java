@@ -24,6 +24,8 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkHooks;
 
 import javax.annotation.Nullable;
+import cn.ism.mekck.registry.MekCkEntities;
+import cn.ism.mekck.registry.MekCkItems;
 
 /**
  * 炒榛子实体：坚果爆炒机的攻击弹药。
@@ -60,7 +62,7 @@ public class RoastedHazelnutEntity extends ThrowableItemProjectile {
      * @param maxAgeTicks 存活 tick 上限（射程 / 2，速度 2 格/tick 下恰好飞满射程）
      */
     public static RoastedHazelnutEntity spawn(Level level, Vec3 from, LivingEntity target, float damage, int maxAgeTicks, @Nullable BlockPos machinePos) {
-        RoastedHazelnutEntity entity = new RoastedHazelnutEntity(UniversalCuttingMachine.ROASTED_HAZELNUT_ENTITY.get(), level);
+        RoastedHazelnutEntity entity = new RoastedHazelnutEntity(MekCkEntities.ROASTED_HAZELNUT_ENTITY.get(), level);
         entity.setPos(from.x, from.y, from.z);
         entity.spawnBlockPos = machinePos;
         Vec3 aim = new Vec3(target.getX(), target.getY() + target.getBbHeight() * 0.5D, target.getZ());
@@ -84,7 +86,7 @@ public class RoastedHazelnutEntity extends ThrowableItemProjectile {
 
     @Override
     protected Item getDefaultItem() {
-        return UniversalCuttingMachine.ROASTED_HAZELNUT_ITEM.get();
+        return MekCkItems.ROASTED_HAZELNUT_ITEM.get();
     }
 
     private float getDamage() {

@@ -8,6 +8,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.player.Player;
+import cn.ism.mekck.registry.MekCkEffects;
 
 /**
  * 永冻：失温叠满 20 级（amplifier 19）时附加。
@@ -57,7 +58,7 @@ public class EternalFreezeEffect extends MobEffect {
                 long now = serverLevel.getServer().getTickCount();
                 long dueTick = mob.getPersistentData().getLong(AI_RESTORE_KEY);
                 boolean due = dueTick > 0 && dueTick <= now;
-                boolean stillFrozen = entity.hasEffect(UniversalCuttingMachine.ETERNAL_FREEZE_EFFECT.get());
+                boolean stillFrozen = entity.hasEffect(MekCkEffects.ETERNAL_FREEZE_EFFECT.get());
 
                 if (due && !stillFrozen) {
                     // 到期：清 AI 并抹掉恢复刻，否则下次进服会重复走这条。
@@ -74,7 +75,7 @@ public class EternalFreezeEffect extends MobEffect {
                     serverLevel.getServer().tell(new net.minecraft.server.TickTask((int) scheduled, () -> {
                         if (mob.isAlive()
                                 && mob.getPersistentData().getLong(AI_RESTORE_KEY) <= serverLevel.getServer().getTickCount()
-                                && !mob.hasEffect(UniversalCuttingMachine.ETERNAL_FREEZE_EFFECT.get())) {
+                                && !mob.hasEffect(MekCkEffects.ETERNAL_FREEZE_EFFECT.get())) {
                             mob.setNoAi(false);
                             mob.getPersistentData().remove(AI_RESTORE_KEY);
                         }

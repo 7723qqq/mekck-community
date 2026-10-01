@@ -69,6 +69,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 public final class SmartCookingPotBlockEntity extends BlockEntity implements MenuProvider, IRedstoneControllable, mekanism.api.heat.IMekanismHeatHandler, cn.ism.mekck.ae2.INetworkPullable {
     // ==================== IMekanismHeatHandler ====================
@@ -362,7 +363,7 @@ public final class SmartCookingPotBlockEntity extends BlockEntity implements Men
     }
 
 public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.COOKING_POT_BLOCK_ENTITY.get(), pos, state);
+        super(MekCkStandaloneMachines.COOKING_POT_BLOCK_ENTITY.get(), pos, state);
         this.heatComponent = new cn.ism.mekck.util.MekCkHeatComponent(this::getLevel, this::getBlockPos, this::setChanged);
         for (int i = 0; i < 6; i++) {
             sideConfig[i] = SideMode.NONE;

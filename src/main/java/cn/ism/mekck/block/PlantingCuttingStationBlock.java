@@ -40,6 +40,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import cn.ism.mekck.registry.MekCkFactories;
 
 public final class PlantingCuttingStationBlock extends BaseEntityBlock {
     // 2-block tall structure: main block + bounding block above
@@ -160,9 +161,9 @@ public final class PlantingCuttingStationBlock extends BaseEntityBlock {
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
         if (level.isClientSide) {
-            return createTickerHelper(type, UniversalCuttingMachine.PLANTING_CUTTING_STATION_BLOCK_ENTITY.get(), PlantingCuttingStationBlockEntity::clientTick);
+            return createTickerHelper(type, MekCkFactories.PLANTING_CUTTING_STATION_BLOCK_ENTITY.get(), PlantingCuttingStationBlockEntity::clientTick);
         }
-        return createTickerHelper(type, UniversalCuttingMachine.PLANTING_CUTTING_STATION_BLOCK_ENTITY.get(), PlantingCuttingStationBlockEntity::serverTick);
+        return createTickerHelper(type, MekCkFactories.PLANTING_CUTTING_STATION_BLOCK_ENTITY.get(), PlantingCuttingStationBlockEntity::serverTick);
     }
 
     @Override

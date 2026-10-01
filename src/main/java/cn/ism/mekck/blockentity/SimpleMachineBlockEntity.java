@@ -42,6 +42,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkLegacyMachines;
 
 /**
  * 四合一基础机器方块实体（寿司卷制机 / 平均切段机 / 饭团成型机 / 凝乳成型机）。
@@ -404,7 +405,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     private final LazyOptional<mekanism.api.heat.IHeatHandler> heatCapability;
 
     public SimpleMachineBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.SIMPLE_MACHINE_BLOCK_ENTITY.get(), pos, state);
+        super(MekCkLegacyMachines.SIMPLE_MACHINE_BLOCK_ENTITY.get(), pos, state);
         this.kind = state.getBlock() instanceof cn.ism.mekck.block.SimpleMachineBlock sb ? sb.getKind() : MachineKind.SUSHI_MAKER;
         for (int i = 0; i < 6; i++) sideConfig[i] = SideMode.NONE;
         this.heatComponent = new cn.ism.mekck.util.MekCkHeatComponent(this::getLevel, this::getBlockPos, this::setChanged);

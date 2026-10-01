@@ -55,6 +55,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import cn.ism.mekck.registry.MekCkFluids;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 生物反应堆方块实体：
@@ -99,7 +101,7 @@ public final class BioreactorBlockEntity extends BlockEntity implements MenuProv
     /** 燃料流体（注册名）→ 每 mb 发电量（FE）。 */
     private static final java.util.Map<ResourceLocation, Integer> FUEL_FE_PER_MB = new java.util.HashMap<>();
     static {
-        FUEL_FE_PER_MB.put(UniversalCuttingMachine.ORGANIC_MATTER_SOURCE.getId(), ENERGY_PER_MB); // 350
+        FUEL_FE_PER_MB.put(MekCkFluids.ORGANIC_MATTER_SOURCE.getId(), ENERGY_PER_MB); // 350
         if (MEAT_FLUID != null) {
             FUEL_FE_PER_MB.put(ForgeRegistries.FLUIDS.getKey(MEAT_FLUID), 8000);
         }
@@ -193,7 +195,7 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
     private final GeneratorEnergyStorage energy = new GeneratorEnergyStorage(ENERGY_CAPACITY, MAX_RECEIVE, MAX_EXTRACT);
     private final FluidTank fluidTank = new FluidTank(FLUID_CAPACITY, stack -> {
         Fluid f = stack.getFluid();
-        return f == UniversalCuttingMachine.ORGANIC_MATTER_SOURCE.get()
+        return f == MekCkFluids.ORGANIC_MATTER_SOURCE.get()
                 || f == MEAT_FLUID
                 || f == NUTRITIONAL_PASTE_FLUID;
     });
@@ -244,7 +246,7 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
     };
 
     public BioreactorBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.BIOREACTOR_BLOCK_ENTITY.get(), pos, state);
+        super(MekCkStandaloneMachines.BIOREACTOR_BLOCK_ENTITY.get(), pos, state);
     }
 
     /**
@@ -370,7 +372,7 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
                     continue;
                 }
                 int filled = fluidTank.fill(
-                        new FluidStack(UniversalCuttingMachine.ORGANIC_MATTER_SOURCE.get(), canTake * mbPerUnit),
+                        new FluidStack(MekCkFluids.ORGANIC_MATTER_SOURCE.get(), canTake * mbPerUnit),
                         net.minecraftforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
                 if (filled <= 0) {
                     continue;

@@ -25,6 +25,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import cn.ism.mekck.registry.MekCkEffects;
 
 /**
  * 失温 / 永冻效果的事件处理（FORGE 总线）：
@@ -83,7 +84,7 @@ public final class FreezeEvents {
         if (entity.level().isClientSide) return;
         // 重入：这一发就是本类在上一次调用里施加给同一只实体的永冻伤害，放行，否则无限递归。
         if (entity == REPLACING_DAMAGE_FOR.get()) return;
-        if (!entity.hasEffect(UniversalCuttingMachine.ETERNAL_FREEZE_EFFECT.get())) return;
+        if (!entity.hasEffect(MekCkEffects.ETERNAL_FREEZE_EFFECT.get())) return;
         if (entity instanceof Player player && player.isCreative()) return;
         // 永冻：取消原伤害，改为 2147483647 点冰块同属性（freeze）冰冻伤害
         event.setCanceled(true);
@@ -101,8 +102,8 @@ public final class FreezeEvents {
         LivingEntity entity = event.getEntity();
         if (entity.level().isClientSide) return;
         // 战利品最大化：失温与永冻实体击杀时都生效（永冻通常由失温叠满附加）
-        boolean maxLoot = entity.hasEffect(UniversalCuttingMachine.ETERNAL_FREEZE_EFFECT.get())
-                || entity.hasEffect(UniversalCuttingMachine.HYPOTHERMIA_EFFECT.get());
+        boolean maxLoot = entity.hasEffect(MekCkEffects.ETERNAL_FREEZE_EFFECT.get())
+                || entity.hasEffect(MekCkEffects.HYPOTHERMIA_EFFECT.get());
         if (!maxLoot) return;
         if (!(entity.level() instanceof ServerLevel serverLevel)) return;
 

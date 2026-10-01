@@ -5,6 +5,7 @@ import cn.ism.mekck.machine.cooking.CookingFactoryTile;
 import mekanism.common.inventory.container.tile.MekanismTileContainer;
 import mekanism.common.registration.impl.ContainerTypeRegistryObject;
 import net.minecraft.world.entity.player.Inventory;
+import cn.ism.mekck.registry.MekCkFactories;
 
 
 /**
@@ -53,7 +54,7 @@ public final class CookingFactoryMenu extends MekanismTileContainer<CookingFacto
                     "烹饪工厂容器拿不到 tile：BlockTypeTile 的 tile Supplier 被过早求值，"
                             + "或方块与 tile 类型不匹配。");
         }
-        ContainerTypeRegistryObject<CookingFactoryMenu> container = UniversalCuttingMachine.COOKING_FACTORY_CONTAINER;
+        ContainerTypeRegistryObject<CookingFactoryMenu> container = MekCkFactories.COOKING_FACTORY_CONTAINER;
         if (container == null) {
             throw new IllegalStateException("烹饪工厂容器尚未注册（COOKING_FACTORY_CONTAINER == null）");
         }

@@ -6,6 +6,7 @@ import mekanism.common.inventory.container.tile.MekanismTileContainer;
 import mekanism.common.registration.impl.ContainerTypeRegistryObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Inventory;
+import cn.ism.mekck.registry.MekCkFactories;
 
 /**
  * 电力烧烤架容器（Mek 体系版）。
@@ -50,7 +51,7 @@ public final class GrillMenu extends MekanismTileContainer<GrillBlockEntity> {
                     "电力烧烤架容器拿不到 tile：BlockTypeTile 的 tile Supplier 被过早求值，"
                             + "或方块与 tile 类型不匹配。");
         }
-        ContainerTypeRegistryObject<GrillMenu> container = UniversalCuttingMachine.GRILL_CONTAINER;
+        ContainerTypeRegistryObject<GrillMenu> container = MekCkFactories.GRILL_CONTAINER;
         if (container == null) {
             throw new IllegalStateException("电力烧烤架容器尚未注册（GRILL_CONTAINER == null）");
         }

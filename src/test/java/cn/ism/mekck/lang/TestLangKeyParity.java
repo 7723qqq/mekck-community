@@ -1,5 +1,6 @@
 package cn.ism.mekck.lang;
 
+import cn.ism.mekck.TestSourceText;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -175,8 +176,7 @@ public class TestLangKeyParity {
     @Test
     public void derivedBlockDescriptionKeysExist() throws IOException {
         Set<String> en = load(EN).keySet();
-        Path registry = SOURCE_ROOT.resolve("cn/ism/mekck/UniversalCuttingMachine.java");
-        String source = Files.readString(registry, StandardCharsets.UTF_8);
+        String source = TestSourceText.readRegistry();
 
         Set<String> blocks = new TreeSet<>();
         Matcher blockMatcher = Pattern.compile("BLOCKS\\.register\\(\"([a-z0-9_]+)\"").matcher(source);
@@ -278,8 +278,10 @@ public class TestLangKeyParity {
         // 6 个走 Mek BlockDeferredRegister 的家族 —— 从注册调用点扫出来，不写死。
         // 锚点用 register(id, 而不是 register(bus)：后者是注册器本身挂到事件总线，不是方块。
         Set<String> families = new TreeSet<>();
-        String registry = Files.readString(
-                SOURCE_ROOT.resolve("cn/ism/mekck/UniversalCuttingMachine.java"), StandardCharsets.UTF_8);
+        // 6 个走 Mek BlockDeferredRegister 的家族 —— 从注册调用点扫出来，不写死。
+        // 锚点用 register(id, 而不是 register(bus)：后者是注册器本身挂到事件总线，不是方块。
+        // 源面 = 入口类 + registry/ 下的注册类（注册中枢拆分后家族注册在 MekCkFactories）。
+        String registry = TestSourceText.readRegistry();
         Matcher familyMatcher =
                 Pattern.compile("([A-Z][A-Z_]*)_FACTORY_BLOCKS_REG\\.register\\(id,").matcher(registry);
         while (familyMatcher.find()) {

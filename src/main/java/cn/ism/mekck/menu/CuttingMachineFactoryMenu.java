@@ -5,6 +5,7 @@ import cn.ism.mekck.machine.cutting.CuttingFactoryTile;
 import mekanism.common.registration.impl.ContainerTypeRegistryObject;
 import mekanism.common.inventory.container.tile.MekanismTileContainer;
 import net.minecraft.world.entity.player.Inventory;
+import cn.ism.mekck.registry.MekCkFactories;
 
 /**
  * 切菜工厂容器（Mek 体系版）—— 阶段 2 Task 4。
@@ -77,7 +78,7 @@ public final class CuttingMachineFactoryMenu extends MekanismTileContainer<Cutti
                     "切菜工厂容器拿不到 tile：BlockTypeTile 的 tile Supplier 被过早求值，"
                             + "或方块与 tile 类型不匹配。");
         }
-        ContainerTypeRegistryObject<CuttingMachineFactoryMenu> container = UniversalCuttingMachine.FACTORY_CONTAINER;
+        ContainerTypeRegistryObject<CuttingMachineFactoryMenu> container = MekCkFactories.FACTORY_CONTAINER;
         if (container == null) {
             throw new IllegalStateException("切菜工厂容器尚未注册（FACTORY_CONTAINER == null）");
         }

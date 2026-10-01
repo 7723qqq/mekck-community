@@ -24,6 +24,7 @@ import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.SlotItemHandler;
 
 import java.util.function.IntSupplier;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 public final class ChocolateCannonMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
     // Mekanism 风格布局常量（与 ChocolateCannonScreen 保持一致）
@@ -53,7 +54,7 @@ public final class ChocolateCannonMenu extends AbstractContainerMenu implements 
     }
 
     public ChocolateCannonMenu(int containerId, Inventory inventory, ChocolateCannonBlockEntity machine, ContainerData data) {
-        super(UniversalCuttingMachine.CHOCOLATE_CANNON_MENU.get(), containerId);
+        super(MekCkStandaloneMachines.CHOCOLATE_CANNON_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
 

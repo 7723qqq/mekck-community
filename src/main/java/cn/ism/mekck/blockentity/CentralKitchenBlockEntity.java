@@ -18,6 +18,7 @@ import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.items.ItemStackHandler;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 中央厨房（终极机器）：MekCK 的产能中枢。
@@ -200,7 +201,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     private final LazyOptional<IItemHandler> itemCapability = LazyOptional.of(() -> items);
 
     public CentralKitchenBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.CENTRAL_KITCHEN_BLOCK_ENTITY.get(), pos, state);
+        super(MekCkStandaloneMachines.CENTRAL_KITCHEN_BLOCK_ENTITY.get(), pos, state);
         this.heatComponent = new cn.ism.mekck.util.MekCkHeatComponent(this::getLevel, this::getBlockPos, this::setChanged);
         this.coldComponent = new cn.ism.mekck.util.MekCkHeatComponent(this::getLevel, this::getBlockPos, this::setChanged);
         this.heatCapability = LazyOptional.of(heatComponent::getHandler);

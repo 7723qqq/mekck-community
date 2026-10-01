@@ -19,6 +19,7 @@ import net.minecraftforge.items.wrapper.RecipeWrapper;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 /**
  * 串烧工厂专属配方 {@code mekck:skewering}：签子(载体) + 主料 + 辅料 → 串烧物。
@@ -134,12 +135,12 @@ public class MekCkSkeweringRecipe implements Recipe<RecipeWrapper> {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return UniversalCuttingMachine.SKEWERING_RECIPE_SERIALIZER.get();
+        return MekCkRecipeTypes.SKEWERING_RECIPE_SERIALIZER.get();
     }
 
     @Override
     public @NotNull RecipeType<?> getType() {
-        return UniversalCuttingMachine.SKEWERING_RECIPE_TYPE.get();
+        return MekCkRecipeTypes.SKEWERING_RECIPE_TYPE.get();
     }
 
     @Override

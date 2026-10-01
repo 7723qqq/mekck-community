@@ -12,6 +12,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.Blocks;
+import cn.ism.mekck.registry.MekCkEffects;
 
 /**
  * 冰冻（原生实现，不依赖冰火传说）：复刻 iceandfire FrozenData.tickFrozen 的移动逻辑——
@@ -48,7 +49,7 @@ public class FrozenEffect extends MobEffect {
         }
 
         // 结束：碎冰粒子 + 玻璃碎裂音效（与冰火 clearFrozen 一致）
-        MobEffectInstance instance = entity.getEffect(UniversalCuttingMachine.FROZEN_EFFECT.get());
+        MobEffectInstance instance = entity.getEffect(MekCkEffects.FROZEN_EFFECT.get());
         if (instance != null && instance.getDuration() <= 1 && entity.level() instanceof ServerLevel serverLevel) {
             serverLevel.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, Blocks.ICE.defaultBlockState()),
                     entity.getX() + (entity.getRandom().nextDouble() - 0.5D) * entity.getBbWidth(),

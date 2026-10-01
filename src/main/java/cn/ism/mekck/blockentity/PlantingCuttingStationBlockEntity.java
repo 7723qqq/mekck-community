@@ -48,6 +48,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Optional;
+import cn.ism.mekck.registry.MekCkFactories;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 public final class PlantingCuttingStationBlockEntity extends BlockEntity implements MenuProvider, IRedstoneControllable, IBoundingBlock , cn.ism.mekck.ae2.INetworkPullable {
     public static final int INPUT_SLOT = 0;
@@ -284,7 +286,7 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
     };
 
     public PlantingCuttingStationBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.PLANTING_CUTTING_STATION_BLOCK_ENTITY.get(), pos, state);
+        super(MekCkFactories.PLANTING_CUTTING_STATION_BLOCK_ENTITY.get(), pos, state);
         for (int i = 0; i < 6; i++) {
             sideConfig[i] = SideMode.NONE;
         }
@@ -457,7 +459,7 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
 
     private Optional<PlantingCuttingRecipe> findPlantingRecipe(Level level, ItemStack seed) {
         if (seed.isEmpty()) return Optional.empty();
-        RecipeType<PlantingCuttingRecipe> plantCutType = UniversalCuttingMachine.PLANTING_CUTTING_RECIPE_TYPE.get();
+        RecipeType<PlantingCuttingRecipe> plantCutType = MekCkRecipeTypes.PLANTING_CUTTING_RECIPE_TYPE.get();
         if (plantCutType == null) return Optional.empty();
         // 复用单槽包装器：原先每次都 new ItemStackHandler + RecipeWrapper（该方法在 tick 路径上）
         seedSlotStack[0] = seed;

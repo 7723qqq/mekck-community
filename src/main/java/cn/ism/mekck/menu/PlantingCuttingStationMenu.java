@@ -22,6 +22,7 @@ import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.SlotItemHandler;
 
 import java.util.function.IntSupplier;
+import cn.ism.mekck.registry.MekCkFactories;
 
 public final class PlantingCuttingStationMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
     private static final int MACHINE_SLOT_COUNT = 9;
@@ -39,7 +40,7 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
     }
 
     public PlantingCuttingStationMenu(int containerId, Inventory inventory, PlantingCuttingStationBlockEntity machine, ContainerData data) {
-        super(UniversalCuttingMachine.PLANTING_CUTTING_STATION_MENU.get(), containerId);
+        super(MekCkFactories.PLANTING_CUTTING_STATION_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
 

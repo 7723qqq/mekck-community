@@ -48,6 +48,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 坚果爆炒机：执行 {@code mekck:nut_roasting} 配方（1 输入 → 1 输出，输入消耗），
@@ -271,7 +273,7 @@ public final class NutRoasterBlockEntity extends BlockEntity implements MenuProv
     }
 
 public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.NUT_ROASTER_BLOCK_ENTITY.get(), pos, state);
+        super(MekCkStandaloneMachines.NUT_ROASTER_BLOCK_ENTITY.get(), pos, state);
         this.heatComponent = new cn.ism.mekck.util.MekCkHeatComponent(this::getLevel, this::getBlockPos, this::setChanged);
         for (int i = 0; i < 6; i++) sideConfig[i] = SideMode.NONE;
         this.fullItemCapability = LazyOptional.of(() -> items);
@@ -679,7 +681,7 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
         if (level == null) return null;
         var manager = level.getRecipeManager();
         var opts = recipeWrapper();
-        var holder = manager.getRecipeFor(UniversalCuttingMachine.NUT_ROASTING_RECIPE_TYPE.get(), opts, level);
+        var holder = manager.getRecipeFor(MekCkRecipeTypes.NUT_ROASTING_RECIPE_TYPE.get(), opts, level);
         NutRoastingRecipe found = holder.orElse(null);
         // ME 下单：只执行订单指定的配方
         if (orderRecipeId != null) {

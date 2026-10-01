@@ -1,5 +1,6 @@
 package cn.ism.mekck.util;
 
+import cn.ism.mekck.TestSourceText;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -73,7 +74,7 @@ public class TestIceFactoryToggle {
     @Test
     public void toggleComesFromConfigNotAConstant() throws IOException {
         String config = read(CONFIG);
-        String code = stripComments(read(REGISTRY));
+        String code = TestSourceText.readRegistryCode();
 
         assertTrue("MekckConfig 里没有 ice_factory.enable_ice_factory 这个配置项",
                 stripComments(config).contains("\"enable_ice_factory\""));
@@ -94,9 +95,22 @@ public class TestIceFactoryToggle {
      */
     @Test
     public void allThreeUseSitesReadTheAccessorDirectly() throws IOException {
-        String code = stripComments(read(REGISTRY));
+        String code = stripComments(useSiteSources());
         int sites = count(code, "MekckConfig.isIceFactoryEnabled()) {");
         assertEquals("读配置的使用点应为 3 处（方块注册 / 创造栏 / 客户端屏幕绑定）", 3, sites);
+    }
+
+    /**
+     * 「三个使用点」分布在两个地方：两个在注册中枢（方块注册 / 创造栏），
+     * 第三个在客户端（屏幕绑定，随事件类从主类内部升格而搬进了 {@code client/}）。
+     *
+     * <p>所以这里拼两面来数 —— 只扫注册中枢会得到 2 而误报「少了一处」，
+     * 那正是拆分之后最容易把护栏改坏的方式：为了让断言变绿而缩小扫描面。</p>
+     */
+    private static String useSiteSources() throws IOException {
+        return TestSourceText.readRegistry() + "\n" + Files.readString(
+                Path.of("src/main/java/cn/ism/mekck/client/ClientEvents.java"),
+                StandardCharsets.UTF_8);
     }
 
     /**
@@ -110,7 +124,7 @@ public class TestIceFactoryToggle {
      */
     @Test
     public void menuSentinelStaysBoundToTheToggle() throws IOException {
-        String code = stripComments(read(REGISTRY));
+        String code = stripComments(TestSourceText.readRegistry());
         assertTrue("启用分支里没有注册制冰工厂菜单",
                 code.contains("ICE_FACTORY_MENU = MENUS.register(\"ice_factory\""));
         assertTrue("禁用分支里没有把 ICE_FACTORY_MENU 置 null —— 空哨兵会变成未初始化",

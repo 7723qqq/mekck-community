@@ -5,6 +5,9 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * 源码文本断言的<b>共享工具</b>。
@@ -102,5 +105,72 @@ public final class TestSourceText {
         }
         int semi = src.indexOf(";", i);
         return semi < 0 ? "" : src.substring(i, semi);
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  「注册中枢」的源码面
+    // ══════════════════════════════════════════════════════════════════
+
+    /** 模组入口类：{@code cn/ism/mekck/UniversalCuttingMachine.java}。 */
+    private static final String MOD_ENTRY = "src/main/java/cn/ism/mekck/UniversalCuttingMachine.java";
+
+    /** 注册中枢拆分后的注册类目录。 */
+    private static final Path REGISTRY_DIR = Path.of("src", "main", "java", "cn", "ism", "mekck", "registry");
+
+    /**
+     * 列出「注册中枢」的全部源码：入口类 + {@code registry/} 下的类，入口类在前。
+     *
+     * <p>顺序固定（入口类先，其余按文件名排序），这样跨文件边界的断言
+     * （例如「方块注册一定紧邻它的物品注册」）仍然可比。</p>
+     */
+    public static List<String> registrySources() throws IOException {
+        List<String> out = new ArrayList<>();
+        out.add(MOD_ENTRY);
+        if (Files.isDirectory(REGISTRY_DIR)) {
+            try (Stream<Path> files = Files.list(REGISTRY_DIR)) {
+                files.filter(p -> p.getFileName().toString().endsWith(".java"))
+                        .map(p -> REGISTRY_DIR.resolve(p.getFileName()).toString().replace('\\', '/'))
+                        .sorted()
+                        .forEach(out::add);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 读「注册中枢」的完整源码面（<b>不</b>剥注释；要剥的用 {@link #readRegistryCode()}）。
+     *
+     * <h3>为什么要有这个拼接入口</h3>
+     * 有 7 条护栏断言的是<b>整体形态</b>而不是某一个文件：方块↔物品注册名的一一对应、
+     * 6 个逐档家族的 tile 闸门各走各的表、制冰工厂开关的三个使用点、JEI 催化剂按家族表遍历……
+     * 注册中枢从 1 个 2265 行的文件拆成 {@code registry/} 下若干类之后，若让它们跟着每次拆分
+     * 改路径，这些断言会变成「拆一次红一次」的噪音 —— 而它们本意是钉住<b>内容</b>
+     * （「注册项都写了没有」），不是钉住文件名。
+     * <p>所以提供拼接入口：拆分再多次，内容断言不用动；哪天真的改了注册写法，
+     * 它们照样会红 —— 就像它们在拆分前一样。</p>
+     */
+    public static String readRegistry() throws IOException {
+        StringBuilder sb = new StringBuilder();
+        for (String path : registrySources()) {
+            if (!Files.isRegularFile(Path.of(path))) {
+                throw new IOException("注册中枢源码不存在：" + path + "（测试需在仓库根目录运行）");
+            }
+            sb.append(Files.readString(Path.of(path), StandardCharsets.UTF_8)).append('\n');
+        }
+        return sb.toString();
+    }
+
+    /** 同 {@link #readRegistry()}，但剥掉注释 —— 供「某标识符不该出现」类断言使用。 */
+    public static String readRegistryCode() throws IOException {
+        return stripComments(readRegistry());
+    }
+
+    /** 读多个文件并按给定顺序拼接。 */
+    public static String readAll(String... paths) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        for (String path : paths) {
+            sb.append(Files.readString(Path.of(path), StandardCharsets.UTF_8)).append('\n');
+        }
+        return sb.toString();
     }
 }

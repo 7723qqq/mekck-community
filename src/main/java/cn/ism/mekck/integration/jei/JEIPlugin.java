@@ -32,6 +32,11 @@ import vectorwing.farmersdelight.common.crafting.CuttingBoardRecipe;
 
 import java.util.ArrayList;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkFactories;
+import cn.ism.mekck.registry.MekCkLegacyMachines;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
+import static cn.ism.mekck.registry.MekCkFactories.FACTORY_BLOCKS;
 
 @JeiPlugin
 public class JEIPlugin implements IModPlugin {
@@ -108,7 +113,7 @@ public class JEIPlugin implements IModPlugin {
 
     // MekCK: 自有配方类型 mekck:skewering / mekck:grilling 的 **JEI** RecipeType。
     // ⚠️ 这两个是 mezz.jei.api.recipe.RecipeType，与
-    // UniversalCuttingMachine.SKEWERING_RECIPE_TYPE（原版 net.minecraft...RecipeType）
+    // MekCkRecipeTypes.SKEWERING_RECIPE_TYPE（原版 net.minecraft...RecipeType）
     // 是**两个不同的类**，不能互相赋值。UID 与 path 必须与注册表里那个逐字相同
     // （"mekck" / "skewering" / "grilling"），配方类必须写成真实的配方类——
     // JEI 的 RecipeType.equals 同时比 UID 与配方类，写成 Recipe.class 就配不上分类。
@@ -219,10 +224,10 @@ public class JEIPlugin implements IModPlugin {
         if (type instanceof mezz.jei.api.recipe.RecipeType<?> recipeType) {
             // 三明治组装机本身 + 中央厨房（装入「三明治组装机」模块后同样可以量产）
             addCatalystTyped(registration,
-                    new ItemStack(cn.ism.mekck.UniversalCuttingMachine.SANDWICH_ASSEMBLER_ITEM.get()),
+                    new ItemStack(cn.ism.mekck.registry.MekCkStandaloneMachines.SANDWICH_ASSEMBLER_ITEM.get()),
                     recipeType);
             addCatalystTyped(registration,
-                    new ItemStack(cn.ism.mekck.UniversalCuttingMachine.CENTRAL_KITCHEN_BLOCK.get()),
+                    new ItemStack(cn.ism.mekck.registry.MekCkStandaloneMachines.CENTRAL_KITCHEN_BLOCK.get()),
                     recipeType);
         }
     }
@@ -240,7 +245,7 @@ public class JEIPlugin implements IModPlugin {
      */
     private static void jeiRegistrationAddKitchenCatalysts(
             mezz.jei.api.registration.IRecipeCatalystRegistration registration) {
-        ItemStack kitchen = new ItemStack(cn.ism.mekck.UniversalCuttingMachine.CENTRAL_KITCHEN_BLOCK.get());
+        ItemStack kitchen = new ItemStack(cn.ism.mekck.registry.MekCkStandaloneMachines.CENTRAL_KITCHEN_BLOCK.get());
 
         // ① 本模组自身的配方分类
         registration.addRecipeCatalyst(kitchen, PLANT_CUT_TYPE);
@@ -329,75 +334,75 @@ public class JEIPlugin implements IModPlugin {
         registration.addRecipeCategories(new PlantingCuttingRecipeCategory(
                 helper,
                 PLANT_CUT_TYPE,
-                new ItemStack(UniversalCuttingMachine.PLANTING_CUTTING_STATION_BLOCK.get())
+                new ItemStack(MekCkFactories.PLANTING_CUTTING_STATION_BLOCK.get())
         ));
 
         // Register the Bioreactor recipe category (item -> organic matter fluid)
         registration.addRecipeCategories(new BioreactorRecipeCategory(
                 helper,
                 BIOREACTOR_TYPE,
-                new ItemStack(UniversalCuttingMachine.BIOREACTOR_BLOCK.get())
+                new ItemStack(MekCkStandaloneMachines.BIOREACTOR_BLOCK.get())
         ));
 
         // Register the Wine Cellar (陈化窖 F20) 介绍页分类
         registration.addRecipeCategories(new WineCellarInfoCategory(
                 helper,
                 WINE_CELLAR_TYPE,
-                new ItemStack(UniversalCuttingMachine.WINE_CELLAR_BLOCK.get())
+                new ItemStack(MekCkStandaloneMachines.WINE_CELLAR_BLOCK.get())
         ));
 
         // Register the Ice Make recipe category (急冻制冰机 / 制冰工厂)
         registration.addRecipeCategories(new IceMakeRecipeCategory(
                 helper,
                 ICE_MAKE_TYPE,
-                new ItemStack(UniversalCuttingMachine.ICE_MAKER_BLOCK.get())
+                new ItemStack(MekCkStandaloneMachines.ICE_MAKER_BLOCK.get())
         ));
 
         // Register the Ferrero recipe category (巧克力大炮)
         registration.addRecipeCategories(new FerreroRecipeCategory(
                 helper,
                 FERRERO_TYPE,
-                new ItemStack(UniversalCuttingMachine.CHOCOLATE_CANNON_BLOCK.get())
+                new ItemStack(MekCkStandaloneMachines.CHOCOLATE_CANNON_BLOCK.get())
         ));
 
         // Register the Nut Roasting recipe category (坚果爆炒机)
         registration.addRecipeCategories(new NutRoastingRecipeCategory(
                 helper,
                 NUT_ROASTING_TYPE,
-                new ItemStack(UniversalCuttingMachine.NUT_ROASTER_BLOCK.get())
+                new ItemStack(MekCkStandaloneMachines.NUT_ROASTER_BLOCK.get())
         ));
 
         // §F19：磨粉分类（电力研磨机）与萃取分类（智能萃取机）
         registration.addRecipeCategories(new GrindingRecipeCategory(
                 helper,
                 GRINDING_TYPE,
-                new ItemStack(UniversalCuttingMachine.GRINDING_MACHINE_ITEM.get())
+                new ItemStack(MekCkFactories.GRINDING_MACHINE_ITEM.get())
         ));
         registration.addRecipeCategories(new ExtractingRecipeCategory(
                 helper,
                 EXTRACTING_TYPE,
-                new ItemStack(UniversalCuttingMachine.SMART_EXTRACTOR_ITEM.get())
+                new ItemStack(MekCkLegacyMachines.SMART_EXTRACTOR_ITEM.get())
         ));
 
         // Register the Beverage Assembly recipe category (饮品调配机 F11 §四.2)
         registration.addRecipeCategories(new BeverageAssemblyRecipeCategory(
                 helper,
                 BEVERAGE_ASSEMBLY_TYPE,
-                new ItemStack(UniversalCuttingMachine.BEVERAGE_BLENDER_BLOCK.get())
+                new ItemStack(MekCkLegacyMachines.BEVERAGE_BLENDER_BLOCK.get())
         ));
 
         // Register the Packaging recipe category (包材组装机 F7/F11 §四.4)
         registration.addRecipeCategories(new PackagingRecipeCategory(
                 helper,
                 PACKAGING_TYPE,
-                new ItemStack(UniversalCuttingMachine.PACKAGING_STATION_BLOCK.get())
+                new ItemStack(MekCkLegacyMachines.PACKAGING_STATION_BLOCK.get())
         ));
 
         // Register the Grape Pressing recipe category (鲜果榨汁机葡萄压榨 简报需求1)
         registration.addRecipeCategories(new GrapePressingRecipeCategory(
                 helper,
                 GRAPE_PRESSING_TYPE,
-                new ItemStack(UniversalCuttingMachine.JUICER_BLOCK.get())
+                new ItemStack(MekCkLegacyMachines.JUICER_BLOCK.get())
         ));
 
         // 自有配方类型 mekck:skewering / mekck:grilling 的分类。
@@ -406,12 +411,12 @@ public class JEIPlugin implements IModPlugin {
         registration.addRecipeCategories(new SkeweringRecipeCategory(
                 helper,
                 MEKCK_SKEWERING_TYPE,
-                new ItemStack(UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK.get())
+                new ItemStack(MekCkStandaloneMachines.SKEWERING_MACHINE_BLOCK.get())
         ));
         registration.addRecipeCategories(new GrillingRecipeCategory(
                 helper,
                 MEKCK_GRILLING_TYPE,
-                new ItemStack(UniversalCuttingMachine.GRILL_BLOCK.get())
+                new ItemStack(MekCkFactories.GRILL_BLOCK.get())
         ));
     }
 
@@ -423,7 +428,7 @@ public class JEIPlugin implements IModPlugin {
             Level level = mc.level;
             RecipeManager recipeManager = level.getRecipeManager();
             net.minecraft.world.item.crafting.RecipeType<PlantingCuttingRecipe> plantCutType =
-                    UniversalCuttingMachine.PLANTING_CUTTING_RECIPE_TYPE.get();
+                    MekCkRecipeTypes.PLANTING_CUTTING_RECIPE_TYPE.get();
             if (plantCutType != null) {
                 List<PlantingCuttingRecipe> recipes = recipeManager.getAllRecipesFor(plantCutType);
                 if (!recipes.isEmpty()) {
@@ -446,56 +451,56 @@ public class JEIPlugin implements IModPlugin {
 
             // Register mekck:ice_make recipes from the recipe manager
             List<IceMakeRecipe> iceRecipes = recipeManager.getAllRecipesFor(
-                    UniversalCuttingMachine.ICE_MAKE_RECIPE_TYPE.get());
+                    MekCkRecipeTypes.ICE_MAKE_RECIPE_TYPE.get());
             if (!iceRecipes.isEmpty()) {
                 registration.addRecipes(ICE_MAKE_TYPE, iceRecipes);
             }
 
             // Register mekck:ferrero recipes from the recipe manager
             List<FerreroRecipe> ferreroRecipes = recipeManager.getAllRecipesFor(
-                    UniversalCuttingMachine.FERRERO_RECIPE_TYPE.get());
+                    MekCkRecipeTypes.FERRERO_RECIPE_TYPE.get());
             if (!ferreroRecipes.isEmpty()) {
                 registration.addRecipes(FERRERO_TYPE, ferreroRecipes);
             }
 
             // Register mekck:nut_roasting recipes from the recipe manager
             List<NutRoastingRecipe> nutRecipes = recipeManager.getAllRecipesFor(
-                    UniversalCuttingMachine.NUT_ROASTING_RECIPE_TYPE.get());
+                    MekCkRecipeTypes.NUT_ROASTING_RECIPE_TYPE.get());
             if (!nutRecipes.isEmpty()) {
                 registration.addRecipes(NUT_ROASTING_TYPE, nutRecipes);
             }
 
             // Register mekck:grinding recipes (§F19 D 半：磨粉)
             List<cn.ism.mekck.recipe.GrindingRecipe> grindingRecipes = recipeManager.getAllRecipesFor(
-                    UniversalCuttingMachine.GRINDING_RECIPE_TYPE.get());
+                    MekCkRecipeTypes.GRINDING_RECIPE_TYPE.get());
             if (!grindingRecipes.isEmpty()) {
                 registration.addRecipes(GRINDING_TYPE, grindingRecipes);
             }
 
             // Register mekck:extracting recipes (§F19 C+E 半：萃取)
             List<cn.ism.mekck.recipe.ExtractingRecipe> extractingRecipes = recipeManager.getAllRecipesFor(
-                    UniversalCuttingMachine.EXTRACTING_RECIPE_TYPE.get());
+                    MekCkRecipeTypes.EXTRACTING_RECIPE_TYPE.get());
             if (!extractingRecipes.isEmpty()) {
                 registration.addRecipes(EXTRACTING_TYPE, extractingRecipes);
             }
 
             // Register mekck:beverage_assembly recipes from the recipe manager
             List<cn.ism.mekck.recipe.BeverageAssemblyRecipe> beverageRecipes = recipeManager.getAllRecipesFor(
-                    UniversalCuttingMachine.BEVERAGE_ASSEMBLY_RECIPE_TYPE.get());
+                    MekCkRecipeTypes.BEVERAGE_ASSEMBLY_RECIPE_TYPE.get());
             if (!beverageRecipes.isEmpty()) {
                 registration.addRecipes(BEVERAGE_ASSEMBLY_TYPE, beverageRecipes);
             }
 
             // Register mekck:packaging recipes from the recipe manager
             List<cn.ism.mekck.recipe.PackagingRecipe> packagingRecipes = recipeManager.getAllRecipesFor(
-                    UniversalCuttingMachine.PACKAGING_RECIPE_TYPE.get());
+                    MekCkRecipeTypes.PACKAGING_RECIPE_TYPE.get());
             if (!packagingRecipes.isEmpty()) {
                 registration.addRecipes(PACKAGING_TYPE, packagingRecipes);
             }
 
             // Register mekck:grape_pressing recipes from the recipe manager (鲜果榨汁机葡萄压榨)
             List<cn.ism.mekck.recipe.GrapePressingRecipe> grapeRecipes = recipeManager.getAllRecipesFor(
-                    UniversalCuttingMachine.GRAPE_PRESSING_RECIPE_TYPE.get());
+                    MekCkRecipeTypes.GRAPE_PRESSING_RECIPE_TYPE.get());
             if (!grapeRecipes.isEmpty()) {
                 registration.addRecipes(GRAPE_PRESSING_TYPE, grapeRecipes);
             }
@@ -503,12 +508,12 @@ public class JEIPlugin implements IModPlugin {
             // 自有配方类型 mekck:skewering / mekck:grilling 的配方本体。
             // 此前只注册了催化剂、没注册配方，也没有分类 ⇒ 这 16 条数据包配方在 JEI 里查不到。
             List<cn.ism.mekck.recipe.MekCkSkeweringRecipe> skeweringRecipes = recipeManager.getAllRecipesFor(
-                    UniversalCuttingMachine.SKEWERING_RECIPE_TYPE.get());
+                    MekCkRecipeTypes.SKEWERING_RECIPE_TYPE.get());
             if (!skeweringRecipes.isEmpty()) {
                 registration.addRecipes(MEKCK_SKEWERING_TYPE, skeweringRecipes);
             }
             List<cn.ism.mekck.recipe.MekCkGrillingRecipe> grillingRecipes = recipeManager.getAllRecipesFor(
-                    UniversalCuttingMachine.GRILLING_RECIPE_TYPE.get());
+                    MekCkRecipeTypes.GRILLING_RECIPE_TYPE.get());
             if (!grillingRecipes.isEmpty()) {
                 registration.addRecipes(MEKCK_GRILLING_TYPE, grillingRecipes);
             }
@@ -535,10 +540,10 @@ public class JEIPlugin implements IModPlugin {
     @Override
     public void registerRecipeCatalysts(IRecipeCatalystRegistration registration) {
         // 鲜果榨汁机：葡萄压榨（mekck:grape_pressing）催化剂
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.JUICER_BLOCK.get()), GRAPE_PRESSING_TYPE);
+        registration.addRecipeCatalyst(new ItemStack(MekCkLegacyMachines.JUICER_BLOCK.get()), GRAPE_PRESSING_TYPE);
 
         // 陈化窖（F20）：其介绍页分类的催化剂（在 JEI 搜酒/点机器可看到这页说明）
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.WINE_CELLAR_BLOCK.get()), WINE_CELLAR_TYPE);
+        registration.addRecipeCatalyst(new ItemStack(MekCkStandaloneMachines.WINE_CELLAR_BLOCK.get()), WINE_CELLAR_TYPE);
 
         // Register all cutting machines as catalysts for the cutting recipe type
         //
@@ -547,32 +552,32 @@ public class JEIPlugin implements IModPlugin {
         // 同一个「手写档位清单漏 BLAZE」的缺陷在 IceFactoryBlock 已经炸过一次
         // （2026-09-16，放置时抛 IllegalArgumentException），此处是第二次复现。
         // 护栏：TestJeiCatalystCoverage#cuttingCatalystsCoverEveryTier。
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.MACHINE_BLOCK.get()), CUTTING_TYPE);
-        for (var entry : UniversalCuttingMachine.FACTORY_BLOCKS.entrySet()) {
+        registration.addRecipeCatalyst(new ItemStack(MekCkFactories.MACHINE_BLOCK.get()), CUTTING_TYPE);
+        for (var entry : MekCkFactories.FACTORY_BLOCKS.entrySet()) {
             registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), CUTTING_TYPE);
         }
 
         // Register all cooking machines as catalysts for the cooking recipe type
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.COOKING_POT_BLOCK.get()), COOKING_TYPE);
-        for (var entry : UniversalCuttingMachine.COOKING_FACTORY_BLOCKS.entrySet()) {
+        registration.addRecipeCatalyst(new ItemStack(MekCkStandaloneMachines.COOKING_POT_BLOCK.get()), COOKING_TYPE);
+        for (var entry : MekCkFactories.COOKING_FACTORY_BLOCKS.entrySet()) {
             registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), COOKING_TYPE);
         }
 
         // Register the Endless Greed cooking factory as a catalyst for the extreme_cooking recipe type
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.COOKING_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.SINGULARITY).get()),
+                new ItemStack(MekCkFactories.COOKING_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.SINGULARITY).get()),
                 EXTREME_COOKING
         );
 
         // Register skewering machines as catalysts for barbequesdelight:skewering recipe type
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK.get()), SKEWERING_TYPE);
-        for (var entry : UniversalCuttingMachine.SKEWERING_FACTORY_BLOCKS.entrySet()) {
+        registration.addRecipeCatalyst(new ItemStack(MekCkStandaloneMachines.SKEWERING_MACHINE_BLOCK.get()), SKEWERING_TYPE);
+        for (var entry : MekCkFactories.SKEWERING_FACTORY_BLOCKS.entrySet()) {
             registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), SKEWERING_TYPE);
         }
 
         // Register grill machines as catalysts for barbequesdelight:grilling recipe type
-        registration.addRecipeCatalyst(new ItemStack(UniversalCuttingMachine.GRILL_BLOCK.get()), GRILLING_TYPE);
-        for (var entry : UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.entrySet()) {
+        registration.addRecipeCatalyst(new ItemStack(MekCkFactories.GRILL_BLOCK.get()), GRILLING_TYPE);
+        for (var entry : MekCkFactories.GRILL_FACTORY_BLOCKS.entrySet()) {
             registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), GRILLING_TYPE);
         }
 
@@ -583,22 +588,22 @@ public class JEIPlugin implements IModPlugin {
         // JEI 的 RecipeType.equals 同时比 UID 与配方类，另造的那个与分类用的类型不相等，
         // 催化剂会挂在一个永远没有分类的类型上（这正是修复前的状态）。
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK.get()), MEKCK_SKEWERING_TYPE);
-        for (var entry : UniversalCuttingMachine.SKEWERING_FACTORY_BLOCKS.entrySet()) {
+                new ItemStack(MekCkStandaloneMachines.SKEWERING_MACHINE_BLOCK.get()), MEKCK_SKEWERING_TYPE);
+        for (var entry : MekCkFactories.SKEWERING_FACTORY_BLOCKS.entrySet()) {
             registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), MEKCK_SKEWERING_TYPE);
         }
 
         // mekck:grilling（烧烤工厂自有配方类型）——无条件注册，该类型恒存在。
         // 语义：单一输入 → 烤制产物。
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.GRILL_BLOCK.get()), MEKCK_GRILLING_TYPE);
-        for (var entry : UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.entrySet()) {
+                new ItemStack(MekCkFactories.GRILL_BLOCK.get()), MEKCK_GRILLING_TYPE);
+        for (var entry : MekCkFactories.GRILL_FACTORY_BLOCKS.entrySet()) {
             registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), MEKCK_GRILLING_TYPE);
         }
 
         // 原版烟熏炉 / 篝火烹饪（熟肉 ×7、烤马铃薯、干燥海带）——全档位烧烤工厂均可处理，
         // 不受档位与配置门禁约束。此处显示范围必须与机器实际行为一致。
-        for (var entry : UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.entrySet()) {
+        for (var entry : MekCkFactories.GRILL_FACTORY_BLOCKS.entrySet()) {
             ItemStack grillFactory = new ItemStack(entry.getValue().get());
             registration.addRecipeCatalyst(grillFactory, mezz.jei.api.constants.RecipeTypes.SMOKING);
             registration.addRecipeCatalyst(grillFactory, mezz.jei.api.constants.RecipeTypes.CAMPFIRE_COOKING);
@@ -615,7 +620,7 @@ public class JEIPlugin implements IModPlugin {
             if (cn.ism.mekck.config.MekckConfig.isCrystalMatrixGrillFurnaceEnabled()) {
                 for (CuttingMachineFactoryTier highTier : new CuttingMachineFactoryTier[]{
                         CuttingMachineFactoryTier.CRYSTAL_MATRIX, CuttingMachineFactoryTier.NEBULA}) {
-                    ItemStack block = new ItemStack(UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.get(highTier).get());
+                    ItemStack block = new ItemStack(MekCkFactories.GRILL_FACTORY_BLOCKS.get(highTier).get());
                     for (mezz.jei.api.recipe.RecipeType<?> ft : furnaceTypes) {
                         registration.addRecipeCatalyst(block, ft);
                     }
@@ -623,7 +628,7 @@ public class JEIPlugin implements IModPlugin {
             }
             if (cn.ism.mekck.config.MekckConfig.isSingularityGrillFurnaceEnabled()) {
                 ItemStack block = new ItemStack(
-                        UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.SINGULARITY).get());
+                        MekCkFactories.GRILL_FACTORY_BLOCKS.get(CuttingMachineFactoryTier.SINGULARITY).get());
                 for (mezz.jei.api.recipe.RecipeType<?> ft : furnaceTypes) {
                     registration.addRecipeCatalyst(block, ft);
                 }
@@ -632,23 +637,23 @@ public class JEIPlugin implements IModPlugin {
 
         // Register all planting & cutting machines as catalysts for the mekck:plantcut recipe type
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.PLANTING_CUTTING_STATION_BLOCK.get()),
+                new ItemStack(MekCkFactories.PLANTING_CUTTING_STATION_BLOCK.get()),
                 PLANT_CUT_TYPE
         );
-        for (var entry : UniversalCuttingMachine.PLANTING_CUTTING_FACTORY_BLOCKS.entrySet()) {
+        for (var entry : MekCkFactories.PLANTING_CUTTING_FACTORY_BLOCKS.entrySet()) {
             registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), PLANT_CUT_TYPE);
         }
 
         // 生物反应堆作为自身配方分类的催化剂
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.BIOREACTOR_BLOCK.get()),
+                new ItemStack(MekCkStandaloneMachines.BIOREACTOR_BLOCK.get()),
                 BIOREACTOR_TYPE
         );
 
         // §F34：鲜果榨汁机作为其三条通道配方分类的催化剂（此前只作 grape_pressing 类别图标、未挂 catalyst，
         //   导致 JEI 催化剂查询只能看到它做瓶装葡萄汁、查不到苹果汁/酒馆果汁）。服务端三通道匹配本已齐全，
         //   此处仅补齐客户端显示层：①自研葡萄压榨 ②vinery 苹果泥/苹果汁 ③kaleidoscope_tavern 压榨槽。
-        ItemStack juicer = new ItemStack(UniversalCuttingMachine.JUICER_BLOCK.get());
+        ItemStack juicer = new ItemStack(MekCkLegacyMachines.JUICER_BLOCK.get());
         registration.addRecipeCatalyst(juicer, GRAPE_PRESSING_TYPE);
         if (ModList.get().isLoaded("vinery")) {
             registration.addRecipeCatalyst(juicer, VINERY_MASH);
@@ -672,87 +677,87 @@ public class JEIPlugin implements IModPlugin {
 
         // 急冻制冰机及所有制冰工厂作为 mekck:ice_make 配方分类的催化剂
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.ICE_MAKER_BLOCK.get()),
+                new ItemStack(MekCkStandaloneMachines.ICE_MAKER_BLOCK.get()),
                 ICE_MAKE_TYPE
         );
-        for (var entry : UniversalCuttingMachine.ICE_FACTORY_BLOCKS.entrySet()) {
+        for (var entry : MekCkFactories.ICE_FACTORY_BLOCKS.entrySet()) {
             registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), ICE_MAKE_TYPE);
         }
 
         // 巧克力大炮作为 mekck:ferrero 配方分类的催化剂
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.CHOCOLATE_CANNON_BLOCK.get()),
+                new ItemStack(MekCkStandaloneMachines.CHOCOLATE_CANNON_BLOCK.get()),
                 FERRERO_TYPE
         );
 
         // 坚果爆炒机作为 mekck:nut_roasting 配方分类的催化剂
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.NUT_ROASTER_BLOCK.get()),
+                new ItemStack(MekCkStandaloneMachines.NUT_ROASTER_BLOCK.get()),
                 NUT_ROASTING_TYPE
         );
 
         // §F19：研磨机/萃取机作为各自新分类的催化剂
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.GRINDING_MACHINE_BLOCK.get()),
+                new ItemStack(MekCkFactories.GRINDING_MACHINE_BLOCK.get()),
                 GRINDING_TYPE
         );
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.SMART_EXTRACTOR_BLOCK.get()),
+                new ItemStack(MekCkLegacyMachines.SMART_EXTRACTOR_BLOCK.get()),
                 EXTRACTING_TYPE
         );
 
         // 饮品调配机作为 mekck:beverage_assembly 配方分类的催化剂
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.BEVERAGE_BLENDER_BLOCK.get()),
+                new ItemStack(MekCkLegacyMachines.BEVERAGE_BLENDER_BLOCK.get()),
                 BEVERAGE_ASSEMBLY_TYPE
         );
 
         // 包材组装机作为 mekck:packaging 配方分类的催化剂
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.PACKAGING_STATION_BLOCK.get()),
+                new ItemStack(MekCkLegacyMachines.PACKAGING_STATION_BLOCK.get()),
                 PACKAGING_TYPE
         );
 
         // 寿司卷制机 → 妖怪们的归家料理台（cuisine）配方分类
         if (net.minecraftforge.fml.ModList.get().isLoaded("youkaishomecoming")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.SUSHI_MAKER_BLOCK.get()),
+                    new ItemStack(MekCkLegacyMachines.SUSHI_MAKER_BLOCK.get()),
                     createRecipeType("youkaishomecoming", "cuisine", "dev.xkmc.youkaishomecoming.content.pot.table.recipe.CuisineRecipe"));
         }
 
         // 发酵机 → 妖怪们的归家发酵分类
         if (net.minecraftforge.fml.ModList.get().isLoaded("youkaishomecoming")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.FERMENTER_BLOCK.get()),
+                    new ItemStack(MekCkLegacyMachines.FERMENTER_BLOCK.get()),
                     createRecipeType("youkaishomecoming", "ferment", "dev.xkmc.youkaishomecoming.content.pot.ferment.FermentationRecipe"));
         }
 
         // 平均切段机 → 农夫乐事切割分类（切段配方）
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.AVERAGE_SLICER_BLOCK.get()),
+                new ItemStack(MekCkLegacyMachines.AVERAGE_SLICER_BLOCK.get()),
                 CUTTING_TYPE);
 
         // 饭团成型机 → 农夫乐事烹饪分类（米饭/饭团配方）
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.RICE_BALL_MAKER_BLOCK.get()),
+                new ItemStack(MekCkLegacyMachines.RICE_BALL_MAKER_BLOCK.get()),
                 COOKING_TYPE);
 
         // Register cooking pot and all cooking factories as catalysts for KaleidoscopeCookery recipes
         if (KaleidoscopeCompat.isLoaded()) {
             RecipeType<?>[] kcTypes = {KC_STOCKPOT, KC_FLEX_STOCKPOT, KC_POT, KC_FLEX_POT};
-            ItemStack cookingPotStack = new ItemStack(UniversalCuttingMachine.COOKING_POT_BLOCK.get());
+            ItemStack cookingPotStack = new ItemStack(MekCkStandaloneMachines.COOKING_POT_BLOCK.get());
             for (RecipeType<?> kcType : kcTypes) {
                 registration.addRecipeCatalyst(cookingPotStack, kcType);
-                for (var entry : UniversalCuttingMachine.COOKING_FACTORY_BLOCKS.entrySet()) {
+                for (var entry : MekCkFactories.COOKING_FACTORY_BLOCKS.entrySet()) {
                     registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), kcType);
                 }
             }
 
             // 电力研磨机 + 研磨工厂 → 石磨配方分类
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.GRINDING_MACHINE_BLOCK.get()),
+                    new ItemStack(MekCkFactories.GRINDING_MACHINE_BLOCK.get()),
                     KC_MILLSTONE);
-            for (var entry : UniversalCuttingMachine.GRINDING_FACTORY_BLOCKS.entrySet()) {
+            for (var entry : MekCkFactories.GRINDING_FACTORY_BLOCKS.entrySet()) {
                 registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), KC_MILLSTONE);
             }
         }
@@ -761,19 +766,19 @@ public class JEIPlugin implements IModPlugin {
         if (ModList.get().isLoaded("kaleidoscope_grilling")) {
             // 烧烤机器（烧烤架 + 烧烤工厂）→ 仅烤制/调味分类
             RecipeType<?>[] grillTypes = {KG_GRILLING, KG_SEASONING};
-            ItemStack grillStack = new ItemStack(UniversalCuttingMachine.GRILL_BLOCK.get());
+            ItemStack grillStack = new ItemStack(MekCkFactories.GRILL_BLOCK.get());
             for (RecipeType<?> kgType : grillTypes) {
                 registration.addRecipeCatalyst(grillStack, kgType);
-                for (var entry : UniversalCuttingMachine.GRILL_FACTORY_BLOCKS.entrySet()) {
+                for (var entry : MekCkFactories.GRILL_FACTORY_BLOCKS.entrySet()) {
                     registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), kgType);
                 }
             }
             // 穿串机器（穿串机 + 穿串工厂）→ 穿串/秘制穿串分类（烧烤机器不参与穿串）
             RecipeType<?>[] threadingTypes = {KG_THREADING, KG_SECRET_THREADING};
-            ItemStack skewerStack = new ItemStack(UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK.get());
+            ItemStack skewerStack = new ItemStack(MekCkStandaloneMachines.SKEWERING_MACHINE_BLOCK.get());
             for (RecipeType<?> t : threadingTypes) {
                 registration.addRecipeCatalyst(skewerStack, t);
-                for (var entry : UniversalCuttingMachine.SKEWERING_FACTORY_BLOCKS.entrySet()) {
+                for (var entry : MekCkFactories.SKEWERING_FACTORY_BLOCKS.entrySet()) {
                     registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), t);
                 }
             }
@@ -782,89 +787,89 @@ public class JEIPlugin implements IModPlugin {
         // ── SimpleMachine 11 台机器 → 对应配方分类催化剂 ──
         // 平均切段机（farmersdelight:cutting 已定义）
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.AVERAGE_SLICER_BLOCK.get()), CUTTING_TYPE);
+                new ItemStack(MekCkLegacyMachines.AVERAGE_SLICER_BLOCK.get()), CUTTING_TYPE);
         // 凝乳成型机（trailandtales 凝乳配方为 farmersdelight:cooking 类型）
         registration.addRecipeCatalyst(
-                new ItemStack(UniversalCuttingMachine.CURD_MAKER_BLOCK.get()), COOKING_TYPE);
+                new ItemStack(MekCkLegacyMachines.CURD_MAKER_BLOCK.get()), COOKING_TYPE);
         // 智能料理台（妖怪们的归家料理台）
         if (ModList.get().isLoaded("youkaishomecoming")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.SUSHI_MAKER_BLOCK.get()), YH_CUISINE);
+                    new ItemStack(MekCkLegacyMachines.SUSHI_MAKER_BLOCK.get()), YH_CUISINE);
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.DEHYDRATOR_BLOCK.get()), YH_RACK);
+                    new ItemStack(MekCkLegacyMachines.DEHYDRATOR_BLOCK.get()), YH_RACK);
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.STEAMER_BLOCK.get()), YH_STEAM);
+                    new ItemStack(MekCkLegacyMachines.STEAMER_BLOCK.get()), YH_STEAM);
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.FERMENTER_BLOCK.get()), YH_FERMENT);
+                    new ItemStack(MekCkLegacyMachines.FERMENTER_BLOCK.get()), YH_FERMENT);
         }
         // 葡园酒香
         if (ModList.get().isLoaded("vinery")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.WINERY_BLOCK.get()), VINERY_WINE);
+                    new ItemStack(MekCkLegacyMachines.WINERY_BLOCK.get()), VINERY_WINE);
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.JUICER_BLOCK.get()), VINERY_MASH, VINERY_FERMENT);
+                    new ItemStack(MekCkLegacyMachines.JUICER_BLOCK.get()), VINERY_MASH, VINERY_FERMENT);
             // 发酵机不再作为陈酿桶（wine_fermentation）催化剂：它不处理 vinery 陈酿桶配方（用户 2026-09-22 验收要求）
         }
         // 馥郁烘焙
         if (ModList.get().isLoaded("bakery")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.BAKERY_OVEN_BLOCK.get()), BAKERY_CAKING);
+                    new ItemStack(MekCkLegacyMachines.BAKERY_OVEN_BLOCK.get()), BAKERY_CAKING);
         }
         // 沉浸农艺
         if (ModList.get().isLoaded("farm_and_charm")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.STOVE_BLOCK.get()), FAC_STOVE);
+                    new ItemStack(MekCkLegacyMachines.STOVE_BLOCK.get()), FAC_STOVE);
             // 电力研磨机 → 绞碎（mincer）配方分类
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.GRINDING_MACHINE_BLOCK.get()), FAC_MINCER);
+                    new ItemStack(MekCkFactories.GRINDING_MACHINE_BLOCK.get()), FAC_MINCER);
         }
         // 盛节精酿：发酵机 → 酿造（brewing）配方分类
         if (ModList.get().isLoaded("brewery")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.FERMENTER_BLOCK.get()), BREWERY_BREWING);
+                    new ItemStack(MekCkLegacyMachines.FERMENTER_BLOCK.get()), BREWERY_BREWING);
         }
         // let's do：智能烤炉 → 烤肉架 / 茶壶 / 草甸烹饪锅分类
         if (ModList.get().isLoaded("farm_and_charm")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.STOVE_BLOCK.get()), FAC_ROASTER);
+                    new ItemStack(MekCkLegacyMachines.STOVE_BLOCK.get()), FAC_ROASTER);
         }
         if (ModList.get().isLoaded("herbalbrews")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.STOVE_BLOCK.get()), HERBALBREWS_KETTLE);
+                    new ItemStack(MekCkLegacyMachines.STOVE_BLOCK.get()), HERBALBREWS_KETTLE);
         }
         if (ModList.get().isLoaded("meadow")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.STOVE_BLOCK.get()), MEADOW_COOKING);
+                    new ItemStack(MekCkLegacyMachines.STOVE_BLOCK.get()), MEADOW_COOKING);
             // 凝乳成型机 → 奶酪压榨（cheese）配方分类
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.CURD_MAKER_BLOCK.get()), MEADOW_CHEESE);
+                    new ItemStack(MekCkLegacyMachines.CURD_MAKER_BLOCK.get()), MEADOW_CHEESE);
         }
         // 烘焙坊（bakeries）：烘焙机 → 烤箱 + 咖啡分类；智能烤炉 → 石窑分类
         if (ModList.get().isLoaded("bakeries")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.BAKERY_OVEN_BLOCK.get()), BAKERIES_OVEN, BAKERIES_DRINK);
+                    new ItemStack(MekCkLegacyMachines.BAKERY_OVEN_BLOCK.get()), BAKERIES_OVEN, BAKERIES_DRINK);
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.STOVE_BLOCK.get()), BAKERIES_STONE_KILN);
+                    new ItemStack(MekCkLegacyMachines.STOVE_BLOCK.get()), BAKERIES_STONE_KILN);
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.BLENDER_BLOCK.get()), BAKERIES_BLENDER);
+                    new ItemStack(MekCkLegacyMachines.BLENDER_BLOCK.get()), BAKERIES_BLENDER);
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.GRINDING_MACHINE_BLOCK.get()), BAKERIES_FLOUR_SIEVE);
+                    new ItemStack(MekCkFactories.GRINDING_MACHINE_BLOCK.get()), BAKERIES_FLOUR_SIEVE);
         }
         // 简单的茶：智能茶艺机 → 原版合成分类（它的配方都是 crafting_shapeless）
         if (ModList.get().isLoaded("simplytea")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.TEA_BREWER_BLOCK.get()),
+                    new ItemStack(MekCkLegacyMachines.TEA_BREWER_BLOCK.get()),
                     mezz.jei.api.constants.RecipeTypes.CRAFTING);
         }
         // 酒馆（kaleidoscope_tavern）：调酒机 → 调酒配方分类（shaker）
         if (ModList.get().isLoaded("kaleidoscope_tavern")) {
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.COCKTAIL_SHAKER_BLOCK.get()), TAVERN_SHAKER);
+                    new ItemStack(MekCkLegacyMachines.COCKTAIL_SHAKER_BLOCK.get()), TAVERN_SHAKER);
             // 陈酿机 → 酒桶（barrel）催化剂；鲜果榨汁机 → 榨汁（pressing_tub）催化剂（复用 tavern 自带分类）
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.WINERY_BLOCK.get()), TAVERN_BARREL);
+                    new ItemStack(MekCkLegacyMachines.WINERY_BLOCK.get()), TAVERN_BARREL);
             registration.addRecipeCatalyst(
-                    new ItemStack(UniversalCuttingMachine.JUICER_BLOCK.get()), TAVERN_PRESSING);
+                    new ItemStack(MekCkLegacyMachines.JUICER_BLOCK.get()), TAVERN_PRESSING);
         }
     }
 

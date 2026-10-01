@@ -1,5 +1,6 @@
 package cn.ism.mekck;
 
+import cn.ism.mekck.TestSourceText;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -51,9 +52,16 @@ public class TestFactoryTileLookupGate {
     private static final Pattern BLOCK_TYPE_FOR = Pattern.compile(
             "blockTypeFor\\s*\\(");
 
+    /**
+     * 注册中枢的完整源码面（入口类 + {@code registry/} 下各注册类）。
+     *
+     * <p>拆分后这条断言关心的是「闸门只有一份、每个家族都走自己的表」，
+     * 而不是「写在哪个文件」—— 所以读整面，见 {@code TestSourceText#readRegistry()}。</p>
+     */
     private static String read() throws IOException {
-        assertTrue("找不到 " + REGISTRY + "（源码测试需在仓库根目录运行）", Files.isRegularFile(REGISTRY));
-        return Files.readString(REGISTRY, StandardCharsets.UTF_8);
+        assertTrue("找不到注册中枢源码（源码测试需在仓库根目录运行）",
+                Files.isRegularFile(REGISTRY));
+        return TestSourceText.readRegistry();
     }
 
     /**

@@ -22,6 +22,7 @@ import org.jetbrains.annotations.NotNull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 /**
  * 急冻制冰机 / 制冰工厂使用的 {@code mekck:ice_make} 配方。
@@ -83,12 +84,12 @@ public class IceMakeRecipe implements Recipe<RecipeWrapper> {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return UniversalCuttingMachine.ICE_MAKE_RECIPE_SERIALIZER.get();
+        return MekCkRecipeTypes.ICE_MAKE_RECIPE_SERIALIZER.get();
     }
 
     @Override
     public @NotNull RecipeType<?> getType() {
-        return UniversalCuttingMachine.ICE_MAKE_RECIPE_TYPE.get();
+        return MekCkRecipeTypes.ICE_MAKE_RECIPE_TYPE.get();
     }
 
     @Override

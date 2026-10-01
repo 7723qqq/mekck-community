@@ -6,6 +6,8 @@ import net.minecraftforge.fml.ModList;
 import org.slf4j.Logger;
 
 import java.lang.reflect.Method;
+import cn.ism.mekck.registry.MekCkFactories;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 与独立模组 **机器放置预览**（machinepreview）的可选联动。
@@ -60,15 +62,15 @@ public final class MachinePreviewCompat {
             namespace.invoke(null, cn.ism.mekck.UniversalCuttingMachine.MOD_ID);
 
             // 种植切配站：1x2x1
-            shape.invoke(null, cn.ism.mekck.UniversalCuttingMachine.PLANTING_CUTTING_STATION_BLOCK.get(), 1, 2, 1);
+            shape.invoke(null, cn.ism.mekck.registry.MekCkFactories.PLANTING_CUTTING_STATION_BLOCK.get(), 1, 2, 1);
             // 种植切配工厂：每个等级一台（按等级存放在 Map 里），形状同为 1x2x1
             int factoryCount = 0;
-            for (var entry : cn.ism.mekck.UniversalCuttingMachine.PLANTING_CUTTING_FACTORY_BLOCKS.entrySet()) {
+            for (var entry : cn.ism.mekck.registry.MekCkFactories.PLANTING_CUTTING_FACTORY_BLOCKS.entrySet()) {
                 shape.invoke(null, entry.getValue().get(), 1, 2, 1);
                 factoryCount++;
             }
             // 生物反应堆：2x3x2（主方块位于底层西南角）
-            shape.invoke(null, cn.ism.mekck.UniversalCuttingMachine.BIOREACTOR_BLOCK.get(), 2, 3, 2);
+            shape.invoke(null, cn.ism.mekck.registry.MekCkStandaloneMachines.BIOREACTOR_BLOCK.get(), 2, 3, 2);
 
             LOGGER.info("[mekck] registered multiblock shapes to machinepreview: 1 station + {} factories + 1 bioreactor; mekck's own preview is now disabled", factoryCount);
         } catch (Throwable t) {

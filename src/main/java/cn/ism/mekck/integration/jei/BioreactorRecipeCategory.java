@@ -19,6 +19,7 @@ import mezz.jei.api.recipe.IFocusGroup;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.recipe.category.IRecipeCategory;
+import cn.ism.mekck.registry.MekCkFluids;
 
 /**
  * JEI 配方分类：展示生物反应堆将各类物品转化为有机物流体（每单位 mb）。
@@ -92,7 +93,7 @@ public class BioreactorRecipeCategory implements IRecipeCategory<BioreactorJeiRe
         builder.addSlot(RecipeIngredientRole.INPUT, INPUT_X + 1, INPUT_Y + 1)
                 .addItemStack(recipe.getInput());
 
-        FluidStack fluid = new FluidStack(UniversalCuttingMachine.ORGANIC_MATTER_SOURCE.get(), recipe.getMbPerUnit());
+        FluidStack fluid = new FluidStack(MekCkFluids.ORGANIC_MATTER_SOURCE.get(), recipe.getMbPerUnit());
         builder.addSlot(RecipeIngredientRole.OUTPUT, OUTPUT_X + 1, OUTPUT_Y + 1)
                 .addFluidStack(fluid.getFluid(), fluid.getAmount());
     }

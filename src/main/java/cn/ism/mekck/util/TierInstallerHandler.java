@@ -39,6 +39,7 @@ import net.minecraftforge.registries.RegistryObject;
 
 import java.util.HashMap;
 import java.util.Map;
+import cn.ism.mekck.registry.MekCkFactories;
 
 /**
  * 工厂安装器支持（对齐 Mekanism ItemTierInstaller 的升级语义）：
@@ -199,25 +200,25 @@ public final class TierInstallerHandler {
     /** 基础机器 → 对应基础工厂方块；非基础机器返回 null。 */
     private static Block baseFactoryOf(Block block) {
         if (block instanceof UniversalCuttingMachineBlock) {
-            return basicOf(UniversalCuttingMachine.FACTORY_BLOCKS);
+            return basicOf(MekCkFactories.FACTORY_BLOCKS);
         }
         if (block instanceof SmartCookingPotBlock) {
-            return basicOf(UniversalCuttingMachine.COOKING_FACTORY_BLOCKS);
+            return basicOf(MekCkFactories.COOKING_FACTORY_BLOCKS);
         }
         if (block instanceof SkeweringMachineBlock) {
-            return basicOf(UniversalCuttingMachine.SKEWERING_FACTORY_BLOCKS);
+            return basicOf(MekCkFactories.SKEWERING_FACTORY_BLOCKS);
         }
         if (block instanceof GrillBlock) {
-            return basicOf(UniversalCuttingMachine.GRILL_FACTORY_BLOCKS);
+            return basicOf(MekCkFactories.GRILL_FACTORY_BLOCKS);
         }
         if (block instanceof PlantingCuttingStationBlock) {
-            return basicOf(UniversalCuttingMachine.PLANTING_CUTTING_FACTORY_BLOCKS);
+            return basicOf(MekCkFactories.PLANTING_CUTTING_FACTORY_BLOCKS);
         }
         if (block instanceof ElectricGrindingMachineBlock) {
-            return basicOf(UniversalCuttingMachine.GRINDING_FACTORY_BLOCKS);
+            return basicOf(MekCkFactories.GRINDING_FACTORY_BLOCKS);
         }
         if (block instanceof IceMakerBlock) {
-            return basicOf(UniversalCuttingMachine.ICE_FACTORY_BLOCKS);
+            return basicOf(MekCkFactories.ICE_FACTORY_BLOCKS);
         }
         return null;
     }
@@ -230,19 +231,19 @@ public final class TierInstallerHandler {
     private static Block nextBlockOf(Block oldBlock, CuttingMachineFactoryTier next) {
         Map<CuttingMachineFactoryTier, RegistryObject<Block>> map;
         if (oldBlock instanceof CuttingMachineFactoryBlock) {
-            map = UniversalCuttingMachine.FACTORY_BLOCKS;
+            map = MekCkFactories.FACTORY_BLOCKS;
         } else if (oldBlock instanceof CookingFactoryBlock) {
-            map = UniversalCuttingMachine.COOKING_FACTORY_BLOCKS;
+            map = MekCkFactories.COOKING_FACTORY_BLOCKS;
         } else if (oldBlock instanceof SkeweringFactoryBlock) {
-            map = UniversalCuttingMachine.SKEWERING_FACTORY_BLOCKS;
+            map = MekCkFactories.SKEWERING_FACTORY_BLOCKS;
         } else if (oldBlock instanceof GrillFactoryBlock) {
-            map = UniversalCuttingMachine.GRILL_FACTORY_BLOCKS;
+            map = MekCkFactories.GRILL_FACTORY_BLOCKS;
         } else if (oldBlock instanceof PlantingCuttingFactoryBlock) {
-            map = UniversalCuttingMachine.PLANTING_CUTTING_FACTORY_BLOCKS;
+            map = MekCkFactories.PLANTING_CUTTING_FACTORY_BLOCKS;
         } else if (oldBlock instanceof GrindingFactoryBlock) {
-            map = UniversalCuttingMachine.GRINDING_FACTORY_BLOCKS;
+            map = MekCkFactories.GRINDING_FACTORY_BLOCKS;
         } else if (oldBlock instanceof IceFactoryBlock) {
-            map = UniversalCuttingMachine.ICE_FACTORY_BLOCKS;
+            map = MekCkFactories.ICE_FACTORY_BLOCKS;
         } else {
             return null;
         }

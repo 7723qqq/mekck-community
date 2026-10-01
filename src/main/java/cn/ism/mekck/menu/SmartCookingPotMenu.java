@@ -28,6 +28,7 @@ import net.minecraftforge.items.SlotItemHandler;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.function.IntSupplier;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 public final class SmartCookingPotMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
     /**
@@ -62,7 +63,7 @@ public final class SmartCookingPotMenu extends AbstractContainerMenu implements 
     }
 
     public SmartCookingPotMenu(int containerId, Inventory inventory, SmartCookingPotBlockEntity machine, ContainerData data) {
-        super(UniversalCuttingMachine.COOKING_POT_MENU.get(), containerId);
+        super(MekCkStandaloneMachines.COOKING_POT_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
 

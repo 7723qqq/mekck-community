@@ -22,6 +22,7 @@ import org.jetbrains.annotations.NotNull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 /**
  * 鲜果榨汁机专属配方 {@code mekck:grape_pressing}（陈酿机/榨汁机改造简报 需求1）。
@@ -112,12 +113,12 @@ public class GrapePressingRecipe implements Recipe<RecipeWrapper> {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return UniversalCuttingMachine.GRAPE_PRESSING_RECIPE_SERIALIZER.get();
+        return MekCkRecipeTypes.GRAPE_PRESSING_RECIPE_SERIALIZER.get();
     }
 
     @Override
     public @NotNull RecipeType<?> getType() {
-        return UniversalCuttingMachine.GRAPE_PRESSING_RECIPE_TYPE.get();
+        return MekCkRecipeTypes.GRAPE_PRESSING_RECIPE_TYPE.get();
     }
 
     @Override

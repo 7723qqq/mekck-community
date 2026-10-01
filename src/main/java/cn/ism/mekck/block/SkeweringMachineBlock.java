@@ -35,6 +35,7 @@ import net.minecraftforge.network.NetworkHooks;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 public final class SkeweringMachineBlock extends BaseEntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
@@ -130,9 +131,9 @@ public final class SkeweringMachineBlock extends BaseEntityBlock {
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
         if (level.isClientSide) {
-            return createTickerHelper(type, UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK_ENTITY.get(), SkeweringMachineBlockEntity::clientTick);
+            return createTickerHelper(type, MekCkStandaloneMachines.SKEWERING_MACHINE_BLOCK_ENTITY.get(), SkeweringMachineBlockEntity::clientTick);
         }
-        return createTickerHelper(type, UniversalCuttingMachine.SKEWERING_MACHINE_BLOCK_ENTITY.get(), SkeweringMachineBlockEntity::serverTick);
+        return createTickerHelper(type, MekCkStandaloneMachines.SKEWERING_MACHINE_BLOCK_ENTITY.get(), SkeweringMachineBlockEntity::serverTick);
     }
 
     @Override

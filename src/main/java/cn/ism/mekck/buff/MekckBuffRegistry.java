@@ -7,6 +7,9 @@ import net.minecraft.world.level.block.Block;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Set;
+import cn.ism.mekck.registry.MekCkLegacyMachines;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
+import static cn.ism.mekck.registry.MekCkStandaloneMachines.NUT_ROASTER_BLOCK;
 
 /**
  * F10 攻击增益白名单（拍板 Q8a）：集中定义「哪个 buff 源覆盖哪些攻击型目标」，
@@ -28,7 +31,7 @@ public final class MekckBuffRegistry {
     /** 被鲜果榨汁机 {@code juicer} buff 的喷射攻击型（当前仅 nut_roaster；未来 +coffee_cannon）。 */
     public static Set<Block> juicerTargets() {
         if (juicerTargets == null) {
-            juicerTargets = Set.of(UniversalCuttingMachine.NUT_ROASTER_BLOCK.get());
+            juicerTargets = Set.of(MekCkStandaloneMachines.NUT_ROASTER_BLOCK.get());
             // 未来：Set.of(NUT_ROASTER_BLOCK.get(), COFFEE_CANNON_BLOCK.get())
         }
         return juicerTargets;
@@ -37,7 +40,7 @@ public final class MekckBuffRegistry {
     /** 被糕点烘焙机 {@code bakery_oven} buff 的散点射攻击型（当前仅 ice_maker）。 */
     public static Set<Block> bakeryTargets() {
         if (bakeryTargets == null) {
-            bakeryTargets = Set.of(UniversalCuttingMachine.ICE_MAKER_BLOCK.get());
+            bakeryTargets = Set.of(MekCkStandaloneMachines.ICE_MAKER_BLOCK.get());
         }
         return bakeryTargets;
     }
@@ -46,8 +49,8 @@ public final class MekckBuffRegistry {
     @Nullable
     public static Block sourceFor(@Nullable Block target) {
         if (target == null) return null;
-        if (juicerTargets().contains(target)) return UniversalCuttingMachine.JUICER_BLOCK.get();
-        if (bakeryTargets().contains(target)) return UniversalCuttingMachine.BAKERY_OVEN_BLOCK.get();
+        if (juicerTargets().contains(target)) return MekCkLegacyMachines.JUICER_BLOCK.get();
+        if (bakeryTargets().contains(target)) return MekCkLegacyMachines.BAKERY_OVEN_BLOCK.get();
         return null;
     }
 

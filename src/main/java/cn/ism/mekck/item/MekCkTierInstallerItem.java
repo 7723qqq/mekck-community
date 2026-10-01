@@ -14,19 +14,16 @@ import net.minecraft.world.item.Item;
 public class MekCkTierInstallerItem extends Item {
 
     private final CuttingMachineFactoryTier tier;
-    private final String materialName;
     private final boolean animated;
 
     /**
-     * @param tier         目标工厂等级
-     * @param materialName 取色来源材料名（用于提示）
-     * @param animated     是否为变色动画纹理（奇点创世）
+     * @param tier     目标工厂等级
+     * @param animated 是否为变色动画纹理（奇点创世）
      */
     public MekCkTierInstallerItem(Properties properties, CuttingMachineFactoryTier tier,
-                                  String materialName, boolean animated) {
+                                  boolean animated) {
         super(properties);
         this.tier = tier;
-        this.materialName = materialName;
         this.animated = animated;
     }
 

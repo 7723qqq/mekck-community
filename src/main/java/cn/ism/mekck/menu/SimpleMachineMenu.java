@@ -23,6 +23,7 @@ import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.SlotItemHandler;
 
 import java.util.function.IntSupplier;
+import cn.ism.mekck.registry.MekCkLegacyMachines;
 
 /** 四合一基础机器共用菜单（寿司卷制机/平均切段机/饭团成型机/凝乳成型机）。 */
 public final class SimpleMachineMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
@@ -85,7 +86,7 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
     }
 
     public SimpleMachineMenu(int containerId, Inventory inventory, SimpleMachineBlockEntity machine, ContainerData data) {
-        super(UniversalCuttingMachine.SIMPLE_MACHINE_MENU.get(), containerId);
+        super(MekCkLegacyMachines.SIMPLE_MACHINE_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
 

@@ -21,6 +21,7 @@ import org.jetbrains.annotations.NotNull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 /**
  * 包材组装机专属配方 {@code mekck:packaging}（F7 / F11 §四.4）。
@@ -93,12 +94,12 @@ public class PackagingRecipe implements Recipe<RecipeWrapper> {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return UniversalCuttingMachine.PACKAGING_RECIPE_SERIALIZER.get();
+        return MekCkRecipeTypes.PACKAGING_RECIPE_SERIALIZER.get();
     }
 
     @Override
     public @NotNull RecipeType<?> getType() {
-        return UniversalCuttingMachine.PACKAGING_RECIPE_TYPE.get();
+        return MekCkRecipeTypes.PACKAGING_RECIPE_TYPE.get();
     }
 
     @Override

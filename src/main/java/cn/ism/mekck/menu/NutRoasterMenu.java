@@ -22,6 +22,7 @@ import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.SlotItemHandler;
 
 import java.util.function.IntSupplier;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 public final class NutRoasterMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
     // Mekanism 风格布局常量（与 NutRoasterScreen 保持一致）
@@ -48,7 +49,7 @@ public final class NutRoasterMenu extends AbstractContainerMenu implements ISide
     }
 
     public NutRoasterMenu(int containerId, Inventory inventory, NutRoasterBlockEntity machine, ContainerData data) {
-        super(UniversalCuttingMachine.NUT_ROASTER_MENU.get(), containerId);
+        super(MekCkStandaloneMachines.NUT_ROASTER_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
 

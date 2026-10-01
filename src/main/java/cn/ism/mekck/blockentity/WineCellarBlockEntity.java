@@ -26,6 +26,7 @@ import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.items.ItemStackHandler;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 陈化窖（时间悖论产生器，F20）方块实体：独立<b>容器</b>方块，非配方加工机。
@@ -196,7 +197,7 @@ public final class WineCellarBlockEntity extends MekCkLegacyMachine implements M
     };
 
     public WineCellarBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.WINE_CELLAR_BLOCK_ENTITY.get(), pos, state,
+        super(MekCkStandaloneMachines.WINE_CELLAR_BLOCK_ENTITY.get(), pos, state,
                 ENERGY_CAPACITY, MAX_RECEIVE);
     }
 

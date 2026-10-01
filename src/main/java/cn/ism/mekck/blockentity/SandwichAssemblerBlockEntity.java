@@ -28,6 +28,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 三明治组装机（联动 Some Assembly Required）。
@@ -126,7 +127,7 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
     private final LazyOptional<net.minecraftforge.items.IItemHandler> itemCapability = LazyOptional.of(() -> items);
 
     public SandwichAssemblerBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.SANDWICH_ASSEMBLER_BLOCK_ENTITY.get(), pos, state);
+        super(MekCkStandaloneMachines.SANDWICH_ASSEMBLER_BLOCK_ENTITY.get(), pos, state);
         for (int i = 0; i < 6; i++) itemSideConfig[i] = cn.ism.mekck.SideMode.NONE;
         this.autoIO = new cn.ism.mekck.util.AutoIO(this,
                 new int[][]{{MATERIAL_START, MATERIAL_SLOTS}},

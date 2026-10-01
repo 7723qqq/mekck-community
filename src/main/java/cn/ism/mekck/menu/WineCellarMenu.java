@@ -19,6 +19,7 @@ import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.SlotItemHandler;
 
 import java.util.function.IntSupplier;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 陈化窖（F20）菜单：9 个普通储存格（既放酒也取酒，箱子式）+ 电源槽（§F45）+ 玩家物品栏；
@@ -50,7 +51,7 @@ public final class WineCellarMenu extends AbstractContainerMenu {
     }
 
     public WineCellarMenu(int containerId, Inventory inventory, WineCellarBlockEntity machine, ContainerData data) {
-        super(UniversalCuttingMachine.WINE_CELLAR_MENU.get(), containerId);
+        super(MekCkStandaloneMachines.WINE_CELLAR_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
 

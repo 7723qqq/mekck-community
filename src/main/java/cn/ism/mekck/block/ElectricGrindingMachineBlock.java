@@ -35,6 +35,7 @@ import net.minecraftforge.network.NetworkHooks;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import cn.ism.mekck.registry.MekCkFactories;
 
 /**
  * 电力研磨机（基础机器）：处理 kaleidoscope_cookery 的石磨 (millstone) 配方。
@@ -131,9 +132,9 @@ public final class ElectricGrindingMachineBlock extends BaseEntityBlock {
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
         if (level.isClientSide) {
-            return createTickerHelper(type, UniversalCuttingMachine.GRINDING_MACHINE_BLOCK_ENTITY.get(), ElectricGrindingMachineBlockEntity::clientTick);
+            return createTickerHelper(type, MekCkFactories.GRINDING_MACHINE_BLOCK_ENTITY.get(), ElectricGrindingMachineBlockEntity::clientTick);
         }
-        return createTickerHelper(type, UniversalCuttingMachine.GRINDING_MACHINE_BLOCK_ENTITY.get(), ElectricGrindingMachineBlockEntity::serverTick);
+        return createTickerHelper(type, MekCkFactories.GRINDING_MACHINE_BLOCK_ENTITY.get(), ElectricGrindingMachineBlockEntity::serverTick);
     }
 
     @Override

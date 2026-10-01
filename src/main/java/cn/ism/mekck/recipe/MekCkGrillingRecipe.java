@@ -18,6 +18,7 @@ import net.minecraftforge.items.wrapper.RecipeWrapper;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 /**
  * 烧烤工厂自有配方 {@code mekck:grilling}：单一输入 → 烤制产物。
@@ -107,12 +108,12 @@ public class MekCkGrillingRecipe implements Recipe<RecipeWrapper> {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return UniversalCuttingMachine.GRILLING_RECIPE_SERIALIZER.get();
+        return MekCkRecipeTypes.GRILLING_RECIPE_SERIALIZER.get();
     }
 
     @Override
     public @NotNull RecipeType<?> getType() {
-        return UniversalCuttingMachine.GRILLING_RECIPE_TYPE.get();
+        return MekCkRecipeTypes.GRILLING_RECIPE_TYPE.get();
     }
 
     @Override

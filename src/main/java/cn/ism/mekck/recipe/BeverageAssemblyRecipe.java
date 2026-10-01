@@ -24,6 +24,7 @@ import org.jetbrains.annotations.NotNull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
 
 /**
  * 饮品调配机专属配方 {@code mekck:beverage_assembly}（F11 §四.2 · 原创一站式类型）。
@@ -106,12 +107,12 @@ public class BeverageAssemblyRecipe implements Recipe<RecipeWrapper> {
 
     @Override
     public @NotNull RecipeSerializer<?> getSerializer() {
-        return UniversalCuttingMachine.BEVERAGE_ASSEMBLY_RECIPE_SERIALIZER.get();
+        return MekCkRecipeTypes.BEVERAGE_ASSEMBLY_RECIPE_SERIALIZER.get();
     }
 
     @Override
     public @NotNull RecipeType<?> getType() {
-        return UniversalCuttingMachine.BEVERAGE_ASSEMBLY_RECIPE_TYPE.get();
+        return MekCkRecipeTypes.BEVERAGE_ASSEMBLY_RECIPE_TYPE.get();
     }
 
     @Override

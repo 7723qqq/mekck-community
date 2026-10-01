@@ -10,6 +10,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.items.SlotItemHandler;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 三明治组装机菜单：有序输入格 32（8×4）+ 样品槽 + 材料区 27（9×3）+ 返还槽 3 + 输出槽 + 升级槽 3 + 能源槽。
@@ -50,7 +51,7 @@ public class SandwichAssemblerMenu extends AbstractContainerMenu
     };
 
     public SandwichAssemblerMenu(int containerId, Inventory playerInventory, SandwichAssemblerBlockEntity machine) {
-        super(cn.ism.mekck.UniversalCuttingMachine.SANDWICH_ASSEMBLER_MENU.get(), containerId);
+        super(cn.ism.mekck.registry.MekCkStandaloneMachines.SANDWICH_ASSEMBLER_MENU.get(), containerId);
         this.machine = machine;
         IItemHandler items = machine.items;
 

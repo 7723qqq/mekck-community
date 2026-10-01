@@ -22,6 +22,7 @@ import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.SlotItemHandler;
 
 import java.util.function.IntSupplier;
+import cn.ism.mekck.registry.MekCkFactories;
 
 public final class ElectricGrindingMachineMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
     /**
@@ -53,7 +54,7 @@ public final class ElectricGrindingMachineMenu extends AbstractContainerMenu imp
     }
 
     public ElectricGrindingMachineMenu(int containerId, Inventory inventory, ElectricGrindingMachineBlockEntity machine, ContainerData data) {
-        super(UniversalCuttingMachine.GRINDING_MACHINE_MENU.get(), containerId);
+        super(MekCkFactories.GRINDING_MACHINE_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
 

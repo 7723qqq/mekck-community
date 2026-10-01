@@ -50,6 +50,8 @@ import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.wrapper.RecipeWrapper;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import cn.ism.mekck.registry.MekCkRecipeTypes;
+import cn.ism.mekck.registry.MekCkStandaloneMachines;
 
 /**
  * 巧克力大炮：唯一的基础机器形态（无工厂版本）。
@@ -320,7 +322,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
     };
 
     public ChocolateCannonBlockEntity(BlockPos pos, BlockState state) {
-        super(UniversalCuttingMachine.CHOCOLATE_CANNON_BLOCK_ENTITY.get(), pos, state);
+        super(MekCkStandaloneMachines.CHOCOLATE_CANNON_BLOCK_ENTITY.get(), pos, state);
         for (int i = 0; i < 6; i++) sideConfig[i] = SideMode.NONE;
         this.fullItemCapability = LazyOptional.of(() -> items);
         this.inputItemCapability = LazyOptional.of(() -> new InputItemHandler());
@@ -813,7 +815,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
         if (level == null) return null;
         var manager = level.getRecipeManager();
         var opts = recipeWrapper();
-        var holder = manager.getRecipeFor(UniversalCuttingMachine.FERRERO_RECIPE_TYPE.get(), opts, level);
+        var holder = manager.getRecipeFor(MekCkRecipeTypes.FERRERO_RECIPE_TYPE.get(), opts, level);
         FerreroRecipe found = holder.orElse(null);
         // ME 下单：只执行订单指定的配方
         if (orderRecipeId != null) {

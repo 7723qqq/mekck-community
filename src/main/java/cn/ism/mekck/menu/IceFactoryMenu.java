@@ -26,6 +26,7 @@ import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.SlotItemHandler;
 
 import java.util.function.IntSupplier;
+import cn.ism.mekck.registry.MekCkFactories;
 
 public final class IceFactoryMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
     // Mekanism 风格布局常量（与 IceFactoryScreen 保持一致）
@@ -54,7 +55,7 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
     }
 
     public IceFactoryMenu(int containerId, Inventory inventory, IceFactoryBlockEntity machine, ContainerData data) {
-        super(UniversalCuttingMachine.ICE_FACTORY_MENU.get(), containerId);
+        super(MekCkFactories.ICE_FACTORY_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
         this.processes = machine.getProcesses();
