@@ -44,7 +44,54 @@ SKIP_BASENAMES = {"creative_upgrade_from_49_foods.json"}
 
 NAMESpaced = re.compile(r"^[a-z0-9_.-]+:[a-z0-9_./-]+$")
 ITEM_KEYS = {"item"}
-EXTERNAL_KEYS = {"type", "item", "tag", "fluid", "gas"}
+
+# 只有这两类条件是本工具生成的、会随 payload 重新推导。
+# 其余（forge:false / forge:not / 第三方自定义类型）是有意为之的手写门，
+# 工具无从推断其意图，必须原样保留——否则 --write 会静默删掉别人的判断。
+OWNED_COND_TYPES = {"forge:mod_loaded", "forge:item_exists"}
+
+TAGS_DIR = os.path.join(
+    ROOT, "src", "main", "resources", "data", "mekck", "tags", "items"
+)
+_tag_cache = {}
+
+
+def tag_namespaces(tag_id, depth=0):
+    """Namespaces a `{"tag": ...}` reference drags in.
+
+    配方 auditor 以前只看得到配方 JSON 本身，看不到 tag 的内容，于是
+    `recipes/combining/*_from_cutting_factory.json` 里的 `mekck:planting_factories`
+    看着是"纯 mekck 依赖、很干净"，实际那个 tag 的 8 个条目全在 mekmm /
+    mekanism_extras —— 那两个模组没装时这 8 条配方根本做不出来。顺着 tag 递归
+    一层（防环）就能看见。
+    """
+    if tag_id in _tag_cache:
+        return _tag_cache[tag_id]
+    if depth > 8:
+        return set()
+    out = {tag_id.split(":", 1)[0]}
+    path = os.path.join(TAGS_DIR, *tag_id.split(":", 1)[1].split("/")) + ".json"
+    if not tag_id.startswith("minecraft:") and os.path.isfile(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                doc = json.load(f)
+        except Exception as e:
+            print("!! 读不了 tag %s: %r" % (tag_id, e))
+            doc = None
+        for v in (doc or {}).get("values", []):
+            entry = v.get("id") if isinstance(v, dict) else v
+            if isinstance(entry, str) and NAMESpaced.match(entry):
+                out |= tag_namespaces(entry, depth + 1)
+    _tag_cache[tag_id] = out
+    return out
+
+
+def foreign_conditions(doc):
+    """已存在的、本工具不负责的条件条目。"""
+    return [
+        c for c in (doc.get("conditions") or [])
+        if not (isinstance(c, dict) and c.get("type") in OWNED_COND_TYPES)
+    ]
 
 
 def collect(node, key=None, out=None):
@@ -59,6 +106,9 @@ def collect(node, key=None, out=None):
     elif isinstance(node, str) and NAMESpaced.match(node):
         ns = node.split(":", 1)[0]
         out["namespaces"].add(ns)
+        if key == "tag":
+            # tag 的内容藏在另一个文件里，不跟进来就会漏判外部依赖
+            out["namespaces"] |= tag_namespaces(node)
         if key in ITEM_KEYS:
             out["all_items"].add(node)
             if ns in ITEM_MAY_BE_MISSING:
@@ -124,18 +174,17 @@ def apply(path, cond, before):
             head += ","
         new = head + "\n  \"conditions\": " + block + "\n}" + text[close + 1 :]
 
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(new)
-
-    # verification: must still parse, carry exactly the intended conditions, and
-    # differ from the original in nothing but that key
-    with open(path, "r", encoding="utf-8") as f:
-        back = json.load(f)
+    # 先在内存里校验，通过了才落盘：原写法是先覆盖再读回校验，
+    # 校验失败时文件已经被改坏且无备份。
+    back = json.loads(new)
     if back.get("conditions") != cond:
         raise SystemExit("verification failed: conditions mismatch in %s" % path)
     stripped = {k: v for k, v in back.items() if k != "conditions"}
     if stripped != before:
         raise SystemExit("verification failed: payload changed in %s" % path)
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(new)
     return new
 
 
@@ -218,6 +267,8 @@ def main():
             cond.append({"type": "forge:mod_loaded", "modid": ns})
         for item in sorted(found["soft_items"]):
             cond.append({"type": "forge:item_exists", "item": item})
+        # 手写门原样带过去，不被本轮重算覆盖掉
+        cond.extend(foreign_conditions(doc))
 
         for ns in external:
             by_mod[ns] += 1

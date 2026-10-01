@@ -202,18 +202,25 @@ def render(verts, uvs, norms, tris, tex, tex_w, tex_h, view, size):
             o = (y * size + x) * 4
             fb[o], fb[o + 1], fb[o + 2], fb[o + 3] = BG[0], BG[1], BG[2], 255
     zbuf = [1e30] * (size * size)
+    # 统计量：用来证明"确实画出了东西"。否则一个整体绕序反了的 OBJ 会
+    # 全被背面剔除掉，洋红计数为 0，UV 覆盖检查就会空过并报"无洋红空块"。
+    stats = {"culled": 0, "front": 0, "degenerate": 0, "painted": 0}
 
     for _grp, (i0, i1, i2) in tris:
         p0, p1, p2 = scr[i0[0] - 1], scr[i1[0] - 1], scr[i2[0] - 1]
         n = norms[i0[2] - 1]
         facing = n[0] * cam[0] + n[1] * cam[1] + n[2] * cam[2]
         if facing <= 0.0:
+            stats["culled"] += 1
             continue                                  # 背面剔除
         shade = shade_of(n)
         t0, t1, t2 = uvs[i0[1] - 1], uvs[i1[1] - 1], uvs[i2[1] - 1]
         area = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p1[1] - p0[1]) * (p2[0] - p0[0])
         if abs(area) < 1e-9:
+            stats["degenerate"] += 1
             continue
+        stats["front"] += 1
+        painted_here = False
         x0 = max(0, int(min(p0[0], p1[0], p2[0])))
         x1 = min(size - 1, int(max(p0[0], p1[0], p2[0])) + 1)
         y0 = max(0, int(min(p0[1], p1[1], p2[1])))
@@ -244,7 +251,10 @@ def render(verts, uvs, norms, tris, tex, tex_w, tex_h, view, size):
                     fb[o + c] = min(255, int(tex[to + c] * shade))
                 fb[o + 3] = 255
                 zbuf[zi] = z
-    return fb
+                painted_here = True
+        if painted_here:
+            stats["painted"] += 1
+    return fb, stats
 
 
 def main():
@@ -263,7 +273,7 @@ def main():
     tw, th, tex = read_png(TEXTURE)
     os.makedirs(OUT_DIR, exist_ok=True)
     out = os.path.join(OUT_DIR, "mc_%s.png" % view)
-    fb = render(verts, uvs, norms, tris, tex, tw, th, view, size)
+    fb, stats = render(verts, uvs, norms, tris, tex, tw, th, view, size)
     write_png(out, size, size, fb)
 
     magenta = 0
@@ -273,10 +283,21 @@ def main():
     print("视角: %s   输出: %s" % (view, out))
     print("顶点 %d  UV %d  法线 %d  三角形 %d" % (len(verts), len(uvs), len(norms), len(tris)))
     print("贴图 %d×%d" % (tw, th))
+    print("三角形去向: 正面 %d / 背面剔除 %d / 退化 %d / 实际着色 %d"
+          % (stats["front"], stats["culled"], stats["degenerate"], stats["painted"]))
+
+    # 一个三角形都没着色时，洋红计数必然是 0，"无洋红空块" 是一句空话。
+    if stats["painted"] == 0:
+        print("\n!! 没有任何三角形被着色 —— UV 覆盖检查无从谈起，本次验收不通过。")
+        print("   三角形 %d 个，背面剔除掉 %d 个。最可能的原因是 OBJ 整体绕序反了"
+              % (len(tris), stats["culled"]))
+        print("   （本脚本有背面剔除；MC 侧的 objCutoutNoCull 没有，所以游戏里可能看着正常、")
+        print("    但法线方向是错的，受光会不对）。")
+        sys.exit(1)
     if magenta:
         print("警告: 预览里有 %d 个洋红像素 —— 有 UV 落进贴图未绘制区" % magenta)
     else:
-        print("UV 覆盖检查: 无洋红空块")
+        print("UV 覆盖检查: 无洋红空块（已着色 %d 个三角形）" % stats["painted"])
 
 
 if __name__ == "__main__":

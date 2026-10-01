@@ -8,15 +8,18 @@
 - Preserves counter-clockwise winding order for OpenGL back-face culling
 """
 
+import json
 import os
 import math
 import bpy
 import bmesh
 from mathutils import Vector, Matrix
 
-PROJECT = "D:/mc/mod/mekck"
+HERE = os.path.dirname(os.path.abspath(__file__))
+PROJECT = os.path.dirname(HERE)
 OBJ_OUT = os.path.join(PROJECT, "src", "main", "resources", "assets",
                        "mekck", "models", "mesh", "bioreactor.obj")
+ATLAS_JSON = os.path.join(HERE, "bioreactor_atlas.json")
 
 # 256x256 Atlas definition
 TSIZE = 256.0
@@ -34,11 +37,56 @@ ATLAS = {
     "MAT_Mek_ScreenTerminal":  (128, 128, 256, 256),
 }
 
+
+def atlas_cell(mid):
+    """未登记材质必须响亮失败：静默落回默认格 -> 贴图串色且毫无告警。"""
+    if mid == "":
+        raise KeyError(
+            "网格没有材质槽，无法决定 UV 落进哪一格。\n"
+            "  这种情况不能靠兜底：给它随便一格就等于把贴图涂错。\n"
+            "  已登记材质: %s" % ", ".join(sorted(ATLAS)))
+    if mid not in ATLAS:
+        raise KeyError("材质 %r 未登记在 ATLAS；已登记: %s"
+                       % (mid, ", ".join(sorted(ATLAS))))
+    return ATLAS[mid]
+
+
+def write_atlas_json():
+    """本脚本是 bioreactor_atlas.json 的唯一写入者。
+
+    格位表此前由两个 legacy 脚本以各自的命名空间（MAT_Alterra_* / BODY_*）各写一次，
+    而 MAT_Mek_* 这一套从不落盘——于是磁盘上的 JSON 长期与实际 UV 布局脱节，
+    贴图脚本照着错的格子画。现在由 ATLAS 自身导出，附带 size/inset，
+    贴图脚本只读不猜。
+    """
+    doc = {
+        "size": TSIZE,
+        "inset": INSET,
+        "materials": {name: list(rect) for name, rect in sorted(ATLAS.items())},
+    }
+    tmp = ATLAS_JSON + ".part"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(doc, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+    os.replace(tmp, ATLAS_JSON)
+    print("已写出图集格位表: %s（%d 种材质）" % (ATLAS_JSON, len(ATLAS)))
+
+
 def export_true_mek():
     print("=== 开始 True Mek 生物反应堆导出 ===")
     src_col = bpy.data.collections.get("COL_Bioreactor_TrueMek")
     if not src_col:
-        raise RuntimeError("未找到源集合 COL_Bioreactor_TrueMek！")
+        # 常见情况：建模与导出是两个 blender -b -P 进程，后者看不到前者的内存场景。
+        blend = os.path.join(PROJECT, ".blender-backup", "bioreactor_true_mek.blend")
+        if os.path.isfile(blend):
+            print("当前场景没有 %s，自动打开 %s" % (COLLECTION_NAME, blend))
+            bpy.ops.wm.open_mainfile(filepath=blend)
+            src_col = bpy.data.collections.get("COL_Bioreactor_TrueMek")
+    if not src_col:
+        raise RuntimeError(
+            "未找到源集合 COL_Bioreactor_TrueMek！\n"
+            "  先跑 tools/blender_build_true_mek_bioreactor.py（它会存 .blend），\n"
+            "  或在同一个 Blender 会话里连续 exec 两个脚本。")
 
     # 1. 清理临时对象
     for name in ["COL_Export_Temp"]:
@@ -81,7 +129,7 @@ def export_true_mek():
         is_port_flange = "Port" in o.name and "Flange" in o.name
 
         for poly in me.polygons:
-            mid = mat_names[poly.material_index] if (mat_names and poly.material_index < len(mat_names)) else "MAT_Mek_SlateSteel"
+            mid = mat_names[poly.material_index] if (mat_names and poly.material_index < len(mat_names)) else ""
             
             if is_screen:
                 mid = "MAT_Mek_ScreenTerminal"
@@ -90,7 +138,7 @@ def export_true_mek():
             elif is_port_flange:
                 mid = "MAT_Mek_PortFlange"
 
-            x0, y0, x1, y1 = ATLAS.get(mid, ATLAS["MAT_Mek_SlateSteel"])
+            x0, y0, x1, y1 = atlas_cell(mid)
             u_min = x0 + INSET
             u_max = x1 - INSET
             v_min = y0 + INSET
@@ -160,6 +208,8 @@ def export_true_mek():
 
     # 5. 切片为 3 层
     layers = []
+    layer_stats = []
+    TOL = 1e-3
     for layer_idx in range(3):
         bm = bmesh.new()
         bm.from_mesh(unified.data)
@@ -213,19 +263,41 @@ def export_true_mek():
         zs = [v.co.z for v in layer_obj.data.vertices]
         print(f"Layer {layer_idx}: {len(layer_obj.data.polygons)} 面, "
               f"Y=[{min(ys):.6f}, {max(ys):.6f}], X=[{min(xs):.3f}, {max(xs):.3f}], Z=[{min(zs):.3f}, {max(zs):.3f}]")
+        layer_stats.append((layer_idx, min(ys), max(ys), min(xs), max(xs), min(zs), max(zs)))
 
-    # 7. 导出 OBJ
+    # 7. 先校验再落盘：不合格就不动现有的 bioreactor.obj
+    problems = []
+    if len(layer_stats) != 3:
+        problems.append(f"只生成了 {len(layer_stats)} 层，期望 3 层")
+    for idx, lo_y, hi_y, lo_x, hi_x, lo_z, hi_z in layer_stats:
+        if lo_y < -TOL or hi_y > 1.0 + TOL:
+            problems.append(f"layer{idx} 局部 Y=[{lo_y:.6f}, {hi_y:.6f}] 越出 [0,1]")
+        if lo_x < -1.5 - TOL or hi_x > 1.5 + TOL:
+            problems.append(f"layer{idx} X=[{lo_x:.3f}, {hi_x:.3f}] 越出 [-1.5,1.5]")
+        if lo_z < -1.5 - TOL or hi_z > 1.5 + TOL:
+            problems.append(f"layer{idx} Z=[{lo_z:.3f}, {hi_z:.3f}] 越出 [-1.5,1.5]")
+    if problems:
+        raise RuntimeError("几何校验未通过，已放弃写入 %s：\n  - %s"
+                           % (OBJ_OUT, "\n  - ".join(problems)))
+
     os.makedirs(os.path.dirname(OBJ_OUT), exist_ok=True)
     bpy.ops.object.select_all(action='DESELECT')
     for o in layers:
         o.select_set(True)
     bpy.context.view_layer.objects.active = layers[0]
 
-    bpy.ops.wm.obj_export(filepath=OBJ_OUT, export_selected_objects=True,
+    # 先导到 .part，校验过再原子替换，避免半成品覆盖掉能用的网格
+    part = OBJ_OUT + ".part"
+    bpy.ops.wm.obj_export(filepath=part, export_selected_objects=True,
                           export_object_groups=True, export_materials=False,
                           export_uv=True, export_normals=True,
                           export_triangulated_mesh=True,
                           forward_axis='Y', up_axis='Z', apply_modifiers=True)
+
+    if os.path.getsize(part) == 0:
+        raise RuntimeError("导出的 OBJ 为空，未替换 %s" % OBJ_OUT)
+    os.replace(part, OBJ_OUT)
+    write_atlas_json()
 
     print(f"成功导出 OBJ 至: {OBJ_OUT}")
 

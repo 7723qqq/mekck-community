@@ -14,9 +14,16 @@ Replaces the previous cartoon spherical model with a genuine Mekanism 3x3x3 mult
 """
 
 import math
+import os
+
 import bpy
 import bmesh
 from mathutils import Matrix, Vector
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PROJECT = os.path.dirname(HERE)
+# 导出器在独立进程里跑时靠这个文件拿到本脚本的产物
+BLEND_OUT = os.path.join(PROJECT, ".blender-backup", "bioreactor_true_mek.blend")
 
 COLLECTION_NAME = "COL_Bioreactor_TrueMek"
 
@@ -85,11 +92,17 @@ def create_octagonal_cylinder(r, h, z_base, name, mat_name, col):
     return obj
 
 def create_box(x_range, y_range, z_range, name, mat_name, col):
-    """创建轴对齐方块"""
+    """创建轴对齐方块
+
+    区间端点不保证有序：调用方按法线方向算偏移，负方向（如 Port_L 的
+    p_dir[0] = -1.0）会解析出 x0 > x1。必须归一化——x0/x1 互换等价于沿该轴
+    镜像，而本函数六个面的绕序是硬编码的，手性会随之翻转，六个面全部朝内。
+    MC 的 rendertype_solid 开启背面剔除，整块几何会直接不可见。
+    """
     bm = bmesh.new()
-    x0, x1 = x_range
-    y0, y1 = y_range
-    z0, z1 = z_range
+    x0, x1 = min(x_range), max(x_range)
+    y0, y1 = min(y_range), max(y_range)
+    z0, z1 = min(z_range), max(z_range)
     
     v0 = bm.verts.new((x0, y0, z0))
     v1 = bm.verts.new((x1, y0, z0))
@@ -441,6 +454,13 @@ def build_true_mek_bioreactor():
     create_box((-0.07, 0.07), (-0.97, -0.94), (2.74, 2.82), "GEO_Top_GaugeDial", "MAT_Mek_CyanGlow", col)
 
     print(f"成功在集合 [{COLLECTION_NAME}] 中构建完成 True Mekanism 生物反应堆！共 {len(col.objects)} 个组件。")
+
+    # 存盘：导出器通常在**另一个** Blender 进程里跑（blender -b -P），那个进程
+    # 看不到这里内存中的集合。不存盘的话，导出器必然报「未找到源集合」。
+    os.makedirs(os.path.dirname(BLEND_OUT), exist_ok=True)
+    bpy.ops.wm.save_as_mainfile(filepath=BLEND_OUT)
+    print(f"已保存场景: {BLEND_OUT}")
+    print("接着在另一个进程跑: blender -b -P tools/blender_export_true_mek_bioreactor.py")
 
 if __name__ == "__main__":
     build_true_mek_bioreactor()

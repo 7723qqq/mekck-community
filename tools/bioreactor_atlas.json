@@ -1,39 +1,16 @@
 {
-  "cell": 16,
-  "size": 128,
-  "inset": 0.5,
+  "size": 256.0,
+  "inset": 2.0,
   "materials": {
-    "MAT_Alterra_White": [
-      0,
-      0
-    ],
-    "MAT_Dark_Metal": [
-      2,
-      0
-    ],
-    "MAT_Alterra_Orange": [
-      4,
-      0
-    ],
-    "MAT_Bio_Glass": [
-      6,
-      0
-    ],
-    "MAT_Bio_Fluid_Core": [
-      0,
-      2
-    ],
-    "MAT_Status_Led": [
-      2,
-      2
-    ],
-    "MAT_Screen_UI": [
-      4,
-      2
-    ],
-    "MAT_Hatch_Door": [
-      6,
-      2
-    ]
+    "MAT_Mek_AlloyLight": [128, 0, 192, 64],
+    "MAT_Mek_BioSlurry": [64, 64, 128, 128],
+    "MAT_Mek_BlastGlass": [0, 64, 64, 128],
+    "MAT_Mek_BrightInox": [192, 0, 256, 64],
+    "MAT_Mek_CyanGlow": [128, 64, 192, 128],
+    "MAT_Mek_GunmetalDark": [64, 0, 128, 64],
+    "MAT_Mek_HazardStripes": [0, 128, 128, 256],
+    "MAT_Mek_PortFlange": [192, 64, 256, 128],
+    "MAT_Mek_ScreenTerminal": [128, 128, 256, 256],
+    "MAT_Mek_SlateSteel": [0, 0, 64, 64]
   }
 }

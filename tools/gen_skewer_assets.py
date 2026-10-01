@@ -114,7 +114,9 @@ def main():
         ],
         "skewering_vegetables": [
             "minecraft:carrot", "minecraft:potato", "minecraft:beetroot",
-            "minecraft:onion", "minecraft:pumpkin",
+            # 洋葱不是原版物品（原版 1.20.1 无 minecraft:onion），
+            # 它来自 Farmer's Delight —— 而 FD 在 mods.toml 里是 mandatory。
+            "farmersdelight:onion", "minecraft:pumpkin",
         ],
         "skewering_mushrooms": [
             "minecraft:brown_mushroom", "minecraft:red_mushroom",
