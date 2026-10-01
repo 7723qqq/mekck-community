@@ -426,7 +426,27 @@ public final class MekCkFactoryLayout {
     }
 
     /** 玩家背包的总宽度：9 列 × 18px。 */
-    private static final int INVENTORY_WIDTH = 9 * 18;
+    private static final int INVENTORY_WIDTH = 9 * SLOT_STEP;
+
+    // ── 「不覆写 getInventoryYOffset 的菜单」的背包几何 ──────────────────
+    //
+    // Mek 的 MekanismContainer 默认 BASE_Y_OFFSET = 84、getInventoryXOffset() 默认 8。
+    // 继承它却**不覆写**的菜单（UniversalCuttingMachineMenu / GrillMenu 等）拿到的就是这两个值。
+    // 把它们在此处显式命名，是为了让屏幕侧不必再写裸数字 ——
+    // 此前 GrillScreen 与 UniversalCuttingMachineScreen 都把 inventoryLabelY 写成 84
+    // （= 背包首行本身），标签于是压在第一行槽位上。
+
+    /** 未覆写 {@code getInventoryYOffset} 的菜单：玩家背包首行 y（Mek 的 BASE_Y_OFFSET）。 */
+    public static final int MEK_DEFAULT_INVENTORY_Y = 84;
+    /** 同上：玩家背包首列 x（Mek 的 {@code getInventoryXOffset()} 默认值）。 */
+    public static final int INVENTORY_X_OFFSET = 8;
+    /**
+     * 「Inventory」标签的 y —— 用于<b>不覆写</b> {@code getInventoryYOffset} 的菜单。
+     *
+     * <p>与 {@link #inventoryLabelY(int)} 的区别只在于基准：那边按本类公式算出的
+     * 背包首行（166 档是 85），这边是 Mek 的默认 84。</p>
+     */
+    public static final int INVENTORY_LABEL_Y = MEK_DEFAULT_INVENTORY_Y - LABEL_ABOVE_INVENTORY;
 
     /**
      * 玩家背包首列的 x —— 覆写 {@code MekanismContainer.getInventoryXOffset()} 时返回它。

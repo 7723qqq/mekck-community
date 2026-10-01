@@ -124,7 +124,8 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
         guiGraphics.fill(sx, sy, sx + SEARCH_W, sy + SEARCH_H, 0xFF000000);
         guiGraphics.fill(sx + 1, sy + 1, sx + SEARCH_W - 1, sy + SEARCH_H - 1,
                 searchFocused ? 0xFFFFFFFF : 0xFFDDDDDD);
-        String shown = searchText.isEmpty() ? "搜索..." : searchText;
+        String shown = searchText.isEmpty()
+                ? Component.translatable("gui.mekck.ui.search_placeholder").getString() : searchText;
         guiGraphics.drawString(font, shown, sx + 3, sy + 3,
                 searchText.isEmpty() ? 0xFF888888 : 0xFF000000, false);
         // 滚动位置提示

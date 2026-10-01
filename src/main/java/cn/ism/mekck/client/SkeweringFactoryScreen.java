@@ -104,7 +104,7 @@ public final class SkeweringFactoryScreen extends MekCkFactoryScreenBase<Skeweri
         if (menu.hasOrder()) {
             int qty = menu.getOrderQuantity();
             int completed = Math.min(menu.getOrderCompleted(), qty);
-            String text = "当前订单: " + completed + "/" + qty;
+            String text = Component.translatable("gui.mekck.ui.current_order", completed, qty).getString();
             int x = leftPos + 5;
             int y = topPos + 5;
             guiGraphics.fill(x, y, x + font.width(text) + 8, y + 14, 0xCC000000);

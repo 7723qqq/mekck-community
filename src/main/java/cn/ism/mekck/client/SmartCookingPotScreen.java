@@ -21,7 +21,6 @@ import mekanism.client.gui.element.slot.GuiVirtualSlot;
 import mekanism.common.inventory.container.slot.IVirtualSlot;
 import mekanism.client.gui.element.slot.SlotType;
 import mekanism.common.inventory.container.slot.SlotOverlay;
-import mekanism.client.gui.element.GuiTexturedElement;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
 import mekanism.client.render.MekanismRenderer;
 import mekanism.client.render.lib.ColorAtlas.ColorRegistryObject;
@@ -33,16 +32,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import vectorwing.farmersdelight.common.crafting.CookingPotRecipe;
 
 public final class SmartCookingPotScreen extends GuiMekanism<SmartCookingPotMenu> implements NetworkOrderHost {
     private final cn.ism.mekck.client.BigStackHud bigStackHud = new cn.ism.mekck.client.BigStackHud();
     private static final int AUTO_DIST_Y = 34;
-    private static final ResourceLocation SORTING_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "sorting.png");
 
     // Redstone control tab (right side, identical position to Mekanism's factory: x = imageWidth, y = 137)
     private static final int REDSTONE_TAB_SIZE = 26;
@@ -370,7 +366,7 @@ public final class SmartCookingPotScreen extends GuiMekanism<SmartCookingPotMenu
         renderTitleText(guiGraphics);
         drawString(guiGraphics, playerInventoryTitle, 20, inventoryLabelY, titleTextColor());
         // 温度系统：显示机身温度（摄氏度）
-        guiGraphics.drawString(font, String.format("温度: %.1f℃", menu.getTemperature() / 100.0), 20, 78, 0xFFFF5555);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.temperature", menu.getTemperature() / 100.0).getString(), 20, 78, 0xFFFF5555);
         super.drawForegroundText(guiGraphics, mouseX, mouseY);
     }
 
@@ -440,7 +436,8 @@ public final class SmartCookingPotScreen extends GuiMekanism<SmartCookingPotMenu
             int orderPanelY = y + 5;
             int orderQty = menu.getOrderQuantity();
             int orderCompleted = menu.getOrderCompleted();
-            String orderText = "当前订单: " + Math.min(orderCompleted, orderQty) + "/" + orderQty;
+            String orderText = Component.translatable("gui.mekck.ui.current_order",
+                    Math.min(orderCompleted, orderQty), orderQty).getString();
             guiGraphics.fill(orderPanelX, orderPanelY, orderPanelX + font.width(orderText) + 8, orderPanelY + 14, 0xCC000000);
             guiGraphics.drawString(font, orderText, orderPanelX + 4, orderPanelY + 3, 0xFFFFFF00);
 

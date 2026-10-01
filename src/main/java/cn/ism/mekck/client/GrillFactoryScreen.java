@@ -118,7 +118,7 @@ public final class GrillFactoryScreen extends MekCkFactoryScreenBase<GrillFactor
                     ? (hovered ? 0xFF7CE25F : 0xFF2E8B2E)
                     : (hovered ? 0xFF666666 : 0xFF333333);
             guiGraphics.fill(bx, buttonY, bx + SLOT_STEP, buttonY + SLOT_STEP, color);
-            String label = enabled ? "开" : "关";
+            String label = Component.translatable(enabled ? "gui.mekck.ui.on" : "gui.mekck.ui.off").getString();
             guiGraphics.drawString(font, label,
                     bx + (SLOT_STEP - font.width(label)) / 2, buttonY + 5, 0xFFFFFFFF);
         }

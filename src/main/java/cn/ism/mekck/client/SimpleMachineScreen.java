@@ -362,7 +362,7 @@ public final class SimpleMachineScreen extends GuiMekanism<SimpleMachineMenu> im
         drawString(guiGraphics, playerInventoryTitle, 20, inventoryLabelY, titleTextColor());
         // 加热类机器：显示机身温度（摄氏度）
         if (menu.isHeatingMachine()) {
-            guiGraphics.drawString(font, String.format("温度: %.1f℃", menu.getTemperature() / 100.0), 20, 78, 0xFFFF5555);
+            guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.temperature", menu.getTemperature() / 100.0).getString(), 20, 78, 0xFFFF5555);
         }
         super.drawForegroundText(guiGraphics, mouseX, mouseY);
     }

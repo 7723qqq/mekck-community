@@ -128,20 +128,16 @@ public class GuiMekCkSideConfiguration extends GuiWindow {
 
     private GuiElement.IHoverable getOnHover(RelativeSide relativeSide) {
         return (onHover, guiGraphics, mouseX, mouseY) -> displayTooltips(guiGraphics, mouseX, mouseY,
-              Component(lang(relativeSide)),
+              net.minecraft.network.chat.Component.translatable(sideLangKey(relativeSide)),
               componentForMode(modeForSide(relativeSide)));
-    }
-
-    private net.minecraft.network.chat.Component Component(String s) {
-        return net.minecraft.network.chat.Component.literal(s);
     }
 
     private net.minecraft.network.chat.Component componentForMode(SideMode mode) {
         net.minecraft.network.chat.Component name = switch (mode) {
-            case PULL_INPUT -> Component("抽取(输入格)");
-            case PULL_INPUT_STORAGE -> Component("抽取(存储)");
-            case PUSH_OUTPUT -> Component("弹出");
-            case NONE -> Component("无");
+            case PULL_INPUT -> net.minecraft.network.chat.Component.translatable("gui.mekck.ui.side_mode.pull_input");
+            case PULL_INPUT_STORAGE -> net.minecraft.network.chat.Component.translatable("gui.mekck.ui.side_mode.pull_storage");
+            case PUSH_OUTPUT -> net.minecraft.network.chat.Component.translatable("gui.mekck.ui.side_mode.push_output");
+            case NONE -> net.minecraft.network.chat.Component.translatable("gui.mekck.ui.side_mode.none");
         };
         return TextComponentUtil.build(colorForMode(mode), name);
     }
@@ -155,14 +151,21 @@ public class GuiMekCkSideConfiguration extends GuiWindow {
         };
     }
 
-    private String lang(RelativeSide side) {
+    /**
+     * 相对面 → {@code gui.mekck.ui.side.*} 语言键后缀。
+     *
+     * <p>刻意返回<b>键</b>而不是译文：调用点一律走
+     * {@code Component.translatable(sideLangKey(side))}，这样 tooltip 里的
+     * 面名与标题共用同一批键，不会出现「一处已迁一处还是硬编码」。</p>
+     */
+    private String sideLangKey(RelativeSide side) {
         return switch (side) {
-            case FRONT -> "前面";
-            case BACK -> "后面";
-            case TOP -> "顶部";
-            case BOTTOM -> "底部";
-            case LEFT -> "左面";
-            case RIGHT -> "右面";
+            case FRONT -> "gui.mekck.ui.side.front";
+            case BACK -> "gui.mekck.ui.side.back";
+            case TOP -> "gui.mekck.ui.side.top";
+            case BOTTOM -> "gui.mekck.ui.side.bottom";
+            case LEFT -> "gui.mekck.ui.side.left";
+            case RIGHT -> "gui.mekck.ui.side.right";
         };
     }
 
@@ -175,7 +178,7 @@ public class GuiMekCkSideConfiguration extends GuiWindow {
             default -> "gui.mekck.config_type_item";
         };
         drawTitleText(guiGraphics, net.minecraft.network.chat.Component.translatable(key), 20);
-        drawCenteredText(guiGraphics, Component("槽位"), relativeX + 80, relativeY + 120, subheadingTextColor());
+        drawCenteredText(guiGraphics, net.minecraft.network.chat.Component.translatable("gui.mekck.ui.side.slot"), relativeX + 80, relativeY + 120, subheadingTextColor());
     }
 
     @Override

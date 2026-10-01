@@ -3,7 +3,6 @@ package cn.ism.mekck.client;
 import cn.ism.mekck.machine.cooking.CookingFactoryTile;
 import cn.ism.mekck.menu.CookingFactoryMenu;
 import mekanism.api.fluid.IExtendedFluidTank;
-import mekanism.client.gui.GuiConfigurableTile;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -53,8 +52,6 @@ public final class CookingFactoryScreen
     private static final int GAP_BETWEEN = 30;
     /** 输入 3 列 × 2 行。 */
     private static final int INPUT_COLS = CookingFactoryTile.INPUT_COLS;
-    /** 输出 3 列 × 4 行（产物 3 行 + 返还 1 行）。 */
-    private static final int OUTPUT_COLS = 3;
     /** 面板宽，与旧 GUI 同值（144 格存储挂在它左右外侧）。 */
     private static final int PANEL_WIDTH = 204;
     /** 3 个流体条：横向排开，每个间隔 28px（与旧 GUI 的 {@code 40 + i * 28} 同值）。 */
@@ -136,7 +133,7 @@ public final class CookingFactoryScreen
         if (menu.hasOrder()) {
             int qty = menu.getOrderQuantity();
             int completed = Math.min(menu.getOrderCompleted(), qty);
-            String text = "当前订单: " + completed + "/" + qty;
+            String text = Component.translatable("gui.mekck.ui.current_order", completed, qty).getString();
             int x = leftPos + 5;
             int y = topPos + 5;
             guiGraphics.fill(x, y, x + font.width(text) + 8, y + 14, 0xCC000000);

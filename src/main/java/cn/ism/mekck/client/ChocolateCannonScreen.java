@@ -314,13 +314,14 @@ public final class ChocolateCannonScreen extends GuiMekanism<ChocolateCannonMenu
 
         // 目标类型按钮
         int t = menu.getTargetType();
-        String targetName = t == 0 ? "敌对" : t == 1 ? "全部" : "动物";
+        String targetName = Component.translatable("gui.mekck.ui.target_type."
+                + (t == 0 ? "hostile" : t == 1 ? "all" : "animal")).getString();
         int color = t == 0 ? 0xFFE33B32 : t == 1 ? 0xFF4488FF : 0xFF66CC66;
         int tX = x + TARGET_X;
         boolean tHovered = mouseX >= tX && mouseX < tX + TARGET_W && mouseY >= attackY && mouseY < attackY + ATTACK_BTN_H;
         guiGraphics.blit(BUTTON_TEXTURE, tX, attackY, 0, tHovered ? 20 : 0, TARGET_W, ATTACK_BTN_H, 200, 60);
         guiGraphics.fill(tX + 1, attackY + 1, tX + TARGET_W - 1, attackY + ATTACK_BTN_H - 1, color);
-        String label = "目标:" + targetName;
+        String label = Component.translatable("gui.mekck.ui.target", targetName).getString();
         guiGraphics.drawString(font, label, tX + (TARGET_W - font.width(label)) / 2, attackY + 4, 0xFFFFFFFF);
 
         // 半径 - 按钮
@@ -339,7 +340,7 @@ public final class ChocolateCannonScreen extends GuiMekanism<ChocolateCannonMenu
             int textColor = radiusInputText.isEmpty() ? 0xFF888888 : 0xFF000000;
             guiGraphics.drawString(font, displayText, boxX + 2, attackY + 4, textColor);
         } else {
-            String radiusText = "半径:" + menu.getRadius();
+            String radiusText = Component.translatable("gui.mekck.ui.radius").getString() + menu.getRadius();
             guiGraphics.drawString(font, radiusText, x + RADIUS_TEXT_X, attackY + 4, 0xFFFFFFFF);
         }
 

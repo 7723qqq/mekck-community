@@ -3,7 +3,6 @@ package cn.ism.mekck.client;
 import cn.ism.mekck.RedstoneControl;
 import cn.ism.mekck.SideMode;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
-import cn.ism.mekck.menu.ISideConfigurableMenu;
 import cn.ism.mekck.menu.IUpgradeMenu;
 import cn.ism.mekck.menu.SkeweringMachineMenu;
 import cn.ism.mekck.network.ModMessages;
@@ -36,7 +35,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -45,7 +43,6 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
     private final cn.ism.mekck.client.BigStackHud bigStackHud = new cn.ism.mekck.client.BigStackHud();
     private boolean configMode = false;
     private static final int AUTO_DIST_Y = 34;
-    private static final ResourceLocation SORTING_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "sorting.png");
 
     /**
      * 「下单」标签页 —— 点开 {@link NetworkOrderWindow}。
@@ -118,8 +115,14 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
     private static final int DONE_BUTTON_H = 21;
 
     // Config overlay widgets (MekCkButtons)。方向顺序/模式名沿用原手绘版，勿改。
+    // 覆盖层方向格：顺序**必须**与 SideMode.ordinal() 对齐，勿改。
+    // 名字本身是语言键（译文在 lang 文件里），此处只放键。
     private static final Direction[] CONFIG_DIRS = {Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
-    private static final String[] CONFIG_MODE_NAMES = {"无", "抽取(输入格)", "输出", "抽取(存储)"};
+    private static final String[] CONFIG_MODE_LANG_KEYS = {
+            "gui.mekck.ui.side_mode.none",
+            "gui.mekck.ui.side_mode.pull_input",
+            "gui.mekck.ui.side_mode.output",
+            "gui.mekck.ui.side_mode.pull_storage"};
     /** 覆盖层 6 个方向格，顺序同 CONFIG_DIRS。 */
     private final List<ColorButton> configDirButtons = new java.util.ArrayList<>();
     /** 覆盖层「完成」按钮。 */
@@ -389,7 +392,8 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
             Direction dir = CONFIG_DIRS[i];
             SideMode mode = menu.getSideMode(dir);
             configDirButtons.get(i).setMessage(
-                    Component.literal(getRelativeDirectionName(dir, facing) + "面: " + CONFIG_MODE_NAMES[mode.ordinal()]));
+                    Component.literal(relativeSideName(dir, facing) + ": "
+                            + Component.translatable(CONFIG_MODE_LANG_KEYS[mode.ordinal()]).getString()));
         }
     }
 
@@ -532,7 +536,8 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
             int orderPanelY = y + 5;
             int orderQty = menu.getOrderQuantity();
             int orderCompleted = menu.getOrderCompleted();
-            String orderText = "当前订单: " + Math.min(orderCompleted, orderQty) + "/" + orderQty;
+            String orderText = Component.translatable("gui.mekck.ui.current_order",
+                    Math.min(orderCompleted, orderQty), orderQty).getString();
             guiGraphics.fill(orderPanelX, orderPanelY, orderPanelX + font.width(orderText) + 8, orderPanelY + 14, 0xCC000000);
             guiGraphics.drawString(font, orderText, orderPanelX + 4, orderPanelY + 3, 0xFFFFFF00);
 
@@ -561,12 +566,6 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
         // 由 GuiMekanism#renderLabels 在渲染管线最后一层统一派发。
     }
 
-    private void openSideConfigWindow() {
-        if (getWindows().stream().noneMatch(w -> w instanceof GuiMekCkSideConfiguration)) {
-            addWindow(new GuiMekCkSideConfiguration(this, (ISideConfigurableMenu) menu, this::getMachineFacing));
-        }
-    }
-
     private void openUpgradeWindow() {
         if (getWindows().stream().noneMatch(w -> w instanceof GuiUpgradeWindow)) {
             addWindow(new GuiUpgradeWindow(this, (IUpgradeMenu) menu));
@@ -583,14 +582,24 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
         return Direction.NORTH;
     }
 
-    private static String getRelativeDirectionName(Direction dir, Direction facing) {
-        if (dir == Direction.DOWN) return "下";
-        if (dir == Direction.UP) return "上";
-        if (dir == facing.getOpposite()) return "正";
-        if (dir == facing) return "背";
-        if (dir == facing.getClockWise()) return "右";
-        if (dir == facing.getCounterClockWise()) return "左";
-        return "?";
+    /**
+     * 方向格按钮上的<b>面名</b>（相对机器朝向），返回已翻译的文本。
+     *
+     * <p>刻意复用 {@code gui.mekck.ui.side.*} —— 6 个面与
+     * {@link GuiMekCkSideConfiguration} 的侧配窗口是同一组概念，
+     * 两个界面各写一份中文/英文只会让译名漂移。中文因此从「下/上/正/背」
+     * 统一成侧配窗口既有的「底部/顶部/前面/后面」，语义不变。</p>
+     */
+    private static String relativeSideName(Direction dir, Direction facing) {
+        String key;
+        if (dir == Direction.DOWN) key = "bottom";
+        else if (dir == Direction.UP) key = "top";
+        else if (dir == facing.getOpposite()) key = "front";
+        else if (dir == facing) key = "back";
+        else if (dir == facing.getClockWise()) key = "right";
+        else if (dir == facing.getCounterClockWise()) key = "left";
+        else return "?";
+        return Component.translatable("gui.mekck.ui.side." + key).getString();
     }
 
     @Override

@@ -27,7 +27,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
@@ -285,7 +284,10 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
         }
         String tier = menu.getGrowthTierName();
         boolean missing = status == PlantingCuttingStationBlockEntity.GROWTH_MISSING;
-        guiGraphics.drawString(font, missing ? "缺生长方块" : "等级不足", GROWTH_SLOT_X + 21, GROWTH_SLOT_Y + 5, 0xFFFF5555);
+        guiGraphics.drawString(font, Component.translatable(missing
+                ? "gui.mekck.ui.growth_status.missing"
+                : "gui.mekck.ui.growth_status.tier_low").getString(),
+                GROWTH_SLOT_X + 21, GROWTH_SLOT_Y + 5, 0xFFFF5555);
 
         boolean hovering = mouseX >= GROWTH_SLOT_X && mouseX < GROWTH_SLOT_X + 18
                 && mouseY >= GROWTH_SLOT_Y && mouseY < GROWTH_SLOT_Y + 18;
@@ -293,9 +295,9 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
             String tierText = tier.isEmpty() ? "" : (tier + " ");
             guiGraphics.renderTooltip(font, java.util.List.of(
                     net.minecraft.network.chat.Component.translatable("gui.mekck.ui.growth_block_slot"),
-                    net.minecraft.network.chat.Component.literal(missing
-                            ? ("需要 " + tierText + "级及以上的生长方块")
-                            : ("等级不足：需要 " + tierText + "级及以上的生长方块")),
+                    net.minecraft.network.chat.Component.translatable(missing
+                            ? "gui.mekck.ui.growth_need"
+                            : "gui.mekck.ui.growth_need_tier_low", tierText),
                     net.minecraft.network.chat.Component.translatable("gui.mekck.ui.growth_block_slot.note")),
                     java.util.Optional.empty(), mouseX, mouseY);
         }

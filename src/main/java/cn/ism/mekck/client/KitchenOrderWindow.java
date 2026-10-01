@@ -121,10 +121,9 @@ public class KitchenOrderWindow extends GuiWindow {
         int mask = menu.getFamilyMask();
 
         // 右侧留给「本机 / ME」切换按钮，避免长清单信息串到按钮上
-        String status = "已装系列 " + Integer.bitCount(mask)
-                + "  订单 " + menu.getOrderCount()
-                + "  页 " + (recipePage + 1) + "/" + (maxPage() + 1)
-                + "  共 " + recipeList.size();
+        String status = Component.translatable("gui.mekck.ui.order_status",
+                Integer.bitCount(mask), menu.getOrderCount(),
+                recipePage + 1, maxPage() + 1, recipeList.size()).getString();
         guiGraphics.drawString(getFont(), getFont().plainSubstrByWidth(status, 138),
                 px, relativeY + 12, 0xFF404040, false);
 
@@ -144,9 +143,9 @@ public class KitchenOrderWindow extends GuiWindow {
         drawSmallButton(guiGraphics, px, by, 16, BTN_H, "−");
         drawSmallButton(guiGraphics, px + 18, by, 40, BTN_H, "×" + orderCount);
         drawSmallButton(guiGraphics, px + 60, by, 16, BTN_H, "+");
-        drawSmallButton(guiGraphics, px + 84, by, BTN_W, BTN_H, "上一页");
-        drawSmallButton(guiGraphics, px + 84 + BTN_W + 2, by, BTN_W, BTN_H, "下一页");
-        drawSmallButton(guiGraphics, px + 84 + (BTN_W + 2) * 2, by, BTN_W - 6, BTN_H, "预览");
+        drawSmallButton(guiGraphics, px + 84, by, BTN_W, BTN_H, Component.translatable("gui.mekck.ui.prev_page").getString());
+        drawSmallButton(guiGraphics, px + 84 + BTN_W + 2, by, BTN_W, BTN_H, Component.translatable("gui.mekck.ui.next_page").getString());
+        drawSmallButton(guiGraphics, px + 84 + (BTN_W + 2) * 2, by, BTN_W - 6, BTN_H, Component.translatable("gui.mekck.ui.preview").getString());
         drawSmallButton(guiGraphics, px + 84 + (BTN_W + 2) * 2 + BTN_W - 4, by, BTN_W - 6, BTN_H,
                 Component.translatable("gui.mekck.ui.order").getString());
 

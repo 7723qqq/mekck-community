@@ -10,6 +10,7 @@ import mekanism.client.gui.element.progress.GuiProgress;
 import mekanism.client.gui.element.progress.IProgressInfoHandler;
 import mekanism.client.gui.element.progress.ProgressType;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
+import cn.ism.mekck.menu.MekCkFactoryLayout;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -79,10 +80,14 @@ public final class GrillScreen extends GuiConfigurableTile<GrillBlockEntity, Gri
         // 这两个值同时也是 AbstractContainerScreen 的默认值，写出来是为了让「别动」这件事显式。
         imageWidth = 176;
         imageHeight = 166;
-        // 玩家背包首行的 y：Mek 的 MekanismContainer.getInventoryYOffset() 默认返回
-        // BASE_Y_OFFSET = 84，与旧菜单手摆的 84 同值；但 inventoryLabelY 的默认值是
-        // imageHeight - 94 = 72，必须显式对齐到 84，否则「Inventory」标签会浮在背包上方 12px。
-        inventoryLabelY = 84;
+        // 「Inventory」标签必须在玩家背包首行**之上**。
+        // 本菜单继承 MekanismTileContainer 且不覆写 getInventoryYOffset()，背包首行即
+        // Mek 的 BASE_Y_OFFSET = 84；标签取 84-10 = 74（见 MekCkFactoryLayout.INVENTORY_LABEL_Y）。
+        //
+        // ⚠️ 此前这里写的是 84 —— 标签被画在第一行背包槽的正上方，两者压在一起。
+        // 原注释把「标签在背包上方 12px」当成要修的问题，方向正好反了：
+        // 原版就是 imageHeight-94 的标签配 imageHeight-84 的槽，中间那 12px 正是对的间距。
+        inventoryLabelY = MekCkFactoryLayout.INVENTORY_LABEL_Y;
         dynamicSlots = true;
     }
 
@@ -138,9 +143,19 @@ public final class GrillScreen extends GuiConfigurableTile<GrillBlockEntity, Gri
         // Mek 的 GuiMekanism.renderLabels 覆写了原版 AbstractContainerScreen.renderLabels
         // 且不调 super，所以机器名与「Inventory」两行不会自动出现，必须自己补。
         renderTitleText(guiGraphics);
-        drawString(guiGraphics, playerInventoryTitle, 8, inventoryLabelY, titleTextColor());
-        // 温度系统：显示机身温度（摄氏度）。摆在能源槽下方、背包标签上方的空档（y 72~83）。
-        guiGraphics.drawString(font, String.format("温度: %.1f℃", menu.getTemperature() / 100.0), 8, 74, 0xFFFF5555);
+        drawString(guiGraphics, playerInventoryTitle, MekCkFactoryLayout.INVENTORY_X_OFFSET,
+                inventoryLabelY, titleTextColor());
+        // 温度系统：显示机身温度（摄氏度）。
+        //
+        // 摆在**与「Inventory」同一行的右端**，而不是另起一行：
+        // 背包首行 84、上方可用空档只有 72~83 这一条 12px 带，而「Inventory」
+        // 已占了左端。再在左边另起一行就会与标签重叠（此前温度在 (8,74)、
+        // 标签在 (8,84)，两者不是重叠而是都压着背包区）。
+        String temperature = Component.translatable("gui.mekck.ui.temperature",
+                menu.getTemperature() / 100.0).getString();
+        guiGraphics.drawString(font, temperature,
+                imageWidth - MekCkFactoryLayout.INVENTORY_X_OFFSET - font.width(temperature),
+                inventoryLabelY, 0xFFFF5555);
         super.drawForegroundText(guiGraphics, mouseX, mouseY);
     }
 

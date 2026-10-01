@@ -22,7 +22,6 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
     private static final int BTN_W = 92;
     private static final int BTN_H = 16;
     private static final int COUNT_Y = 122;
-    private static final int SLOT_BG = 0xFF8B8B8B;
     private static final int SIDE_BTN_X = 240;
     private static final int SIDE_BTN_Y = 140;
     private GuiMekCkSideConfiguration sideWindow;
@@ -88,7 +87,8 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
         drawButton(guiGraphics, x + MODE_BTN_X, y + COUNT_Y, 20, BTN_H, "-");
         drawButton(guiGraphics, x + MODE_BTN_X + BTN_W - 20, y + COUNT_Y, 20, BTN_H, "+");
         // 侧面配置按钮
-        drawButton(guiGraphics, x + SIDE_BTN_X, y + SIDE_BTN_Y, 40, BTN_H, "侧配");
+        drawButton(guiGraphics, x + SIDE_BTN_X, y + SIDE_BTN_Y, 40, BTN_H,
+                Component.translatable("gui.mekck.ui.side_config_short").getString());
         // 进度条
         int pw = BTN_W;
         int ph = 8;
@@ -117,13 +117,19 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
         int x = leftPos;
         int y = topPos;
         int mode = menu.getMode();
-        String modeLabel = mode == SandwichAssemblerBlockEntity.MODE_COPY ? "复制样品模式"
-                : mode == SandwichAssemblerBlockEntity.MODE_CUSTOM ? "自定义组装模式" : "序列组模式";
+        String modeLabel = Component.translatable(mode == SandwichAssemblerBlockEntity.MODE_COPY
+                ? "gui.mekck.ui.sandwich_mode.copy"
+                : mode == SandwichAssemblerBlockEntity.MODE_CUSTOM
+                ? "gui.mekck.ui.sandwich_mode.custom"
+                : "gui.mekck.ui.sandwich_mode.sequenced").getString();
         guiGraphics.drawString(font, modeLabel,
                 x + MODE_BTN_X - leftPos + 6, MODE_BTN_Y + 4, 0xFF101010, false);
-        String countText = mode == SandwichAssemblerBlockEntity.MODE_COPY ? "自动（材料够就产）"
-                : mode == SandwichAssemblerBlockEntity.MODE_SEQUENCED ? "有序格+流体罐"
-                : ("剩余: " + menu.getTargetCount());
+        String countText = mode == SandwichAssemblerBlockEntity.MODE_COPY
+                ? Component.translatable("gui.mekck.ui.sandwich_count.copy").getString()
+                : mode == SandwichAssemblerBlockEntity.MODE_SEQUENCED
+                ? Component.translatable("gui.mekck.ui.sandwich_count.sequenced").getString()
+                : Component.translatable("gui.mekck.ui.sandwich_count.remaining",
+                        menu.getTargetCount()).getString();
         guiGraphics.drawString(font, countText, x + MODE_BTN_X + 24, y + COUNT_Y + 4, 0xFF202020, false);
         if (!SandwichAssemblerBlockEntity.hasSar()) {
             guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.sandwich_sample_slot.requires_sar").getString(), 8, 96, 0xFFFF5555, false);

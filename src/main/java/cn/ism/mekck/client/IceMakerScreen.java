@@ -331,7 +331,8 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
 
         // 目标类型按钮
         int t = menu.getTargetType();
-        String targetName = t == 0 ? "敌对" : t == 1 ? "全部" : "动物";
+        String targetName = Component.translatable("gui.mekck.ui.target_type."
+                + (t == 0 ? "hostile" : t == 1 ? "all" : "animal")).getString();
         int color = t == 0 ? 0xFFE33B32 : t == 1 ? 0xFF4488FF : 0xFF66CC66;
         int tX = x + TARGET_X;
         boolean tHovered = mouseX >= tX && mouseX < tX + TARGET_W && mouseY >= attackY && mouseY < attackY + ATTACK_BTN_H;
@@ -355,7 +356,8 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
         guiGraphics.blit(BUTTON_TEXTURE, toggleX, rowY, 0, toggleHovered ? 20 : 0, TEMP_TOGGLE_W, ATTACK_BTN_H, 200, 60);
         guiGraphics.fill(toggleX + 1, rowY + 1, toggleX + TEMP_TOGGLE_W - 1, rowY + ATTACK_BTN_H - 1,
                 enabled ? 0xFF33AA55 : 0xFF777777);
-        String toggleLabel = enabled ? "控温:开" : "控温:关";
+        String toggleLabel = Component.translatable("gui.mekck.ui.temp_control",
+                Component.translatable(enabled ? "gui.mekck.ui.on" : "gui.mekck.ui.off")).getString();
         guiGraphics.drawString(font, toggleLabel,
                 toggleX + (TEMP_TOGGLE_W - font.width(toggleLabel)) / 2, rowY + 4, 0xFFFFFFFF);
         // 目标输入标签 + 当前温度读数（目标值本身显示/编辑在中间输入框内）

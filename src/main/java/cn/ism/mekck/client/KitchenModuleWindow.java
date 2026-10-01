@@ -87,7 +87,7 @@ public class KitchenModuleWindow extends GuiWindow {
             }
             String status = installed
                     ? installedStatus(family)
-                    : "未安装";
+                    : Component.translatable("gui.mekck.ui.module_not_installed").getString();
             int color = installed ? 0xFF3FBF3F : 0xFF888888;
             guiGraphics.drawString(getFont(), family.id + "  " + status, x + 14, y + 1, color, false);
         }
@@ -127,11 +127,12 @@ public class KitchenModuleWindow extends GuiWindow {
         KitchenFamily family = families.get(selectedRow);
         var cached = cn.ism.mekck.network.KitchenFilterSyncPacket.CLIENT_CACHE.get(family.ordinal());
         int mode = cached == null ? 0 : cached.mode;
-        String modeName = switch (mode) {
-            case 1 -> "白名单";
-            case 2 -> "黑名单";
-            default -> "关闭";
+        String modeKey = switch (mode) {
+            case 1 -> "gui.mekck.ui.filter_mode.whitelist";
+            case 2 -> "gui.mekck.ui.filter_mode.blacklist";
+            default -> "gui.mekck.ui.off";
         };
+        String modeName = Component.translatable(modeKey).getString();
         int modeColor = switch (mode) {
             case 1 -> 0xFF80C0FF;
             case 2 -> 0xFFFF9090;
@@ -163,7 +164,8 @@ public class KitchenModuleWindow extends GuiWindow {
             int abx = bx + 112;
             guiGraphics.fill(abx, by, abx + 76, by + 12, auto ? 0xFF2E6B2E : 0xFF5A5A5A);
             guiGraphics.fill(abx + 1, by + 1, abx + 75, by + 11, auto ? 0xFF9CE09C : 0xFFB0B0B0);
-            guiGraphics.drawString(getFont(), auto ? "自动：开" : "自动：关", abx + 6, by + 2,
+            guiGraphics.drawString(getFont(), Component.translatable("gui.mekck.ui.auto",
+                    Component.translatable(auto ? "gui.mekck.ui.on" : "gui.mekck.ui.off")).getString(), abx + 6, by + 2,
                     auto ? 0xFF103010 : 0xFF303030, false);
         }
         // 幽灵槽
@@ -178,8 +180,13 @@ public class KitchenModuleWindow extends GuiWindow {
             }
         }
         // 说明
-        String hint = mode == 0 ? "关闭时处理该系列全部配方"
-                : (mode == 1 ? "只处理材料全部在列表内的配方" : "跳过用到列表内任一材料的配方");
+        // 说明：模式 0=关闭（整系列全做）、1=白名单、其余按黑名单处理。
+        // 三选一刻意照抄原来的三元链而不是 switch：服务端若送来 >2 的 mode，
+        // 原行为是落到黑名单分支，switch 版的 default 会悄悄改成「关闭」。
+        String hintKey = mode == 0 ? "gui.mekck.ui.filter.hint_off"
+                : mode == 1 ? "gui.mekck.ui.filter.hint_whitelist"
+                : "gui.mekck.ui.filter.hint_blacklist";
+        String hint = Component.translatable(hintKey).getString();
         guiGraphics.drawString(getFont(), hint, relativeX + LIST_X, relativeY + FILTER_SLOT_Y + 20, 0xFF606060, false);
         guiGraphics.drawString(getFont(), Component.translatable("gui.mekck.ui.modules.hint").getString(),
                 relativeX + LIST_X, relativeY + FILTER_SLOT_Y + 31, 0xFF808080, false);
@@ -189,10 +196,11 @@ public class KitchenModuleWindow extends GuiWindow {
     private String installedStatus(KitchenFamily family) {
         for (KitchenModule.Ability a : menu.getMachine().installedAbilities()) {
             if (a.family() == family) {
-                return a.displayName() + "  " + a.threads() + "线程×" + a.parallel() + "并行";
+                return a.displayName() + "  " + Component.translatable("gui.mekck.ui.module_power",
+                        a.threads(), a.parallel()).getString();
             }
         }
-        return "已安装";
+        return Component.translatable("gui.mekck.ui.module_installed").getString();
     }
 
     private mekanism.client.gui.IGuiWrapper guiRenderer() {
