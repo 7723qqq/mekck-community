@@ -112,6 +112,11 @@ config/mekck/mekck-common.toml
 
 ```
 src/main/java/cn/ism/mekck/     Java 源码
+  registry/                     注册中枢：按家族分文件（物品 / 机器 / 工厂 /
+                               流体 / 状态效果 / 弹射物 / 配方类型）。
+                               MekCkRegistries.registerAll(bus) 会在任何注册事件
+                               之前逐个触碰它们 —— 为什么这个顺序是硬要求，见 docs/STATUS.md
+  event/                        服务端事件订阅
 src/main/resources/             资源、数据、语言文件、游戏内指南
   assets/mekck/mekckguide/      GuideME 指南页（Markdown）
   assets/mekck/textures/block/vendor/   以 MIT 许可再分发的纹理（详见 THIRD-PARTY.md）

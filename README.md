@@ -122,6 +122,12 @@ Notable options:
 
 ```
 src/main/java/cn/ism/mekck/     Java sources
+  registry/                     Registration hub: one class per family (items,
+                               machines, factories, fluids, effects, entities,
+                               recipe types). MekCkRegistries.registerAll(bus)
+                               touches all of them before any registry event —
+                               see docs/STATUS.md for why that ordering matters.
+  event/                        Server-side event subscriptions
 src/main/resources/             assets, data, lang, in-game guide
   assets/mekck/mekckguide/      GuideME pages (Markdown)
   assets/mekck/textures/block/vendor/   textures redistributed under MIT (see THIRD-PARTY.md)

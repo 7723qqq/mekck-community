@@ -1,16 +1,288 @@
 # mekck 当前状态汇总
 
-- 最后更新：2026-09-30（**第三轮**全量审查；之后另有 3 个提交，见 §一）
-- 审查基线：HEAD `bb00171` 之后的工作区
-- 验收口径：`./gradlew build`（**联网**；理由见第五节第 6 条）→
-  第三轮收尾时 **359 测试 / 0 失败 / 0 错误 / 0 跳过**，且产物内含 `mekck.refmap.json`
+- 最后更新：2026-10-01（**整理轮**：仓库卫生 + 结构整理，注册中枢 2265 行拆成 `registry/` 10 类）
+- 审查基线：HEAD `e0f99fa` 之后的工作区（第五轮的两项修复见 §〇）
+- 验收口径：`./gradlew build`（**联网**；理由见第五节第 6 条）→ 见 §〇
+  本轮验收用 `./gradlew --offline test`：**62 套件 / 457 用例 / 0 失败**
 
 本文是**单一入口**：当前状态、未修项、环境注意事项都在这里。
-全部文档清单见 [`README.md`](README.md)；第二轮及更早的轮次叙事见 §七。
+全部文档清单见 [`README.md`](README.md)；第三轮及更早的轮次叙事见 §一、§七。
+
+> ⚠️ **本文档曾落后代码 14 个提交**（第三轮收尾写到 `bb00171`，实际 HEAD 已到 `fefa065`），
+> 期间发生了大段重构。**上一轮已因此付出代价**：§二 记录的「I1 已关闭 / 已做完」
+> 是一条**虚假声明**——全仓检索不到它引用的那份报告，代码里
+> `SimpleMachineMenu.getEnergy()` 也仍是裸的 `data.get(DATA_ENERGY)`。
+> 那一版甚至把错误结论写进了本文件，让下一个 agent 照着它跳过了一个真缺陷。
+> **判据：写「已修」时必须同时给出提交号与代码位置，否则一律按未修对待。**
 
 ---
 
-## 一、第三轮全量审查（2026-09-30）—— 最新
+## 〇、本轮（2026-10-01）—— 仓库卫生 + 结构整理
+
+分两件事，判据都是 `./gradlew --offline test`（**62 套件 / 457 用例 / 0 失败**）。
+
+### 一、仓库卫生
+
+| 提交 | 内容 |
+|---|---|
+| `7885345` | 中央厨房存储浏览器补 S2C 回传（I-N4，详见下文第五轮小节） |
+| `e9e9bb9` | 客户端硬编码中文全量迁移（I-N6）+ GUI 机器名 / 背包标签 |
+| `2ac632b` | 删 33 个死成员 + 40 条未用 import + 1 处遗留实现（`PlantingRecipeGenerator` 的 139 行废弃黑名单读取），并**订正一处错误注释** |
+| `f3c33ef` | 两处资源标签修正（`minecraft:onion` → `farmersdelight:onion`；`planting_factories` 加 `required: false`） |
+| `437c8be` | 生物反应炉资产管线收敛到一条，删 3 个与主线写同一个 OBJ / 同一个 atlas 的脚本 |
+| `49c36ee` | 可复现构建（去掉 jar 清单里的构建时间戳）+ wrapper 校验和 + `bootstrapDeps` 任务 + `.gitignore` 三项 |
+
+清理掉的本地派生物：`logs/`、`.blender-preview/`、`scratch/`、`run-data/logs/`、`.logs/` 里的旧构建日志。
+
+**两处刻意没清**：
+
+- `.backup-20260929/` —— 其 `README.txt` 自述含 **3 个不在任何 git 提交里的 java 文件（唯一副本）**，
+  并要求「删除前先确认不再需要」。0.15 MB，留着。
+- `.superpowers/` —— 2026-09-29 多智能体轮次的 39 份会话报告（`docs/superpowers/` 只保留策展版）。
+  已在 `.gitignore` 补一条根级规则：此前**仅靠一个未被跟踪的嵌套 `.gitignore`** 挡住它，
+  那份文件一丢，39 个文件立刻全变成未跟踪。
+
+### 二、结构整理：注册中枢拆分（`e0f99fa`）
+
+`UniversalCuttingMachine.java` **2265 行 → 341 行**，只留 `@Mod` 入口、`MOD_ID`、构造器、
+公共 setup 与创造标签入口；约 1900 行注册项按归属搬进 `cn.ism.mekck.registry`：
+
+| 类 | 搬走什么 |
+|---|---|
+| `MekCkRegistries` | 十个延迟注册器本体 + 新的 `registerAll(bus)` 统一入口 |
+| `MekCkItems` / `MekCkLegacyMachines` / `MekCkStandaloneMachines` / `MekCkFactories` | 纯物品 / 联动机器 / 单机 / 12 级工厂与基座机 |
+| `MekCkFluids` / `MekCkEffects` / `MekCkEntities` / `MekCkRecipeTypes` | 流体 / 状态效果 / 弹射物 / 配方类型 |
+| `MekCkRegistrySupport` | 注册期辅助（`registryView` / `findFactoryTile` 等闸门） |
+
+三个内嵌事件类升格为顶层类：`ClientWorldEvents` / `ClientEvents` → `client/`，
+`NetworkAdvancementEvents` → 新包 `event/`（方法体逐字未改，只去掉 `static` 修饰）。
+
+**三条结构性决定**（都不是「风格偏好」，是被编译器和实机事故逼出来的）
+
+1. **字段声明与赋值必须同居一处**。原先工厂与弹射物的注册都写在同一段静态块里；拆分时编译期
+   直接拦下「字段在 `MekCkEntities`、赋值在 `MekCkFactories`」——**blank final 不能跨类赋值**。
+   实体注册因此搬回 `MekCkEntities` 自己的静态块。
+2. **触碰式初始化**（每个注册类一个空 `init()` + `registerAll` 的显式名单）。条目在静态初始化器里
+   进 `DeferredRegister`，而监听器是 `register(bus)` 时挂的、**事件触发时**才读表 ⇒ 晚一步就是
+   **静默不注册**（方块变空气、菜单取不到、无任何报错）。入口类不再持有全部字段之后，
+   「谁引用到它」纯属运气，所以把顺序写成显式名单。
+   新护栏 `TestRegistryInitContract`（3 条）用**目录扫描**得出名单：写死清单会让人误以为
+   新注册类「已经接好了」。它的「是否加条目」判据**只看代码不看注释** ——
+   `MekCkRegistrySupport` 的 javadoc 里就写着 `.register(blockHandle, …)`，那是解释不是注册项。
+3. **创造标签页按类自报**。原先 81 行清单交织着 6 个归属的 `accept` 调用，现在各注册类有
+   `addToCreativeTab(event)`，主类只留 tab key 判断 + 五次调用。标签页顺序随之变为「按类分组」
+   （纯展示层变化）。
+
+**拆分顺带暴露并修掉的两个真问题**
+
+- `ClientWorldEvents` 里一条**玩家可见的硬编码中文聊天消息**
+  （`displayClientMessage(Component.literal("§e[MekCK] 放置预览：…"))`）躲过了只扫 `client/`
+  的 i18n 护栏整整五轮 —— 它一直住在**主类里的客户端事件内部类**中，而那个目录不在扫描范围内。
+  升格进 `client/` 后当场变红，已改用语言键 `message.mekck.placement_preview_tip`。
+  ⇒ **护栏的扫描面决定了它能看见什么；搬文件有时候比加断言更能修好判据。**
+- `MekCkTierInstallerItem#materialName` 是死字段（只赋值从不读取），连带 4 个硬编码中文档位名实参。
+
+**护栏改造**：7 条护栏原本硬编码读 `UniversalCuttingMachine.java`，拆分后会集体变红。但它们断言的是
+**整体形态**（方块↔物品注册名对应、6 个家族的 tile 闸门、制冰工厂开关的三个使用点、JEI 催化剂按家族表
+遍历……），不是文件名。于是给 `TestSourceText` 加了 `readRegistry()`（入口类 + `registry/` 全部类，
+顺序固定），断言一行未改 —— 拆分再多次也不用改它们；真的改了注册写法，它们照样会红。
+`TestIceFactoryToggle` 是个例外：它的「三个使用点」里有一个随事件类搬进了 `client/`，所以显式拼两面来数 ——
+**为了让断言变绿而缩小扫描面，是拆分之后最容易犯的错**（缩小扫描面会把真实回归一起放过）。
+
+### 三、本轮刻意没做的事
+
+- **`SimpleMachineBlockEntity.java` 4841 行** —— 全仓最大文件，比拆分前的注册中枢还大。
+  它是遗留 BE 的上帝类（NBT / 物品守恒 / 流体守恒 / 侧配置都在里面），拆它要按状态域切分并逐域验证，
+  风险等级与「纯注册项搬家」不同。**列为下一轮的独立目标**，不要顺手带上。
+- **实机验证** —— 本仓 dev 环境起不来（Farmer's Delight 自己的 mixin 注入失败，见第二轮报告），
+  所以拆分只做到了「编译 + 457 测试」。**注册顺序相关的行为（类初始化、事件注册）必须有能启动 MC 的
+  环境做一次实机确认**，清单见 `superpowers/handoff/2026-09-29-phase1-runtime-verification.md`。
+- **拆分脚本未入库** —— 是一次性搬迁工具（从 git HEAD 的主类出发按行区间搬运 + 改写引用），
+  留在本地 `.logs/`；入库的是**护栏**（`TestRegistryInitContract` + `TestSourceText.readRegistry`），
+  因为它们保护的是「以后」的改动，不是这一次。
+
+---
+
+## 〇、第五轮（2026-10-01）
+
+在 `fefa065` 之上修两条**面向玩家的真实缺陷**。两者的共同特征是
+**编译通过、单元测试全绿、单机看不出来**——所以本轮的重点不只是修，还包括
+给每条修法配一个**能在源码形态上抓住回归**的护栏。
+
+### I-N4：中央厨房存储浏览器整体是死的 —— 已修
+
+**病因**：`CentralKitchenMenu` 的搜索 / 排序 / 滚动**一直是在服务端算对的**
+（`KitchenViewPacket` 落地后调的是服务端 menu 的 `setSearchText` / `setSortMode` / `scroll`）。
+缺的不是计算，是**回传**：客户端 menu 里的 `CentralKitchenBlockEntity` 是一个
+**items 全空的桩**（300 格存储从不进 `ContainerSynchronizer`），
+`StorageSlot.getItem()` 读的又恰好是 `machine.items` ⇒ `machineIndex` 恒 -1 ⇒
+**54 个格子永远画成空的**。玩家看到的是一个搜索框能动、但下面什么都没有的浏览器。
+
+**修法**（`network/KitchenStorageSyncPacket.java`，包 id 29）：
+
+| 环节 | 做法 |
+|---|---|
+| 同步内容 | **只发当前可见的一页（54 格）**，不发 300 格全量。AutoIO 可能每 tick 拉料，全量推送是带宽灾难，而玩家能看到的永远只有一页 |
+| 落地 | `CentralKitchenMenu#applyStorageSnapshot` 写客户端镜像；`StorageSlot.getItem()` **分端**：客户端读按**显示位置**索引的镜像，服务端才读 `machine.items` |
+| 客户端不再自行过滤 | `refreshDisplay()` 加客户端提前返回。用空桩算出来的必然是空列表，还会顺手把服务端下行的 `displayOrder` 刷成全 -1 |
+| 触发时机 | 玩家触发（搜索/排序/滚动/quickMove）**强制**推送；BE 每 tick 的补推**节流 4 tick** 且只在 `storageVersion` 变化时推（`onContentsChanged` 里对存储区计数） |
+| 顺带修的显示 bug | `getFilteredCount()` 之前在客户端恒为 0，界面会显示「共 0 条」「1/0 页」——格子有货了页码却是空的，玩家仍会以为没同步。现在随快照一起下行 |
+
+**一个必须记下来的坑**：`pushStorageSync` 在**没有观众时不记账**。
+菜单构造器里 `refreshDisplay()` 就会调它，而此刻玩家的 `containerMenu`
+**还没被设成本 menu**（`MenuProvider.createMenu` 返回后才赋值）⇒ `sent` 恒为 0。
+若照常记账，首推会被记成「已发」，随后 BE 第一次 tick 看到「版本没变」直接返回，
+**界面永远收不到第一页**。不记账则下一 tick 自动重试。
+
+护栏 `TestKitchenStorageBrowserSync`（**7** 条断言）钉的是**链路每一环**，
+而不只是「有 S2C 包」——补了包却没接进渲染路径，界面照样空白且无任何日志：
+
+- 客户端不自行过滤（`refreshDisplay` 有客户端提前返回）
+- 槽位渲染分端，且**客户端分支不得出现 `machine.items`**
+- **客户端分支只由 `isClientSide()` 把关**（变异测试逼出来的，见 §六；缺它则 `&& false` 形态漏网）
+- 包处理器真的调到了 menu 的落地方法（防「加了包没接上」）
+- 包已注册且方向是 S2C（`TestPacketGuardCoverage` 自动覆盖新包，无需改它）
+- 页码指示读的值也下行了
+- 判据不许空转（正则失配会先红，而不是让文件变成永远绿的摆设）
+
+### I-N6：客户端硬编码中文 —— 已修（85 处 / 45 个新键）
+
+英文客户端此前会在 `client/` 看到成片中文。**剩余 11 处 CJK 字面量全部是日志诊断**
+（`MekCkFactoryJei` / `MekCkOutlineRenderer` / `GuideMECompatImpl` / `ObjMeshLoader`），
+玩家读不到，**刻意不迁**——这条区分是本项的关键，判据必须能区分日志与 UI，
+否则只会得到一份不断变长的豁免清单。
+
+**先加共享键再替换**，没有逐处新造同义键。最典型的是
+`gui.mekck.ui.target_type.hostile/all/animal`——**4 个界面**（巧克力大炮 / 制冰机 /
+制冰厂 / 坚果烘焙机）共用同一批键。`目标:` / `半径:` 也没有新建键，
+复用上一轮已有的 `gui.mekck.ui.target` / `.radius`。
+
+护栏 `TestNoHardcodedUiText` **从「45 条字面量清单 + 10 文件白名单」重写为全域扫描**，
+且判据从**文本形状**改为**数据流**：
+
+- 词法器识别 logger 变量绑定 → 字面量所在语句里有 `<logger>.<日志方法>(` 即放行。
+  玩家能看到的 `"抽取失败"` 不会被误放过。
+- 唯一白名单 `LOG_ONLY_SINKS` 只允许 ≤ **4** 项，超出直接红。
+  **目的是逼迫改进判据，而不是让清单长下去。**
+- 生命周期自检从「全仓 CJK ≥ 20」提到 **≥ 100**（实测迁移后全仓仍有 499，
+  全部残留在 common 代码里）。**20 离现状太远，几乎只在彻底失配时才响。**
+- 新增 `theDetectorStillFlagsASyntheticSample`：喂人工合成样本，断言「抓 UI、放日志」。
+  这是唯一不依赖仓库现状的防线。
+
+### 护栏总数
+
+337 → 359（第三轮）→ 380（`5a8756f`，未复跑）→ 438（切菜机）→ 441（`fefa065`）→
+454（第五轮 +13）→ **457**（整理轮 +3：`TestRegistryInitContract`）。
+**62 套件 / 457 用例 / 0 失败 / 0 错误 / 0 跳过**（`./gradlew --offline test`）。
+`TestKitchenStorageBrowserSync` 的 7 条断言里，**`clientBranchIsGatedBySideAlone` 是被变异测试逼出来的**——
+原先那 6 条挡不住「客户端分支被 `&& false` 短路、缺陷完整复现」这一形态。
+变异测试的完整记录见 §六。
+
+### 第六轮补：GUI 两行字（机器名 / 「Inventory」标签）—— 已修
+
+Mek 的 `GuiMekanism.renderLabels` 覆写了原版 `AbstractContainerScreen.renderLabels` 且**不调 super**，
+而 `GuiConfigurableTile` / `GuiMekanismTile` 都**没有**覆写 `drawForegroundText`
+（实测其方法体就是 `return`）。⇒ **不自己覆写它的屏，机器名与背包标签一个都不画。**
+
+| 屏 | 缺陷 | 修法 |
+|---|---|---|
+| `UniversalCuttingMachineScreen` | **两行字都不显示**。它直接继承 `GuiConfigurableTile` 且不覆写，而 `inventoryLabelY` 被设成了 84 却**没有任何代码读它** —— 典型的「设了值就以为画了」 | 补 `drawForegroundText`：`renderTitleText` + `drawString(playerInventoryTitle, …)`，并把 label 改用共享常量 |
+| `GrillScreen` | `inventoryLabelY = 84`，而本菜单不覆写 `getInventoryYOffset()` ⇒ 背包首行**就是** 84（Mek 的 `BASE_Y_OFFSET`，已用 `MekanismContainer.addInventorySlots` 字节码坐实：槽位 y = `getInventoryYOffset() + row*18`）⇒ 标签画在第一行背包槽的正上方 | label 改 74（= 84−10）；温度读数从 `(8,74)` 移到**与标签同行的右端**（原先也在抢那条 72~83 的空档） |
+
+**原注释把方向写反了，值得单独记一笔**：`GrillScreen` 的注释说
+「inventoryLabelY 的默认值是 72，必须显式对齐到 84，否则『Inventory』标签会浮在背包上方 12px」。
+实际上「浮在背包上方 12px」**正是对的间距**（原版就是 `imageHeight−94` 的标签配 `imageHeight−84` 的槽），
+对齐到 84 才是把它按到槽上。⇒ **注释里描述的「问题」要先验证是不是真问题。**
+
+顺带在 `MekCkFactoryLayout` 里把这条几何显式命名，消除两处裸数字：
+`MEK_DEFAULT_INVENTORY_Y = 84` / `INVENTORY_X_OFFSET = 8` / `INVENTORY_LABEL_Y = 84−10`。
+
+护栏 `TestGuiInventoryLabels`（4 条断言）覆盖整类问题，不是单点。
+变异测试记录见 §六 —— **其中一条断言在第一版是漏的**：
+豁免判据原本是「全文出现过 `MekCkFactoryScreenBase`」，而该屏的 javadoc 正好引用了这个名字
+（解释「六个工厂屏由它统一补上」），**注释被当成了继承关系**。
+改成解析真正的 `extends` 子句后才抓住。⇒ **豁免判据不能用全文子串匹配。**
+
+### 第六轮补：桩代码 / 死代码清理 —— 已完成
+
+**删了 33 个成员 + 40 条未用 import + 3 个空目录**，产物小 6.3 KB，**454 测试 0 失败**。
+编译器（`compileJava` + `clean build`）是本次清理的最终判据：删错任何一个 `::` 引用都会编译失败。
+
+| 类别 | 数量 | 例子 |
+|---|---|---|
+| 未被引用的 private 方法 | 20 | 7 个遗留 BE 的 `decodeSideConfig`；`SimpleMachineBlockEntity#slotRoom`；`MekckTierInstallerItem#tierName`（**还内含硬编码中文档位名**，删掉顺带消掉一个潜伏的 i18n 违规） |
+| 连带孤儿（删上一批后才变成死代码） | 2 | `MekckAe2#countAvailable` / `canExtractFromNetwork` —— 唯一调用方是已删的 `maxCraftable` / `canExtractAll` |
+| 未被引用的 private 字段 | 12 | `GrillFactoryTile` 的 3 个 `SEASONING_SLOT_*`；`UniversalCuttingMachineTile` 的 2 个升级槽 X；`IceMakeRecipeCategory` 相关的若干常量 |
+| 整块死逻辑 | ~70 行 | `PlantingCuttingFactoryExecutor` 的 `collectBatch` + 嵌套 `record Batch` —— 一整套「批量收集」从未被调用 |
+| 未使用的 import | 40 | 18 个文件 |
+| 空目录（工作区残留） | 3 | `src/main/java/com/example/examplemod`（Forge MDK 模板）、空的 `datagen/` 与 `fluid/` 包 |
+
+> **删除是级联的**：删掉 `maxCraftable` 之后 `countAvailable` 才变成孤儿。
+> 所以清理必须**扫一轮、编译、再扫一轮**，只扫一次会留下新的死代码。
+
+#### ⚠️ 六类「看起来是死的、其实不能删」——本轮全部踩过
+
+这一节是本轮最重要的产出。**自动扫描给出的候选里有一半以上是误报**：
+
+| 目标 | 为什么看着像死代码 | 真相 |
+|---|---|---|
+| `Reflect.missingMethod()` | 空的 private static 方法体，教科书级桩代码 | **是哨兵**：`getDeclaredMethod("missingMethod")` 拿它当「未找到」缓存标记。名字骗人，作用关键 |
+| `matchesTarget`（2 个 BE） | 只在声明处出现 | 通过**方法引用** `this::matchesTarget` 使用。`grep 'matchesTarget('` 看不见 —— **扫描器必须同时认 `::name`** |
+| 8 个屏的 `openSideConfigWindow` / `openUpgradeWindow` | 同上 | 全部通过 `this::openSideConfigWindow` 挂在按钮上。**删掉等于从 8 台机器上移除侧配与升级按钮** |
+| `TestMekCkHeatIntegration` | 在 `src/main` 里、零引用 | 是 Forge **GameTest**（注解发现），且 `build.gradle` 显式 `exclude` 掉不打进 jar —— 有意为之 |
+| `CreativeUpgradeTooltipHandler` 等 4 个类 | 零引用 | `@Mod.EventBusSubscriber` + `@SubscribeEvent`，**事件总线按注解发现** |
+| **`TemperatureHelper`（112 行）** | 零引用，纯粹的工具类 | **它的类注释里直接写着「它现在没人用，也不要为了『整洁』把它删掉」**——它保存的是一次设计查证的**否定结论**（本模组不存在「热源温度」概念，正确位置是 `MekCkHeatComponent`），留着是为了让下一个人不必重做一遍 |
+
+另外两个工具性教训：
+- **PowerShell 的 `Select-String -Pattern "\bX\b" | Where { $_.Filename -ne "X.java" }` 报出了「0 外部引用」的假结论**
+  （`MekCkTabElement` 实有 10+ 处引用）。判据改用 Python 后结论相反。**扫描器本身的 bug 会被误读成「代码是干净的」**。
+- 脚本里用 `[^"]*\bNAME\b` 查「字符串里是否出现」时，`[^"]*` 会跨行匹配到整个文件，判据完全失效。
+
+#### 「死资源」核验结果：三项都是误报
+
+| 疑点 | 结论 |
+|---|---|
+| `loot_tables/blocks/` 疑似 5 张死表 | **73 张全部有效**。其中 4 张早已被删；剩下的 `electric_grill` 对应的 `GrillBlock` **并未覆写 `getDrops`**（全文无该方法），是活表。代码里那段「5 张从未生效、属于待清理项」的注释已订正 |
+| 505 个 lang 键疑似 320 个未引用 | **零死键**。`block.mekck.*` / `item.mekck.*` 由引擎按注册名自动解析，进度由 advancement JSON 引用 —— 只扫 Java 会把它们全判成死键 |
+| 备份目录 / `scratch/` / `run/` | 全部已 gitignore 且未被跟踪，**不是仓库污染**。`src/generated/resources` 虽空但被 `build.gradle` 引用，保留 |
+
+### 仍未修
+
+| # | 问题 | 备注 |
+|---|---|---|
+| **ICE 工厂 Mek 原生化** | 7 个工艺里最后一个未迁。**不是「照抄第 7 遍」**，见 §〇 末尾的专项评估 | 默认配置关闭，玩家当前不可达 |
+| I-6 | 种植切配站模型硬依赖未声明的 `mekmm`（18 处引用 + 30 条配方） | 需决定：声明依赖 / 换自有模型 / 条件化 |
+| I-1（生成器） | 配方生成器在主线程跑 + 强制 `/reload`，大整合包首开服可能超 60 s 看门狗 | 需幂等短路 + 分摊到若干 tick |
+| — | 18 个方块把 `getDrops` 覆写成 `List.of()`、物品只在 `onRemove` 掉 ⇒ **TNT/爆炸摧毁时一件不掉** | 需确认是否有意。**连带**：`data/mekck/loot_tables/blocks/` 下 5 张遗留机器的表因这个覆写**从未生效**，是死文件 |
+| — | 16 个新物品（8 串烧 + 8 烤制）刻意没设 `food` 属性 | 营养值得与主料逐条对齐才算平衡，**需你定设计** |
+| — | `creative_upgrade_from_49_foods.json` 的 `type` 是不存在的 `avaritia:shapeless_table`，而 Avaritia 从未在 `mods.toml` 声明为依赖 | 只改产物修不好它，`type` 仍需改 |
+| — | `MixinExtremeSmithingMenu.INFINITY_UPGRADE` 的求值时机存疑 | 需对 Avaritia 做 `javap -v`，该模组不在本地缓存 |
+
+### ICE 工厂专项评估（本轮结论：**不迁**，理由如下）
+
+第 7 个工艺**不是照抄第 6 遍**。`IceFactoryBlockEntity`（964 行）比已迁的 6 个多出四类东西，
+其中第一类就需要改**共享基类**：
+
+| 需求 | 已迁的 6 个 | 制冰工厂 | 障碍 |
+|---|---|---|---|
+| 流体 | 无 | **水罐 256,000 mB** | `MekCkMachineTile#presetVariables` 写死 `TileComponentConfig(this, ITEM, ENERGY)`，**注释明说「本模组工厂没有气体/流体/矿浆」**。加 `TransmissionType.FLUID` 会给**6 台正常机器的侧配 GUI 多出一个空 Tab**——那是回归，不是修复。（可在 `IceFactoryTile` 单点覆写 `presetVariables` 规避，但那是新架构，不是复用） |
+| 热 | 烧烤 / 烹饪有单热容 | **双热容**（`heatComponent` + `coldComponent`，正面吸热/背面放热） | 基类只有单热钩子 `hasHeatSupport()` / `getInitialHeatCapacitors()` |
+| 升级 | 速度/能量/存储/随机化 | **5 段链式冷萃升级**（冷→低��→霜→龙霜/女王→失温，前段未装则后段不可装） | `appendExtraSlots` 能挂槽，但链式准入判定要新写 |
+| 行为 | 纯 item→item | **发射冰块实体**：目标搜索、排队分配、AOE、伤害/减速/去 AI/失温，外加 `targetType` / `radius` 自己的包与客户端同步 | 执行器要拿到 level 并生成实体；`pendingAttackTargets` 队列有跨 tick 状态 |
+
+外加：自有配方类型 `IceMakeRecipe`、从 964 行旧 BE 的存档迁移。
+
+**为什么本轮不做**：架构规格 §13 要求**每个阶段都过实机验收**（放置→GUI→投料→加工→
+升级卡→拆放→重启）。而本机代理当前不可用（见 §五.7），**装不出可启动的客户端**。
+在这种情况下交付一个改动了**共享基类**、影响 6 台在产机器、且**无法实机验证**的千行改动，
+风险高于收益——本仓已经吃过一次「编译 + 441 测试全绿但功能是坏的」的亏
+（`fefa065` 修的进度条问题正是 438 个测试全漏、只在联机发作）。
+**`MekCkFactoryType.ICE` 的枚举槽与译名键已就位**，补 tile + executor 即可接上；
+等有可启动环境时按上面四行逐项做，不要在无验证条件下动 `presetVariables`。
+
+---
+
+## 一、第三轮全量审查（2026-09-30）
 
 4 个 agent 按**包边界**并行深审 + Lead 亲自复核每条 Critical 与产物级证据。
 本轮**没有**独立的分域报告文件——结论全部内联在本节。第二轮的分域明细见
@@ -69,10 +341,6 @@
 
 ### 未修项
 
-> ⚠️ **本表写于第三轮收尾时。** 之后又有 3 个提交（`1448ec9` / `7403722` / `5a8756f`）。
-> 其中 `1448ec9` 已修掉下表 7 项——已逐项核实并移入下方「已修」表。
-> **其余各项未逐条复核**，以 `git show <提交>` 为准。
-
 **已修（第四轮，2026-09-30）**
 
 | # | 问题 | 修法 |
@@ -93,14 +361,26 @@
 
 **仍未修**
 
+> ⚠️ **本表写于第三轮收尾时。** 之后又有 10 个提交（`1448ec9` / `7403722` / `5a8756f` /
+> `7885345` / `e9e9bb9` / `2ac632b` / `f3c33ef` / `437c8be` / `49c36ee` / `e0f99fa`）。
+> `1448ec9` 已修掉下表 7 项、第五轮的 `7885345` / `e9e9bb9` 又修掉 2 项（I-N4 / I-N6），
+> 均已逐项核实并移入上方「已修」表。**其余各项未逐条复核**，以 `git show <提交>` 为准。
+
+**已修（第五轮，2026-10-01；此前本表把它们挂在「仍未修」里，与 §〇 自相矛盾，已对齐）**
+
+| # | 问题 | 修法（提交号 + 代码位置） |
+|---|---|---|
+| I-N4 | 中央厨房的搜索/排序/滚动只在服务端算，**没有任何 S2C 包回传** ⇒ 存储浏览器整体是死的 | `7885345`。新增 `network/KitchenStorageSyncPacket`（包 id 29）只推可见的一页 54 格；`CentralKitchenMenu#applyStorageSnapshot` 写客户端镜像；`CentralKitchenBlockEntity#storageVersion` 驱动节流补推。护栏 `TestKitchenStorageBrowserSync` **7** 条 |
+| **I-N6** | `client/` 下 98 处硬编码 UI 文案 / 21 个文件（第四轮实测）⇒ 英文客户端看到中文 | `e9e9bb9`。文案迁到共享 `gui.mekck.ui.*` 键（先加共享键再替换，**新增 45 个键**，两份语言同批）；剩余 11 处 CJK 全是**日志诊断**，玩家读不到，刻意不迁。护栏 `TestNoHardcodedUiText` 从「45 条字面量清单 + 10 文件白名单」重写为**全域扫描**（判据改为数据流：日志 sink 才放行，白名单 ≤4 项） |
+
+**仍未修**
+
 | # | 问题 | 备注 |
 |---|---|---|
-| I-N4 | 中央厨房的搜索/排序/滚动只在服务端算，**没有任何 S2C 包回传** ⇒ 存储浏览器整体是死的 | 需设计同步字段。`5a8756f` 修的是「存储浏览器是开界面那刻的快照」（另一条），**本条未复核** |
 | I-1 | 制冰工厂 GUI 面板在高档位超出屏幕，玩家背包被推出可视区 | 制冰工厂未注册，实际不可达 |
 | I-6 | 种植切配站的模型硬依赖未声明的 `mekmm`（18 处引用 + 30 条配方） | 需决定：声明依赖 / 换自有模型 / 条件化 |
 | I-1(生成器) | 配方生成器在主线程跑 + 强制 `/reload`，大整合包首开服可能超 60 s 看门狗 | 需幂等短路 + 分摊到若干 tick |
 | — | 18 个方块把 `getDrops` 覆写成 `List.of()`、物品只在 `onRemove` 掉 ⇒ **TNT/爆炸摧毁时一件不掉** | 需确认是否有意 |
-| **I-N6** | `client/` 下仍有 **98 处硬编码 UI 文案 / 21 个文件**（第四轮实测）⇒ **英文客户端看到中文** |   第四轮已迁 45 处（10 个文件）。**剩余 53 处 / 11 个文件**，逐个文件计数：   `SkeweringMachineScreen`12 `KitchenModuleWindow`12 `GuiMekCkSideConfiguration`11 `KitchenOrderWindow`7   `SandwichAssemblerScreen`7 `NutRoasterScreen`6 `PlantingCuttingStationScreen`6   `ChocolateCannonScreen`5 `IceFactoryScreen`5 `IceMakerScreen`4，其余 8 个文件各 1~2 处。   多数是**跨文件复用的短词**（敌对/全部/动物/开/关/上·下·正·背·左·右/温度/当前订单），   **应先加共享键再替换**，不要逐处新造同义键 —— 否则会得到一堆语义重复的 `xxx_target_mode_1` 之类。   另约 47 处是 `LOGGER` 诊断与 `MekCkOutlineRenderer` 的预览日志，**玩家读不到，不属本条**   （这也说明「全域不许有中文」的判据必须能区分日志与 UI，否则只能挂一个不断变长的豁免清单）。   护栏 `TestNoHardcodedUiText` 现阶段只守已迁走的 45 处；全域清零后应把它升级回全域扫描 |
 | — | `MixinExtremeSmithingMenu.INFINITY_UPGRADE` 的求值时机存疑 | 需对 Avaritia 做 `javap -v`，该模组不在本地缓存 |
 
 ### 新增护栏（337 → 359 测试）
@@ -200,10 +480,53 @@ residual failures   : 0
 6. **`clean` 会删掉 `build/fg_cache`，所以 `--offline` 构建不可靠**：验收口径因此是
    **联网**的 `./gradlew build`（见文首）。`--offline` 不允许 ForgeGradle 去补被删掉的缓存。
    详见 [`audit/2026-09-30-full-code-review.md`](audit/2026-09-30-full-code-review.md) §五「最终验证」。
+7. **⚠️ 本机代理当前不可用（2026-10-01 实测）**：环境变量
+   `HTTP_PROXY` / `HTTPS_PROXY` 指向 `http://127.0.0.1:10793`，但**该端口无进程监听**
+   （`Test-NetConnection` 返回 False），于是 ForgeGradle 报
+   `Failed to validate certificate for host 'https://maven.minecraftforge.net/'`
+   ——**这不是证书问题，是连接被拒**。症状具有欺骗性：报错说证书，真实原因是代理没开。
+   - 直接连（清空 proxy 变量）时：`repo1.maven.org` 通、`libraries.minecraft.net` 通，
+     但 **`maven.minecraftforge.net` 超时**（本网络直连不通）。
+   - **可用解法**：本次验收用 `$env:HTTP_PROXY=''; $env:HTTPS_PROXY=''` 清空代理变量后
+     `.\gradlew.bat build` 成功跑完（`downloadMcpConfig` 等 ForgeGradle 任务照常完成，
+     依赖全部命中本地缓存）。**长期解法是把代理客户端开起来。**
+   - **注意：绕过代理之后网络是抖的。** 同一命令连续两次跑，一次 34 s 成功、
+     一次 42 s 就死在同一个证书报错上。**遇到这个报错先原样重试一次**，
+     不要立刻判定成代码问题或去加 `--offline`（§五.6）。
+   - `~/.gradle/gradle.properties` 里已有 `systemProp.net.minecraftforge.gradle.test_certs=false`，
+     那只跳过证书校验、**不能**解决连接被拒。
+8. **别信「javac 解析检查 = 编译通过」**：worker 用 `javac` 单文件检查时把 100 个
+   「程序包不存在 / 找不到符号」当成可忽略的 classpath 噪音，于是漏掉了
+   `TestNoHardcodedUiText.java` 里一处 `codeText` 写成字段、实际是方法的错误
+   ——`compileTestJava` 一秒就红。**单文件 javac 的解析检查只保证没有语法错误，
+   不保证名字解析正确**；真结论只能来自 Gradle。
 
 ---
 
 ## 六、方法论教训（避免重蹈）
+
+- **⚠️ 源码形态护栏必须做变异测试，否则不知道它会不会响**（第五轮实测，**三次变异暴露了两个我自己的护栏 bug**）：
+
+  | # | 注入的变异 | 护栏是否抓住 | 说明 |
+  |---|---|---|---|
+  | 1 | 在 `client/` 塞一处硬编码中文常量 | ✅ **红** | `noHardcodedCjkInPlayerVisibleText` 如期失败并打印语句原文。判据可用 |
+  | 2 | `getItem()` 改成 `isClientSide() && clientVisible != null`（语义等价） | ✅ 绿 | **绿是对的**——行为没变，护栏不该响 |
+  | 3 | `getItem()` 改成 `isClientSide() && false`（**缺陷完整复现**） | ❌ **绿（漏网）** | 客户端分支整个失效、静默回落到读空桩 `machine.items`，而原有 6 条断言**全部照旧为真** ⇒ 补 `clientBranchIsGatedBySideAlone` |
+
+  补完第 7 条断言后，**它自己又错了两次**，都是同一个变异暴露的：
+
+  | 轮次 | 判据写法 | 干净树上 | 变异树上 | 问题 |
+  |---|---|---|---|---|
+  | 4 | `substring(open+1, close)` | ❌ 红 | ❌ 红 | 闭区间 off-by-one，切出 `isClientSide`（少右括号）。**在干净代码上也红**——看起来像「抓到变异」，实则是判据自身坏了 |
+  | 5 | `substring(open+1, close+1)` | ✅ 绿 | ✅ **绿（漏网）** | 第一个 `)` 是 `isClientSide()` 自己的右括号，条件被截断，`&& false` 根本看不见 |
+  | 6 | 按括号**配对**扫描到 if 条件的右括号 | ✅ 绿 | ✅ **红** | 正确 |
+
+  ⇒ 三条教训：
+  1. **「变异测试红」不等于「护栏抓到了变异」。** 必须**先在干净树上确认绿**，再注入缺陷确认红。只看红会把自己判据的 bug 误当成验证通过（第 4 轮）。
+  2. **字符串判据里凡是用「第一个 X」定位的，几乎都该改成「配对扫描」。** `indexOf(')')` 在有嵌套括号的源码上是错的。
+  3. 这个项目的护栏风格（源码形态断言）**天然容易写出这种假绿**，
+     因为「结构对」和「结构在跑」是两件事，而静态断言天然只能看前者。
+     **新增任何源码形态护栏，一律先跑变异测试。**
 
 - **三次「查证后判定不是缺口」，避免了无效改动**：COOKING 不需要自有配方类型
   （FD 是强制依赖 + 28 条配方，硬造会脱离 FD/森罗/avaritia 生态丢集成）；
