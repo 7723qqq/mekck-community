@@ -121,11 +121,11 @@ public final class ChocolateCannonMenu extends AbstractContainerMenu implements 
         } else {
             if (ChocolateCannonBlockEntity.isUsablePowerItem(stack)) {
                 if (!moveItemStackTo(stack, ChocolateCannonBlockEntity.SLOT_POWER, ChocolateCannonBlockEntity.SLOT_POWER + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isSpeedUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isSpeedUpgrade(stack)) {
                 if (!moveItemStackTo(stack, ChocolateCannonBlockEntity.SLOT_SPEED_UPGRADE, ChocolateCannonBlockEntity.SLOT_SPEED_UPGRADE + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isEnergyUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isEnergyUpgrade(stack)) {
                 if (!moveItemStackTo(stack, ChocolateCannonBlockEntity.SLOT_ENERGY_UPGRADE, ChocolateCannonBlockEntity.SLOT_ENERGY_UPGRADE + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isCreativeUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isCreativeUpgrade(stack)) {
                 if (!moveItemStackTo(stack, ChocolateCannonBlockEntity.SLOT_CREATIVE_UPGRADE, ChocolateCannonBlockEntity.SLOT_CREATIVE_UPGRADE + 1, false)) return ItemStack.EMPTY;
             } else {
                 FerreroUpgradeTier tier = cn.ism.mekck.item.FerreroUpgradeItem.getTier(stack);

@@ -8,7 +8,7 @@ import cn.ism.mekck.block.SimpleMachineBlock;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.menu.SimpleMachineMenu;
 import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import net.minecraft.core.BlockPos;
 import mekanism.api.heat.IHeatCapacitor;
 import mekanism.api.heat.IMekanismHeatHandler;
@@ -170,12 +170,12 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     private int progress;
 
     // ================== 升级读条（Mekanism 式：放入槽位 → 20 tick 读条 → 安装） ==================
-    private final cn.ism.mekck.util.MekCkUpgradeTracker speedTracker =
-            new cn.ism.mekck.util.MekCkUpgradeTracker(() -> MekckConfig.getBasicSpeedUpgradeMax());
-    private final cn.ism.mekck.util.MekCkUpgradeTracker energyTracker =
-            new cn.ism.mekck.util.MekCkUpgradeTracker(() -> MekckConfig.getBasicEnergyUpgradeMax());
-    private final cn.ism.mekck.util.MekCkUpgradeTracker creativeTracker =
-            new cn.ism.mekck.util.MekCkUpgradeTracker(1);
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker speedTracker =
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(() -> MekckConfig.getBasicSpeedUpgradeMax());
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker energyTracker =
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(() -> MekckConfig.getBasicEnergyUpgradeMax());
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker creativeTracker =
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(1);
     /** 当前生产配方的身份（用于换配方时重置进度；旧存档缺省为 null）。 */
     private net.minecraft.resources.ResourceLocation currentRecipeId;
     /** WINERY 专属 Tavern 酿造批次（第一阶段：仅持有/保存/加载/只读查询，不参与真实生产）。 */
@@ -518,7 +518,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         if (stack.isEmpty()) return false;
         // vinery 酒瓶的判定与榨汁机载具共用同一个单一口径（见 {@link #isVineryWineBottle}），避免两处各写一份漂移
         if (isVineryWineBottle(stack)) return true;
-        return cn.ism.mekck.util.TavernBarrelCompat.isCarrier(level, stack);
+        return cn.ism.mekck.compat.TavernBarrelCompat.isCarrier(level, stack);
     }
 
     /** 简报需求2：该物品是否命中本机 {@link #allRecipesOfKind()} 任一配方的 ingredient（WINERY 另含 tavern barrel 配料）；判定异常时保守放行。 */
@@ -533,7 +533,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
             // 森罗酒馆的 barrel 配料：它的 RecipeType 是从不进注册表的匿名对象（javap 证实），按 id 查注册表
             // 永远拿不到 ⇒ 这一段整块落空 ⇒ 酒馆材料一律进不了输入槽（用户 2026-09-24）。改走
             // TavernBarrelCompat 的统一解析与缓存，与「流体是否参与陈酿」同源、单一口径。
-            if (kind == MachineKind.WINERY && cn.ism.mekck.util.TavernBarrelCompat.hasIngredient(level, stack)) return true;
+            if (kind == MachineKind.WINERY && cn.ism.mekck.compat.TavernBarrelCompat.hasIngredient(level, stack)) return true;
         } catch (Throwable ignored) {
             return true;
         }
@@ -611,7 +611,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
      */
     public void uninstallUpgrade(byte mode, int slot) {
         int upgradeSlot;
-        cn.ism.mekck.util.MekCkUpgradeTracker tracker;
+        cn.ism.mekck.upgrade.MekCkUpgradeTracker tracker;
         if (mode == 2) {
             upgradeSlot = slot;
             tracker = trackerForSlot(slot);
@@ -648,7 +648,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     }
 
     /** 槽位 → 升级读条组件（非升级槽返回 null）。 */
-    private cn.ism.mekck.util.MekCkUpgradeTracker trackerForSlot(int slot) {
+    private cn.ism.mekck.upgrade.MekCkUpgradeTracker trackerForSlot(int slot) {
         if (slot == SLOT_SPEED_UPGRADE) return speedTracker;
         if (slot == SLOT_ENERGY_UPGRADE) return energyTracker;
         if (slot == SLOT_CREATIVE_UPGRADE) return creativeTracker;
@@ -678,11 +678,11 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     }
 
     public double getEffectiveSpeedMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
     }
 
     public double getEffectiveEnergyConsumptionMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
     }
 
     public int getEffectiveProcessTime() {
@@ -736,7 +736,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     public void setRemoved() {
         super.setRemoved();
         // AE2 网格节点销毁（未安装 AE2 时为空操作；节点 NBT 由 saveAdditional 保存，重载后 init 重建）
-        cn.ism.mekck.util.AE2Compat.onRemoved(this);
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     /** 当前机器类型（供方块交互等只读判断）。 */
@@ -948,12 +948,12 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     /**
      * 取配方类型。森罗物语系（酒馆 + 厨房，同一作者）的 RecipeType 是模组用 {@code RecipeType.simple()}
      * 造的**匿名对象**、从不进注册表（javap 两者的 {@code init.ModRecipes} 证实，详见
-     * {@link cn.ism.mekck.util.TavernBarrelCompat#typeById}）⇒ 按 id 查恒为 null，那整条配方路径会静默
+     * {@link cn.ism.mekck.compat.TavernBarrelCompat#typeById}）⇒ 按 id 查恒为 null，那整条配方路径会静默
      * 当成「未安装」。该兜底现已内置在 {@link cn.ism.mekck.util.RecipeCache#type} 里，本方法只是保留一个
      * 可读的调用点写法（行为与直接调 RecipeCache 完全一致）。
      */
     private RecipeType<?> recipeTypeOf(ResourceLocation id) {
-        RecipeType<?> tavern = cn.ism.mekck.util.TavernBarrelCompat.typeById(id);
+        RecipeType<?> tavern = cn.ism.mekck.compat.TavernBarrelCompat.typeById(id);
         return tavern != null ? tavern : cn.ism.mekck.util.RecipeCache.type(id);
     }
 
@@ -1266,7 +1266,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     public static void serverTick(Level level, BlockPos pos, BlockState state, SimpleMachineBlockEntity machine) {
         machine.updateRedstone();
         // AE2 网格节点生命周期 / 联网检测 / 自动补料（未安装 AE2 时为空操作）
-        cn.ism.mekck.util.AE2Compat.serverTick(machine, level, pos);
+        cn.ism.mekck.compat.AE2Compat.serverTick(machine, level, pos);
         // WINERY 专属：Tavern 酿造批次（完工扣料口径：陈化期不扣料，陈到满级才一次性扣料）+ 自动逐瓶分装
         if (machine.kind == MachineKind.WINERY) {
             // 陈化期持守校验：材料被拿走/换放其他材料/流体减少 ⇒ 失配，中止批次、进度归 0（材料原样留在槽内）
@@ -2758,7 +2758,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         if (!tavernBatch.isIdle()) return false; // BREWING/STALLED 均不接受
         if (progress != 0) return false; // 普通 Vinery 加工进行中不抢占
         if (level == null) return false;
-        net.minecraft.world.item.crafting.RecipeType<?> barrelT = cn.ism.mekck.util.TavernBarrelCompat.type();
+        net.minecraft.world.item.crafting.RecipeType<?> barrelT = cn.ism.mekck.compat.TavernBarrelCompat.type();
         if (barrelT == null) return false; // tavern 未安装
         // 配方仍有效，且同 ID 配方语义未变（ingredients/fluid/result/unitTime/carrier 一致）
         java.util.Optional<? extends net.minecraft.world.item.crafting.Recipe<?>> recipeOpt =
@@ -2833,7 +2833,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
      */
     private TavernBarrelPlan matchTavernBarrelPlan() {
         if (level == null) return null;
-        net.minecraft.world.item.crafting.RecipeType<?> barrelT = cn.ism.mekck.util.TavernBarrelCompat.type();
+        net.minecraft.world.item.crafting.RecipeType<?> barrelT = cn.ism.mekck.compat.TavernBarrelCompat.type();
         if (barrelT == null) return null; // tavern 未安装 → 保持 Vinery 原样
         // 流体：必须满 4000mB
         if (inputTank.getFluidAmount() < TavernBarrelPlan.MAX_FLUID_AMOUNT) return null;
@@ -3198,7 +3198,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
                 default -> false;
             };
         }
-        return kind == MachineKind.WINERY && cn.ism.mekck.util.TavernBarrelCompat.isCarrier(level, stack);
+        return kind == MachineKind.WINERY && cn.ism.mekck.compat.TavernBarrelCompat.isCarrier(level, stack);
     }
 
     /** 本机配方表里是否存在「要求空酒瓶」的 {@code vinery:wine_fermentation} 配方（与榨汁机同口径）。 */
@@ -3269,7 +3269,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         drainRejectCooldown = 0;
         setChanged();
         // 已抽进去、但对酿造无用的提醒（酒桶合法流体集由扫描 barrel 配方得到，含 water / lava 基配方）
-        if (!cn.ism.mekck.util.TavernBarrelCompat.isBarrelFluid(level, probe.fluid.getFluid())) {
+        if (!cn.ism.mekck.compat.TavernBarrelCompat.isBarrelFluid(level, probe.fluid.getFluid())) {
             noteFluidIntake(st, "已抽入储罐，但 " + fluidId + " 不是任何酒馆酒桶配方的流体，不会参与陈酿");
         }
     }
@@ -3548,7 +3548,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         // KaleidoscopeTavern pressing_tub：一次查找生成完整生产计划
         // （真实 recipeId + 输入 Ingredient + 流体产物），不重复扫描、不拼接不同配方。
         // tavern 未安装时类型解析为 null，自动跳过。（不能按 id 查注册表：该模组的类型从不注册，详见门面注释）
-        net.minecraft.world.item.crafting.RecipeType<?> pressT = cn.ism.mekck.util.TavernBarrelCompat.pressingTubType();
+        net.minecraft.world.item.crafting.RecipeType<?> pressT = cn.ism.mekck.compat.TavernBarrelCompat.pressingTubType();
         if (pressT != null && level != null) {
             MatchedRecipe best = null;
             for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, pressT)) {
@@ -4180,7 +4180,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
      * - 无时间字段（原版为交互触发），MekCK 按机器默认处理时长（200 tick）执行。
      */
     private MatchedRecipe matchShaker() {
-        RecipeType<?> rt = cn.ism.mekck.util.TavernBarrelCompat.shakerType();
+        RecipeType<?> rt = cn.ism.mekck.compat.TavernBarrelCompat.shakerType();
         if (rt == null || level == null) return null;
         java.util.List<Integer> slots = new java.util.ArrayList<>();
         java.util.List<ItemStack> slotStacks = new java.util.ArrayList<>();
@@ -4678,7 +4678,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     @Override
     public void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
-        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
         // 不写 MachineKind：kind 是 final 字段、构造期由方块决定，load 从不读该键。
         // 写入只会让「存档里的键」与「可恢复的状态」产生误导性偏差。
@@ -4730,7 +4730,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
-        cn.ism.mekck.util.AE2Compat.load(this, tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
         items.deserializeNBT(tag.getCompound("Items"));
         energy.receiveEnergy(tag.getInt("Energy"), false);
@@ -4827,7 +4827,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         // 同理必须调用两个外部持久化助手：AE2 的自动补料清单（缺失会丢玩家逐条配的补料规则）
         // 与放置器 UUID（缺失会让已放置的机器被当成新机器）。load 侧两者都会读回，
         // 此处不写就等于「挖起来再放下」必丢，而 getDrops 为空时物品是状态的唯一载体。
-        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
         if (orderRecipeId != null) {
             tag.putString("OrderRecipeId", orderRecipeId.toString());

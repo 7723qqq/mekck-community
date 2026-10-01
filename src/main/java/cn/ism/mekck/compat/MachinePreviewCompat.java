@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.compat;
 
 import com.mojang.logging.LogUtils;
 import net.minecraft.world.level.block.Block;

@@ -1348,11 +1348,11 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
         // MEckAe2 的产物回写才能在同一 tick 看到它们（与旧
         // CuttingMachineFactoryBlockEntity.serverTick 里「先干活、后
         // AE2Compat.autoProcessTick」的次序一致）。
-        cn.ism.mekck.util.AE2Compat.serverTick(this, getLevel(), worldPosition);
+        cn.ism.mekck.compat.AE2Compat.serverTick(this, getLevel(), worldPosition);
         // 「已勾选材料 → 持续补料 + 产物回网」的第二段，与旧 serverTick 里紧跟在
         // AE2Compat.serverTick 之后的那行逐字对应。没接上这一段的表现是：
         // 节点在网、样板在终端里看得见，但勾了材料也不会自动补料。
-        cn.ism.mekck.util.AE2Compat.autoProcessTick(this);
+        cn.ism.mekck.compat.AE2Compat.autoProcessTick(this);
     }
 
     /** 闸门 + 逐路进度 + 执行器调度。拆出来只为让 {@link #onUpdateServer} 保持一屏可读。 */
@@ -1823,7 +1823,7 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
         // AE2 网格节点的 NBT 必须与节点一同存活（阶段 2 Task 4.6）：
         // 节点里存着频道占用与「已勾选的自动处理材料」，不写就等于每次重载
         // 都换一批频道。AE2Compat 未装时整个方法短路为空操作。
-        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         // 放置者归属（网络厨师学徒）：与旧 BE 的 saveAdditional 逐字同款，
         // 同样不依赖 AE2 是否安装。
         cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
@@ -1966,7 +1966,7 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
         // AE2 网格节点的 NBT（阶段 2 Task 4.6）：必须在 super.load 之后——
         // 它的 loadFromNBT 只是把整个 tag 缓存成 pendingTag，真正建节点要等
         // 下一次 serverTick 的 init()，与旧 BE 的调用位置一致。
-        cn.ism.mekck.util.AE2Compat.load(this, tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
     }
 
@@ -2102,7 +2102,7 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
     @Override
     public void setRemoved() {
         super.setRemoved();
-        cn.ism.mekck.util.AE2Compat.onRemoved(this);
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     /**

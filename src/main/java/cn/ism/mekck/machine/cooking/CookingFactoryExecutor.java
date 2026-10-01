@@ -7,7 +7,7 @@ import cn.ism.mekck.machine.MekCkOrderState;
 import cn.ism.mekck.machine.MekCkRecipeExecutor;
 import cn.ism.mekck.util.CountMath;
 import cn.ism.mekck.util.FluidIngredientHelper;
-import cn.ism.mekck.util.KaleidoscopeCompat;
+import cn.ism.mekck.compat.KaleidoscopeCompat;
 import cn.ism.mekck.util.RecipeCache;
 import mekanism.api.Action;
 import mekanism.api.AutomationType;

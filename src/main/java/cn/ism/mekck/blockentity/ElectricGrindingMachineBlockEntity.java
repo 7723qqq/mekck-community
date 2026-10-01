@@ -8,10 +8,10 @@ import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.menu.ElectricGrindingMachineMenu;
 import cn.ism.mekck.util.RecipeInputMatcher;
 import cn.ism.mekck.util.AutoIO;
-import cn.ism.mekck.util.KaleidoscopeCompat;
+import cn.ism.mekck.compat.KaleidoscopeCompat;
 import cn.ism.mekck.util.LagMonitor;
 import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import mekanism.client.sound.SoundHandler;
 import mekanism.common.registries.MekanismSounds;
 import net.minecraft.core.BlockPos;
@@ -261,7 +261,7 @@ public final class ElectricGrindingMachineBlockEntity extends BlockEntity implem
     public static void serverTick(Level level, BlockPos pos, BlockState state, ElectricGrindingMachineBlockEntity machine) {
         boolean wasActive = machine.progress > 0;
         // AE2 网格节点生命周期 / 联网检测 / 自动补料（未安装 AE2 时为空操作）
-        cn.ism.mekck.util.AE2Compat.serverTick(machine, level, pos);
+        cn.ism.mekck.compat.AE2Compat.serverTick(machine, level, pos);
 
 
         machine.updateRedstone();
@@ -383,7 +383,7 @@ public final class ElectricGrindingMachineBlockEntity extends BlockEntity implem
         for (String typeId : new String[]{"kaleidoscope_cookery:millstone", "bakeries:flour_sieve",
                 "farm_and_charm:mincer", "mekck:grinding"}) {
             // 走 RecipeCache.type：石磨类型在森罗厨房的注册表里根本查不到（它造了匿名 RecipeType 却不注册，
-            // 详见 cn.ism.mekck.util.TavernBarrelCompat#typeById），直查注册表会让石磨这一路整条静默失效。
+            // 详见 cn.ism.mekck.compat.TavernBarrelCompat#typeById），直查注册表会让石磨这一路整条静默失效。
             net.minecraft.world.item.crafting.RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(
                     new net.minecraft.resources.ResourceLocation(typeId));
             if (rt == null) continue;
@@ -737,11 +737,11 @@ public final class ElectricGrindingMachineBlockEntity extends BlockEntity implem
     }
 
     public double getEffectiveSpeedMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
     }
 
     public double getEffectiveEnergyConsumptionMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
     }
 
     public int getEffectiveProcessTime() {
@@ -800,7 +800,7 @@ public final class ElectricGrindingMachineBlockEntity extends BlockEntity implem
     public void setRemoved() {
         super.setRemoved();
         // AE2 网格节点销毁（未安装 AE2 时为空操作；节点 NBT 由 saveAdditional 保存，重载后 init 重建）
-        cn.ism.mekck.util.AE2Compat.onRemoved(this);
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     public ItemStackHandler getItems() {
@@ -854,7 +854,7 @@ public final class ElectricGrindingMachineBlockEntity extends BlockEntity implem
     @Override
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
-        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
         tag.put("Items", items.serializeNBT());
         tag.putInt("Energy", energy.getEnergyStored());
@@ -881,7 +881,7 @@ public final class ElectricGrindingMachineBlockEntity extends BlockEntity implem
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
-        cn.ism.mekck.util.AE2Compat.load(this, tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
         items.deserializeNBT(tag.getCompound("Items"));
         if (items.getSlots() != TOTAL_SLOTS) {

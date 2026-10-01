@@ -10,7 +10,7 @@ import cn.ism.mekck.machine.MekCkSlot;
 import cn.ism.mekck.machine.ports.IMekCkPorted;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.util.CountMath;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import mekanism.api.IContentsListener;
 import mekanism.api.Upgrade;
 import mekanism.api.fluid.IExtendedFluidTank;

@@ -87,7 +87,7 @@ public final class KitchenCraftingPlan {
         if (level == null) return index;
         for (KitchenModule.Ability ability : abilities) {
             // 烟火虚拟配方（无原版配方类型）
-            for (Recipe<?> recipe : cn.ism.mekck.util.KaleidoscopeGrillingCompat
+            for (Recipe<?> recipe : cn.ism.mekck.compat.KaleidoscopeGrillingCompat
                     .virtualRecipesForFamily(ability.family().id)) {
                 try {
                     ItemStack out = recipe.getResultItem(level.registryAccess());
@@ -241,7 +241,7 @@ public final class KitchenCraftingPlan {
      */
     private static ResourceLocation typeId(RecipeType<?> raw) {
         ResourceLocation id = ForgeRegistries.RECIPE_TYPES.getKey(raw);
-        return id != null ? id : cn.ism.mekck.util.TavernBarrelCompat.idOf(raw);
+        return id != null ? id : cn.ism.mekck.compat.TavernBarrelCompat.idOf(raw);
     }
 
     /** 找出能执行该配方的已安装系列。 */

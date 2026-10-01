@@ -11,7 +11,7 @@ import cn.ism.mekck.util.AutoIO;
 import cn.ism.mekck.util.LagMonitor;
 import cn.ism.mekck.util.PowerSlotUtil;
 import cn.ism.mekck.util.RecipeInputMatcher;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import mekanism.client.sound.SoundHandler;
 import mekanism.common.registries.MekanismSounds;
 import mekanism.common.tile.interfaces.IBoundingBlock;
@@ -299,7 +299,7 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
     public static void serverTick(Level level, BlockPos pos, BlockState state, PlantingCuttingStationBlockEntity machine) {
         boolean wasActive = machine.progress > 0;
         // AE2 网格节点生命周期 / 联网检测 / 自动补料（未安装 AE2 时为空操作）
-        cn.ism.mekck.util.AE2Compat.serverTick(machine, level, pos);
+        cn.ism.mekck.compat.AE2Compat.serverTick(machine, level, pos);
 
         boolean changed = false;
 
@@ -694,11 +694,11 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
     }
 
     public double getEffectiveSpeedMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
     }
 
     public double getEffectiveEnergyConsumptionMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
     }
 
     public int getEffectiveProcessTime() {
@@ -759,7 +759,7 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
     public void setRemoved() {
         super.setRemoved();
         // AE2 网格节点销毁（未安装 AE2 时为空操作；节点 NBT 由 saveAdditional 保存，重载后 init 重建）
-        cn.ism.mekck.util.AE2Compat.onRemoved(this);
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     public ItemStackHandler getItems() {
@@ -809,7 +809,7 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
     @Override
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
-        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
         tag.put("Items", items.serializeNBT());
         tag.putInt("Energy", energy.getEnergyStored());
@@ -830,7 +830,7 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
-        cn.ism.mekck.util.AE2Compat.load(this, tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
         items.deserializeNBT(tag.getCompound("Items"));
         // Ensure correct slot count for NBT migration

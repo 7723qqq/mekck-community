@@ -1,6 +1,6 @@
-package cn.ism.mekck.client.item;
+package cn.ism.mekck.client.atomic_knife;
 
-import cn.ism.mekck.client.render.item.gear.RenderAtomicKnife;
+import cn.ism.mekck.client.atomic_knife.RenderAtomicKnife;
 import mekanism.client.render.RenderPropertiesProvider;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;

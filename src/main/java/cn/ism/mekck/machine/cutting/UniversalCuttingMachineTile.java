@@ -4,7 +4,7 @@ import cn.ism.mekck.RedstoneControl;
 import cn.ism.mekck.machine.MekCkSlot;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import cn.ism.mekck.util.MatchKey;
 import mekanism.api.Action;
 import mekanism.api.AutomationType;

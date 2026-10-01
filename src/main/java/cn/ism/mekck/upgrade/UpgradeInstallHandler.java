@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.upgrade;
 
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
@@ -19,6 +19,7 @@ import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraft.server.level.ServerLevel;
+import cn.ism.mekck.UniversalCuttingMachine;
 
 /**
  * 潜行右键机器安装升级的全局处理器。

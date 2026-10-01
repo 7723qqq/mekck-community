@@ -243,7 +243,7 @@ public final class ClientWorldEvents {
     public static void onRenderHighlight(net.minecraftforge.client.event.RenderHighlightEvent.Block event) {
         // 装了独立模组「机器放置预览」（machinepreview）时，预览由它接管，
         // 本模组自动关闭以免两层叠加（形状已在构造期登记给它）。
-        if (cn.ism.mekck.util.MachinePreviewCompat.isLoaded()) {
+        if (cn.ism.mekck.compat.MachinePreviewCompat.isLoaded()) {
             return;
         }
         // 与原版方块选择框同事件渲染（Mekanism 放置线框同款方案），必然可见

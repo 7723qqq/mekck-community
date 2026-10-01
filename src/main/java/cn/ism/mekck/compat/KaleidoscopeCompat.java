@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.compat;
 
 import net.minecraft.core.NonNullList;
 import net.minecraft.resources.ResourceLocation;

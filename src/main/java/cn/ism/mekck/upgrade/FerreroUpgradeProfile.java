@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.upgrade;
 
 /**
  * §F17 费列罗升级伤害阶梯（逐档查表，单点定义伤害来源，禁止乘法/三元叠加）。

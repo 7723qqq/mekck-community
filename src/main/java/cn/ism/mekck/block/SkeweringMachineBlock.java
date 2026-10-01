@@ -78,7 +78,7 @@ public final class SkeweringMachineBlock extends BaseEntityBlock {
                 && level.getBlockEntity(pos) instanceof SkeweringMachineBlockEntity machine) {
             if (player.isShiftKeyDown()) {
                 ItemStack held = player.getItemInHand(hand);
-                if (!held.isEmpty() && cn.ism.mekck.util.UpgradeHelper.isUpgrade(held)) {
+                if (!held.isEmpty() && cn.ism.mekck.upgrade.UpgradeHelper.isUpgrade(held)) {
                     String upgradeName = held.getHoverName().getString();
                     int added = machine.addUpgradesFromHand(held);
                     if (added > 0) {

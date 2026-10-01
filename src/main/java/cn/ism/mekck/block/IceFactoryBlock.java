@@ -4,7 +4,7 @@ import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import cn.ism.mekck.item.ColdBrewUpgradeItem;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;

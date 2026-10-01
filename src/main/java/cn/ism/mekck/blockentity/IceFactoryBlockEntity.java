@@ -14,7 +14,7 @@ import cn.ism.mekck.recipe.IceMakeRecipe;
 import cn.ism.mekck.util.RecipeInputMatcher;
 import cn.ism.mekck.util.ColdBrewHelper;
 import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import net.minecraft.core.BlockPos;
 import mekanism.api.heat.IHeatCapacitor;
 import mekanism.api.heat.IMekanismHeatHandler;
@@ -81,11 +81,11 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
     private final int OUTPUT_SLOTS;
     private final int base;
     // ================== 升级读条（Mekanism 式：20 tick 安装） ==================
-    private final cn.ism.mekck.util.MekCkUpgradeTracker speedTracker;
-    private final cn.ism.mekck.util.MekCkUpgradeTracker energyTracker;
-    private final cn.ism.mekck.util.MekCkUpgradeTracker stackTracker;
-    private final cn.ism.mekck.util.MekCkUpgradeTracker creativeTracker =
-            new cn.ism.mekck.util.MekCkUpgradeTracker(1);
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker speedTracker;
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker energyTracker;
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker stackTracker;
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker creativeTracker =
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(1);
 
     public final int SPEED_UPGRADE_SLOT;
     public final int ENERGY_UPGRADE_SLOT;
@@ -247,9 +247,9 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
         this.tier = tier;
                 // 上限惰性读取 MekckConfig，故 /reload 改配置后立即生效。
                 // 必须在构造器体内初始化：tier 在此处才保证已赋值，字段初始化器里无法引用。
-                this.speedTracker = new cn.ism.mekck.util.MekCkUpgradeTracker(() -> MekckConfig.getFactorySpeedUpgradeMax(tier));
-                this.energyTracker = new cn.ism.mekck.util.MekCkUpgradeTracker(() -> MekckConfig.getFactoryEnergyUpgradeMax(tier));
-                this.stackTracker = new cn.ism.mekck.util.MekCkUpgradeTracker(() -> MekckConfig.getFactoryStackUpgradeMax(tier));
+                this.speedTracker = new cn.ism.mekck.upgrade.MekCkUpgradeTracker(() -> MekckConfig.getFactorySpeedUpgradeMax(tier));
+                this.energyTracker = new cn.ism.mekck.upgrade.MekCkUpgradeTracker(() -> MekckConfig.getFactoryEnergyUpgradeMax(tier));
+                this.stackTracker = new cn.ism.mekck.upgrade.MekCkUpgradeTracker(() -> MekckConfig.getFactoryStackUpgradeMax(tier));
         this.heatComponent = new cn.ism.mekck.util.MekCkHeatComponent(this::getLevel, this::getBlockPos, this::setChanged);
         this.processes = tier.processes;
         // 输入/输出格数量与其他同等级多线程工厂一致（= 并行数）
@@ -340,7 +340,7 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
 
     /** 卸载升级（升级界面卸载按钮）。 */
     public void uninstallUpgrade(byte mode, int slot) {
-        cn.ism.mekck.util.MekCkUpgradeTracker tracker;
+        cn.ism.mekck.upgrade.MekCkUpgradeTracker tracker;
         String itemId;
         if (slot == SPEED_UPGRADE_SLOT) {
             tracker = speedTracker;
@@ -389,19 +389,19 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
         boolean changed = false;
         if (SPEED_UPGRADE_SLOT >= 0 && SPEED_UPGRADE_SLOT < items.getSlots()) {
             changed |= speedTracker.tick(items.getStackInSlot(SPEED_UPGRADE_SLOT),
-                    cn.ism.mekck.util.UpgradeHelper::isSpeedUpgrade);
+                    cn.ism.mekck.upgrade.UpgradeHelper::isSpeedUpgrade);
         }
         if (ENERGY_UPGRADE_SLOT >= 0 && ENERGY_UPGRADE_SLOT < items.getSlots()) {
             changed |= energyTracker.tick(items.getStackInSlot(ENERGY_UPGRADE_SLOT),
-                    cn.ism.mekck.util.UpgradeHelper::isEnergyUpgrade);
+                    cn.ism.mekck.upgrade.UpgradeHelper::isEnergyUpgrade);
         }
         if (STACK_UPGRADE_SLOT >= 0 && STACK_UPGRADE_SLOT < items.getSlots()) {
             changed |= stackTracker.tick(items.getStackInSlot(STACK_UPGRADE_SLOT),
-                    cn.ism.mekck.util.UpgradeHelper::isStackUpgrade);
+                    cn.ism.mekck.upgrade.UpgradeHelper::isStackUpgrade);
         }
         if (CREATIVE_SLOT >= 0 && CREATIVE_SLOT < items.getSlots()) {
             changed |= creativeTracker.tick(items.getStackInSlot(CREATIVE_SLOT),
-                    cn.ism.mekck.util.UpgradeHelper::isCreativeUpgrade);
+                    cn.ism.mekck.upgrade.UpgradeHelper::isCreativeUpgrade);
         }
         if (changed) setChanged();
     }
@@ -450,11 +450,11 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
     }
 
     public double getEffectiveSpeedMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
     }
 
     public double getEffectiveEnergyConsumptionMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
     }
 
     public int getEffectiveProcessTime() {
@@ -546,7 +546,7 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
     public void setRemoved() {
         super.setRemoved();
         // AE2 网格节点销毁（未安装 AE2 时为空操作；节点 NBT 由 saveAdditional 保存，重载后 init 重建）
-        cn.ism.mekck.util.AE2Compat.onRemoved(this);
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     public ItemStackHandler getItems() {
@@ -617,7 +617,7 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
         // 温度系统：每 tick 自然回归环境并与相邻 Mekanism 热力设备传导
         machine.heatComponent.tick(level, pos);
         // AE2 网格节点生命周期 / 联网检测 / 自动补料（未安装 AE2 时为空操作）
-        cn.ism.mekck.util.AE2Compat.serverTick(machine, level, pos);
+        cn.ism.mekck.compat.AE2Compat.serverTick(machine, level, pos);
         machine.updateRedstone();
         if (machine.drainPowerSlot()) machine.setChanged();
 
@@ -899,7 +899,7 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
         tag.put("StackUpgradeTracker", stackTracker.save());
         tag.put("CreativeUpgradeTracker", creativeTracker.save());
         if (heatComponent != null) tag.put("HeatCapacitor", heatComponent.save());
-        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
         tag.put("Items", items.serializeNBT());
         tag.putInt("SlotLayoutVersion", 2);
@@ -927,7 +927,7 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
         if (heatComponent != null && tag.contains("HeatCapacitor", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
             heatComponent.load(tag.getCompound("HeatCapacitor"));
         }
-        cn.ism.mekck.util.AE2Compat.load(this, tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
         // 槽位迁移：旧星云/奇点工厂存档无创造升级槽（冷萃槽在 base+3 起），新布局在 base+3 插入创造槽，
         // 需将旧槽位 >= CREATIVE_SLOT 的内容后移一格，避免错位（仅对未带布局版本标记的旧存档生效）。

@@ -97,7 +97,7 @@ public final class SmartCookingPotBlock extends BaseEntityBlock {
                 }
             }
             if (player.isShiftKeyDown()) {
-                if (!held.isEmpty() && cn.ism.mekck.util.UpgradeHelper.isUpgrade(held)) {
+                if (!held.isEmpty() && cn.ism.mekck.upgrade.UpgradeHelper.isUpgrade(held)) {
                     String upgradeName = held.getHoverName().getString();
                     int added = machine.addUpgradesFromHand(held);
                     if (added > 0) {

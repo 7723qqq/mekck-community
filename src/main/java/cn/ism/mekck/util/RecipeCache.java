@@ -16,6 +16,7 @@ import net.minecraft.world.level.Level;
 import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.wrapper.RecipeWrapper;
 import org.jetbrains.annotations.NotNull;
+import cn.ism.mekck.compat.TavernBarrelCompat;
 
 /**
  * 配方表缓存：把 {@code RecipeManager.getAllRecipesFor(type)} 的结果按「配方管理器实例」缓存。

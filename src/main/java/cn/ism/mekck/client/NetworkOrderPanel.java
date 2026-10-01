@@ -3,7 +3,7 @@ package cn.ism.mekck.client;
 import cn.ism.mekck.network.ModMessages;
 import cn.ism.mekck.network.NetworkMissingRequestPacket;
 import cn.ism.mekck.network.NetworkRecipeRequestPacket;
-import cn.ism.mekck.util.AE2Compat;
+import cn.ism.mekck.compat.AE2Compat;
 import mekanism.client.gui.GuiUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;

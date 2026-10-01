@@ -179,8 +179,8 @@ public final class WineCellarScreen extends GuiMekanism<WineCellarMenu> {
         double sum = 0;
         for (int i = 0; i < WineCellarBlockEntity.SLOT_COUNT; i++) {
             ItemStack st = menu.slots.get(i).getItem();
-            if (st.isEmpty() || !cn.ism.mekck.util.WineAgeCompat.hasWineAge(st)) continue;
-            if (cn.ism.mekck.util.WineAgeCompat.isAgedOut(st, lvl)) continue;
+            if (st.isEmpty() || !cn.ism.mekck.compat.WineAgeCompat.hasWineAge(st)) continue;
+            if (cn.ism.mekck.compat.WineAgeCompat.isAgedOut(st, lvl)) continue;
             sum += 62.5D * st.getCount() * s;
         }
         return sum;

@@ -108,11 +108,11 @@ public final class NutRoasterMenu extends AbstractContainerMenu implements ISide
         } else {
             if (NutRoasterBlockEntity.isUsablePowerItem(stack)) {
                 if (!moveItemStackTo(stack, NutRoasterBlockEntity.SLOT_POWER, NutRoasterBlockEntity.SLOT_POWER + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isSpeedUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isSpeedUpgrade(stack)) {
                 if (!moveItemStackTo(stack, NutRoasterBlockEntity.SLOT_SPEED_UPGRADE, NutRoasterBlockEntity.SLOT_SPEED_UPGRADE + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isEnergyUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isEnergyUpgrade(stack)) {
                 if (!moveItemStackTo(stack, NutRoasterBlockEntity.SLOT_ENERGY_UPGRADE, NutRoasterBlockEntity.SLOT_ENERGY_UPGRADE + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isCreativeUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isCreativeUpgrade(stack)) {
                 if (!moveItemStackTo(stack, NutRoasterBlockEntity.SLOT_CREATIVE_UPGRADE, NutRoasterBlockEntity.SLOT_CREATIVE_UPGRADE + 1, false)) return ItemStack.EMPTY;
             } else if (!cn.ism.mekck.util.MekCkTransfer.moveItemStackTo(stack, slots,
                     NutRoasterBlockEntity.INPUT_SLOT, NutRoasterBlockEntity.INPUT_SLOT + 1, false)) {

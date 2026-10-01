@@ -70,7 +70,7 @@ public final class KitchenRecipeMatcher {
                              cn.ism.mekck.kitchen.KitchenFilter filter) {
         if (level == null) return null;
         // ① 烟火（森罗物语）没有原版配方类型，改走兼容层的虚拟配方
-        for (Recipe<?> recipe : cn.ism.mekck.util.KaleidoscopeGrillingCompat
+        for (Recipe<?> recipe : cn.ism.mekck.compat.KaleidoscopeGrillingCompat
                 .virtualRecipesForFamily(family.id)) {
             try {
                 if (!passesFilter(filter, recipe)) continue;

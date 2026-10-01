@@ -11,7 +11,7 @@ import cn.ism.mekck.recipe.NutRoastingRecipe;
 import cn.ism.mekck.util.RecipeInputMatcher;
 import cn.ism.mekck.util.IceTargetSearch;
 import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import net.minecraft.core.BlockPos;
 import mekanism.api.heat.IHeatCapacitor;
 import mekanism.api.heat.IMekanismHeatHandler;
@@ -307,11 +307,11 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
     }
 
     public double getEffectiveSpeedMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
     }
 
     public double getEffectiveEnergyConsumptionMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
     }
 
     public int getEffectiveProcessTime() {
@@ -462,7 +462,7 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
         super.setRemoved();
         cn.ism.mekck.buff.BuffLinkIndex.remove(worldPosition);
         // AE2 网格节点销毁（未安装 AE2 时为空操作；节点 NBT 由 saveAdditional 保存，重载后 init 重建）
-        cn.ism.mekck.util.AE2Compat.onRemoved(this);
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     // ================== 本机下单（面板「本机 / ME」的本机一侧） ==================
@@ -597,7 +597,7 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
         machine.heatComponent.tick(level, pos);
         machine.updateRedstone();
         // AE2 网格节点生命周期 / 联网检测 / 自动补料（未安装 AE2 时为空操作）
-        cn.ism.mekck.util.AE2Compat.serverTick(machine, level, pos);
+        cn.ism.mekck.compat.AE2Compat.serverTick(machine, level, pos);
 
         // F10 攻击增益：每 20 tick 解析一次 buff 源归属（nut_roaster ← juicer）
         if (machine.buffScanCooldown-- <= 0) {
@@ -851,7 +851,7 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
         if (heatComponent != null) tag.put("HeatCapacitor", heatComponent.save());
-        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
         tag.put("Items", items.serializeNBT());
         tag.putInt("Energy", energy.getEnergyStored());
@@ -881,7 +881,7 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
         if (heatComponent != null && tag.contains("HeatCapacitor", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
             heatComponent.load(tag.getCompound("HeatCapacitor"));
         }
-        cn.ism.mekck.util.AE2Compat.load(this, tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
         items.deserializeNBT(tag.getCompound("Items"));
         if (items.getSlots() != TOTAL_SLOTS) {

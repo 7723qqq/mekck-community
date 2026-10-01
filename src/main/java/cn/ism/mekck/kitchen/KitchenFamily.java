@@ -108,7 +108,7 @@ public enum KitchenFamily {
      * 这里按 id 前缀把它们分别归入烧烤系列与穿串系列。</p>
      */
     public boolean handlesVirtualId(ResourceLocation id) {
-        if (id == null || !cn.ism.mekck.util.KaleidoscopeGrillingCompat.MOD_ID.equals(id.getNamespace())) {
+        if (id == null || !cn.ism.mekck.compat.KaleidoscopeGrillingCompat.MOD_ID.equals(id.getNamespace())) {
             return false;
         }
         String path = id.getPath();

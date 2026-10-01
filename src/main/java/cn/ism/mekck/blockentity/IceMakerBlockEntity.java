@@ -13,7 +13,7 @@ import cn.ism.mekck.recipe.IceMakeRecipe;
 import cn.ism.mekck.util.RecipeInputMatcher;
 import cn.ism.mekck.util.ColdBrewHelper;
 import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import net.minecraft.core.BlockPos;
 import mekanism.api.heat.IHeatCapacitor;
 import mekanism.api.heat.IMekanismHeatHandler;
@@ -158,14 +158,14 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     private boolean meOrderEnabled = true;
     // 冷萃升级读条（每槽 1 个，复刻 Mekanism 安装语义：读条完成后安装并消耗槽位物品）
     /** 常规升级读条（速度不支持；能量 / 创造）。 */
-    private final cn.ism.mekck.util.MekCkUpgradeTracker energyTracker =
-            new cn.ism.mekck.util.MekCkUpgradeTracker(() -> MekckConfig.getBasicEnergyUpgradeMax());
-    private final cn.ism.mekck.util.MekCkUpgradeTracker creativeTracker =
-            new cn.ism.mekck.util.MekCkUpgradeTracker(1);
-    private final cn.ism.mekck.util.MekCkUpgradeTracker[] coldBrewTrackers = {
-            new cn.ism.mekck.util.MekCkUpgradeTracker(1), new cn.ism.mekck.util.MekCkUpgradeTracker(1),
-            new cn.ism.mekck.util.MekCkUpgradeTracker(1), new cn.ism.mekck.util.MekCkUpgradeTracker(1),
-            new cn.ism.mekck.util.MekCkUpgradeTracker(1)};
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker energyTracker =
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(() -> MekckConfig.getBasicEnergyUpgradeMax());
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker creativeTracker =
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(1);
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker[] coldBrewTrackers = {
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(1), new cn.ism.mekck.upgrade.MekCkUpgradeTracker(1),
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(1), new cn.ism.mekck.upgrade.MekCkUpgradeTracker(1),
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(1)};
     /** 各冷萃槽已安装的等级（null = 未安装）。 */
     private final cn.ism.mekck.item.ColdBrewTier[] installedColdBrew = new cn.ism.mekck.item.ColdBrewTier[5];
 
@@ -493,7 +493,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     /** 冷萃升级安装进度（0~1，供升级界面）。 */
     public double getColdBrewInstallProgress() {
         double best = 0.0;
-        for (cn.ism.mekck.util.MekCkUpgradeTracker t : coldBrewTrackers) {
+        for (cn.ism.mekck.upgrade.MekCkUpgradeTracker t : coldBrewTrackers) {
             best = Math.max(best, t.getProgress());
         }
         return best;
@@ -529,7 +529,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
             return;
         }
         // 常规升级槽：速度不支持；能量 / 创造
-        cn.ism.mekck.util.MekCkUpgradeTracker tracker;
+        cn.ism.mekck.upgrade.MekCkUpgradeTracker tracker;
         String itemId;
         if (slot == SLOT_ENERGY_UPGRADE) {
             tracker = energyTracker;
@@ -616,7 +616,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     }
 
     public double getEffectiveEnergyConsumptionMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
     }
 
     public int getEffectiveProcessTime() {
@@ -701,7 +701,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
         super.setRemoved();
         cn.ism.mekck.buff.BuffLinkIndex.remove(worldPosition);
         // AE2 网格节点销毁（未安装 AE2 时为空操作；节点 NBT 由 saveAdditional 保存，重载后 init 重建）
-        cn.ism.mekck.util.AE2Compat.onRemoved(this);
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     // ================== 本机下单（面板「本机 / ME」的本机一侧） ==================
@@ -833,7 +833,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
 
     public static void serverTick(Level level, BlockPos pos, BlockState state, IceMakerBlockEntity machine) {
         // AE2 网格节点生命周期 / 联网检测 / 自动补料（未安装 AE2 时为空操作）
-        cn.ism.mekck.util.AE2Compat.serverTick(machine, level, pos);
+        cn.ism.mekck.compat.AE2Compat.serverTick(machine, level, pos);
         // F10 攻击增益：每 20 tick 解析一次 buff 源归属（ice_maker ← bakery_oven）
         if (machine.buffScanCooldown-- <= 0) {
             machine.buffScanCooldown = 20;
@@ -850,11 +850,11 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
         // 升级读条：常规升级（能量/创造）+ 冷萃升级，20 tick 安装一次
         machine.tickColdBrewUpgrades();
         if (machine.energyTracker.tick(machine.items.getStackInSlot(SLOT_ENERGY_UPGRADE),
-                cn.ism.mekck.util.UpgradeHelper::isEnergyUpgrade)) {
+                cn.ism.mekck.upgrade.UpgradeHelper::isEnergyUpgrade)) {
             machine.setChanged();
         }
         if (machine.creativeTracker.tick(machine.items.getStackInSlot(SLOT_CREATIVE_UPGRADE),
-                cn.ism.mekck.util.UpgradeHelper::isCreativeUpgrade)) {
+                cn.ism.mekck.upgrade.UpgradeHelper::isCreativeUpgrade)) {
             machine.setChanged();
         }
 
@@ -1122,7 +1122,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     @Override
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
-        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
         tag.put("Items", items.serializeNBT());
         tag.put("Fluid", waterTank.writeToNBT(new CompoundTag()));
@@ -1161,7 +1161,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
-        cn.ism.mekck.util.AE2Compat.load(this, tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
         items.deserializeNBT(tag.getCompound("Items"));
         if (items.getSlots() != TOTAL_SLOTS) {

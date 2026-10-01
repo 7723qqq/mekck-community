@@ -1423,7 +1423,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                         net.minecraft.world.item.crafting.Recipe<?> recipe =
                                 level.getRecipeManager().byKey(rid).orElse(null);
                         if (recipe == null) {
-                            recipe = cn.ism.mekck.util.KaleidoscopeGrillingCompat.findVirtualById(rid);
+                            recipe = cn.ism.mekck.compat.KaleidoscopeGrillingCompat.findVirtualById(rid);
                         }
                         if (recipe == null) continue;
                         var step = cn.ism.mekck.kitchen.KitchenCraftingPlan.rebuildStep(level, rid,

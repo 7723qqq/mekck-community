@@ -201,8 +201,8 @@ public class IceCubeEntity extends FallingBlockEntity {
             e.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 40, 10, false, true));
             // 龙霜冷萃：装有冰火传说时联动其原生冰冻状态（frozenData capability）；
             // 未装冰火时使用原生冰冻效果（减速/向下牵引/冰封视觉，逻辑与冰火 FrozenData 一致）
-            if (cn.ism.mekck.util.IceAndFireCompat.isAvailable()) {
-                cn.ism.mekck.util.IceAndFireCompat.applyDragonboneFreeze(e);
+            if (cn.ism.mekck.compat.IceAndFireCompat.isAvailable()) {
+                cn.ism.mekck.compat.IceAndFireCompat.applyDragonboneFreeze(e);
             } else {
                 e.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 2, false, true));
                 e.addEffect(new MobEffectInstance(MobEffects.DIG_SLOWDOWN, 100, 2, false, true));

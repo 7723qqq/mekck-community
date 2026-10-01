@@ -1,6 +1,6 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.util.AE2Compat;
+import cn.ism.mekck.compat.AE2Compat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;

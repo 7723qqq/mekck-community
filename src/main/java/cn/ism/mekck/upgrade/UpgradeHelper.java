@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.upgrade;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;

@@ -1,6 +1,6 @@
-package cn.ism.mekck.client.render.item.gear;
+package cn.ism.mekck.client.atomic_knife;
 
-import cn.ism.mekck.client.model.ModelAtomicKnife;
+import cn.ism.mekck.client.atomic_knife.ModelAtomicKnife;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import mekanism.client.render.item.MekanismISTER;

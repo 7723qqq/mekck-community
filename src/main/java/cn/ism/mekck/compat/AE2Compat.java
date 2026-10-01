@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.compat;
 
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.BlockPos;
@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
+import cn.ism.mekck.util.Reflect;
 
 /**
  * 应用能源2（AE2）可选联动的安全门面。

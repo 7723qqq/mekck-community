@@ -1,6 +1,7 @@
 package cn.ism.mekck.upgrade;
 
 import mekanism.api.Upgrade;
+import cn.ism.mekck.mixin.MixinUpgrade;
 
 /**
  * MekCK 注入 {@link Upgrade} 的 2 个常量，由 {@code MixinUpgrade} 在

@@ -41,7 +41,7 @@ public class NetworkMissingRequestPacket {
         context.get().enqueueWork(() -> {
             ServerPlayer player = context.get().getSender();
             BlockEntity be = PacketGuard.target(player, packet.pos);
-            String text = be == null ? null : cn.ism.mekck.util.AE2Compat.describeNetworkMissing(
+            String text = be == null ? null : cn.ism.mekck.compat.AE2Compat.describeNetworkMissing(
                     be, packet.recipeId, packet.quantity);
             ModMessages.sendToPlayer(new NetworkMissingPacket(packet.pos, packet.recipeId, packet.quantity,
                     text == null ? "" : text), player);

@@ -17,6 +17,7 @@ import vectorwing.farmersdelight.common.registry.ModRecipeTypes;
 
 import java.util.List;
 import cn.ism.mekck.registry.MekCkRecipeTypes;
+import cn.ism.mekck.compat.KaleidoscopeCompat;
 
 /**
  * 机器输入 / 额外输入格的配方匹配过滤：

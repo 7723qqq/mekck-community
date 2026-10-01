@@ -1,4 +1,4 @@
-package cn.ism.mekck.client.model;
+package cn.ism.mekck.client.atomic_knife;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;

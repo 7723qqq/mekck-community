@@ -3,7 +3,7 @@ package cn.ism.mekck.blockentity;
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.menu.WineCellarMenu;
 import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.WineAgeCompat;
+import cn.ism.mekck.compat.WineAgeCompat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;

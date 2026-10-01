@@ -30,8 +30,8 @@ import cn.ism.mekck.machine.MekCkFactoryType;
 import cn.ism.mekck.machine.MekCkMachineTile;
 import cn.ism.mekck.machine.ports.IMekCkPorted;
 import cn.ism.mekck.machine.skewering.SkeweringFactoryExecutor;
-import cn.ism.mekck.util.KaleidoscopeCompat;
-import cn.ism.mekck.util.KaleidoscopeGrillingCompat;
+import cn.ism.mekck.compat.KaleidoscopeCompat;
+import cn.ism.mekck.compat.KaleidoscopeGrillingCompat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
@@ -899,7 +899,7 @@ public final class MekckAe2 {
      * {@code KaleidoscopeCompat.findMillstoneRecipe}）。放宽了就是拉不来的料被投进去永远不加。</p>
      */
     private static boolean grindingIngredientMatches(Level level, ItemStack stack) {
-        if (!cn.ism.mekck.util.KaleidoscopeCompat.isLoaded()) return false;
+        if (!cn.ism.mekck.compat.KaleidoscopeCompat.isLoaded()) return false;
         for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, "kaleidoscope_cookery", "millstone")) {
             for (Ingredient ing : r.getIngredients()) {
                 if (ing != null && !ing.isEmpty() && ing.test(stack)) return true;
@@ -910,8 +910,8 @@ public final class MekckAe2 {
 
     /** 研磨某张石磨配方的所有可能产出（带概率，不抽样）——产物回网的白名单按「全都可能」给。 */
     private static void addGrindingProducts(Recipe<?> recipe, Set<String> out) {
-        for (cn.ism.mekck.util.KaleidoscopeCompat.MillstoneOutput o
-                : cn.ism.mekck.util.KaleidoscopeCompat.getMillstoneOutputs(recipe)) {
+        for (cn.ism.mekck.compat.KaleidoscopeCompat.MillstoneOutput o
+                : cn.ism.mekck.compat.KaleidoscopeCompat.getMillstoneOutputs(recipe)) {
             String id = registryId(o.stack());
             if (id != null) out.add(id);
         }
@@ -2067,7 +2067,7 @@ public final class MekckAe2 {
         List<PatternEntry> out = new ArrayList<>();
         for (var ability : kitchen.installedAbilities()) {
             // 烟火（森罗物语）虚拟配方：没有原版配方类型，单独取用
-            for (Recipe<?> recipe : cn.ism.mekck.util.KaleidoscopeGrillingCompat
+            for (Recipe<?> recipe : cn.ism.mekck.compat.KaleidoscopeGrillingCompat
                     .virtualRecipesForFamily(ability.family().id)) {
                 try {
                     List<InputSpec> specs = new ArrayList<>();

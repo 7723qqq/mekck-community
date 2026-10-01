@@ -381,7 +381,7 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
         }
         // 复用 UpgradeHelper 的曲线常量：GUI 显示的倍率必须与方块实体实际生效的倍率同源，
         // 否则调整升级曲线后这里会显示过期数值。
-        double speedMult = cn.ism.mekck.util.UpgradeHelper.speedMultiplier(speedCount);
+        double speedMult = cn.ism.mekck.upgrade.UpgradeHelper.speedMultiplier(speedCount);
         guiGraphics.drawString(font, String.format("Speed: %d (%.1fx)", speedCount, speedMult), slotX + 22, speedY + 4, 0xFFFFFFFF);
 
         // Energy upgrade slot (left column, bottom)
@@ -391,8 +391,8 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
             String energyText = "E" + (energyCount > 1 ? "x" + energyCount : "");
             guiGraphics.drawString(font, energyText, slotX + 2, energyY + 4, 0xFFFFFFFF);
         }
-        double consumptionMult = cn.ism.mekck.util.UpgradeHelper.energyConsumptionMultiplier(energyCount);
-        double capacityMult = cn.ism.mekck.util.UpgradeHelper.energyCapacityMultiplier(energyCount);
+        double consumptionMult = cn.ism.mekck.upgrade.UpgradeHelper.energyConsumptionMultiplier(energyCount);
+        double capacityMult = cn.ism.mekck.upgrade.UpgradeHelper.energyCapacityMultiplier(energyCount);
         guiGraphics.drawString(font, String.format("Energy: %d (%.2fx/%.1fx)", energyCount, consumptionMult, capacityMult), slotX + 22, energyY + 4, 0xFFFFFFFF);
 
         // Gas upgrade slot (right column, top)

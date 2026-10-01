@@ -1,6 +1,7 @@
 package cn.ism.mekck.upgrade;
 
 import mekanism.api.text.APILang;
+import cn.ism.mekck.mixin.MixinAPILang;
 
 /**
  * MekCK 注入 {@link APILang} 的 4 个译名常量，由 {@code MixinAPILang} 在

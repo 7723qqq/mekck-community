@@ -117,11 +117,11 @@ public final class IceMakerMenu extends AbstractContainerMenu implements ISideCo
         } else {
             if (IceMakerBlockEntity.isUsablePowerItem(stack)) {
                 if (!moveItemStackTo(stack, IceMakerBlockEntity.SLOT_POWER, IceMakerBlockEntity.SLOT_POWER + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isSpeedUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isSpeedUpgrade(stack)) {
                 if (!moveItemStackTo(stack, IceMakerBlockEntity.SLOT_SPEED_UPGRADE, IceMakerBlockEntity.SLOT_SPEED_UPGRADE + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isEnergyUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isEnergyUpgrade(stack)) {
                 if (!moveItemStackTo(stack, IceMakerBlockEntity.SLOT_ENERGY_UPGRADE, IceMakerBlockEntity.SLOT_ENERGY_UPGRADE + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isCreativeUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isCreativeUpgrade(stack)) {
                 if (!moveItemStackTo(stack, IceMakerBlockEntity.SLOT_CREATIVE_UPGRADE, IceMakerBlockEntity.SLOT_CREATIVE_UPGRADE + 1, false)) return ItemStack.EMPTY;
             } else {
                 ColdBrewTier cb = ColdBrewUpgradeItem.getTier(stack);

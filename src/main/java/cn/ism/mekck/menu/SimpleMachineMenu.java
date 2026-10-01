@@ -197,11 +197,11 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
             // 用常量会把升级卡/能源物品指向扩展输入槽或输出槽 ⇒ shift-click 静默无效。
             if (SimpleMachineBlockEntity.isUsablePowerItem(stack)) {
                 if (!moveItemStackTo(stack, powerSlotIndex, powerSlotIndex + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isSpeedUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isSpeedUpgrade(stack)) {
                 if (!moveItemStackTo(stack, speedSlotIndex, speedSlotIndex + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isEnergyUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isEnergyUpgrade(stack)) {
                 if (!moveItemStackTo(stack, energySlotIndex, energySlotIndex + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.util.UpgradeHelper.isCreativeUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isCreativeUpgrade(stack)) {
                 if (!moveItemStackTo(stack, creativeSlotIndex, creativeSlotIndex + 1, false)) return ItemStack.EMPTY;
             } else if (usesExtendedSlots() && MekCkTransfer.moveItemStackTo(stack, slots,
                     0, SimpleMachineBlockEntity.INPUT_COUNT, false)) {
@@ -417,7 +417,7 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
     @Override
     public int getCreativeUpgradeCount() {
         ItemStack s = creativeUpgradeSlot.getItem();
-        return (!s.isEmpty() && cn.ism.mekck.util.UpgradeHelper.isCreativeUpgrade(s)) ? 1 : 0;
+        return (!s.isEmpty() && cn.ism.mekck.upgrade.UpgradeHelper.isCreativeUpgrade(s)) ? 1 : 0;
     }
 
     @Override

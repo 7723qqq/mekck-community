@@ -12,7 +12,7 @@ import cn.ism.mekck.machine.ports.IMekCkPorted;
 import cn.ism.mekck.recipe.PlantingCuttingRecipe;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.upgrade.MekCkUpgradeTypes;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import mekanism.api.Action;
 import mekanism.api.AutomationType;
 import mekanism.api.IContentsListener;

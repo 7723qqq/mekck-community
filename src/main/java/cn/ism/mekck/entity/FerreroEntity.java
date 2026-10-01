@@ -65,7 +65,7 @@ public class FerreroEntity extends ThrowableItemProjectile {
     private static final EntityDataAccessor<Float> DATA_DAMAGE = SynchedEntityData.defineId(FerreroEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Byte> DATA_FLAGS = SynchedEntityData.defineId(FerreroEntity.class, EntityDataSerializers.BYTE);
 
-    /** 基础伤害（未安装任何费列罗升级时的 0 档默认值，与 {@link cn.ism.mekck.util.FerreroUpgradeProfile#damageOf(int) damageOf(0)} 一致）。 */
+    /** 基础伤害（未安装任何费列罗升级时的 0 档默认值，与 {@link cn.ism.mekck.upgrade.FerreroUpgradeProfile#damageOf(int) damageOf(0)} 一致）。 */
     public static final float BASE_DAMAGE = 250.0F;
 
     @Nullable

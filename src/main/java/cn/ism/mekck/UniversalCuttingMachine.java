@@ -221,14 +221,14 @@ public final class UniversalCuttingMachine {
         //   后果是书能打开但提示 Page 'mekguide:index.md' could not be found（页面 map 为空）。
         //   AE2 就是这么做的（在 AppEngClient 构造器里 builder(...).build()），照抄。
         if (net.minecraftforge.fml.loading.FMLEnvironment.dist.isClient()) {
-            cn.ism.mekck.util.GuideMECompat.registerGuidebook();
+            cn.ism.mekck.compat.GuideMECompat.registerGuidebook();
         }
 
         // 应用能源2（AE2）可选联动：为烹饪工厂/穿串工厂挂接 IInWorldGridNodeHost 能力
         // （AE2 未安装时 AE2Compat.isLoaded() 为 false，直接短路）
         MinecraftForge.EVENT_BUS.addGenericListener(BlockEntity.class, (AttachCapabilitiesEvent<BlockEntity> event) -> {
-            if (cn.ism.mekck.util.AE2Compat.isLoaded()) {
-                cn.ism.mekck.util.AE2Compat.attachCapabilities(event);
+            if (cn.ism.mekck.compat.AE2Compat.isLoaded()) {
+                cn.ism.mekck.compat.AE2Compat.attachCapabilities(event);
             }
         });
 
@@ -324,7 +324,7 @@ public final class UniversalCuttingMachine {
         //   直接 .get() 会抛 "Registry Object not present: mekck:planting_cutting_station"、被 setup() 内 catch
         //   吞成一条 warn 并从该处中断，导致后续种植工厂/生物反应堆尺寸全部漏登记。
         //   FMLCommonSetupEvent 时点所有方块已注册，enqueueWork 里调安全；未装 machinepreview 时 setup() 内部直接返回。
-        event.enqueueWork(cn.ism.mekck.util.MachinePreviewCompat::setup);
+        event.enqueueWork(cn.ism.mekck.compat.MachinePreviewCompat::setup);
     }
 
     private void addCreativeTabContents(BuildCreativeModeTabContentsEvent event) {

@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.compat;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -20,6 +20,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.slf4j.Logger;
+import cn.ism.mekck.util.RecipeCache;
+import cn.ism.mekck.util.Reflect;
 
 /**
  * 森罗物语系（作者 ysbbbbbb 的两个模组）「按 id 查不到的配方类型」门面：

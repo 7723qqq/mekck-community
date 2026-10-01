@@ -176,19 +176,19 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
                 if (!moveItemStackTo(stack, powerSlotIndex, powerSlotIndex + 1, false)) {
                     return ItemStack.EMPTY;
                 }
-            } else if (cn.ism.mekck.util.UpgradeHelper.isSpeedUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isSpeedUpgrade(stack)) {
                 if (!moveItemStackTo(stack, speedIdx, speedIdx + 1, false)) {
                     return ItemStack.EMPTY;
                 }
-            } else if (cn.ism.mekck.util.UpgradeHelper.isEnergyUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isEnergyUpgrade(stack)) {
                 if (!moveItemStackTo(stack, energyIdx, energyIdx + 1, false)) {
                     return ItemStack.EMPTY;
                 }
-            } else if (cn.ism.mekck.util.UpgradeHelper.isStackUpgrade(stack)) {
+            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isStackUpgrade(stack)) {
                 if (!moveItemStackTo(stack, stackIdx, stackIdx + 1, false)) {
                     return ItemStack.EMPTY;
                 }
-            } else if (hasCreative && cn.ism.mekck.util.UpgradeHelper.isCreativeUpgrade(stack)) {
+            } else if (hasCreative && cn.ism.mekck.upgrade.UpgradeHelper.isCreativeUpgrade(stack)) {
                 if (!moveItemStackTo(stack, creativeSlotIndex, creativeSlotIndex + 1, false)) {
                     return ItemStack.EMPTY;
                 }

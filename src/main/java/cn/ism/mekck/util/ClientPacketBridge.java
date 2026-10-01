@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import cn.ism.mekck.compat.GuideMECompat;
 
 /**
  * S2C 包的客户端落地门面 —— <b>本类不持有任何 {@code net.minecraft.client.* 符号</b>。

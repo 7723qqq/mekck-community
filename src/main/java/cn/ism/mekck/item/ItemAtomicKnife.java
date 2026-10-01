@@ -66,7 +66,7 @@ public class ItemAtomicKnife extends ItemEnergized {
     public void initializeClient(@NotNull Consumer<IClientItemExtensions> consumer) {
         // 专用服务器安全：客户端渲染逻辑全部隔离在 @OnlyIn(CLIENT) 的 RenderPropertiesAtomicKnife，
         // 本类不再持有任何客户端类符号（RenderAtomicKnife / mekanism.client.RenderPropertiesProvider 均已移除）。
-        cn.ism.mekck.client.item.RenderPropertiesAtomicKnife.get().accept(consumer);
+        cn.ism.mekck.client.atomic_knife.RenderPropertiesAtomicKnife.get().accept(consumer);
     }
 
     @Override

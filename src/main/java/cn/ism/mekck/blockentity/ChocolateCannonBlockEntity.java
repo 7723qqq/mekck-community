@@ -12,7 +12,7 @@ import cn.ism.mekck.menu.ChocolateCannonMenu;
 import cn.ism.mekck.recipe.FerreroRecipe;
 import cn.ism.mekck.util.IceTargetSearch;
 import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.NonNullList;
@@ -148,18 +148,18 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
     private boolean meOrderEnabled = true;
 
     // ================== 升级读条（Mekanism 式） ==================
-    private final cn.ism.mekck.util.MekCkUpgradeTracker speedTracker =
-            new cn.ism.mekck.util.MekCkUpgradeTracker(() -> MekckConfig.getBasicSpeedUpgradeMax());
-    private final cn.ism.mekck.util.MekCkUpgradeTracker energyTracker =
-            new cn.ism.mekck.util.MekCkUpgradeTracker(() -> MekckConfig.getBasicEnergyUpgradeMax());
-    private final cn.ism.mekck.util.MekCkUpgradeTracker creativeTracker =
-            new cn.ism.mekck.util.MekCkUpgradeTracker(1);
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker speedTracker =
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(() -> MekckConfig.getBasicSpeedUpgradeMax());
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker energyTracker =
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(() -> MekckConfig.getBasicEnergyUpgradeMax());
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker creativeTracker =
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker(1);
     /** 费列罗升级各槽读条（每槽 1 个）。 */
-    private final cn.ism.mekck.util.MekCkUpgradeTracker[] ferreroTrackers =
-            new cn.ism.mekck.util.MekCkUpgradeTracker[cn.ism.mekck.item.FerreroUpgradeTier.values().length];
+    private final cn.ism.mekck.upgrade.MekCkUpgradeTracker[] ferreroTrackers =
+            new cn.ism.mekck.upgrade.MekCkUpgradeTracker[cn.ism.mekck.item.FerreroUpgradeTier.values().length];
     {
         for (int i = 0; i < ferreroTrackers.length; i++) {
-            ferreroTrackers[i] = new cn.ism.mekck.util.MekCkUpgradeTracker(1);
+            ferreroTrackers[i] = new cn.ism.mekck.upgrade.MekCkUpgradeTracker(1);
         }
     }
     private int attackTimer = 0;
@@ -364,7 +364,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
     public double getUpgradeInstallProgress() {
         double best = Math.max(speedTracker.getProgress(),
                 Math.max(energyTracker.getProgress(), creativeTracker.getProgress()));
-        for (cn.ism.mekck.util.MekCkUpgradeTracker t : ferreroTrackers) {
+        for (cn.ism.mekck.upgrade.MekCkUpgradeTracker t : ferreroTrackers) {
             best = Math.max(best, t.getProgress());
         }
         return best;
@@ -400,7 +400,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
             setChanged();
             return;
         }
-        cn.ism.mekck.util.MekCkUpgradeTracker tracker;
+        cn.ism.mekck.upgrade.MekCkUpgradeTracker tracker;
         String itemId;
         if (slot == SLOT_SPEED_UPGRADE) {
             tracker = speedTracker;
@@ -462,11 +462,11 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
     }
 
     public double getEffectiveSpeedMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.speedMultiplier(getSpeedUpgradeCount());
     }
 
     public double getEffectiveEnergyConsumptionMultiplier() {
-        return cn.ism.mekck.util.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
+        return cn.ism.mekck.upgrade.UpgradeHelper.energyConsumptionMultiplier(getEnergyUpgradeCount());
     }
 
     public int getEffectiveProcessTime() {
@@ -556,7 +556,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
     public void setRemoved() {
         super.setRemoved();
         // AE2 网格节点销毁（未安装 AE2 时为空操作；节点 NBT 由 saveAdditional 保存，重载后 init 重建）
-        cn.ism.mekck.util.AE2Compat.onRemoved(this);
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     // ================== 本机下单（面板「本机 / ME」的本机一侧） ==================
@@ -687,7 +687,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
         machine.tickUpgrades();
         boolean wasActive = machine.progress > 0;
         // AE2 网格节点生命周期 / 联网检测 / 自动补料（未安装 AE2 时为空操作）
-        cn.ism.mekck.util.AE2Compat.serverTick(machine, level, pos);
+        cn.ism.mekck.compat.AE2Compat.serverTick(machine, level, pos);
 
         machine.updateRedstone();
 
@@ -917,7 +917,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
         // 再于此处一处乘 ferrero_damage_mult——下游 reserve/pick/处决/applyHit 共用 pendingDamage，天然一致。
         int installedTiers = (coconut ? 1 : 0) + (reaper ? 1 : 0) + (crispy ? 1 : 0)
                 + (overlord ? 1 : 0) + (gravity ? 1 : 0);
-        pendingDamage = cn.ism.mekck.util.FerreroUpgradeProfile.damageOf(installedTiers)
+        pendingDamage = cn.ism.mekck.upgrade.FerreroUpgradeProfile.damageOf(installedTiers)
                 * (float) MekckConfig.getFerreroDamageMult();
         byte flags = 0;
         if (crispy) flags |= FerreroEntity.FLAG_CRISPY;
@@ -1190,7 +1190,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
     @Override
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
-        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
         tag.put("Items", items.serializeNBT());
         tag.put("Fluids", fluidTanks.writeToNBT());
@@ -1223,7 +1223,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
-        cn.ism.mekck.util.AE2Compat.load(this, tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
         items.deserializeNBT(tag.getCompound("Items"));
         if (items.getSlots() != TOTAL_SLOTS) {

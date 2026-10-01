@@ -266,7 +266,7 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
     public void setRemoved() {
         super.setRemoved();
         // AE2 网格节点销毁（未安装 AE2 时为空操作；节点 NBT 由 saveAdditional 保存，重载后 init 重建）
-        cn.ism.mekck.util.AE2Compat.onRemoved(this);
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     public ItemStackHandler getItems() {
@@ -327,7 +327,7 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
 
     public static void serverTick(Level level, BlockPos pos, BlockState state, BioreactorBlockEntity tile) {
         // AE2 网格节点生命周期 / 联网检测（未安装 AE2 时为空操作）
-        cn.ism.mekck.util.AE2Compat.serverTick(tile, level, pos);
+        cn.ism.mekck.compat.AE2Compat.serverTick(tile, level, pos);
         tile.tickServer(level, pos, state);
     }
 
@@ -538,7 +538,7 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
     @Override
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
-        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
         tag.put("Items", items.serializeNBT());
         tag.putInt("Energy", energy.getEnergyStored());
@@ -548,7 +548,7 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
-        cn.ism.mekck.util.AE2Compat.load(this, tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
         if (tag.contains("Items")) {
             items.deserializeNBT(tag.getCompound("Items"));

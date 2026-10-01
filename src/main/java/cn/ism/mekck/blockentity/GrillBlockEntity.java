@@ -3,7 +3,7 @@ package cn.ism.mekck.blockentity;
 import cn.ism.mekck.machine.MekCkSlot;
 import cn.ism.mekck.machine.MekCkSlotHandler;
 import cn.ism.mekck.util.RecipeInputMatcher;
-import cn.ism.mekck.util.UpgradeHelper;
+import cn.ism.mekck.upgrade.UpgradeHelper;
 import mekanism.api.Action;
 import mekanism.api.AutomationType;
 import mekanism.api.IContentsListener;
@@ -421,7 +421,7 @@ public final class GrillBlockEntity extends TileEntityConfigurableMachine
         // AE2 网格节点生命周期 / 联网检测 / 自动补料（未安装 AE2 时为空操作）。
         // 排在 workCycle() 之后：本 tick 刚产出的物品要先落到产物槽，
         // MekckAe2 的产物回写才能在同一 tick 看到它们。
-        cn.ism.mekck.util.AE2Compat.serverTick(this, getLevel(), worldPosition);
+        cn.ism.mekck.compat.AE2Compat.serverTick(this, getLevel(), worldPosition);
     }
 
     /**
@@ -918,7 +918,7 @@ public final class GrillBlockEntity extends TileEntityConfigurableMachine
         // AE2 网格节点的 NBT 必须与节点一同存活：节点里存着频道占用与
         // 「已勾选的自动处理材料」，不写就等于每次重载都换一批频道。
         // AE2Compat 未装时整个方法短路为空操作。
-        cn.ism.mekck.util.AE2Compat.saveAdditional(this, tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         // 放置者归属（网络厨师学徒）：与旧 BE 的 saveAdditional 逐字同款。
         cn.ism.mekck.advancement.PlacerPersist.save(this, tag);
     }
@@ -1113,7 +1113,7 @@ public final class GrillBlockEntity extends TileEntityConfigurableMachine
                     tag.getList(LEGACY_ITEMS, Tag.TAG_LIST));
         }
         readOwnState(tag);
-        cn.ism.mekck.util.AE2Compat.load(this, tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
     }
 
@@ -1154,7 +1154,7 @@ public final class GrillBlockEntity extends TileEntityConfigurableMachine
     @Override
     public void setRemoved() {
         super.setRemoved();
-        cn.ism.mekck.util.AE2Compat.onRemoved(this);
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     /** 供 GUI 与外部读的能量容器。 */

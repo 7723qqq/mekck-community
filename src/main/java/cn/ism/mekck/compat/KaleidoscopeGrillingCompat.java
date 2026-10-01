@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.compat;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;

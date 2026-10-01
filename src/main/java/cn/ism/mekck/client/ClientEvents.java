@@ -115,15 +115,15 @@ public final class ClientEvents {
     /** 原子刀模型层（物品渲染用）。 */
     @SubscribeEvent
     public static void onRegisterLayerDefinitions(net.minecraftforge.client.event.EntityRenderersEvent.RegisterLayerDefinitions event) {
-        event.registerLayerDefinition(cn.ism.mekck.client.model.ModelAtomicKnife.KNIFE_LAYER,
-                cn.ism.mekck.client.model.ModelAtomicKnife::createLayerDefinition);
+        event.registerLayerDefinition(cn.ism.mekck.client.atomic_knife.ModelAtomicKnife.KNIFE_LAYER,
+                cn.ism.mekck.client.atomic_knife.ModelAtomicKnife::createLayerDefinition);
     }
 
     /** 原子刀渲染器资源重载监听（纹理/模型重载时重建）。 */
     @SubscribeEvent
     public static void onRegisterClientReloadListeners(net.minecraftforge.client.event.RegisterClientReloadListenersEvent event) {
         mekanism.client.ClientRegistrationUtil.registerClientReloadListeners(event,
-                cn.ism.mekck.client.render.item.gear.RenderAtomicKnife.RENDERER);
+                cn.ism.mekck.client.atomic_knife.RenderAtomicKnife.RENDERER);
     }
 }
 

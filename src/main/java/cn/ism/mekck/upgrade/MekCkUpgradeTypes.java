@@ -10,6 +10,7 @@ import net.minecraft.world.item.ItemStack;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import cn.ism.mekck.CuttingMachineFactoryTier;
 
 /**
  * {@link MekCkUpgradeCodec} 与 {@link Upgrade} 的绑定层，同时是升级体系的聚合入口。
