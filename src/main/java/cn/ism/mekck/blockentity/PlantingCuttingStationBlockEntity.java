@@ -339,11 +339,15 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
         if (canOperate && plantingRecipe.isPresent() && hasNutrient && !seed.isEmpty()
                 && machine.energy.getEnergyStored() >= energyPerTick
                 && machine.growthStatus == GROWTH_OK
-                && machine.canFitOutputs(level, plantingRecipe.get())) {
+                && machine.canFitOutputs(plantingRecipe.get())) {
             machine.energy.extractEnergy(energyPerTick, false);
             machine.progress++;
             if (machine.progress >= effectiveProcessTime) {
-                machine.completeRecipe(level, plantingRecipe.get());
+                // 完成时只掷一次骰：产物集算好一次再交给 completeRecipe。
+                // 旧实现预检与产出各掷一次（canFitOutputs 每 tick 掷），副产物概率 1.0
+                // 且输出槽装不下副产物时预检永远失败 ⇒ progress 每 tick 清零 ⇒ 永久卡死。
+                NonNullList<ItemStack> outputs = machine.getFinalOutputs(plantingRecipe.get());
+                machine.completeRecipe(level, outputs);
                 machine.progress = 0;
                 // PULSE 模式：本次完整处理结束，停止并等待下一次红石信号
                 if (machine.redstoneControl == RedstoneControl.PULSE) {
@@ -467,18 +471,35 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
     }
 
     /**
-     * Check if the recipe's outputs can all fit in the output slot.
+     * 开工预检：**主产物**必须能进输出槽（不掷副产物骰）。
+     *
+     * <p>单槽装不下两种物品，而 plantcut 配方常有多个不同产物（FD 切割结果，
+     * 如 chicken → chicken_cuts + bone_meal）。所以这里只要求第一个产物进得去：
+     * 其余产物在 {@link #insertOutput} 里装不下时走掉落兜底，不再静默销毁，
+     * 也不会像旧实现那样「副产物永远装不下 ⇒ 每 tick 清零 progress ⇒ 永久卡死」。</p>
+     *
+     * <p>旧实现用同一个 {@code existing} 逐个试插、不模拟累积：输出槽为空时
+     * 任意多个不同产物都判「装得下」，第二个产物在 insertOutput 里被静默丢弃。</p>
      */
-    private boolean canFitOutputs(Level level, PlantingCuttingRecipe recipe) {
-        NonNullList<ItemStack> allResults = getFinalOutputs(recipe);
-        if (allResults.isEmpty()) return false;
+    private boolean canFitOutputs(PlantingCuttingRecipe recipe) {
+        NonNullList<ItemStack> mainResults = recipe.getResults();
+        ItemStack first = mainResults.isEmpty()
+                ? (recipe.getSecondaryResults().isEmpty() ? ItemStack.EMPTY : recipe.getSecondaryResults().get(0))
+                : mainResults.get(0);
+        if (first.isEmpty()) return false;
 
-        ItemStack existing = items.getStackInSlot(OUTPUT_SLOT).copy();
-        for (ItemStack result : allResults) {
-            ItemStack remainder = tryInsert(existing, result.copy());
-            if (!remainder.isEmpty()) return false;
+        // 副本必须回答与真槽相同的上限（BigStackItemHandler 默认 64，而输出槽是
+        // Integer.MAX_VALUE）：否则预检会比真实落槽更严，输出槽堆到 64 个后机器停摆。
+        ItemStackHandler simulated = new cn.ism.mekck.util.BigStackItemHandler(items.getSlots()) {
+            @Override
+            public int getSlotLimit(int slot) {
+                return items.getSlotLimit(slot);
+            }
+        };
+        for (int slot = 0; slot < items.getSlots(); slot++) {
+            simulated.setStackInSlot(slot, items.getStackInSlot(slot).copy());
         }
-        return true;
+        return insertOutput(simulated, first.copy(), OUTPUT_SLOT).isEmpty();
     }
 
     /**
@@ -502,50 +523,43 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
         return outputs;
     }
 
-    private void completeRecipe(Level level, PlantingCuttingRecipe recipe) {
+    private void completeRecipe(Level level, NonNullList<ItemStack> outputs) {
         // Seed is not consumed (acts as a catalyst)
         // Consume nutrient
         consumeNutrient();
 
-        // Get final outputs and insert
-        NonNullList<ItemStack> outputs = getFinalOutputs(recipe);
+        // 产物逐个落槽；装不下的余量掉落兜底，绝不静默销毁
         for (ItemStack output : outputs) {
-            insertOutput(output.copy());
-        }
-    }
-
-    private void insertOutput(ItemStack stack) {
-        for (int slot = OUTPUT_SLOT; slot <= OUTPUT_SLOT && !stack.isEmpty(); slot++) {
-            ItemStack existing = items.getStackInSlot(slot);
-            if (existing.isEmpty()) {
-                int moved = Math.min(stack.getCount(), items.getSlotLimit(slot));
-                ItemStack inserted = stack.copy();
-                inserted.setCount(moved);
-                items.setStackInSlot(slot, inserted);
-                stack.shrink(moved);
-            } else if (ItemStack.isSameItemSameTags(existing, stack)) {
-                int limit = items.getSlotLimit(slot);
-                int space = limit - existing.getCount();
-                if (space > 0) {
-                    int moved = Math.min(stack.getCount(), space);
-                    existing.grow(moved);
-                    items.setStackInSlot(slot, existing);
-                    stack.shrink(moved);
-                }
+            ItemStack remainder = insertOutput(items, output.copy(), OUTPUT_SLOT);
+            if (!remainder.isEmpty() && level != null && !level.isClientSide) {
+                cn.ism.mekck.util.BigStackDrops.dropAbove(level, worldPosition, remainder);
             }
         }
     }
 
-    private static ItemStack tryInsert(ItemStack existing, ItemStack stack) {
+    /**
+     * 把 {@code stack} 放进 {@code handler} 的 {@code slot}，返回装不下的余量
+     * （不改动传入的 stack）。预检在副本上调用它、落槽在真 handler 上调用它，
+     * 两处同一口径。
+     */
+    private static ItemStack insertOutput(ItemStackHandler handler, ItemStack stack, int slot) {
         ItemStack remainder = stack.copy();
+        ItemStack existing = handler.getStackInSlot(slot);
         if (existing.isEmpty()) {
-            return ItemStack.EMPTY; // fits
+            int moved = Math.min(remainder.getCount(), handler.getSlotLimit(slot));
+            ItemStack inserted = remainder.copy();
+            inserted.setCount(moved);
+            handler.setStackInSlot(slot, inserted);
+            remainder.shrink(moved);
         } else if (ItemStack.isSameItemSameTags(existing, remainder)) {
-            int space = Integer.MAX_VALUE - existing.getCount();
-            if (remainder.getCount() <= space) {
-                return ItemStack.EMPTY;
+            int limit = handler.getSlotLimit(slot);
+            int moved = Math.min(remainder.getCount(), limit - existing.getCount());
+            if (moved > 0) {
+                ItemStack merged = existing.copy();
+                merged.grow(moved);
+                handler.setStackInSlot(slot, merged);
+                remainder.shrink(moved);
             }
-            remainder.shrink(space);
         }
         return remainder;
     }
