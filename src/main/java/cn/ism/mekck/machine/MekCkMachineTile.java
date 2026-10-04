@@ -1074,11 +1074,29 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine
      * 那是调用执行器之后才能得到的结论——用它来给「要不要调执行器」做前置判断会自相矛盾。</p>
      */
     protected int activeWorkSlots() {
-        if (inputSlots == null) {
+        return countNonEmpty(inputSlots);
+    }
+
+    /**
+     * 槽列表里的非空槽数 —— {@link #activeWorkSlots()} 的公共算术。
+     *
+     * <p>抽成 {@code static} 纯函数是为了能在裸 JVM 里断言：真 tile 造不出来
+     * （构造链要 {@code BlockEntityType} 与 Mek 的注册表），而这条判据的全部输入
+     * 就是一个槽列表。见 {@code TestFactoryStorageOnlyStart}。
+     * {@code protected} 而不是包级可见：家族 tile 在子包里（{@code machine.cooking} /
+     * {@code machine.skewering}），包级可见够不到。</p>
+     *
+     * <p><b>存储型家族（烹饪 / 穿串）覆写 {@link #activeWorkSlots()} 时拿它数
+     * {@code ingredientSlots()}</b>，不能退回只数输入槽：这两家的存储区
+     * （144 / 81 格）才是真正的料仓 —— 材料只放在存储区时会被判成「没活干」，
+     * 机器永不启动，而执行器明明扫得到那些料。</p>
+     */
+    protected static int countNonEmpty(List<IInventorySlot> slots) {
+        if (slots == null) {
             return 0;
         }
         int active = 0;
-        for (IInventorySlot slot : inputSlots) {
+        for (IInventorySlot slot : slots) {
             if (!slot.isEmpty()) {
                 active++;
             }
@@ -1796,15 +1814,19 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine
             }
         }
         // ③ 均分：每槽取 ceil(剩余 / 剩余目标槽数)，总量逐字守恒。
+        //    每槽上限取 slotLimit 本身，不再与物品自身堆叠上限取小：MekCkSlot 的
+        //    obeyStackLimit = false，槽的真实容量就是 slotLimit（配置注释写明
+        //    「该值同时是执行器判定产物装不装得下的依据」）。取小会让「总量没超总容量」
+        //    的摆法提前触发下面的兜底，把余量一股脑倒进第一格。
         for (int k = 0; k < kinds.size(); k++) {
             ItemStack kind = kinds.get(k);
             List<Integer> target = targets.get(k);
             int remaining = kind.getCount();
             for (int t = 0; t < target.size() && remaining > 0; t++) {
                 int free = target.size() - t;
-                int perSlot = (remaining + free - 1) / free;
-                int limit = Math.min(slotLimit, kind.getMaxStackSize());
-                int put = Math.min(remaining, Math.min(perSlot, limit));
+                // long 中间量：remaining 可接近 Integer.MAX_VALUE，+ free - 1 会溢出成负数。
+                int perSlot = (int) Math.min(Integer.MAX_VALUE, ((long) remaining + free - 1) / free);
+                int put = Math.min(remaining, Math.min(perSlot, slotLimit));
                 if (put <= 0) {
                     continue;
                 }
@@ -1812,13 +1834,13 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine
                 remaining -= put;
             }
             if (remaining > 0) {
-                // 目标槽全装满了还有剩。不会发生（目标槽含该物品原本占用的槽，
-                // 容量必然够），留着是为了「宁可堆叠也不销毁」。
+                // 走到这里 ⟺ 总量 > 目标槽总容量（每槽上限 slotLimit，循环已把每槽填满）。
+                // 宁可超容量堆叠也不销毁：MekCkSlot 的 obeyStackLimit = false 允许槽里
+                // 存在超过 getLimit 的叠，少一个都是玩家的损失。
                 int first = target.get(0);
                 ItemStack existing = layout.get(first);
-                layout.set(first, existing.isEmpty()
-                        ? kind.copyWithCount(remaining)
-                        : existing.copyWithCount(existing.getCount() + remaining));
+                long merged = (long) (existing.isEmpty() ? 0 : existing.getCount()) + remaining;
+                layout.set(first, kind.copyWithCount((int) Math.min(Integer.MAX_VALUE, merged)));
             }
         }
         return layout;

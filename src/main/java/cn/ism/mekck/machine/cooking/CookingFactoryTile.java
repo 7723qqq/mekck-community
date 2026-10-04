@@ -511,7 +511,21 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
     /**
      * {@inheritDoc}
      *
-     * <p><b>本机的判据是「有订单 <u>且</u> 输入槽里有料」</b>，而不是基类的「有非空输入槽」，
+     * <p><b>本机的「在干活」槽数按 {@link #ingredientSlots()}（6 个输入槽 + 144 格存储）
+     * 数，不是基类的「非空输入槽」</b>：存储区才是本机真正的料仓，旧实现的
+     * {@code getMaxConsumableCount} 就是「先扫输入槽、再扫存储区」。只数输入槽会让
+     * 「材料全放在存储区」的机器永不启动 —— 而执行器明明扫得到那些料
+     * （{@code canProcess} 用的就是 {@code ingredientSlots()}）。</p>
+     */
+    @Override
+    protected int activeWorkSlots() {
+        return countNonEmpty(ingredientSlots());
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p><b>本机的判据是「有订单 <u>且</u> 配料槽里有料」</b>，而不是基类的「有非空输入槽」，
      * 也不是单纯的「有订单」：</p>
      * <ul>
      *   <li>不带订单判据时，材料摆满就会推着进度条走空批次（本机无订单绝不加工，
@@ -524,11 +538,12 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
      *       第 578 行才 {@code extractEnergy}。缺料时旧机器一滴电都不扣。</li>
      * </ul>
      *
-     * <p><b>这是一处保守近似，不是对旧语义的完整复刻</b>：它只挡住了「6 个输入槽全空」，
-     * 挡不住「有料但都不匹配订单配方」与「产物槽满 / 流体不够」。要做到与旧
-     * {@code canProcess} 等价，需要执行器对外暴露一个「本 tick 真的能加工」的查询
-     * （配方匹配与容量判定只有它知道），那是一次接口改动，留给后续决策。
-     * 此处先把「空转吃电」这个最常见的形态去掉。</p>
+     * <p>「有料」由覆写后的 {@link #activeWorkSlots()} 给出 —— 它数的是
+     * {@link #ingredientSlots()}（输入 + 存储），见该方法的注释。</p>
+     *
+     * <p>更细的「有料但都不匹配订单配方 / 产物槽满 / 流体不够」由执行器的
+     * {@code canProcess} 逐 tick 判定：{@code workCycle} 对每一路先问它，判 false 的
+     * 那一路进度清零、<b>不扣电</b>，并点亮该路的告警位。</p>
      */
     @Override
     protected boolean hasWorkToDo() {

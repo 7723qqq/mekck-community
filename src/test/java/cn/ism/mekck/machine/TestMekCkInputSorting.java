@@ -146,6 +146,47 @@ public class TestMekCkInputSorting {
     }
 
     /**
+     * 槽上限高于原版堆叠上限时，<b>按槽上限摊</b>，不按物品自身堆叠上限截。
+     *
+     * <p>{@code MekCkSlot} 的 {@code obeyStackLimit = false}，槽的真实容量就是
+     * {@code slotLimit}（配置注释写明「该值同时是执行器判定产物装不装得下的依据」）。
+     * 旧实现把每槽上限取成 {@code min(slotLimit, maxStackSize)}，于是「总量没超总容量」
+     * 的摆法也会提前触发兜底，把余量一股脑倒进第一格（48/16 而不是 32/32）。</p>
+     */
+    @Test
+    public void slotLimitAboveVanillaStackSizeIsTheRealPerSlotCap() {
+        // 鸡蛋的原版堆叠上限是 16；本模组的槽上限配成 64。
+        List<ItemStack> layout = MekCkMachineTile.sortedLayout(
+                slots(of(Items.EGG, 32), of(Items.EGG, 32)), 64);
+        assertEquals(64, totalOf(layout, of(Items.EGG, 1)));
+        assertEquals("每槽按 slotLimit 摊平，而不是按原版 16 截", 32, layout.get(0).getCount());
+        assertEquals(32, layout.get(1).getCount());
+    }
+
+    /** 总量正好等于目标槽总容量时不该触发兜底：2 槽 × 上限 16 = 32 ⇒ 16/16。 */
+    @Test
+    public void totalEqualToTotalCapacityDoesNotTriggerFallback() {
+        List<ItemStack> layout = MekCkMachineTile.sortedLayout(
+                slots(of(Items.EGG, 32), ItemStack.EMPTY), 16);
+        assertEquals(32, totalOf(layout, of(Items.EGG, 1)));
+        assertEquals(16, layout.get(0).getCount());
+        assertEquals(16, layout.get(1).getCount());
+    }
+
+    /**
+     * 兜底只在「总量真超目标槽总容量」时触发：2 槽 × 上限 16 = 32 &lt; 64，
+     * 于是每槽先填满 16、余量堆进第一格，总量一个不少。
+     */
+    @Test
+    public void fallbackTriggersOnlyWhenTotalExceedsTotalCapacity() {
+        List<ItemStack> layout = MekCkMachineTile.sortedLayout(
+                slots(of(Items.EGG, 64), ItemStack.EMPTY), 16);
+        assertEquals("宁可超容量堆叠也不销毁", 64, totalOf(layout, of(Items.EGG, 1)));
+        assertEquals(48, layout.get(0).getCount());
+        assertEquals(16, layout.get(1).getCount());
+    }
+
+    /**
      * 总量超过目标槽总容量时，<b>宁可超容量堆叠也不销毁</b>。
      *
      * <p>这个场景在真机上可达：{@code MekCkSlot} 的 {@code obeyStackLimit = false}，
