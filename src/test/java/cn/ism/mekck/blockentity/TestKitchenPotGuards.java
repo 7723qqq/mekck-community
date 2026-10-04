@@ -11,16 +11,16 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * 智能厨锅本轮修复的护栏（源码形态 + 一段纯算术）。
+ * 智能厨锅修复的护栏（源码形态 + 一段纯算术）。
  *
  * <h3>为什么是源码形态</h3>
- * 三处修复都在 {@code SmartCookingPotBlockEntity} 的加工路径上，而该类的构造链
+ * 这些修复都在 {@code SmartCookingPotBlockEntity} 的加工路径上，而该类的构造链
  * 需要 {@code BlockEntityType} / {@code Level} / 物品注册表，裸 JVM 里造不出来
  * （同 {@code TestNbtPersistenceInvariants} 的说明）。所以这里钉的是<b>结构</b>：
  * 调用顺序、返回值是否被消费、口径函数是否被换掉 —— 这三类错误都不需要运行游戏
- * 就能判出来，而且正是本轮真实修过的形态。
+ * 就能判出来，而且正是真实修过的形态。
  *
- * <h3>它钉的是哪三个 bug</h3>
+ * <h3>它钉的是哪些 bug</h3>
  * <ol>
  *   <li><b>C1（Critical）</b>：{@code completeRecipe} 先扣流体、后复检流体，且
  *       {@code consumeAllMaterials} 的返回值被丢弃 ⇒ 罐内流体不足一份时零固体消耗
@@ -30,6 +30,13 @@ import static org.junit.Assert.assertTrue;
  *       门禁失效 ⇒ 无限加工、订单永不完成。</li>
  *   <li><b>m7</b>：{@code getMaxConsumableCountForOrder} 用 {@code totalOf}（跨罐求和）
  *       估算流体份数，而实际 {@code drainOf} 要求单罐足量 ⇒ 估算偏大。</li>
+ *   <li><b>canFitAll 64 上限</b>：模拟副本未覆写 {@code getSlotLimit}（默认 64），
+ *       输出槽堆到 64 个同种产物后预检永远失败 ⇒ 机器静默停摆。</li>
+ *   <li><b>半扣中间态</b>：{@code canMatch} 回溯判定可合成、{@code consumeAllMaterials}
+ *       贪心真扣，两者结论可能不同 ⇒ 贪心扣到一半失败留下「扣了一半」的中间态。</li>
+ *   <li><b>零产出订单完成 + 空转</b>：{@code completeRecipe} 失败仍无条件
+ *       {@code orderCompleted++}，且开工门禁不校验流体 ⇒ 订单零产出被标记完成、
+ *       机器空转耗能。</li>
  * </ol>
  */
 public class TestKitchenPotGuards {
@@ -45,31 +52,41 @@ public class TestKitchenPotGuards {
         return TestSourceText.methodBody(src, signature);
     }
 
-    // ── C1：扣料门禁必须在扣流体之前 ─────────────────────────────────────
+    // ── C1 + 半扣：扣料门禁必须在扣流体之前，且先模拟再真扣 ──────────────
 
     /**
      * {@code completeRecipe} 必须把 {@code consumeAllMaterials} 的返回值当门禁，
-     * 且该调用在 {@code consumeFluidForRecipe} <b>之前</b>。
+     * 且扣料在 {@code consumeFluidForRecipe} <b>之前</b>；真扣之前必须先模拟一遍
+     * （同一贪心顺序），失败时零消耗。
      *
      * <p>旧顺序：先 {@code consumeFluidForRecipe}（抽走一份流体）→
      * {@code consumeAllMaterials} 第一步 {@code hasRequiredFluid} 复检同一阈值，
      * 罐内不足 2×需求时返回 false → 返回值被丢弃 → 照出产物。固定一份固体库存
      * 可无限产出。</p>
+     *
+     * <p>半扣中间态：{@code canMatch} 用回溯判定可合成，而 {@code consumeAllMaterials}
+     * 用贪心真扣、不跟踪已用槽 —— 两者对同一库存可能结论不同，贪心扣到一半失败
+     * 会留下「扣了一半」的中间态（材料被扣、无产物）。先模拟再真扣后，模拟失败
+     * 时零消耗。</p>
      */
     @Test
     public void completeRecipeGatesOnConsumeAllMaterialsBeforeDrainingFluid() throws IOException {
-        String body = methodBody(read(POT), "private void completeRecipe(");
-        assertFalse("找不到 completeRecipe", body.isEmpty());
+        String body = methodBody(read(POT), "private boolean completeRecipe(");
+        assertFalse("找不到 completeRecipe（必须返回 boolean，失败与成功可区分）", body.isEmpty());
 
-        String gate = "if (!consumeAllMaterials(recipe, 1, false)) return;";
-        assertTrue("completeRecipe 必须把 consumeAllMaterials 的返回值当门禁："
-                        + "旧实现丢弃返回值 ⇒ 罐内流体不足一份时零固体消耗出产物（物品复制）",
-                body.contains(gate));
-        int gateIdx = body.indexOf(gate);
+        String simulateGate = "if (!consumeAllMaterials(recipe, 1, true)) return false;";
+        String executeGate = "if (!consumeAllMaterials(recipe, 1, false)) return false;";
+        assertTrue("completeRecipe 必须先模拟扣料（同一贪心顺序）：模拟失败零消耗，"
+                        + "旧实现直接真扣，贪心扣到一半失败留下半扣中间态",
+                body.contains(simulateGate));
+        assertTrue("completeRecipe 必须把真扣的返回值当门禁", body.contains(executeGate));
+        int simulateIdx = body.indexOf(simulateGate);
+        int executeIdx = body.indexOf(executeGate);
         int drainIdx = body.indexOf("consumeFluidForRecipe(recipe)");
         assertTrue("找不到 consumeFluidForRecipe(recipe)", drainIdx >= 0);
+        assertTrue("模拟必须在真扣之前", simulateIdx < executeIdx);
         assertTrue("扣料门禁必须在扣流体之前：先扣流体再复检会因「罐内 < 2×需求」而整单跳过固体消耗",
-                gateIdx < drainIdx);
+                executeIdx < drainIdx);
         assertFalse("不得再出现丢弃返回值的裸调用 consumeAllMaterials(recipe, 1, false);",
                 body.contains("consumeAllMaterials(recipe, 1, false);"));
     }
@@ -139,5 +156,59 @@ public class TestKitchenPotGuards {
         assertEquals("单罐 250 mB 恰好一份",
                 1, CookingFactoryExecutor.batchForFluidAmounts(
                         new int[]{250, 0}, new boolean[]{true, true}, 250));
+    }
+
+    // ── 模拟副本必须回答与真槽相同的上限 ────────────────────────────────
+
+    /**
+     * {@code canFitAll} 的模拟副本必须覆写 {@code getSlotLimit} 委托真 handler。
+     *
+     * <p>{@code BigStackItemHandler} 未覆写 {@code getSlotLimit}，继承
+     * {@code ItemStackHandler} 的默认 64；而真 items 的 OUTPUT_SLOT 上限是
+     * {@code Integer.MAX_VALUE}。输出槽里同种产物 ≥64 时，模拟判定「装不下」⇒
+     * {@code serverTick} 门禁失败、{@code progress} 每 tick 清零，机器静默停摆
+     * （玩家不取走产物就永远不再加工）。</p>
+     */
+    @Test
+    public void canFitAllSimulationCopyDelegatesSlotLimit() throws IOException {
+        String body = methodBody(read(POT), "private boolean canFitAll(");
+        assertFalse("找不到 canFitAll", body.isEmpty());
+        assertTrue("canFitAll 的模拟副本必须覆写 getSlotLimit 委托真 handler："
+                        + "BigStackItemHandler 默认 64，而输出槽上限是 Integer.MAX_VALUE，"
+                        + "输出槽堆到 64 个同种产物后预检永远失败、机器静默停摆",
+                body.contains("public int getSlotLimit(int slot)")
+                        && body.contains("return items.getSlotLimit(slot);"));
+    }
+
+    // ── 开工门禁校验流体 / 订单计数只在真产出后推进 ──────────────────────
+
+    /**
+     * {@code serverTick} 的开工门禁必须校验流体：旧实现只查 {@code canFitAll}
+     * （输出空间），罐内 0 mB 奶 + 固体齐时机器照常开工，跑满 200 tick（20 FE/tick）
+     * 后零产出 —— 空转耗能。
+     */
+    @Test
+    public void startGateChecksRequiredFluid() throws IOException {
+        String tick = methodBody(read(POT), "public static void serverTick(");
+        assertFalse("找不到 serverTick", tick.isEmpty());
+        assertTrue("开工门禁必须校验流体（hasRequiredFluid）：旧实现只查 canFitAll，"
+                        + "流体不足时机器照常开工、跑满 200 tick 后零产出（空转耗能）",
+                tick.contains("machine.hasRequiredFluid(recipe)"));
+    }
+
+    /**
+     * {@code serverTick} 必须把 {@code completeRecipe} 的返回值当门禁：
+     * 失败（输出装不下 / 材料或流体不足）时零产出，不得推进 {@code orderCompleted}。
+     * 旧实现无条件 {@code orderCompleted++}，订单会在零产出下被标记完成。
+     */
+    @Test
+    public void orderCountAdvancesOnlyOnSuccessfulCompletion() throws IOException {
+        String tick = methodBody(read(POT), "public static void serverTick(");
+        assertFalse("找不到 serverTick", tick.isEmpty());
+        assertTrue("serverTick 必须把 completeRecipe 的返回值当门禁：失败（零产出）不推进订单计数",
+                tick.contains("if (machine.completeRecipe(level, recipe) && machine.orderQuantity > 0)"));
+        assertFalse("不得再无条件推进订单计数：旧实现 completeRecipe 失败仍 orderCompleted++，"
+                        + "订单在零产出下被标记完成",
+                tick.contains("machine.completeRecipe(level, recipe);"));
     }
 }

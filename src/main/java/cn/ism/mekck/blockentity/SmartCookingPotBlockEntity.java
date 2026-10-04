@@ -430,6 +430,7 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
         int effectiveProcessTime = hasCreative ? 1 : Math.max(1, (int) (recipeBaseTime / speedMult));
 
         if (canOperate && recipe != null && machine.energy.getEnergyStored() >= energyPerTick
+                && machine.hasRequiredFluid(recipe)
                 && machine.canFitAll(recipe)) {
             // Check order requirements: if we have an order, verify we haven't completed it yet
             boolean canProcess = true;
@@ -443,10 +444,9 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
                 machine.heatComponent.addHeatFromEnergy(energyPerTick);
                 machine.progress++;
                 if (machine.progress >= effectiveProcessTime) {
-                    machine.completeRecipe(level, recipe);
-                    
-                    // Update order tracking
-                    if (machine.orderQuantity > 0) {
+                    // 只有真产出才推进订单计数：completeRecipe 失败（输出装不下 / 材料或流体
+                    // 不足）时零产出，旧实现无条件 orderCompleted++ 会把订单在零产出下标记完成。
+                    if (machine.completeRecipe(level, recipe) && machine.orderQuantity > 0) {
                         machine.orderCompleted++;
                         if (machine.orderCompleted >= machine.orderQuantity) {
                             machine.orderQuantity = 0;
@@ -983,22 +983,40 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
      * 返回值当门禁；扣不动就整单放弃，绝不产出。旧顺序是「先扣流体 → 复检流体
      * 失败 → 返回值被丢弃 → 照出产物」：罐内流体不足一份时零固体消耗出产物
      * （物品复制）。</p>
+     *
+     * <p><b>先模拟再真扣</b>：{@code canMatch} 用回溯判定可合成，而
+     * {@code consumeAllMaterials} 用贪心真扣、不跟踪已用槽 —— 两者对同一库存可能
+     * 结论不同，旧实现贪心扣到一半失败会留下「扣了一半」的中间态（材料被扣、无产物）。
+     * 模拟与真扣走同一贪心顺序，模拟失败时零消耗。</p>
+     *
+     * @return 是否真的产出了（失败时零消耗、零产出，调用方据此决定是否推进订单计数）
      */
-    private void completeRecipe(Level level, Recipe<?> recipe) {
-        if (!canFitAll(recipe)) return;
+    private boolean completeRecipe(Level level, Recipe<?> recipe) {
+        if (!canFitAll(recipe)) return false;
         // 固体+容器+附加油/carrier 一并扣 1 份；扣不动（含流体不足）就整单放弃
-        if (!consumeAllMaterials(recipe, 1, false)) return;
+        if (!consumeAllMaterials(recipe, 1, true)) return false;
+        if (!consumeAllMaterials(recipe, 1, false)) return false;
         consumeFluidForRecipe(recipe);
         // 产物
         ItemStack result = getResultStack(recipe);
         if (!result.isEmpty()) insertOutput(items, result.copy(), OUTPUT_SLOT);
+        return true;
     }
 
     /**
      * 模拟一次产物放入：只看 OUTPUT_SLOT 能否容纳（不再写入 RETURN_SLOT）。
+     *
+     * <p>副本必须回答与真槽相同的上限（{@code BigStackItemHandler} 默认 64，而输出槽是
+     * {@code Integer.MAX_VALUE}）：否则预检会比真实落槽更严，输出槽堆到 64 个同种产物后
+     * 预检永远失败、{@code progress} 每 tick 清零，机器静默停摆。</p>
      */
     private boolean canFitAll(Recipe<?> recipe) {
-        ItemStackHandler simulated = new cn.ism.mekck.util.BigStackItemHandler(items.getSlots());
+        ItemStackHandler simulated = new cn.ism.mekck.util.BigStackItemHandler(items.getSlots()) {
+            @Override
+            public int getSlotLimit(int slot) {
+                return items.getSlotLimit(slot);
+            }
+        };
         for (int slot = 0; slot < items.getSlots(); slot++) {
             simulated.setStackInSlot(slot, items.getStackInSlot(slot).copy());
         }

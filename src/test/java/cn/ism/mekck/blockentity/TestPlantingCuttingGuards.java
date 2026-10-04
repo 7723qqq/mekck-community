@@ -120,4 +120,23 @@ public class TestPlantingCuttingGuards {
         assertTrue("insertOutput 必须返回余量（旧实现把余量留在局部变量里丢掉）",
                 insert.contains("return remainder"));
     }
+
+    /**
+     * 预检副本必须覆写 {@code getSlotLimit} 委托真 handler。
+     *
+     * <p>{@code BigStackItemHandler} 未覆写 {@code getSlotLimit}，继承
+     * {@code ItemStackHandler} 的默认 64；而真 items 的 OUTPUT_SLOT 上限是
+     * {@code Integer.MAX_VALUE}。输出槽堆到 64 个后预检永远失败、{@code progress}
+     * 每 tick 清零 ⇒ 机器停摆。</p>
+     */
+    @Test
+    public void precheckCopyDelegatesSlotLimitToRealHandler() throws IOException {
+        String body = methodBody(read(BE), "private boolean canFitOutputs(");
+        assertFalse("找不到 canFitOutputs", body.isEmpty());
+        assertTrue("canFitOutputs 的模拟副本必须覆写 getSlotLimit 委托真 handler："
+                        + "BigStackItemHandler 默认 64，而输出槽上限是 Integer.MAX_VALUE，"
+                        + "输出槽堆到 64 个后预检永远失败、机器停摆",
+                body.contains("public int getSlotLimit(int slot)")
+                        && body.contains("return items.getSlotLimit(slot);"));
+    }
 }
