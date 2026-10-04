@@ -1,5 +1,6 @@
 package cn.ism.mekck.client;
 
+import cn.ism.mekck.UniversalCuttingMachine;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
@@ -9,6 +10,10 @@ import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
 /**
@@ -20,7 +25,11 @@ import org.joml.Matrix4f;
  *   <li>模型无 quad（如无 ModelData 的 Mekanism 系机器）时由调用方回退到包围盒 {@link #renderBox}；</li>
  *   <li>顶点必须以 {@code .endVertex()} 结束，否则不会被写入缓冲（历史不可见根因）。</li>
  * </ul>
+ *
+ * <p>订阅登出事件只为清掉 {@code berPreview*} 静态缓存（见 {@link #onLogout}）——
+ * 缓存里的临时 BE 强引用 ClientLevel，不清理会跨存档残留。</p>
  */
+@Mod.EventBusSubscriber(modid = UniversalCuttingMachine.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class MekCkOutlineRenderer {
 
     /** 包围盒线框粗细（倍数，由配置 box_line_width 设置；1.0 = 基础细带）。 */
@@ -80,20 +89,12 @@ public final class MekCkOutlineRenderer {
                                            net.minecraft.client.renderer.MultiBufferSource mbs,
                                            Level level, BlockState state,
                                            net.minecraft.core.BlockPos pos, int light) {
-        net.minecraft.world.level.block.entity.BlockEntity be = null;
-        try {
-            if (state.getBlock() instanceof net.minecraft.world.level.block.EntityBlock entityBlock) {
-                be = entityBlock.newBlockEntity(pos, state);
-            }
-        } catch (Throwable ignored) {
-            return false;
-        }
+        net.minecraft.world.level.block.entity.BlockEntity be = previewBlockEntity(level, state, pos);
         if (be == null) return false;
         // §F26：能量立方的临时 BE 储能为 0 会让 RenderEnergyCube.shouldRender 直接 false（内部旋转核不画）
         // → 取/调 BER 前先灌满储能（全反射、静默失败；只碰临时 BE，不碰世界真实方块）。
         cn.ism.mekck.util.EnergyCubePreviewUtil.seedTempEnergyIfCube(be);
         try {
-            be.setLevel(level); // 临时 BE 补 world 上下文，避免 BER 内 getLevel() NPE
             net.minecraft.client.renderer.blockentity.BlockEntityRenderer<?> ber =
                     Minecraft.getInstance().getBlockEntityRenderDispatcher().getRenderer(be);
             if (ber == null) return false;
@@ -106,6 +107,63 @@ public final class MekCkOutlineRenderer {
                     net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(state.getBlock()), t.toString());
             return false;
         }
+    }
+
+    // 预览用临时 BE 缓存（客户端渲染线程单线程访问，无需同步）：
+    // 旧实现每帧 newBlockEntity —— 能量立方/风机的 tile 构造期持有 10+ 个 handler/component，
+    // 60fps 下就是每秒上百个短命对象。缓存键必须含 BlockPos：BE 的 worldPosition 是 final
+    // （javap 已证），而 RenderEnergyCube 用 Vec3.atCenterOf(getBlockPos()) 决定能量核的世界位置、
+    // BioreactorRenderer 用 pos.above(i) 取逐层光照 —— 位置变了必须换 BE，不能只按状态复用。
+    private static BlockState berPreviewState;
+    private static net.minecraft.core.BlockPos berPreviewPos;
+    private static net.minecraft.world.level.block.entity.BlockEntity berPreviewBe;
+
+    /** 取预览用临时 BE：同 (BlockState, BlockPos) 复用；换世界时刷新 level 引用。 */
+    private static net.minecraft.world.level.block.entity.BlockEntity previewBlockEntity(
+            Level level, BlockState state, net.minecraft.core.BlockPos pos) {
+        if (berPreviewBe != null && berPreviewState == state && pos.equals(berPreviewPos)) {
+            if (berPreviewBe.getLevel() != level) {
+                berPreviewBe.setLevel(level); // 临时 BE 补 world 上下文，避免 BER 内 getLevel() NPE
+            }
+            return berPreviewBe;
+        }
+        net.minecraft.world.level.block.entity.BlockEntity be = null;
+        try {
+            if (state.getBlock() instanceof net.minecraft.world.level.block.EntityBlock entityBlock) {
+                be = entityBlock.newBlockEntity(pos, state);
+            }
+        } catch (Throwable ignored) {
+            be = null;
+        }
+        if (be == null) {
+            // 创建失败：清掉旧缓存，避免继续复用与当前状态/位置不匹配的 BE
+            berPreviewState = null;
+            berPreviewPos = null;
+            berPreviewBe = null;
+            return null;
+        }
+        // 新建的 BE 没有 world 上下文（BlockEntity 构造器只写 type/worldPosition/blockState，
+        // 构造链里不调 setLevel）：不补 level，缓存未命中后的第一帧 BER 会因 getLevel() == null
+        // 直接 return（BioreactorRenderer 开头即判空）⇒ 叠加层缺一帧。
+        be.setLevel(level);
+        berPreviewState = state;
+        berPreviewPos = pos.immutable();
+        berPreviewBe = be;
+        return be;
+    }
+
+    /**
+     * 登出 / 换世界：清掉预览 BE 缓存。
+     *
+     * <p>缓存是静态字段，而 BE 的 level 字段强引用 ClientLevel（含已加载区块）——
+     * 不清理会一直强引用旧世界，直到玩家再次进世界并手持 BER 预览方块才换键。
+     * 与 {@code BuffLinkRenderer.onLogout} 清 {@code BuffLinkIndex} 同一先例。</p>
+     */
+    @SubscribeEvent
+    public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        berPreviewState = null;
+        berPreviewPos = null;
+        berPreviewBe = null;
     }
 
     private static final org.slf4j.Logger PREVIEW_LOGGER = org.slf4j.LoggerFactory.getLogger("mekck-preview");

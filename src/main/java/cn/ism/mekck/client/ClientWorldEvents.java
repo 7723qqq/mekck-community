@@ -88,53 +88,92 @@ public final class ClientWorldEvents {
                                             com.mojang.blaze3d.vertex.VertexConsumer lines,
                                             java.util.List<net.minecraft.core.BlockPos> positions,
                                             Vec3 view, net.minecraft.core.BlockPos target) {
-        if (positions.isEmpty()) return;
-        int minY = Integer.MAX_VALUE;
-        for (net.minecraft.core.BlockPos p1 : positions) {
-            minY = Math.min(minY, p1.getY());
-        }
-        java.util.Set<Long> ground = new java.util.HashSet<>();
-        for (net.minecraft.core.BlockPos p1 : positions) {
-            if (p1.getY() == minY) {
-                ground.add(((long) p1.getX() << 32) | (p1.getZ() & 0xFFFFFFFFL));
-            }
-        }
-        if (ground.isEmpty()) return;
+        java.util.List<GroundEdge> edges = groundOutlineEdges(positions, target);
+        if (edges.isEmpty()) return;
         // 与模型线框同一坐标系：translate(target - view)，画相对 target 的局部坐标，
         // 避免对 RenderHighlight poseStack 空间做假设导致白线错位。
         poseStack.pushPose();
         poseStack.translate(target.getX() - view.x, target.getY() - view.y, target.getZ() - view.z);
         org.joml.Matrix4f m = poseStack.last().pose();
-        float y = minY - target.getY();
-        for (long k : ground) {
-            int x = (int) (k >> 32);
-            int z = (int) (k & 0xFFFFFFFFL);
-            int lx = x - target.getX();
-            int lz = z - target.getZ();
-            groundEdge(lines, m, ground, lx, y, lz, lx + 1, y, lz);          // 北
-            groundEdge(lines, m, ground, lx + 1, y, lz, lx + 1, y, lz + 1);  // 东
-            groundEdge(lines, m, ground, lx + 1, y, lz + 1, lx, y, lz + 1);  // 南
-            groundEdge(lines, m, ground, lx, y, lz + 1, lx, y, lz);          // 西
+        for (GroundEdge e : edges) {
+            float y = e.y() - target.getY();
+            lines.vertex(m, e.x0() - target.getX(), y, e.z0() - target.getZ())
+                    .color(1.0F, 1.0F, 1.0F, 0.9F).normal(0.0F, 1.0F, 0.0F).endVertex();
+            lines.vertex(m, e.x1() - target.getX(), y, e.z1() - target.getZ())
+                    .color(1.0F, 1.0F, 1.0F, 0.9F).normal(0.0F, 1.0F, 0.0F).endVertex();
         }
         poseStack.popPose();
     }
 
-    /** 画一条底边；若相邻方向有同层块（内部边）则跳过。 */
-    private static void groundEdge(com.mojang.blaze3d.vertex.VertexConsumer lines, org.joml.Matrix4f m,
-                                   java.util.Set<Long> ground, int x0, float y0, int z0, int x1, float y1, int z1) {
-        boolean hidden;
-        if (z0 == z1) {
-            int nx = (x0 + x1) / 2;
-            hidden = ground.contains(((long) nx << 32) | ((long) (z0 - 1) & 0xFFFFFFFFL))
-                    || ground.contains(((long) nx << 32) | ((long) (z0 + 1) & 0xFFFFFFFFL));
-        } else {
-            int nz = (z0 + z1) / 2;
-            hidden = ground.contains(((long) (x0 - 1) << 32) | (nz & 0xFFFFFFFFL))
-                    || ground.contains(((long) (x0 + 1) << 32) | (nz & 0xFFFFFFFFL));
+    /** 地面轮廓的一条底边（世界坐标，格单位）：从 (x0,y,z0) 到 (x1,y,z1)，y 为地面层。 */
+    record GroundEdge(int x0, int y, int z0, int x1, int z1) {
+    }
+
+    /**
+     * 一条地面底边是否可见：**只查外侧那一格**。
+     *
+     * <p>旧实现查的是边<b>两侧</b>的格子（水平边查 z0-1 与 z0+1、垂直边查 x0-1 与 x0+1），
+     * 而方块自身恒在地面集合里 ⇒ 南/东边恒被自己挡住、北/西边被对侧邻块误挡：
+     * 种植切配站只画 2/4 条边、生物反应堆只画 4/12 条。外侧格坐标由调用点按边的朝向
+     * 显式给出，不从端点反推朝向（那正是算错的地方）。</p>
+     */
+    static boolean isGroundEdgeVisible(java.util.Set<net.minecraft.core.BlockPos> ground,
+                                       net.minecraft.core.BlockPos outerCell) {
+        return !ground.contains(outerCell);
+    }
+
+    /**
+     * 枚举地面集合的全部可见底边（纯函数，不依赖渲染环境）。
+     *
+     * <p>每个地面格贡献 4 条候选边（北/东/南/西），一条边可见 ⇔ 它外侧那一格
+     * 不在同层地面集合里。护栏：{@code TestGroundOutlineEdges} 断言 1×1 / 1×2 / 3×3
+     * 三种足迹画出的边集合。</p>
+     */
+    static java.util.List<GroundEdge> visibleGroundEdges(java.util.Set<net.minecraft.core.BlockPos> ground) {
+        java.util.List<GroundEdge> edges = new java.util.ArrayList<>();
+        for (net.minecraft.core.BlockPos cell : ground) {
+            int x = cell.getX();
+            int y = cell.getY();
+            int z = cell.getZ();
+            if (isGroundEdgeVisible(ground, new net.minecraft.core.BlockPos(x, y, z - 1))) {
+                edges.add(new GroundEdge(x, y, z, x + 1, z));                    // 北
+            }
+            if (isGroundEdgeVisible(ground, new net.minecraft.core.BlockPos(x + 1, y, z))) {
+                edges.add(new GroundEdge(x + 1, y, z, x + 1, z + 1));            // 东
+            }
+            if (isGroundEdgeVisible(ground, new net.minecraft.core.BlockPos(x, y, z + 1))) {
+                edges.add(new GroundEdge(x + 1, y, z + 1, x, z + 1));            // 南
+            }
+            if (isGroundEdgeVisible(ground, new net.minecraft.core.BlockPos(x - 1, y, z))) {
+                edges.add(new GroundEdge(x, y, z + 1, x, z));                    // 西
+            }
         }
-        if (hidden) return;
-        lines.vertex(m, x0, y0, z0).color(1.0F, 1.0F, 1.0F, 0.9F).normal(0.0F, 1.0F, 0.0F).endVertex();
-        lines.vertex(m, x1, y1, z1).color(1.0F, 1.0F, 1.0F, 0.9F).normal(0.0F, 1.0F, 0.0F).endVertex();
+        return edges;
+    }
+
+    /**
+     * 地面轮廓的可见底边（纯函数）：最底层（minY）全部格 + 主方块 target → 可见底边。
+     *
+     * <p>主方块必须并入地面集合：绑定格清单不含主方块，3×3 足迹因此只有外圈 8 格，
+     * 缺了中心会在轮廓中间多画一个 1×1 的洞（12 条边变 16 条）。</p>
+     */
+    static java.util.List<GroundEdge> groundOutlineEdges(java.util.List<net.minecraft.core.BlockPos> positions,
+                                                         net.minecraft.core.BlockPos target) {
+        if (positions.isEmpty()) return java.util.List.of();
+        int minY = Integer.MAX_VALUE;
+        for (net.minecraft.core.BlockPos p : positions) {
+            minY = Math.min(minY, p.getY());
+        }
+        java.util.Set<net.minecraft.core.BlockPos> ground = new java.util.HashSet<>();
+        for (net.minecraft.core.BlockPos p : positions) {
+            if (p.getY() == minY) {
+                ground.add(p);
+            }
+        }
+        if (target.getY() == minY) {
+            ground.add(target);
+        }
+        return visibleGroundEdges(ground);
     }
 
     private static final java.util.Map<net.minecraft.world.level.block.Block, Boolean> OTHER_MOD_MACHINE_CACHE =

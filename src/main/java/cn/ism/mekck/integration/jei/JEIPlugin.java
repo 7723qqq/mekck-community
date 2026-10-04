@@ -62,11 +62,6 @@ public class JEIPlugin implements IModPlugin {
     private static final RecipeType<?> GRILLING_TYPE = createRecipeType(
             "barbequesdelight", "grilling", "com.mao.barbequesdelight.content.recipe.SimpleGrillingRecipe");
 
-    // Mekanism: Central Kitchen planting recipe type (for reference in catalyst)
-    @SuppressWarnings("unchecked")
-    public static final RecipeType<Recipe<?>> PLANTING_TYPE = (RecipeType<Recipe<?>>) createRecipeType(
-            "mekmm", "planting", "com.jerry.mekmm.api.recipes.PlantingRecipe");
-
     // MekCK: PlantCut recipe type - our own recipe type
     public static final RecipeType<PlantingCuttingRecipe> PLANT_CUT_TYPE =
             RecipeType.create("mekck", "plantcut", PlantingCuttingRecipe.class);
