@@ -35,6 +35,9 @@ public class NetworkRecipeRequestPacket {
     public static void handle(NetworkRecipeRequestPacket packet, Supplier<NetworkEvent.Context> context) {
         context.get().enqueueWork(() -> {
             ServerPlayer player = context.get().getSender();
+            // 恶意/魔改服务端可以把 C2S 包发回客户端执行：此时 getSender() 恒为 null，
+            // 继续走到 sendToPlayer 会 NPE 崩客户端。直接丢弃。
+            if (player == null) return;
             net.minecraft.world.level.block.entity.BlockEntity be = PacketGuard.target(player, packet.pos);
             // 任何挂了 ME 网络节点的机器都能回列表（服务端通用分派：终端样板同源），
             // 未联网 / 未装 AE2 时 AE2Compat 短路为空表，客户端显示"ME 网络中无可用食材"。

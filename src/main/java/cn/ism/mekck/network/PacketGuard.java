@@ -60,7 +60,7 @@ public final class PacketGuard {
         return Math.max(0, Math.min(raw, MAX_DECODE_ELEMENTS));
     }
 
-    // ==================== 昂贵只读请求的节流（第三轮补）====================
+    // ==================== 昂贵只读请求的节流（第三轮补；第七轮改三态）====================
 
     /**
      * 昂贵请求的最小间隔（tick）。
@@ -75,8 +75,49 @@ public final class PacketGuard {
     private static final java.util.Map<java.util.UUID, long[]> EXPENSIVE_COOLDOWN =
             new java.util.concurrent.ConcurrentHashMap<>();
 
+    /** 玩家 UUID → 上次真实计算的结果（供 {@link ExpensiveRequest#ALLOW_CACHED} 复用）。 */
+    private static final java.util.Map<java.util.UUID, CachedResult> EXPENSIVE_RESULT =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 一次真实计算的结果快照：指纹 + 结果本体。 */
+    private record CachedResult(long fingerprint, Object value) {
+    }
+
+    /** 昂贵请求闸门的三态结论。 */
+    public enum ExpensiveRequest {
+        /** 冷却期外（或首次请求）：必须真实计算。 */
+        ALLOW_COMPUTE,
+        /** 冷却期内且与上次请求完全相同：结果必然相同，调用方应回上次结果，不得重算。 */
+        ALLOW_CACHED,
+        /** 冷却期内且请求不同：静默忽略。 */
+        DENY
+    }
+
     /**
-     * 「昂贵只读/预览」请求的节流闸：同一玩家在冷却期内<b>只放行与上次完全相同</b>的请求。
+     * 三态判定表（纯函数，普通 JVM 可单测）。
+     *
+     * <p>两个输入是闸门从槽位里读出的两个事实：{@code sameFingerprint} = 与上次放行的
+     * 请求指纹相同；{@code withinCooldown} = 距上次放行不足
+     * {@link #EXPENSIVE_COOLDOWN_TICKS} 刻。</p>
+     *
+     * <table>
+     *   <caption>判定表</caption>
+     *   <tr><th>同指纹</th><th>冷却期内</th><th>结论</th></tr>
+     *   <tr><td>是</td><td>是</td><td>ALLOW_CACHED（重复请求，回缓存）</td></tr>
+     *   <tr><td>是</td><td>否</td><td>ALLOW_COMPUTE（结果可能已变，重算）</td></tr>
+     *   <tr><td>否</td><td>是</td><td>DENY（不同请求，静默忽略）</td></tr>
+     *   <tr><td>否</td><td>否</td><td>ALLOW_COMPUTE（新请求，重算）</td></tr>
+     * </table>
+     */
+    public static ExpensiveRequest classifyExpensiveRequest(boolean sameFingerprint, boolean withinCooldown) {
+        if (sameFingerprint) {
+            return withinCooldown ? ExpensiveRequest.ALLOW_CACHED : ExpensiveRequest.ALLOW_COMPUTE;
+        }
+        return withinCooldown ? ExpensiveRequest.DENY : ExpensiveRequest.ALLOW_COMPUTE;
+    }
+
+    /**
+     * 「昂贵只读/预览」请求的节流闸（布尔视图：true = 放行，false = 静默忽略）。
      *
      * <h3>为什么需要它</h3>
      * {@code CentralKitchenBlockEntity.previewOrder} 与 {@code placeOrder} 都会走
@@ -88,17 +129,20 @@ public final class PacketGuard {
      * <p>而 {@code mode == 0} 的<b>预览不消耗任何材料</b>，客户端可以纯刷 ——
      * 一个玩家发几百个包就能把服务端主线程打满。</p>
      *
-     * <h3>为什么是「同请求去重」而不是「一律拒绝」</h3>
-     * 一律拒绝会让「连点两次预览」第二次没反应，看起来像 bug。而 GUI 的自然操作里
-     * <b>重复同一个请求</b>本来就是幂等的（结果一样），所以：冷却期内只有
-     * <b>与上次完全相同</b>的请求被静默放行（省掉重复计算），任何<b>不同</b>的请求被拒。
-     * 玩家的下一次真实操作（换了配方/数量）仍然立即生效。</p>
+     * <h3>三态语义（第七轮修）</h3>
+     * 放行分两种：冷却期内的<b>同指纹重复</b>是 {@link ExpensiveRequest#ALLOW_CACHED}
+     * （调用方回上次结果，<b>不重算</b>）；其余放行是 {@link ExpensiveRequest#ALLOW_COMPUTE}。
+     * 布尔视图把两者都映射成 true —— 新调用方应改用 {@link #expensiveRequestState}
+     * 以区分「重算」与「回缓存」。
+     *
+     * <p>冷却期外的同指纹请求<b>必须重算</b>：结果可能已随机器状态变化，
+     * 若无限期回缓存，同一订单（指纹不变）将永远无法再下一次。</p>
      *
      * <p>被拒时<b>不回错误提示</b>：节流是内部实现细节，不是玩家的错误。
      * 静默丢弃即可（客户端下一次真实操作自然会拿到新结果）。</p>
      *
-     * @param fingerprint 请求指纹；同指纹在冷却期内视为重复，直接放行
-     * @return true = 放行；false = 冷却中且请求不同，应静默忽略
+     * @param fingerprint 请求指纹；同指纹在冷却期内视为重复
+     * @return true = 放行（ALLOW_COMPUTE 或 ALLOW_CACHED）；false = 冷却中且请求不同
      */
     public static boolean expensiveRequest(ServerPlayer player, long fingerprint) {
         if (player == null) {
@@ -110,23 +154,73 @@ public final class PacketGuard {
             EXPENSIVE_COOLDOWN.put(player.getUUID(), new long[]{now, fingerprint});
             return true;
         }
-        if (slot[1] == fingerprint) {
-            // 重复请求：结果必然相同，放行但**不刷新时刻**。
-            // 刷新时刻会让「连点」变成永远通不过（每次都被当成新请求）的反面极端。
-            return true;
+        boolean sameFingerprint = slot[1] == fingerprint;
+        boolean withinCooldown = now - slot[0] < EXPENSIVE_COOLDOWN_TICKS;
+        ExpensiveRequest decision = classifyExpensiveRequest(sameFingerprint, withinCooldown);
+        if (decision == ExpensiveRequest.ALLOW_COMPUTE) {
+            slot[0] = now;
+            slot[1] = fingerprint;
         }
-        if (now - slot[0] < EXPENSIVE_COOLDOWN_TICKS) {
-            return false;
-        }
-        slot[0] = now;
-        slot[1] = fingerprint;
-        return true;
+        return decision != ExpensiveRequest.DENY;
     }
 
-    /** 玩家离开时清掉其节流记录（不清理也不影响正确性，只是回收 Map）。 */
+    /**
+     * 三态版节流闸：调用方据此决定「重算 / 回缓存 / 忽略」。
+     *
+     * <p>与 {@link #expensiveRequest} 共用同一张判定表与同一份槽位。本方法先按当前槽位
+     * 判一次「这是不是冷却期内的同指纹重复」，再让布尔闸门落账，最后把结果映射成三态 ——
+     * 布尔闸门只回 true/false，分不出 ALLOW_COMPUTE 与 ALLOW_CACHED。</p>
+     */
+    public static ExpensiveRequest expensiveRequestState(ServerPlayer player, long fingerprint) {
+        if (player == null) {
+            return ExpensiveRequest.DENY;
+        }
+        long now = player.level() == null ? 0 : player.level().getGameTime();
+        long[] slot = EXPENSIVE_COOLDOWN.get(player.getUUID());
+        boolean cached = slot != null && classifyExpensiveRequest(slot[1] == fingerprint,
+                now - slot[0] < EXPENSIVE_COOLDOWN_TICKS) == ExpensiveRequest.ALLOW_CACHED;
+        if (!expensiveRequest(player, fingerprint)) {
+            return ExpensiveRequest.DENY;
+        }
+        return cached ? ExpensiveRequest.ALLOW_CACHED : ExpensiveRequest.ALLOW_COMPUTE;
+    }
+
+    /** 记录一次真实计算的结果，供同指纹的 {@link ExpensiveRequest#ALLOW_CACHED} 复用。 */
+    public static void rememberResult(ServerPlayer player, long fingerprint, Object result) {
+        if (player != null) {
+            EXPENSIVE_RESULT.put(player.getUUID(), new CachedResult(fingerprint, result));
+        }
+    }
+
+    /** 取回上次真实计算的结果；没有记录或指纹不符时返回 null。 */
+    public static Object cachedResult(ServerPlayer player, long fingerprint) {
+        if (player == null) {
+            return null;
+        }
+        CachedResult cached = EXPENSIVE_RESULT.get(player.getUUID());
+        return cached != null && cached.fingerprint() == fingerprint ? cached.value() : null;
+    }
+
+    /**
+     * 请求指纹：把「同一请求」的全部判别分量依次混成一个 64 位值（纯函数）。
+     *
+     * <p>调用方必须把机器坐标也混进来：节流槽按玩家存，若指纹不含坐标，
+     * 玩家在冷却期内对两台不同机器发同参数请求会被当成重复 ——
+     * ALLOW_CACHED 会回错结果，或把一次真实操作静默吞掉。</p>
+     */
+    public static long fingerprint(long... parts) {
+        long h = 0x9E3779B97F4A7C15L;
+        for (long part : parts) {
+            h = (h ^ part) * 0x100000001B3L;
+        }
+        return h;
+    }
+
+    /** 玩家离开时清掉其节流记录与结果缓存（不清理也不影响正确性，只是回收 Map）。 */
     public static void forgetCooldown(ServerPlayer player) {
         if (player != null) {
             EXPENSIVE_COOLDOWN.remove(player.getUUID());
+            EXPENSIVE_RESULT.remove(player.getUUID());
         }
     }
 

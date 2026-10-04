@@ -40,6 +40,9 @@ public class NetworkMissingRequestPacket {
     public static void handle(NetworkMissingRequestPacket packet, Supplier<NetworkEvent.Context> context) {
         context.get().enqueueWork(() -> {
             ServerPlayer player = context.get().getSender();
+            // 恶意/魔改服务端可以把 C2S 包发回客户端执行：此时 getSender() 恒为 null，
+            // 继续走到 sendToPlayer 会 NPE 崩客户端。直接丢弃。
+            if (player == null) return;
             BlockEntity be = PacketGuard.target(player, packet.pos);
             // 与 NetworkRecipeRequestPacket 同口径：任何请求都必回响应（首请求不得被丢弃），
             // 不做「丢弃式」节流；昂贵部分由 MekckAe2.describeNetworkMissing 内部的面板入口
