@@ -1,10 +1,20 @@
 package cn.ism.mekck.blockentity;
 
 import cn.ism.mekck.TestSourceText;
+import cn.ism.mekck.compat.KaleidoscopeGrillingCompat;
+import cn.ism.mekck.util.BigStackItemHandler;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraftforge.items.ItemStackHandler;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.IOException;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -21,6 +31,11 @@ import static org.junit.Assert.assertTrue;
  * <p>所以判据钉在<b>源码结构</b>上：与 {@code TestAttackRadiusClamp} /
  * {@code TestMinorDefectGuards} 同源。每条断言都对应一个「改回去就变红」的具体形态，
  * 而不是「看起来对」。</p>
+ *
+ * <p>例外是 M31 的 {@code returnPreview}：它是包级可见的静态纯函数（只用到
+ * {@link ItemStackHandler} 与配方字段），能按 {@link #boot()} 把注册表拉起来后做
+ * <b>真行为断言</b> —— 与 {@code TestKitchenPotGuards} 的 {@code findAndConsumeOne}
+ * 同口径。能行为断言的地方就不该只钉源码形态。</p>
  *
  * <p>读源码一律走 {@link TestSourceText#read}（剥注释）—— 本类的 javadoc 与各方法注释里
  * 逐字引用了旧形态，不剥注释会把说明当成代码（本仓库已栽过三次，见 {@code TestSourceText}）。</p>
@@ -43,6 +58,31 @@ public class TestIceCombatGuards {
         String body = TestSourceText.methodBody(src, signature);
         assertFalse(where + " 里找不到 " + signature + "（改名了就同步更新本测试）", body.isEmpty());
         return body;
+    }
+
+    /**
+     * 裸 JVM 里把原版注册表拉起来 —— 与 {@code TestKitchenPotGuards.boot()} 同一套两步。
+     *
+     * <p>本类绝大多数断言只读源码文本，不需要注册表；只有
+     * {@link #skeweringReturnPreviewIsSimulatedAndGated} 要造
+     * {@link Ingredient} / {@link ItemStack}，才需要这一步。</p>
+     */
+    @BeforeClass
+    public static void boot() {
+        net.minecraft.SharedConstants.tryDetectVersion();
+        try {
+            net.minecraft.server.Bootstrap.bootStrap();
+        } catch (Throwable ignored) {
+            // Forge 网络钩子在未变换的 classpath 上必然失败；注册表此时已就绪。
+        }
+    }
+
+    /** 森罗虚拟配方同形的配方：机器侧反射读 public 字段 {@code tool} / {@code ingredientCount}。 */
+    private static Recipe<?> threadingRecipe(Ingredient tool, int toolCount) {
+        return new KaleidoscopeGrillingCompat.VirtualRecipe(
+                new ResourceLocation("mekck", "threading/test"),
+                tool, Ingredient.of(Items.COOKED_BEEF), toolCount, null, 0,
+                new ItemStack(Items.COOKED_BEEF));
     }
 
     // ================== 1. IceFactory 创造升级 ==================
@@ -110,6 +150,71 @@ public class TestIceCombatGuards {
         assertTrue("Max 按钮的 tool 项必须带 toolCount > 0 守卫："
                         + "toolAvailable / 0 抛 ArithmeticException，被外层 catch 吞成「Max 恒 0」",
                 body.contains("!tool.isEmpty() && toolCount > 0"));
+    }
+
+    /**
+     * 行为：返还预览 = 本次实际会扣掉的签子，且预演零改动。
+     *
+     * <p>{@code returnPreview} 是包级可见的静态纯函数（只用到 {@link ItemStackHandler} 与
+     * 配方字段），所以能按 {@link #boot()} 把注册表拉起来后做真行为断言 ——
+     * 与 {@code TestKitchenPotGuards} 的 {@code findAndConsumeOne} 同口径。</p>
+     *
+     * <p>反例形态：主料在输入槽 0、签子在存储槽（扣料位置无关，签子照样扣得动）。
+     * 预览必须是<b>被扣掉的签子</b>，而不是槽 0 里恰好放着的主料 —— 旧写法读槽 0
+     * 复制整叠，这条路径上复制的是主料（物品复制，M29 修复）。</p>
+     */
+    @Test
+    public void skeweringReturnPreviewIsSimulatedAndGated() {
+        ItemStackHandler handler = new BigStackItemHandler(SkeweringMachineBlockEntity.TOTAL_SLOTS);
+        handler.setStackInSlot(SkeweringMachineBlockEntity.INPUT_SLOT_START, new ItemStack(Items.COOKED_BEEF, 64));
+        handler.setStackInSlot(SkeweringMachineBlockEntity.STORAGE_SLOT_START, new ItemStack(Items.STICK, 10));
+
+        ItemStack preview = SkeweringMachineBlockEntity.returnPreview(
+                threadingRecipe(Ingredient.of(Items.STICK), 1), handler);
+        assertTrue("返还预览必须是本次会扣掉的签子，不是槽 0 的主料",
+                ItemStack.isSameItemSameTags(preview, new ItemStack(Items.STICK)));
+        assertEquals("toolCount = 1 ⇒ 预览 1 根", 1, preview.getCount());
+        assertEquals("预演不得改动存储槽的签子", 10,
+                handler.getStackInSlot(SkeweringMachineBlockEntity.STORAGE_SLOT_START).getCount());
+        assertEquals("预演不得改动输入槽的主料", 64,
+                handler.getStackInSlot(SkeweringMachineBlockEntity.INPUT_SLOT_START).getCount());
+
+        assertTrue("toolCount = 0（自有配方签子不消耗）⇒ 不得返还",
+                SkeweringMachineBlockEntity.returnPreview(
+                        threadingRecipe(Ingredient.of(Items.STICK), 0), handler).isEmpty());
+        assertTrue("签子配料为空 ⇒ 不得返还",
+                SkeweringMachineBlockEntity.returnPreview(
+                        threadingRecipe(Ingredient.EMPTY, 1), handler).isEmpty());
+    }
+
+    /**
+     * 源码形态：{@code canFitAll} 必须把返还槽纳入容量判定，且模拟副本必须回答与真槽相同的上限。
+     *
+     * <p>原实现只模拟 OUTPUT_SLOT：返还槽满（或槽里是别的物品）时机器照常开工，
+     * {@code completeRecipe} 先扣签子、{@code insertOutput} 的剩余量被静默丢弃
+     * （每周期丢 toolCount 个签子）。返还量取 {@code returnPreview} 的预演结果，
+     * 与 {@code completeRecipe} 真正要落的返还物同口径（工厂侧
+     * {@code SkeweringFactoryExecutor.canFitBatch} 的两段分开判同款）。</p>
+     *
+     * <p>模拟副本还必须覆写 {@code getSlotLimit} 委托真 handler：
+     * {@code BigStackItemHandler} 默认 64，而本机 OUTPUT_SLOT / RETURN_SLOT 是
+     * {@code Integer.MAX_VALUE} —— 不覆写则返还槽堆到 64 个签子后预检永远失败、
+     * 机器静默停摆（与 {@code SmartCookingPotBlockEntity.canFitAll} 同款）。</p>
+     */
+    @Test
+    public void skeweringCanFitAllChecksReturnSlot() throws IOException {
+        String src = be("SkeweringMachineBlockEntity");
+        String body = body(src, "private boolean canFitAll(Recipe<?> recipe) {", "SkeweringMachineBlockEntity");
+        assertTrue("canFitAll 必须对 RETURN_SLOT 做一次 insertOutput 模拟："
+                        + "否则返还槽满/异物时签子被扣、返还落不进，剩余量被静默丢弃",
+                body.contains("insertOutput(simulated, preview, RETURN_SLOT)"));
+        assertTrue("canFitAll 的返还量必须来自 returnPreview 预演（本次实际会扣掉的签子）",
+                body.contains("returnPreview(recipe, items)"));
+        assertTrue("canFitAll 的模拟副本必须覆写 getSlotLimit 委托真 handler："
+                        + "BigStackItemHandler 默认 64，而 OUTPUT_SLOT / RETURN_SLOT 上限是 Integer.MAX_VALUE，"
+                        + "返还槽堆到 64 个签子后预检永远失败、机器静默停摆",
+                body.contains("public int getSlotLimit(int slot)")
+                        && body.contains("return items.getSlotLimit(slot);"));
     }
 
     // ================== 3. 电力研磨机 AE2 拉料 ==================
