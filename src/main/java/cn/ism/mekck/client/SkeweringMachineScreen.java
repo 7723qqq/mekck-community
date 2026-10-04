@@ -573,8 +573,13 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
     }
 
     private Direction getMachineFacing() {
+        // 空菜单（BE 缺失）：没有方块状态可读，朝向按 NORTH 兜底。
+        var machine = menu.getMachine();
+        if (machine == null) {
+            return Direction.NORTH;
+        }
         if (minecraft != null && minecraft.level != null) {
-            BlockState state = minecraft.level.getBlockState(menu.getBlockPos());
+            BlockState state = minecraft.level.getBlockState(machine.getBlockPos());
             if (state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
                 return state.getValue(BlockStateProperties.HORIZONTAL_FACING);
             }
@@ -667,17 +672,26 @@ public final class SkeweringMachineScreen extends GuiMekanism<SkeweringMachineMe
         return new NetworkOrderPanel.LocalSource() {
             @Override
             public List<Recipe<?>> recipes() {
-                return menu.getMachine().getAvailableRecipes();
+                // 空菜单（BE 缺失）：没有机器可读，按空列表处理。
+                var machine = menu.getMachine();
+                return machine == null ? List.of() : machine.getAvailableRecipes();
             }
 
             @Override
             public int maxCraftable(Recipe<?> recipe) {
-                return menu.getMachine().getMaxConsumableCountForOrder(recipe);
+                // 空菜单（BE 缺失）：没有机器可读，按 0 处理。
+                var machine = menu.getMachine();
+                return machine == null ? 0 : machine.getMaxConsumableCountForOrder(recipe);
             }
 
             @Override
             public void order(Recipe<?> recipe, int quantity) {
-                ModMessages.sendToServer(new OrderRecipePacket(menu.getBlockPos(), recipe.getId(), quantity));
+                // 空菜单（BE 缺失）：没有机器可下单，跳过发包。
+                var machine = menu.getMachine();
+                if (machine == null) {
+                    return;
+                }
+                ModMessages.sendToServer(new OrderRecipePacket(machine.getBlockPos(), recipe.getId(), quantity));
             }
         };
     }

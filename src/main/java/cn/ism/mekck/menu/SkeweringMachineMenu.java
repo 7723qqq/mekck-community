@@ -51,9 +51,17 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
      */
     private final int powerSlotIndex;
 
+    /**
+     * 客户端构造器：方块在 OpenScreen 到达前被破坏/替换、或区块被卸载时，
+     * {@code getBlockEntity} 返回 null。旧写法直接强转后交给主构造器，
+     * 主构造器第一行 {@code machine.getItems()} 就 NPE 崩客户端。这里显式判空
+     * （{@code instanceof} 同时挡掉类型不符），null 时构造「空菜单」：
+     * 槽位数量与坐标照旧，所有读取走 {@code machine == null} 的兜底分支。
+     */
     public SkeweringMachineMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
-                (SkeweringMachineBlockEntity) inventory.player.level().getBlockEntity(buffer.readBlockPos()),
+                inventory.player.level().getBlockEntity(buffer.readBlockPos())
+                        instanceof SkeweringMachineBlockEntity machine ? machine : null,
                 new SimpleContainerData(SkeweringMachineBlockEntity.DATA_SIZE));
     }
 
@@ -62,20 +70,26 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
         this.machine = machine;
         this.data = data;
 
+        // 空菜单（客户端 BE 缺失）用等长的空 handler 兜底：槽位数量与坐标必须照旧，
+        // 否则客户端与服务端的槽位契约不一致；读取路径全部走 machine == null 分支。
+        ItemStackHandler items = machine == null
+                ? new ItemStackHandler(SkeweringMachineBlockEntity.TOTAL_SLOTS)
+                : machine.getItems();
+
         // 3 input slots: 1 row x 3 columns, starting from (38, 41), 18px spacing
-        addSlot(new InputSlot(machine, SkeweringMachineBlockEntity.INPUT_SLOT_START + 0, 38, 41));
-        addSlot(new InputSlot(machine, SkeweringMachineBlockEntity.INPUT_SLOT_START + 1, 56, 41));
-        addSlot(new InputSlot(machine, SkeweringMachineBlockEntity.INPUT_SLOT_START + 2, 74, 41));
+        addSlot(new InputSlot(items, SkeweringMachineBlockEntity.INPUT_SLOT_START + 0, 38, 41));
+        addSlot(new InputSlot(items, SkeweringMachineBlockEntity.INPUT_SLOT_START + 1, 56, 41));
+        addSlot(new InputSlot(items, SkeweringMachineBlockEntity.INPUT_SLOT_START + 2, 74, 41));
 
         // Output slot (130, 41)
-        addSlot(new OutputSlot(machine, SkeweringMachineBlockEntity.OUTPUT_SLOT, 130, 41));
+        addSlot(new OutputSlot(items, SkeweringMachineBlockEntity.OUTPUT_SLOT, 130, 41));
         // Return slot (130, 59)
-        addSlot(new OutputSlot(machine, SkeweringMachineBlockEntity.RETURN_SLOT, 130, 59));
+        addSlot(new OutputSlot(items, SkeweringMachineBlockEntity.RETURN_SLOT, 130, 59));
 
         // Upgrade slots (visible only in upgrade page, not removable)
-        this.speedUpgradeSlot = new UpgradeSlot(machine.getItems(), SkeweringMachineBlockEntity.SLOT_SPEED_UPGRADE, 40, 46, this);
+        this.speedUpgradeSlot = new UpgradeSlot(items, SkeweringMachineBlockEntity.SLOT_SPEED_UPGRADE, 40, 46, this);
         addSlot(this.speedUpgradeSlot);
-        this.energyUpgradeSlot = new UpgradeSlot(machine.getItems(), SkeweringMachineBlockEntity.SLOT_ENERGY_UPGRADE, 40, 72, this);
+        this.energyUpgradeSlot = new UpgradeSlot(items, SkeweringMachineBlockEntity.SLOT_ENERGY_UPGRADE, 40, 72, this);
         addSlot(this.energyUpgradeSlot);
 
         // 存储槽（81）：改「单列纵向滚动」（拍板 F1·方案 5，与烧烤工厂同款）。
@@ -84,12 +98,12 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
         int storageSlots = SkeweringMachineBlockEntity.STORAGE_SLOT_COUNT;
         for (int i = 0; i < storageSlots; i++) {
             int slotIndex = SkeweringMachineBlockEntity.STORAGE_SLOT_START + i;
-            addSlot(new StorageSlot(machine.getItems(), slotIndex, -1000, -1000));
+            addSlot(new StorageSlot(items, slotIndex, -1000, -1000));
         }
 
         // Power slot (energy items: energy cube / tablet / redstone) next to the energy bar
         this.powerSlotIndex = slots.size();
-        addSlot(new PowerSlot(machine, SkeweringMachineBlockEntity.SLOT_POWER, 7, 13, this));
+        addSlot(new PowerSlot(items, SkeweringMachineBlockEntity.SLOT_POWER, 7, 13, this));
 
         // Player inventory: starting from (20, 101)
         for (int row = 0; row < 3; row++) {
@@ -115,6 +129,10 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
 
     @Override
     public boolean stillValid(Player player) {
+        // 空菜单一律视为失效：服务端据此关闭窗口，客户端也不再接受交互。
+        if (machine == null) {
+            return false;
+        }
         Level level = player.level();
         return level.getBlockEntity(machine.getBlockPos()) == machine
                 && player.distanceToSqr(machine.getBlockPos().getX() + 0.5D, machine.getBlockPos().getY() + 0.5D,
@@ -200,11 +218,12 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
     }
 
     public int getSpeedUpgradeCount() {
-        return machine.getSpeedUpgradeCount();
+        // 空菜单没有机器可读：按 0（升级窗口只用于显示已装数量）。
+        return machine == null ? 0 : machine.getSpeedUpgradeCount();
     }
 
     public int getEnergyUpgradeCount() {
-        return machine.getEnergyUpgradeCount();
+        return machine == null ? 0 : machine.getEnergyUpgradeCount();
     }
 
     @Override
@@ -241,10 +260,15 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
 
     @Nullable
     public ResourceLocation getOrderRecipeId() {
-        return machine.getOrderRecipeId();
+        // 空菜单没有机器可读：按「无订单」处理。
+        return machine == null ? null : machine.getOrderRecipeId();
     }
 
     public int getMaxOrderQuantity() {
+        // 空菜单没有机器可读：按 0 处理。
+        if (machine == null) {
+            return 0;
+        }
         ResourceLocation recipeId = machine.getOrderRecipeId();
         if (recipeId == null) return 0;
         // For SkeweringMachine, we don't have getMaxConsumableCount, so return 0
@@ -252,7 +276,8 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
     }
 
     public BlockPos getBlockPos() {
-        return machine.getBlockPos();
+        // 空菜单没有真实坐标，返回 ZERO 而不是 NPE（同 GrillMenu 的 tile == null 写法）。
+        return machine == null ? BlockPos.ZERO : machine.getBlockPos();
     }
 
     public SkeweringMachineBlockEntity getMachine() {
@@ -260,8 +285,8 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
     }
 
     private static final class PowerSlot extends SlotItemHandler implements IVirtualSlot {
-        private PowerSlot(SkeweringMachineBlockEntity machine, int slot, int x, int y, SkeweringMachineMenu menu) {
-            super(machine.getItems(), slot, x, y);
+        private PowerSlot(ItemStackHandler handler, int slot, int x, int y, SkeweringMachineMenu menu) {
+            super(handler, slot, x, y);
         }
 
         @Override
@@ -282,8 +307,8 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
     }
 
     private static final class InputSlot extends SlotItemHandler implements IVirtualSlot {
-        private InputSlot(SkeweringMachineBlockEntity machine, int slot, int x, int y) {
-            super(machine.getItems(), slot, x, y);
+        private InputSlot(ItemStackHandler handler, int slot, int x, int y) {
+            super(handler, slot, x, y);
         }
 
         @Override
@@ -304,8 +329,8 @@ public final class SkeweringMachineMenu extends AbstractContainerMenu implements
     }
 
     private static final class OutputSlot extends SlotItemHandler implements IVirtualSlot {
-        private OutputSlot(SkeweringMachineBlockEntity machine, int slot, int x, int y) {
-            super(machine.getItems(), slot, x, y);
+        private OutputSlot(ItemStackHandler handler, int slot, int x, int y) {
+            super(handler, slot, x, y);
         }
 
         @Override
