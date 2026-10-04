@@ -310,7 +310,10 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
      *
      * <p><b>先判有没有 {@code Items} 再动手</b>：配置卡粘贴时走
      * {@code setConfigurationData → loadGeneralPersistentData → 本方法}，
-     * 那份载荷里不会有 {@code Items}；无条件读容器会把目标机器的库存按空表清掉。</p>
+     * 那份载荷里不会有 {@code Items}。守卫<b>不是承重结构</b>：实测
+     * {@code DataHandlerUtils.readContents} 按 ListTag 条目数迭代（javap：循环边界是
+     * {@code listTag.size()}），空表零次迭代即无操作；保留它只为与
+     * {@code GrillBlockEntity} / {@code WineCellarBlockEntity} 同款、让意图显式。</p>
      */
     @Override
     public void readSustainedData(CompoundTag tag) {
