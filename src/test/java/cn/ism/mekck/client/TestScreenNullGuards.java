@@ -10,7 +10,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * M30 的<b>源码形态</b>护栏：中央厨房 / 三明治组装机的屏幕与窗口对 {@code menu.getMachine()} 判空。
+ * M30 的<b>源码形态</b>护栏：中央厨房 / 三明治组装机的屏幕与窗口对 {@code menu.getMachine()} 判空；
+ * M32 扩展到 5 个独立机器屏幕（巧克力炮 / 制冰机 / 坚果烘焙机 / 智能烹饪锅 / 穿串机）。
  *
  * <h3>这个缺陷为什么必须用源码形态钉</h3>
  * M25 已给 {@code CentralKitchenMenu} / {@code SandwichAssemblerMenu} 的客户端构造器与菜单内
@@ -23,7 +24,7 @@ import static org.junit.Assert.assertTrue;
  * <p>屏幕/窗口是客户端渲染类，单测里起不了 Minecraft 运行时，所以只能钉源码形态；
  * 每条断言都要求真的匹配到东西（找不到方法/调用点即红），避免判据空转。</p>
  *
- * <h3>判据（对四个文件里每个含 {@code menu.getMachine()} 的方法）</h3>
+ * <h3>判据（对每个文件里每个含 {@code menu.getMachine()} 的方法）</h3>
  * <ol>
  *   <li>不得出现链式解引用 {@code menu.getMachine().xxx}（原缺陷形态）；</li>
  *   <li>每个调用点都必须写成 {@code var machine = menu.getMachine();} 的提取形态；</li>
@@ -41,6 +42,18 @@ public class TestScreenNullGuards {
             "src/main/java/cn/ism/mekck/client/KitchenOrderWindow.java";
     private static final String MODULE_WINDOW =
             "src/main/java/cn/ism/mekck/client/KitchenModuleWindow.java";
+
+    // M32 扩展：5 个独立机器屏幕（BioreactorScreen 不访问 machine，无需纳入）。
+    private static final String CHOCOLATE_SCREEN =
+            "src/main/java/cn/ism/mekck/client/ChocolateCannonScreen.java";
+    private static final String ICE_MAKER_SCREEN =
+            "src/main/java/cn/ism/mekck/client/IceMakerScreen.java";
+    private static final String NUT_ROASTER_SCREEN =
+            "src/main/java/cn/ism/mekck/client/NutRoasterScreen.java";
+    private static final String COOKING_POT_SCREEN =
+            "src/main/java/cn/ism/mekck/client/SmartCookingPotScreen.java";
+    private static final String SKEWERING_SCREEN =
+            "src/main/java/cn/ism/mekck/client/SkeweringMachineScreen.java";
 
     /** 提取形态：所有调用点都必须先落到这个局部变量，再判空。 */
     private static final String EXTRACTION = "var machine = menu.getMachine();";
@@ -81,6 +94,47 @@ public class TestScreenNullGuards {
                 "public KitchenModuleWindow(IGuiWrapper gui, CentralKitchenMenu menu)",
                 "private String installedStatus(KitchenFamily family)",
                 "private void sendFilter(byte action, KitchenFamily family, int index,");
+    }
+
+    // ================== M32：5 个独立机器屏幕 ==================
+    //
+    // 每个屏幕的 menu.getMachine() 调用点都在 localOrderSource()（本机下单数据源：
+    // recipes() 空菜单返回空列表、maxCraftable() 返回 0、order() 跳过发包），
+    // 外加 getMachineFacing()（空菜单没有方块状态可读，朝向按 NORTH 兜底）。
+
+    @Test
+    public void chocolateCannonScreenGuardsEveryGetMachine() throws IOException {
+        assertGuarded(CHOCOLATE_SCREEN,
+                "private NetworkOrderPanel.LocalSource localOrderSource()",
+                "private Direction getMachineFacing()");
+    }
+
+    @Test
+    public void iceMakerScreenGuardsEveryGetMachine() throws IOException {
+        assertGuarded(ICE_MAKER_SCREEN,
+                "private NetworkOrderPanel.LocalSource localOrderSource()",
+                "private Direction getMachineFacing()");
+    }
+
+    @Test
+    public void nutRoasterScreenGuardsEveryGetMachine() throws IOException {
+        assertGuarded(NUT_ROASTER_SCREEN,
+                "private NetworkOrderPanel.LocalSource localOrderSource()",
+                "private Direction getMachineFacing()");
+    }
+
+    @Test
+    public void cookingPotScreenGuardsEveryGetMachine() throws IOException {
+        assertGuarded(COOKING_POT_SCREEN,
+                "private NetworkOrderPanel.LocalSource localOrderSource()",
+                "private Direction getMachineFacing()");
+    }
+
+    @Test
+    public void skeweringScreenGuardsEveryGetMachine() throws IOException {
+        assertGuarded(SKEWERING_SCREEN,
+                "private NetworkOrderPanel.LocalSource localOrderSource()",
+                "private Direction getMachineFacing()");
     }
 
     /**
