@@ -5,9 +5,11 @@ import net.minecraftforge.items.ItemStackHandler;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -213,5 +215,29 @@ public class TestKitchenOutputMergeOverflow {
         ItemStack zero = of(net.minecraft.world.item.Items.STONE, 0);
         assertTrue("数量 ≤ 0 的栈就是空 —— 这正是溢出后整堆消失的机制",
                 zero.isEmpty());
+    }
+
+    /**
+     * {@code insertIntoBuffer} 的返回值<b>必须被调用方消费</b>。
+     *
+     * <p>{@code insertIntoBuffer} 逐格夹紧、放不下时把余量写回返回值；旧缺陷不在
+     * 这个方法内部，而在<b>调用方</b> {@code reserveLeaves}：它把 {@code leftover}
+     * 直接丢掉，于是「已经从存储区抽走、又装不进 18 格暂存区」的那批材料静默消失。
+     * 所以本条钉的是调用点：返回值要么回插存储区、要么掉落到世界（不变量：
+     * 抽出 = 进 buffer + 回存储 + 掉落 + 缺口，缺口必须为 0）。</p>
+     */
+    @Test
+    public void insertIntoBufferLeftoverIsConsumedByTheReservePath() throws IOException {
+        String be = cn.ism.mekck.TestSourceText.read(
+                "src/main/java/cn/ism/mekck/blockentity/CentralKitchenBlockEntity.java");
+        String reserve = cn.ism.mekck.TestSourceText.methodBody(be, "private String reserveLeaves(");
+        assertFalse("找不到 reserveLeaves", reserve.isEmpty());
+        int call = reserve.indexOf("insertIntoBuffer(order, taken)");
+        assertTrue("reserveLeaves 必须接住 insertIntoBuffer 的返回值（旧实现把它丢了）", call >= 0);
+        assertTrue("leftover 必须被显式判定", reserve.contains("leftover > 0"));
+        assertTrue("leftover 必须先回插存储区", reserve.contains("insertIntoStorage"));
+        assertTrue("回插仍放不下时必须掉落+告警，不得静默", reserve.contains("dropReservedOverflow"));
+        assertTrue("暂存区满与存储区缺料必须分开提示",
+                reserve.contains("订单暂存区已满") && reserve.contains("存储区缺少材料"));
     }
 }

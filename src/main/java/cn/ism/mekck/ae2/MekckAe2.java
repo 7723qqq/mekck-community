@@ -267,8 +267,9 @@ public final class MekckAe2 {
     private static List<PatternEntry> panelEntries(BlockEntity be) {
         FactoryGridHost host = HOSTS.get(be);
         if (host == null || host.mainNode == null || !host.mainNode.isActive()) return List.of();
-        host.refreshPatterns(); // 面板打开/切模式时按最新网络库存重算
-        return host.provider.entries;
+        // 面板类只读请求走带最短刷新间隔的入口：窗口内复用上次样板，
+        // 避免客户端连点/快速切换时反复触发全量重建（每次都要重扫全网库存）。
+        return host.entriesForPanel();
     }
 
     /** 样板每份所需输入（possibleInputs 首项 × multiplier）。 */
@@ -556,14 +557,15 @@ public final class MekckAe2 {
         // 会变成每台机器每 tick 数千次遍历——80 台机器就是几十万次。网络内容变化缓慢，
         // 因此按「机器 + 勾选集合」缓存 20 tick；新增物品最多晚 1 秒被发现（抽取时仍会校验）。
         long nowTick = be.getLevel() != null ? be.getLevel().getGameTime() : 0L;
-        String selKey = String.join(",", selected);
         Map<String, AEItemKey> found;
         CachedIndex cached = AUTO_INDEX.get(be);
-        if (cached != null && cached.key().equals(selKey) && nowTick - cached.tick() < AUTO_INDEX_TTL) {
+        // 直接比勾选列表本身，不再 String.join 出一把字符串：本方法每 tick 每台机器都跑，
+        // 81 个勾选项就意味着每 tick 一次 81 元素的字符串拼接，而它唯一的用途就是当下这个比较。
+        if (cached != null && cached.selected().equals(selected) && nowTick - cached.tick() < AUTO_INDEX_TTL) {
             found = cached.index();
         } else {
             found = indexSelected(storage, selected);
-            AUTO_INDEX.put(be, new CachedIndex(selKey, nowTick, found));
+            AUTO_INDEX.put(be, new CachedIndex(selected, nowTick, found));
         }
         if (found.isEmpty()) return;
 
@@ -626,8 +628,13 @@ public final class MekckAe2 {
     /** 索引缓存有效期（tick）：网络内容变化缓慢，20 tick 足够。 */
     private static final long AUTO_INDEX_TTL = 20L;
 
-    /** 缓存的网络索引（勾选集合 + 采集时刻 + 物品索引）。 */
-    private record CachedIndex(String key, long tick, Map<String, AEItemKey> index) {
+    /**
+     * 缓存的网络索引（勾选集合 + 采集时刻 + 物品索引）。
+     *
+     * <p>存 {@code List} 而不是拼好的字符串键：字符串方案每 tick 都要 {@code String.join}
+     * 一次（勾选项可达 81 个），而列表比较只需逐元素 equals，且命中缓存时一次分配都不做。</p>
+     */
+    private record CachedIndex(List<String> selected, long tick, Map<String, AEItemKey> index) {
     }
 
     private static Map<String, AEItemKey> indexSelected(MEStorage storage, List<String> selected) {
@@ -1136,6 +1143,15 @@ public final class MekckAe2 {
         private IManagedGridNode mainNode;
         private final List<IManagedGridNode> extraNodes = new ArrayList<>();
         private long nextRefreshTick = -1;
+        /**
+         * 上次真实刷新样板的游戏刻（{@code <0} = 从未刷新）。
+         *
+         * <p>由 {@link #refreshPatterns()} 统一记录 —— 无论是 tick / 网格状态变化 / 任务完成
+         * 触发的重建，还是面板请求触发的重建，都算数。这样面板入口
+         * （{@link #entriesForPanel()}）能据此把「连点请求」识别为同一窗口内的重复，
+         * 而不必自己再维护一套时刻。</p>
+         */
+        private long lastRefreshTick = -1;
         private long lastChannelLog = -1;
         private long powerReaddTick = 0;
         private AeJob job;
@@ -1476,7 +1492,34 @@ public final class MekckAe2 {
 
         // ----- 动态配方 -----
 
+        /**
+         * 面板类只读请求（ME 可下单列表 / 缺料清单）的样板入口：在
+         * {@link cn.ism.mekck.network.PacketGuard#PANEL_REFRESH_MIN_TICKS} 窗口内复用上次结果，
+         * 窗口外或从未刷新时才重建。
+         *
+         * <p>为什么不在这里丢弃请求：客户端连点刷新 / 快速切换配方会在一瞬间灌入大量请求，
+         * 每次都 {@code refreshPatterns()} 会重扫全网库存并逐条重建样板，可打满服务端主线程。
+         * 但面板是只读的，窗口（0.5s）内复用缓存与实时结果无可见差异，因此选择
+         * <b>合并而非拒绝</b>：窗口内返回 {@code provider.entries} 缓存，保证任何请求都拿到响应；
+         * 从未刷新（含打开面板的首个请求）时必定重建，不会回空缓存造成面板空白。</p>
+         */
+        List<PatternEntry> entriesForPanel() {
+            Level level = owner.getLevel();
+            long now = level == null ? 0L : level.getGameTime();
+            if (cn.ism.mekck.network.PacketGuard.panelRefreshDue(now, lastRefreshTick,
+                    cn.ism.mekck.network.PacketGuard.PANEL_REFRESH_MIN_TICKS)) {
+                refreshPatterns();
+            }
+            return provider.entries;
+        }
+
         void refreshPatterns() {
+            // 统一记录刷新时刻：tick / 网格状态变化 / 任务完成 / 面板请求触发的重建都写这里，
+            // 面板入口据此判断是否处于窗口内（见 entriesForPanel）。
+            Level refreshLevel = owner.getLevel();
+            if (refreshLevel != null && !refreshLevel.isClientSide) {
+                lastRefreshTick = refreshLevel.getGameTime();
+            }
             IGrid grid = mainNode != null ? mainNode.getGrid() : null;
             if (grid == null) {
                 provider.setEntries(List.of());

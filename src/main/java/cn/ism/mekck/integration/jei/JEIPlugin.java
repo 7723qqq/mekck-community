@@ -348,7 +348,7 @@ public class JEIPlugin implements IModPlugin {
         registration.addRecipeCategories(new WineCellarInfoCategory(
                 helper,
                 WINE_CELLAR_TYPE,
-                new ItemStack(MekCkStandaloneMachines.WINE_CELLAR_BLOCK.get())
+                new ItemStack(MekCkStandaloneMachines.WINE_CELLAR_HANDLE.getBlock())
         ));
 
         // Register the Ice Make recipe category (急冻制冰机 / 制冰工厂)
@@ -543,7 +543,7 @@ public class JEIPlugin implements IModPlugin {
         registration.addRecipeCatalyst(new ItemStack(MekCkLegacyMachines.JUICER_BLOCK.get()), GRAPE_PRESSING_TYPE);
 
         // 陈化窖（F20）：其介绍页分类的催化剂（在 JEI 搜酒/点机器可看到这页说明）
-        registration.addRecipeCatalyst(new ItemStack(MekCkStandaloneMachines.WINE_CELLAR_BLOCK.get()), WINE_CELLAR_TYPE);
+        registration.addRecipeCatalyst(new ItemStack(MekCkStandaloneMachines.WINE_CELLAR_HANDLE.getBlock()), WINE_CELLAR_TYPE);
 
         // Register all cutting machines as catalysts for the cutting recipe type
         //

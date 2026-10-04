@@ -58,8 +58,13 @@
                 },
                 {
                   "op": "replace",
-                  "source": "MekCkWorkProgress",
-                  "target": "mekData.MekCkWorkProgress"
+                  "source": "MekCkWorkProgressArray",
+                  "target": "mekData.MekCkWorkProgressArray"
+                },
+                {
+                  "op": "replace",
+                  "source": "MekCkSorting",
+                  "target": "mekData.MekCkSorting"
                 },
                 {
                   "op": "replace",

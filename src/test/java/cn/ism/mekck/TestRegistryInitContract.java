@@ -125,6 +125,25 @@ public class TestRegistryInitContract {
     }
 
     /**
+     * 不持有注册条目的辅助类（{@code MekCkRegistrySupport}）不应被要求 {@code init()} / 触碰。
+     *
+     * <p>判据是「代码里是否真的出现 {@code DeferredRegister} / {@code .register(}」，
+     * 因此名单是自动收缩的：辅助类天然不在其中。{@code MekCkRegistrySupport} 曾经带一个空的
+     * {@code init()} 与「必须早于注册事件被触碰」的注释，但那与代码相反（它没有静态初始化器
+     * 加条目）；空方法已删，这条把它「不该回到名单里」钉住。</p>
+     *
+     * <p>{@code classes} 为空会让上面两条断言一起空转，所以先断言名单非空。</p>
+     */
+    @Test
+    public void helperWithoutEntriesIsNotTreatedAsARegistryClass() throws IOException {
+        List<String> classes = registryClasses();
+        assertTrue("注册类名单为空 —— 判据空转会放过所有回归", !classes.isEmpty());
+        assertTrue("MekCkRegistrySupport 不持有注册条目，不应被要求 init()/触碰；"
+                        + "它若出现在名单里，说明有人给它加了注册项，请补 init() 并在 registerAll 登记触碰",
+                !classes.contains("MekCkRegistrySupport"));
+    }
+
+    /**
      * 3) 入口类构造器必须走这条路，且<b>顺序</b>是「先触碰（registerAll）→ 再挂 Mek 家族注册器」。
      *
      * <p>顺序也是契约的一部分：{@code MekCkFactories} 的静态块要读同包里更早声明的字段，

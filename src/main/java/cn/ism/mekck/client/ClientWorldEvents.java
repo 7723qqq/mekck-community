@@ -447,6 +447,10 @@ public final class ClientWorldEvents {
 
     // [mekck-bb] 诊断：玩家右键点击绑定方块时，记录客户端是否已收到主块坐标（receivedCoords）。
     // 若日志显示 hit 的是 mekanism:bounding_block 但 mainPos=null，说明客户端同步仍未成功。
+    //
+    // 常驻 INFO 会让每次右键绑定块都往日志里写一行（本模组机器多为多块结构，右键即刷屏），
+    // 因此降为 DEBUG：需要排查时把 logger "mekck.BoundingDiag" 调到 DEBUG 即可
+    // （log4j2.xml 里加 <Logger name="mekck.BoundingDiag" level="debug"/>），诊断能力原样保留。
     private static final org.apache.logging.log4j.Logger BB_DIAG =
             org.apache.logging.log4j.LogManager.getLogger("mekck.BoundingDiag");
 
@@ -459,7 +463,7 @@ public final class ClientWorldEvents {
         mekanism.common.tile.TileEntityBoundingBlock t =
                 mekanism.common.util.WorldUtils.getTileEntity(mekanism.common.tile.TileEntityBoundingBlock.class, event.getLevel(), hit);
         net.minecraft.core.BlockPos main = mekanism.common.block.BlockBounding.getMainBlockPos(event.getLevel(), hit);
-        BB_DIAG.info("[mekck-bb] 右键绑定块 {} → tile存在={}, receivedCoords={}, mainPos={}",
+        BB_DIAG.debug("[mekck-bb] 右键绑定块 {} → tile存在={}, receivedCoords={}, mainPos={}",
                 hit, t != null, t != null && t.hasReceivedCoords(), main);
     }
 }

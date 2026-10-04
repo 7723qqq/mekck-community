@@ -11,9 +11,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -57,19 +63,29 @@ public class TestFactoryLootTableSustainData {
             "planting_cutting_factory", "skewering_factory", "cooking_factory");
 
     /**
-     * 必须被搬进掉落物的 BE 存档键：Mek 标准 6 条 + MekCK 自有 7 条。
+     * 必须被搬进掉落物的 BE 存档键：Mek 标准 6 条 + MekCK 自有 8 条。
      *
-     * <p>自有键的权威定义在 {@code machine/MekCkMachineTile} 的「键契约」注释
-     * （{@code MekCkSlots} / {@code mekckExecutor} / {@code MekCkWorkProgress} / {@code MekCkNative} /
-     * {@code GasTank} / {@code FluidTanks} / {@code MekckPlacerUuid}），那里同时是
-     * {@code ISustainedData.readSustainedData} 的读取侧。两边任何一处拼写不同都是静默丢失：
-     * {@code copy_nbt} 对不存在的 source 键是**跳过**，不报错。</p>
+     * <p>MekCK 自有键的权威清单<b>不在这里</b>，而是
+     * {@link #lootTablesCopyExactlyTheKeysSaveAdditionalWrites()} 从写侧源码
+     * （{@code MekCkMachineTile.saveAdditional} 及其家族覆写、{@code PlacerPersist}）
+     * 解析出来的键常量。本清单只是它的镜像，且会被该测试逐字比对——因此不存在
+     * 「本清单把旧键（v1 的 {@code MekCkWorkProgress}）钉成契约」的余地：
+     * 写侧自 v2 起只写 {@code MekCkWorkProgressArray}，战利品表也必须复制它。
+     * 两边任何一处拼写不同都是静默丢失：{@code copy_nbt} 对不存在的 source 键是**跳过**，不报错。</p>
      */
     private static final List<String> REQUIRED_SOURCES = List.of(
             "componentUpgrade", "componentConfig", "componentEjector", "controlType",
             "EnergyContainers", "Items",
-            "MekCkSlots", "mekckExecutor", "MekCkWorkProgress", "MekCkNative",
+            "MekCkSlots", "mekckExecutor", "MekCkWorkProgressArray", "MekCkSorting", "MekCkNative",
             "GasTank", "FluidTanks", "MekckPlacerUuid");
+
+    /** Mek 原生 {@code super.saveAdditional} 自己写的 6 条键（不在 MekCK 源码里，只能按 Mek 契约登记）。 */
+    private static final List<String> VANILLA_MEK_KEYS = List.of(
+            "componentUpgrade", "componentConfig", "componentEjector", "controlType",
+            "EnergyContainers", "Items");
+
+    /** 写侧源码根目录。 */
+    private static final Path MAIN_JAVA = Path.of("src", "main", "java", "cn", "ism", "mekck");
 
     private static String blockId(String tier, String family) {
         return tier + "_" + family;
@@ -95,6 +111,52 @@ public class TestFactoryLootTableSustainData {
             if (fn.has("function") && name.equals(fn.get("function").getAsString())) return fn;
         }
         return null;
+    }
+
+    // ── 写侧源码解析（护栏的权威清单来源）────────────────────────────────
+
+    private static String source(Path relativePath) throws IOException {
+        return Files.readString(relativePath, StandardCharsets.UTF_8);
+    }
+
+    /** 取某个方法体的源码文本（从签名到第一个「四个空格 + 右花括号」）。 */
+    private static String methodBody(String source, String signature) {
+        int start = source.indexOf(signature);
+        assertTrue("源码里找不到方法 " + signature, start > 0);
+        int end = source.indexOf("\n    }", start);
+        assertTrue("方法 " + signature + " 没有闭合", end > start);
+        return source.substring(start, end);
+    }
+
+    /** 读一个 {@code String NAME = "值";} 常量。 */
+    private static String stringConst(String source, String name, String where) {
+        Matcher matcher = Pattern.compile("String " + name + "\\s*=\\s*\"([^\"]*)\"").matcher(source);
+        assertTrue("找不到常量 " + where, matcher.find());
+        return matcher.group(1);
+    }
+
+    /**
+     * 解析某源文件的 {@code saveAdditional} 方法体里所有 {@code tag.putXxx(KEY, …)} 的 KEY，
+     * 并把它解析成实际键名（形如 {@code MekCkSlotNbt.TAG_SLOTS} 的跨类常量会在同类里查）。
+     *
+     * <p>这样「权威键清单」与写侧同源：改了写侧的键常量、或删/加一条 {@code tag.put}，
+     * 清单立刻跟着变，战利品表一侧不跟就会在 {@link #lootTablesCopyExactlyTheKeysSaveAdditionalWrites()}
+     * 里变红——不需要手工维护两份可能互相漂移的清单。</p>
+     */
+    private static void collectWrittenKeys(String relativeJavaPath, Set<String> out) throws IOException {
+        String src = source(Path.of(relativeJavaPath));
+        String body = methodBody(src, "void saveAdditional(");
+        Matcher matcher = Pattern.compile("\\btag\\.put[A-Za-z]*\\(\\s*([A-Za-z0-9_.]+)\\s*,").matcher(body);
+        while (matcher.find()) {
+            String identifier = matcher.group(1);
+            if (identifier.contains(".")) {
+                String[] parts = identifier.split("\\.", 2);
+                String owner = source(MAIN_JAVA.resolve("machine").resolve(parts[0] + ".java"));
+                out.add(stringConst(owner, parts[1], relativeJavaPath + " 里的 " + identifier));
+            } else {
+                out.add(stringConst(src, identifier, relativeJavaPath + " 里的 " + identifier));
+            }
+        }
     }
 
     @Test
@@ -181,6 +243,71 @@ public class TestFactoryLootTableSustainData {
         }
         assertTrue("以下战利品表不会保住机器内容:\n  " + String.join("\n  ", offenders),
                 offenders.isEmpty());
+    }
+
+    /**
+     * 核心护栏：每张战利品表复制的 <b>MekCK 自有键集合</b>必须<b>逐字等于</b>写侧实际写出的键集合。
+     *
+     * <h3>为什么不能只钉一份手抄清单</h3>
+     * <p>本缺陷的形态正是「测试把 v1 旧键钉成契约」：写侧自 v2 起只写
+     * {@code MekCkWorkProgressArray}（int 数组）与 {@code MekCkSorting}（boolean），
+     * 而 72 张表还在复制 v1 的 {@code MekCkWorkProgress}（单个 int）。手抄清单
+     * ({@link #REQUIRED_SOURCES}) 一旦与写侧各走各的，删掉写侧一条键、或改名，测试都不会响。</p>
+     *
+     * <p>因此这里把「权威清单」从写侧源码解析出来：{@code MekCkMachineTile.saveAdditional}
+     * 的 5 条 literal 键 + {@code CookingFactoryTile} 的 {@code FluidTanks}
+     * + {@code PlantingCuttingFactoryTile} 的 {@code GasTank}（两个家族的 {@code saveAdditional} 覆写）
+     * + {@code PlacerPersist.KEY_UUID}（基类委托写出的放置者键）。战利品表的
+     * MekCK 子集（复制键 − Mek 原生 6 条）必须与它集合相等，且 {@link #REQUIRED_SOURCES}
+     * 也必须与「Mek 原生 6 条 ∪ 解析结果」一致。</p>
+     *
+     * <h3>变异点（删一条应让本测试变红）</h3>
+     * <ol>
+     *   <li>从任一战利品表删掉 {@code MekCkSorting} 的 op；</li>
+     *   <li>把 {@code MekCkMachineTile.TAG_WORK_PROGRESS_ARRAY} 的值改名（写侧变了、表没变）；</li>
+     *   <li>删掉 {@code saveAdditional} 里的 {@code tag.putBoolean(TAG_SORTING, sorting)}；</li>
+     *   <li>在 {@code saveAdditional} 里新增一条 {@code tag.putXxx("Foo", …)} 而不加对应 op。</li>
+     * </ol>
+     */
+    @Test
+    public void lootTablesCopyExactlyTheKeysSaveAdditionalWrites() throws IOException {
+        Set<String> written = new LinkedHashSet<>();
+        collectWrittenKeys(
+                "src/main/java/cn/ism/mekck/machine/MekCkMachineTile.java", written);
+        collectWrittenKeys(
+                "src/main/java/cn/ism/mekck/machine/cooking/CookingFactoryTile.java", written);
+        collectWrittenKeys(
+                "src/main/java/cn/ism/mekck/machine/plantingcutting/PlantingCuttingFactoryTile.java", written);
+        written.add(stringConst(source(MAIN_JAVA.resolve("advancement").resolve("PlacerPersist.java")),
+                "KEY_UUID", "PlacerPersist.KEY_UUID"));
+
+        // 手抄清单必须与「Mek 原生 6 条 + 写侧解析结果」逐字一致：清单漂移在这里立刻变红。
+        Set<String> expected = new LinkedHashSet<>(VANILLA_MEK_KEYS);
+        expected.addAll(written);
+        assertEquals("REQUIRED_SOURCES 与写侧源码解析结果不一致（清单漂移，或写侧改了键名）",
+                expected, new HashSet<>(REQUIRED_SOURCES));
+
+        List<String> offenders = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(LOOT_DIR)) {
+            for (Path p : files.filter(f -> f.toString().endsWith("_factory.json")).toList()) {
+                JsonObject table = JsonParser.parseString(Files.readString(p, StandardCharsets.UTF_8)).getAsJsonObject();
+                JsonObject copyNbt = function(entry(table), "minecraft:copy_nbt");
+                if (copyNbt == null) continue; // 缺 copy_nbt 由上一个测试报
+                Set<String> copiedMekck = new LinkedHashSet<>();
+                for (JsonElement e : copyNbt.getAsJsonArray("ops")) {
+                    String src = e.getAsJsonObject().get("source").getAsString();
+                    if (!VANILLA_MEK_KEYS.contains(src)) {
+                        copiedMekck.add(src);
+                    }
+                }
+                if (!copiedMekck.equals(written)) {
+                    offenders.add(p.getFileName() + "：复制的 MekCK 键 " + copiedMekck
+                            + "，但 saveAdditional 实际写的是 " + written);
+                }
+            }
+        }
+        assertTrue("战利品表复制的键集合与写侧写入的键集合不一致（拆机将静默丢状态）:\n  "
+                + String.join("\n  ", offenders), offenders.isEmpty());
     }
 
     @Test

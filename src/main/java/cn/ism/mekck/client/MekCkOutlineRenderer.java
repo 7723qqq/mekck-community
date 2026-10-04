@@ -480,7 +480,8 @@ public final class MekCkOutlineRenderer {
                                   double x0, double y0, double z0,
                                   double x1, double y1, double z1,
                                   float hueBase, int edgeIdx) {
-        float[] rgb = hsvToRgb((hueBase + edgeIdx * 137.508f) % 360f, 0.85f, 1.0f);
+        hsvToRgb((hueBase + edgeIdx * 137.508f) % 360f, 0.85f, 1.0f, HSV_RGB_SCRATCH);
+        float[] rgb = HSV_RGB_SCRATCH;
         float r = rgb[0], g = rgb[1], b = rgb[2], a = 0.45F;
         float dx = (float) (x1 - x0), dy = (float) (y1 - y0), dz = (float) (z1 - z0);
         float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
@@ -571,7 +572,8 @@ public final class MekCkOutlineRenderer {
                                     double x0, double y0, double z0,
                                     double x1, double y1, double z1,
                                     float hueBase, int segIdx) {
-        float[] rgb = hsvToRgb((hueBase + segIdx * (360f / BEAM_SEGMENTS)) % 360f, 0.85f, 1.0f);
+        hsvToRgb((hueBase + segIdx * (360f / BEAM_SEGMENTS)) % 360f, 0.85f, 1.0f, HSV_RGB_SCRATCH);
+        float[] rgb = HSV_RGB_SCRATCH;
         // §F40（用户口径：让它半透明）：0.9 近乎实心 ⇒ 降为 0.5；debugQuads 无剔除双面可见，
         // 半透后能透视到梁内背面（略增体积感，属预期）。
         float r = rgb[0], g = rgb[1], b = rgb[2], a = 0.5F;
@@ -636,7 +638,8 @@ public final class MekCkOutlineRenderer {
                                     double x1, double y1, double z1,
                                     float hueBase, int edgeIdx) {
         // 原版细线：GL_LINES 两个顶点（未加粗）
-        float[] rgb = hsvToRgb((hueBase + edgeIdx * 137.508f) % 360f, 0.85f, 1.0f);
+        hsvToRgb((hueBase + edgeIdx * 137.508f) % 360f, 0.85f, 1.0f, HSV_RGB_SCRATCH);
+        float[] rgb = HSV_RGB_SCRATCH;
         c.vertex(m, (float) x0, (float) y0, (float) z0).color(rgb[0], rgb[1], rgb[2], 0.55F).normal(0.0F, 0.0F, 1.0F).endVertex();
         c.vertex(m, (float) x1, (float) y1, (float) z1).color(rgb[0], rgb[1], rgb[2], 0.55F).normal(0.0F, 0.0F, 1.0F).endVertex();
     }
@@ -647,7 +650,8 @@ public final class MekCkOutlineRenderer {
                              double x1, double y1, double z1,
                              int idx) {
         float hueBase = rainbowHueBase();
-        float[] rgb = hsvToRgb((hueBase + idx * 137.508f) % 360f, 0.85f, 1.0f);
+        hsvToRgb((hueBase + idx * 137.508f) % 360f, 0.85f, 1.0f, HSV_RGB_SCRATCH);
+        float[] rgb = HSV_RGB_SCRATCH;
         c.vertex(m, (float) x0, (float) y0, (float) z0).color(rgb[0], rgb[1], rgb[2], 0.45F).normal(0.0F, 0.0F, 1.0F).endVertex();
         c.vertex(m, (float) x1, (float) y1, (float) z1).color(rgb[0], rgb[1], rgb[2], 0.45F).normal(0.0F, 0.0F, 1.0F).endVertex();
     }
@@ -659,8 +663,13 @@ public final class MekCkOutlineRenderer {
         return (tick * 4.0F) % 360.0F;
     }
 
-    /** HSV → RGB（0..1）。 */
-    private static float[] hsvToRgb(float h, float s, float v) {
+    // 本方法在放置预览里逐边/逐段调用（每帧）：旧实现每次调用 new float[]{...} 造成每帧
+    // 大量短命分配。改写入调用方提供的缓冲，复用同一下标为零分配（客户端渲染单线程，
+    // 且各调用点读到结果后立即用完、彼此不嵌套，复用安全）。
+    private static final float[] HSV_RGB_SCRATCH = new float[3];
+
+    /** HSV → RGB（0..1），写入调用方提供的 {@code out}（长度 ≥3）；不返回数组、不分配。 */
+    private static void hsvToRgb(float h, float s, float v, float[] out) {
         float c = v * s;
         float x = c * (1.0f - Math.abs((h / 60.0f) % 2.0f - 1.0f));
         float m = v - c;
@@ -692,6 +701,8 @@ public final class MekCkOutlineRenderer {
             g = 0;
             b = x;
         }
-        return new float[]{r + m, g + m, b + m};
+        out[0] = r + m;
+        out[1] = g + m;
+        out[2] = b + m;
     }
 }

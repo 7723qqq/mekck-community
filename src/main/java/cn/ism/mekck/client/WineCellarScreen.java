@@ -22,6 +22,7 @@ import mekanism.client.render.MekanismRenderer;
 import mekanism.client.render.lib.effect.BoltRenderer;
 import mekanism.common.inventory.container.slot.IVirtualSlot;
 import mekanism.common.inventory.container.slot.SlotOverlay;
+import mekanism.common.inventory.warning.WarningTracker.WarningType;
 import mekanism.common.lib.Color;
 import mekanism.common.lib.effect.BoltEffect;
 import mekanism.common.lib.effect.BoltEffect.BoltRenderInfo;
@@ -68,45 +69,38 @@ public final class WineCellarScreen extends GuiMekanism<WineCellarMenu> {
 
     public WineCellarScreen(WineCellarMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
-        imageWidth = WineCellarMenu.IMAGE_WIDTH;
-        imageHeight = WineCellarMenu.IMAGE_HEIGHT;
-        inventoryLabelY = WineCellarMenu.INV_TOP - 9; // §F47：原 -12(=91) 被进度条 (5,88,h≈5) 压住，下移让位
+        imageWidth = PANEL_WIDTH;
+        imageHeight = PANEL_HEIGHT;
+        inventoryLabelY = INV_TOP - 9; // §F47：原 -12(=91) 被进度条 (5,88,h≈5) 压住，下移让位
         dynamicSlots = true;
         // §F45：同 SPS 拓宽 20px，右侧给能量计 (172,18) 让位（GuiMekanism 背景按 imageWidth 自适应铺绘）
         imageWidth += 20;
     }
 
+    // ── 面板布局（屏幕侧唯一出处）──────────────────────────────────────
+    //
+    // 2026-10-03 迁移：槽位坐标不再在这里——它们只在 MekCkSlots.WineCellar 里定义一次，
+    // 由 tile 的 getInitialInventory 写进槽对象，Mek 据此自动渲染。
+    // 屏幕现在只剩「面板尺寸」与「背包标签位置」这类纯视觉常量。
+
+    private static final int PANEL_WIDTH = 176;
+    private static final int PANEL_HEIGHT = 184;
+    /** 玩家背包首行的 y —— 与 Mek 的 playerInventoryTitle 定位同源。 */
+    private static final int INV_TOP = 103;
+
     @Override
     protected void addGuiElements() {
         super.addGuiElements();
 
-        // §F45：黑屏背板（同 SPS GuiInnerScreen 坐标）。§F47 缺陷修复：储存格必须用
-        // setRenderAboveSlots 把边框/物品从 renderWidget 层抬进 drawBackground 环（后加者胜），
-        // 否则 GuiInnerScreen 纹理在 renderLabels 阶段后画、整片盖没 3×3 格（F45 实机图证）。
+        // §F45：黑屏背板（同 SPS GuiInnerScreen 坐标）。
+        //
+        // ⚠️ 迁移后这里不再手画任何槽：Mek 的 GuiMekanism.addSlots() 会遍历容器的
+        // InventoryContainerSlot 自动建 GuiSlot，槽的坐标就是 tile 建槽时写进去的
+        // （MekCkSlots.WineCellar）。原先手画的 GuiVirtualSlot 与菜单的 Slot 各有一套坐标，
+        // 靠 x-1/y-1 凑合对齐——那正是本次重写要消灭的「一个框两套坐标」。
+        //
+        // 背板仍要画：它是槽位底下的纹理层，与槽位 widget 是两件事。
         addRenderableWidget(new GuiInnerScreen(this, 45, 18, 104, 68));
-
-        // 3×3 储存格网格（既放酒也取酒）
-        for (int i = 0; i < WineCellarBlockEntity.SLOT_COUNT; i++) {
-            int row = i / WineCellarMenu.GRID_COLS;
-            int col = i % WineCellarMenu.GRID_COLS;
-            int x = WineCellarMenu.GRID_X0 + col * WineCellarMenu.GRID_SPACING;
-            int y = WineCellarMenu.GRID_Y0 + row * WineCellarMenu.GRID_SPACING;
-            GuiVirtualSlot vs = new GuiVirtualSlot(SlotType.NORMAL, this, x - 1, y - 1);
-            vs.setRenderAboveSlots(); // §F47：压在黑屏上必须抬层
-            if (menu.slots.get(i) instanceof IVirtualSlot ivs) {
-                vs.updateVirtualSlot(null, ivs);
-            }
-            addRenderableWidget(vs);
-        }
-
-        // §F45：电源槽（能量物品/红石），左上角同急冻制冰机对位
-        GuiVirtualSlot powerVs = new GuiVirtualSlot(SlotType.POWER, this,
-                WineCellarMenu.POWER_X, WineCellarMenu.POWER_Y);
-        powerVs.with(SlotOverlay.POWER);
-        if (menu.slots.get(WineCellarBlockEntity.SLOT_POWER) instanceof IVirtualSlot ivs) {
-            powerVs.updateVirtualSlot(null, ivs);
-        }
-        addRenderableWidget(powerVs);
 
         // §F45：能量显示改 SPS 同款粗能量计 GuiEnergyGauge SMALL_MED (172,18)，替掉旧细 GuiVerticalPowerBar；
         // tooltip 覆写为 FE 口径（不走 Mekanism 默认 kJ 格式化）
@@ -126,6 +120,9 @@ public final class WineCellarScreen extends GuiMekanism<WineCellarMenu> {
                 return List.of(Component.translatable("gui.mekck.energy", menu.getEnergy(), menu.getEnergyCapacity()));
             }
         });
+        // §F45 后续：接 Mek 警告系统（WarningTracker）——能量耗尽时左列出现警告 tab；
+        // gauge 匿名子类不便链式 .warning，走 GuiMekanism#trackWarning 独立注册（tab tooltip 同源）。
+        trackWarning(WarningType.NOT_ENOUGH_ENERGY, () -> menu.getEnergy() <= 0);
 
         // 能量信息标签（§F43后续 §F44：补「能耗 FE/t」行，与急冻制冰机等同源双行口径）：
         // 客户端按服务端同公式 Σ 62.5×瓶数×倍速（只计可陈化且未封顶的格）实时估算。

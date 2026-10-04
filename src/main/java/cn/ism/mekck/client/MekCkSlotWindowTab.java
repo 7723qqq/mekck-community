@@ -43,9 +43,11 @@ public class MekCkSlotWindowTab extends GuiWindowCreatorTab<MekCkMachineTile, Me
                               MekCkWindowSlotHolder slots,
                               Supplier<MekCkSlotWindowTab> elementSupplier) {
         // 图标复用 Mek 的 items.png（assets/mekanism/gui/items.png），不凭空造资源。
-        // 左侧一列 y=90：避开 Mek 的侧配(6)/传输配置(34)/能量(62)/(137) 三段。
+        // 右侧一列 y=99：分选 tab（62..97）之下、红石（137）之上。原先挂左列 90 ——
+        // MekCkMachineTile 补实现 INetworkPullable 后，「自动补料(62)/网络拉料(90)」两枚
+        // tab 进了左列（口径 §十 的左列预算表），左列已满，本 tab 按既定方案让位到右列。
         super(MekanismUtils.getResource(ResourceType.GUI, "items.png"), gui, tile,
-                -26, 90, 26, 18, true, elementSupplier);
+                gui.getWidth(), 99, 26, 18, false, elementSupplier);
         this.groups = buildGroups(slots);
         // 窗口身份必须与槽里记的是同一个（槽在 tile 侧创建时就写死了）。
         // 三类槽（输入 / 输出 / 存储）共用一份身份：本标签页把非空的组放进同一扇窗，

@@ -140,6 +140,44 @@ public class TestKitchenOrderItemSafety {
         }
     }
 
+    /**
+     * 订单预留必须<b>守恒</b>：从存储区抽出的材料只能落在「暂存区 / 存储区 / 世界掉落」三处，
+     * 缺口必须为 0。
+     *
+     * <p>旧实现：{@code taken} 已经从存储区 {@code extractItem} 抽走，而 {@code insertIntoBuffer}
+     * 返回的 {@code leftover} 既不回插也不入 buffer（buffer 只有 18 格），随后只报一句
+     * 「存储区缺少材料」并回滚 buffer 内部分 ⇒ <b>这批材料静默消失</b>，没有任何日志。</p>
+     *
+     * <p>本条钉住处置链的三段：回插存储区 → 仍放不下则掉落世界 → 两种失败原因分开提示。
+     * 前两段缺任何一段，不变量就被打破。</p>
+     */
+    @Test
+    public void reserveLeavesNeverLosesExtractedMaterial() throws IOException {
+        String src = read(BE);
+        String reserve = methodBody(src, "private String reserveLeaves(");
+        assertFalse("找不到 reserveLeaves", reserve.isEmpty());
+        assertTrue("reserveLeaves 必须把 insertIntoBuffer 的 leftover 回插存储区，否则静默销毁玩家材料",
+                reserve.contains("insertIntoStorage"));
+        assertTrue("回插仍放不下时必须走兜底掉落（不变量：抽出 = 进 buffer + 回存储 + 掉落 + 缺口）",
+                reserve.contains("dropReservedOverflow"));
+        assertTrue("错误提示必须区分「订单暂存区已满」与「存储区缺少材料」",
+                reserve.contains("订单暂存区已满") && reserve.contains("存储区缺少材料"));
+        assertTrue("leftover 必须被显式判定", reserve.contains("if (leftover > 0)"));
+
+        int buffer = reserve.indexOf("insertIntoBuffer(order, taken)");
+        int refund = reserve.indexOf("insertIntoStorage");
+        int drop = reserve.indexOf("dropReservedOverflow");
+        assertTrue("找不到 insertIntoBuffer(order, taken)", buffer >= 0);
+        assertTrue("leftover 的回插必须在 insertIntoBuffer 之后", refund > buffer);
+        assertTrue("掉落兜底必须在回插判定之后", drop > refund);
+
+        // 兜底掉落必须走大堆叠感知工具并记 WARN —— 21 亿堆叠按原版分堆会炸实体，静默则无从排查。
+        String dropBody = methodBody(src, "private void dropReservedOverflow(");
+        assertFalse("找不到 dropReservedOverflow", dropBody.isEmpty());
+        assertTrue("兜底掉落必须用 BigStackDrops", dropBody.contains("BigStackDrops"));
+        assertTrue("兜底掉落必须记日志（守恒被打破时要有迹可循）", dropBody.contains("KITCHEN_LOG.warn"));
+    }
+
     private static String fieldDeclaration(String src, String name) {
         return cn.ism.mekck.TestSourceText.fieldDeclaration(src, name);
     }

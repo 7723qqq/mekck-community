@@ -85,8 +85,15 @@ public class TestLegacyMachineBase {
             }
         }
         // 防空转：得真的扫到几台，否则「没发现副本」是假的。
+        //
+        // 阈值跟着实际台数走，而不是钉死一个数字 —— 这个基类的机器数<b>只会减不会增</b>：
+        // 每台从「自研 BlockEntity」迁到 Mek 原生体系（TileEntityConfigurableMachine）时
+        // 就离开这份名单。2026-10-03 陈化窖迁走后只剩 1 台
+        // （{@code SkeweringMachineBlockEntity}），阈值随之从 2 降到 1。
+        // **这不是把判据放宽**：「已迁机器里不许出现副本」那条 assertEquals 对名单里
+        // 每一台逐条生效，一台都不少。
         assertTrue("已迁机器一台都没扫到，护栏空转了（migrated=" + migrated.size() + "）",
-                migrated.size() >= 2);
+                !migrated.isEmpty());
         assertEquals("已迁到 MekCkLegacyMachine 的机器里又出现了副本：\n  " + String.join("\n  ", offenders),
                 Set.of(), offenders);
     }

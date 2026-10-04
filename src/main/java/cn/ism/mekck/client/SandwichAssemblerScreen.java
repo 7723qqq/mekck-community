@@ -4,15 +4,31 @@ import cn.ism.mekck.blockentity.SandwichAssemblerBlockEntity;
 import cn.ism.mekck.menu.SandwichAssemblerMenu;
 import cn.ism.mekck.network.ModMessages;
 import cn.ism.mekck.network.SandwichConfigPacket;
+import mekanism.client.gui.element.progress.GuiProgress;
+import mekanism.client.gui.element.progress.ProgressType;
+import mekanism.client.gui.element.slot.GuiVirtualSlot;
+import mekanism.client.gui.element.slot.SlotType;
 import mekanism.client.gui.element.window.GuiWindow;
+import mekanism.common.inventory.container.slot.IVirtualSlot;
+import mekanism.common.util.MekanismUtils;
+import mekanism.common.util.MekanismUtils.ResourceType;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
+import java.util.List;
+
 /**
  * 三明治组装机界面：有序输入格 32 + 样品槽 + 材料区 27 + 返还槽 + 输出槽 + 模式/数量控件 + 进度条。
+ *
+ * <p>本屏的槽位 / 进度条 / 模式与数量按钮 / 侧配入口全部走 Mek 元件体系（此前整屏 fill 手绘）：
+ * 槽位是 {@link GuiVirtualSlot} 绑定 menu 的 {@code IVirtualSlot} 槽（同 SimpleMachineScreen 等 12 屏），
+ * 进度条是 {@link GuiProgress}，按钮走 {@link MekCkButtons}，侧配入口是右侧栏 tab。</p>
  */
 @OnlyIn(Dist.CLIENT)
 public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<SandwichAssemblerMenu> {
@@ -22,9 +38,18 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
     private static final int BTN_W = 92;
     private static final int BTN_H = 16;
     private static final int COUNT_Y = 122;
-    private static final int SIDE_BTN_X = 240;
-    private static final int SIDE_BTN_Y = 140;
+    /** 进度条 y（原 fill 进度条的位置；横向 Mek 箭头 LARGE_RIGHT 48×8）。 */
+    private static final int PROGRESS_Y = 144;
+    /** 侧配 tab 图标（与其他屏同一张 Mek configuration.png）。 */
+    private static final net.minecraft.resources.ResourceLocation CONFIG_TEXTURE =
+            MekanismUtils.getResource(ResourceType.GUI, "configuration.png");
+
     private GuiMekCkSideConfiguration sideWindow;
+
+    /** 模式三按钮（当前模式的那一个显示，其余隐藏——见 containerTick 同步）。 */
+    private mekanism.client.gui.element.button.MekanismButton copyBtn;
+    private mekanism.client.gui.element.button.MekanismButton customBtn;
+    private mekanism.client.gui.element.button.MekanismButton sequencedBtn;
 
     public SandwichAssemblerScreen(SandwichAssemblerMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -34,21 +59,98 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
     }
 
     @Override
+    protected void addGuiElements() {
+        super.addGuiElements();
+
+        // ── 槽位：坐标与 menu 的 addSlot 表达式同源（两处一旦不一致就是「格在一个地方、物品在另一个地方」）──
+        int idx = 0;
+        // 有序输入格 8×4（menu 第 0..31 槽）
+        for (int i = 0; i < SandwichAssemblerBlockEntity.ORDERED_SLOTS; i++) {
+            bindSlot(SlotType.INPUT, idx++, 8 + (i % SandwichAssemblerMenu.ORDERED_COLS) * 18,
+                    20 + (i / SandwichAssemblerMenu.ORDERED_COLS) * 18);
+        }
+        // 材料区 9×3（32..58）
+        for (int i = 0; i < SandwichAssemblerBlockEntity.MATERIAL_SLOTS; i++) {
+            bindSlot(SlotType.INPUT, idx++, 170 + (i % SandwichAssemblerMenu.MATERIAL_COLS) * 18,
+                    20 + (i / SandwichAssemblerMenu.MATERIAL_COLS) * 18);
+        }
+        // 样品槽 / 输出槽 / 返还槽 3
+        bindSlot(SlotType.INPUT, idx++, 170, 80);
+        bindSlot(SlotType.OUTPUT, idx++, 200, 80);
+        for (int i = 0; i < SandwichAssemblerBlockEntity.RETURN_SLOTS; i++) {
+            bindSlot(SlotType.OUTPUT, idx++, 240 + i * 18, 80);
+        }
+        // 升级槽 3（速度 / 能量 / 创造，直接放取——本 menu 未实现 IUpgradeMenu，不弹升级窗）
+        bindSlot(SlotType.NORMAL, idx++, 170, 104);
+        bindSlot(SlotType.NORMAL, idx++, 170, 122);
+        bindSlot(SlotType.NORMAL, idx++, 170, 140);
+        // 能源槽
+        bindSlot(SlotType.POWER, idx, 310, 8);
+
+        // ── 进度条：Mek 横向箭头（原 fill 绿条）──
+        addRenderableWidget(new GuiProgress(() -> menu.getProgressRatio(),
+                ProgressType.LARGE_RIGHT, this, MODE_BTN_X, PROGRESS_Y));
+
+        // ── 模式按钮：三个按需显示的文本按钮（当前模式的那一个显示，见 containerTick 同步）──
+        copyBtn = addRenderableWidget(MekCkButtons.text(this, MODE_BTN_X, MODE_BTN_Y, BTN_W, BTN_H,
+                Component.translatable("gui.mekck.ui.sandwich_mode.copy"),
+                () -> sendMode(SandwichAssemblerBlockEntity.MODE_COPY)));
+        customBtn = addRenderableWidget(MekCkButtons.text(this, MODE_BTN_X, MODE_BTN_Y, BTN_W, BTN_H,
+                Component.translatable("gui.mekck.ui.sandwich_mode.custom"),
+                () -> sendMode(SandwichAssemblerBlockEntity.MODE_CUSTOM)));
+        sequencedBtn = addRenderableWidget(MekCkButtons.text(this, MODE_BTN_X, MODE_BTN_Y, BTN_W, BTN_H,
+                Component.translatable("gui.mekck.ui.sandwich_mode.sequenced"),
+                () -> sendMode(SandwichAssemblerBlockEntity.MODE_SEQUENCED)));
+
+        // 数量 - / +
+        addRenderableWidget(MekCkButtons.text(this, MODE_BTN_X, COUNT_Y, 20, BTN_H,
+                Component.literal("-"), () -> sendCount(-1)));
+        addRenderableWidget(MekCkButtons.text(this, MODE_BTN_X + BTN_W - 20, COUNT_Y, 20, BTN_H,
+                Component.literal("+"), () -> sendCount(1)));
+
+        // ── 侧配入口：右侧栏 tab（与其他 9 屏统一），替代原 fill 按钮 ──
+        addRenderableWidget(new MekCkTabElement(this, CONFIG_TEXTURE, imageWidth, 6, false,
+                MekCkTabElement.OUTER, MekCkTabElement.INNER,
+                () -> getWindows().stream().anyMatch(w -> w instanceof GuiMekCkSideConfiguration),
+                mekanism.client.SpecialColors.TAB_CONFIGURATION,
+                () -> List.of(Component.translatable("tooltip.mekck.side_config")),
+                this::openSideConfigWindow, null));
+    }
+
+    /** 绑定一个虚拟槽：坐标 = menu 槽坐标（本模组 GuiVirtualSlot 的惯例，不加 -1）。 */
+    private void bindSlot(SlotType type, int menuSlotIndex, int x, int y) {
+        GuiVirtualSlot vs = new GuiVirtualSlot(type, this, x, y);
+        if (menu.slots.get(menuSlotIndex) instanceof IVirtualSlot ivs) {
+            vs.updateVirtualSlot(null, ivs);
+        }
+        addRenderableWidget(vs);
+    }
+
+    private void sendMode(int mode) {
+        ModMessages.sendToServer(new SandwichConfigPacket(menu.getMachine().getBlockPos(), (byte) 0, mode));
+    }
+
+    private void sendCount(int delta) {
+        ModMessages.sendToServer(new SandwichConfigPacket(menu.getMachine().getBlockPos(), (byte) 2, delta));
+    }
+
+    @Override
+    public void containerTick() {
+        super.containerTick();
+        int mode = menu.getMode();
+        MekCkButtons.setShown(copyBtn, mode == SandwichAssemblerBlockEntity.MODE_COPY);
+        MekCkButtons.setShown(customBtn, mode == SandwichAssemblerBlockEntity.MODE_CUSTOM);
+        MekCkButtons.setShown(sequencedBtn, mode == SandwichAssemblerBlockEntity.MODE_SEQUENCED);
+    }
+
+    @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
         super.renderBg(guiGraphics, partialTick, mouseX, mouseY);
+        // 样品槽空位提示：半透明三明治图标（画在 GuiVirtualSlot 贴图之下，槽贴图中心透明处透出；
+        // 有真物品时不画——vanilla 的物品渲染在其后，会盖住幽灵）。幽灵绘制保留在渲染层：
+        // 「空槽画半透明预览」在 Mek 元件体系里没有标准行为。
         int x = leftPos;
         int y = topPos;
-        // 有序输入格（自定义模式）
-        for (int i = 0; i < SandwichAssemblerBlockEntity.ORDERED_SLOTS; i++) {
-            drawSlot(guiGraphics, x + 7 + (i % 8) * 18, y + 19 + (i / 8) * 18, 0xFF9B9B9B);
-        }
-        // 材料区（复制模式）
-        for (int i = 0; i < SandwichAssemblerBlockEntity.MATERIAL_SLOTS; i++) {
-            drawSlot(guiGraphics, x + 169 + (i % 9) * 18, y + 19 + (i / 9) * 18, 0xFF9B9B9B);
-        }
-        // 样品 / 输出 / 返还 / 升级 / 能源
-        drawSlot(guiGraphics, x + 169, y + 79, 0xFFD0A0A0);
-        // 样品槽空位提示：半透明三明治图标（先画图标，再覆盖半透明底色做“幽灵”淡出）
         var sample = menu.getMachine().items.getStackInSlot(
                 SandwichAssemblerBlockEntity.SAMPLE_SLOT);
         if (sample.isEmpty()) {
@@ -58,7 +160,8 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
             }
             guiGraphics.fill(x + 170, y + 80, x + 186, y + 96, 0xC0D0A0A0);
         }
-        // 样品槽悬停说明
+        // 样品槽悬停说明（4 行 lang 键）。GuiVirtualSlot 默认 tooltip 显示槽内物品名，
+        // 这里保留渲染层手算命中给出完整说明（Mek GuiSlot.builder 的 hover 通道后续可迁）。
         if (mouseX >= x + 169 && mouseX < x + 169 + 18 && mouseY >= y + 79 && mouseY < y + 79 + 18) {
             guiGraphics.renderTooltip(font, java.util.List.of(
                     net.minecraft.network.chat.Component.translatable("gui.mekck.ui.sandwich_sample_slot"),
@@ -67,47 +170,6 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
                     net.minecraft.network.chat.Component.translatable("gui.mekck.ui.sandwich_sample_slot.requires_mod")
             ), java.util.Optional.empty(), mouseX, mouseY);
         }
-        drawSlot(guiGraphics, x + 199, y + 79, 0xFFA0D0A0);
-        for (int i = 0; i < SandwichAssemblerBlockEntity.RETURN_SLOTS; i++) {
-            drawSlot(guiGraphics, x + 239 + i * 18, y + 79, 0xFFB0B0B0);
-        }
-        drawSlot(guiGraphics, x + 169, y + 103, 0xFFB0B0C0);
-        drawSlot(guiGraphics, x + 169, y + 121, 0xFFB0B0C0);
-        drawSlot(guiGraphics, x + 169, y + 139, 0xFFB0B0C0);
-        drawSlot(guiGraphics, x + 309, y + 7, 0xFFB0B0B0);
-
-        // 模式按钮
-        int mode = menu.getMode();
-        guiGraphics.fill(x + MODE_BTN_X, y + MODE_BTN_Y, x + MODE_BTN_X + BTN_W, y + MODE_BTN_Y + BTN_H, 0xFF5A5A5A);
-        int modeInner = mode == SandwichAssemblerBlockEntity.MODE_COPY ? 0xFF7FA0D0
-                : mode == SandwichAssemblerBlockEntity.MODE_CUSTOM ? 0xFFD0A070 : 0xFFA0D0A0;
-        guiGraphics.fill(x + MODE_BTN_X + 1, y + MODE_BTN_Y + 1, x + MODE_BTN_X + BTN_W - 1,
-                y + MODE_BTN_Y + BTN_H - 1, modeInner);
-        // 数量 - / +
-        drawButton(guiGraphics, x + MODE_BTN_X, y + COUNT_Y, 20, BTN_H, "-");
-        drawButton(guiGraphics, x + MODE_BTN_X + BTN_W - 20, y + COUNT_Y, 20, BTN_H, "+");
-        // 侧面配置按钮
-        drawButton(guiGraphics, x + SIDE_BTN_X, y + SIDE_BTN_Y, 40, BTN_H,
-                Component.translatable("gui.mekck.ui.side_config_short").getString());
-        // 进度条
-        int pw = BTN_W;
-        int ph = 8;
-        int px = x + MODE_BTN_X;
-        int py = y + 144;
-        guiGraphics.fill(px, py, px + pw, py + ph, 0xFF303030);
-        int fill = (int) (pw * menu.getProgressRatio());
-        if (fill > 0) guiGraphics.fill(px, py, px + fill, py + ph, 0xFF55D055);
-    }
-
-    private void drawButton(GuiGraphics guiGraphics, int bx, int by, int w, int h, String label) {
-        guiGraphics.fill(bx, by, bx + w, by + h, 0xFF5A5A5A);
-        guiGraphics.fill(bx + 1, by + 1, bx + w - 1, by + h - 1, 0xFF9A9A9A);
-        guiGraphics.drawString(font, label, bx + (w - font.width(label)) / 2, by + 4, 0xFF101010, false);
-    }
-
-    private void drawSlot(GuiGraphics guiGraphics, int sx, int sy, int inner) {
-        guiGraphics.fill(sx, sy, sx + 18, sy + 18, 0xFF373737);
-        guiGraphics.fill(sx + 1, sy + 1, sx + 17, sy + 17, inner);
     }
 
     @Override
@@ -140,78 +202,57 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
     }
 
     /**
-     * 打开一扇窗口 —— <b>两条注册都要做</b>。
+     * 打开一扇窗口 —— <b>只走 {@code addWindow} 单通道</b>（与 Mek 全部窗口一致）。
      *
-     * <ul>
-     *   <li>{@code addRenderableWidget} 把它放进 {@code Screen.renderables}，
-     *       而 {@code Screen.render} 正是遍历那份列表画的；</li>
-     *   <li>{@code addWindow} 把它放进 {@code GuiMekanism.windows}，
-     *       而 {@code GuiMekanism.mouseClicked} / {@code keyPressed} 都是遍历那份 LRU 的。</li>
-     * </ul>
-     * 只做前者 ⇒ 窗口画得出来但点不动，连它自己的关闭按钮都按不了。
+     * <p>绘制不依赖 {@code Screen.renderables}：{@code GuiMekanism.renderLabels} 反序遍历
+     * windows LRU 调 {@code onRenderForeground}，而 {@code GuiElement.onRenderForeground}
+     * 自含全部绘制（底图 + 内容 + 子元素）；事件也由 {@code GuiMekanism} 先遍历
+     * windows LRU 分发。旧实现两条注册都做 ⇒ 同一窗口被画两遍。</p>
      */
     private void openWindow(GuiWindow window) {
-        addRenderableWidget(window);
         addWindow(window);
     }
 
-    /** 关闭一扇窗口 —— 与 {@link #openWindow} 对称，两条注册都要撤。 */
+    /** 关闭一扇窗口：{@code GuiWindow.close()} 自己会从窗口 LRU 出列（gui().removeWindow）。 */
     private void closeWindow(GuiWindow window) {
-        window.close();       // 第一句就是 gui().removeWindow(this)，出窗口 LRU
-        removeWidget(window); // 出 renderables / children
+        window.close();
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         int x = leftPos;
         int y = topPos;
-        // 窗口可能已被它自己的关闭按钮关掉（close() 只出 LRU，不出 renderables），先对一次账。
+        // 窗口可能已被它自己的关闭按钮关掉（close() 会出 LRU），先清一下本屏的字段引用。
         if (sideWindow != null && !getWindows().contains(sideWindow)) {
-            removeWidget(sideWindow);
             sideWindow = null;
         }
-        // 侧面配置
-        if (inRect(mouseX, mouseY, x + SIDE_BTN_X, y + SIDE_BTN_Y, 40, BTN_H)) {
-            if (sideWindow == null) {
-                sideWindow = new GuiMekCkSideConfiguration(this, menu, () -> {
-                    var state = menu.getMachine().getBlockState();
-                    return state.hasProperty(cn.ism.mekck.block.SandwichAssemblerBlock.FACING)
-                            ? state.getValue(cn.ism.mekck.block.SandwichAssemblerBlock.FACING)
-                            : net.minecraft.core.Direction.NORTH;
-                });
-                openWindow(sideWindow);
-            } else {
-                closeWindow(sideWindow);
-                sideWindow = null;
-            }
-            return true;
-        }
-        // 模式按钮（三态循环：复制→自定义→序列组→复制）
-        if (inRect(mouseX, mouseY, x + MODE_BTN_X, y + MODE_BTN_Y, BTN_W, BTN_H)) {
-            ModMessages.sendToServer(new SandwichConfigPacket(menu.getMachine().getBlockPos(), (byte) 0,
-                    (menu.getMode() + 1) % 3));
-            return true;
-        }
-        // 数量 -
-        if (inRect(mouseX, mouseY, x + MODE_BTN_X, y + COUNT_Y, 20, BTN_H)) {
-            ModMessages.sendToServer(new SandwichConfigPacket(menu.getMachine().getBlockPos(), (byte) 2, -1));
-            return true;
-        }
-        // 数量 +
-        if (inRect(mouseX, mouseY, x + MODE_BTN_X + BTN_W - 20, y + COUNT_Y, 20, BTN_H)) {
-            ModMessages.sendToServer(new SandwichConfigPacket(menu.getMachine().getBlockPos(), (byte) 2, 1));
-            return true;
-        }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    private void openSideConfigWindow() {
+        if (sideWindow == null || !getWindows().contains(sideWindow)) {
+            sideWindow = new GuiMekCkSideConfiguration(this, menu, this::getMachineFacing);
+            openWindow(sideWindow);
+        }
+    }
+
+    private Direction getMachineFacing() {
+        if (minecraft != null && minecraft.level != null) {
+            BlockState state = minecraft.level.getBlockState(menu.getBlockPos());
+            if (state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+                return state.getValue(BlockStateProperties.HORIZONTAL_FACING);
+            }
+        }
+        return Direction.NORTH;
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         int x = leftPos;
         int y = topPos;
+        // 数量按钮区域滚轮调整（保留原行为；模式按钮区域不响应滚轮）
         if (inRect(mouseX, mouseY, x + MODE_BTN_X, y + COUNT_Y, BTN_W, BTN_H)) {
-            ModMessages.sendToServer(new SandwichConfigPacket(menu.getMachine().getBlockPos(), (byte) 2,
-                    delta > 0 ? 1 : -1));
+            sendCount(delta > 0 ? 1 : -1);
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, delta);

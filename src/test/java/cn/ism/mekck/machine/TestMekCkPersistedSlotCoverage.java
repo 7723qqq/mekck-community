@@ -409,19 +409,30 @@ public class TestMekCkPersistedSlotCoverage {
      * 键名必须与这里断言的一模一样。改动任何一个都会让「挖掉再放下」静默丢状态，
      * 所以 T2（战利品表）与本类（读取侧）以本测试为共同契约。
      *
-     * <p>六个键全部是编译期字符串常量（引用它们不会触发类加载，真 tile 造不出来也能测）。
-     * AE2 节点键（{@code MekckAe2Main} / {@code MekckAe2Extra1..7} / {@code MekCkAutoSel}）
-     * 与放置者 UUID（{@code MekckPlacerUuid}）<b>刻意不在契约内</b>：前者在拆机时已被销毁、
-     * 重新放置应重新入网，后者属可选归属信息。</p>
+     * <p>这些键全部是编译期字符串常量（引用它们不会触发类加载，真 tile 造不出来也能测）。
+     * 进度的<b>权威键是 v2 的 {@code MekCkWorkProgressArray}</b>（每路一个 int）与分选开关
+     * {@code MekCkSorting}；v1 的单个 int 键 {@code MekCkWorkProgress} <b>不再是契约</b>——
+     * 它只由读侧 {@code readWorkProgress} 为旧档保留 fallback，战利品表复制它等于搬一个
+     * 读侧从不认领的键。AE2 节点键（{@code MekckAe2Main} / {@code MekckAe2Extra1..7} /
+     * {@code MekCkAutoSel}）与放置者 UUID（{@code MekckPlacerUuid}）<b>刻意不在本断言内</b>：
+     * 前者在拆机时已被销毁、重新放置应重新入网，后者属可选归属信息。</p>
      */
     @Test
-    public void mekckPersistentKeysMatchTheLootTableContract() {
+    public void mekckPersistentKeysMatchTheLootTableContract() throws IOException {
         assertEquals("MekCkSlots", MekCkSlotNbt.TAG_SLOTS);
         assertEquals("mekckExecutor", MekCkMachineTile.TAG_EXECUTOR);
-        assertEquals("MekCkWorkProgress", MekCkMachineTile.TAG_WORK_PROGRESS);
+        assertEquals("MekCkWorkProgressArray", MekCkMachineTile.TAG_WORK_PROGRESS_ARRAY);
+        assertEquals("MekCkSorting", MekCkMachineTile.TAG_SORTING);
         assertEquals("MekCkNative", MekCkMachineTile.TAG_NATIVE_VERSION);
         assertEquals("GasTank", cn.ism.mekck.machine.plantingcutting.PlantingCuttingFactoryTile.TAG_NUTRIENT_TANK);
         assertEquals("FluidTanks", cn.ism.mekck.machine.cooking.CookingFactoryTile.TAG_FLUID_TANKS);
+
+        // 读侧仍须优先认 v2 键、并保留 v1 fallback —— 旧档的单 int 进度不能凭空丢半批。
+        String readProgress = methodBody(
+                source("src/main/java/cn/ism/mekck/machine/MekCkMachineTile.java"),
+                "private void readWorkProgress(CompoundTag tag) {");
+        assertTrue("读侧必须优先认 v2 的 int 数组", readProgress.contains("getIntArray(TAG_WORK_PROGRESS_ARRAY)"));
+        assertTrue("读侧必须保留 v1 fallback（旧档单个 int）", readProgress.contains("getInt(TAG_WORK_PROGRESS)"));
     }
 
     // ── 8. cooking / skewering 的门禁必须同时要求订单与料 ───────────────

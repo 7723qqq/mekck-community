@@ -6,8 +6,13 @@ import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.Container;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import mekanism.common.inventory.container.IGUIWindow;
+import mekanism.common.inventory.container.slot.IVirtualSlot;
+
+import java.util.function.IntSupplier;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -107,7 +112,7 @@ public class CentralKitchenMenu extends AbstractContainerMenu
     };
 
     /** 动态索引存储槽：显示位置固定，真实索引随滚动 / 搜索变化。 */
-    public class StorageSlot extends Slot {
+    public class StorageSlot extends VirtualSlot {
         private int machineIndex = -1;
         private final int displayIndex;
 
@@ -207,7 +212,7 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
         // 模块槽 5×4（左区）
         for (int i = 0; i < VISIBLE_MODULES; i++) {
-            addSlot(new Slot(new ModuleContainer(machine, i),
+            addSlot(new VirtualSlot(new ModuleContainer(machine, i),
                     i, 12 + (i % 5) * 18, 20 + (i / 5) * 18));
         }
 
@@ -221,12 +226,12 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
         // 输出区 3×3（右区）
         for (int i = 0; i < VISIBLE_OUTPUT; i++) {
-            addSlot(new Slot(new OutputContainer(machine, i), i,
+            addSlot(new VirtualSlot(new OutputContainer(machine, i), i,
                     294 + (i % 3) * 18, 20 + (i / 3) * 18));
         }
 
         // 三明治样品槽（安装「三明治组装机」模块后用于定义要量产的三明治；放在输出区下方）
-        addSlot(new Slot(new SampleContainer(machine),
+        addSlot(new VirtualSlot(new SampleContainer(machine),
                 CentralKitchenBlockEntity.SANDWICH_SAMPLE_SLOT, 294, 78));
 
         // 玩家背包 + 快捷栏（服务端与客户端必须一致地注册，否则槽位数量不匹配）
@@ -327,6 +332,28 @@ public class CentralKitchenMenu extends AbstractContainerMenu
     }
 
     /**
+     * 补推节流判定（纯函数，便于单测）：是否应<b>跳过</b>本次补推。
+     *
+     * <p>语义：{@code force} 立即推；否则<b>先判时间窗</b>——距上次推送不足
+     * {@code intervalTicks} 一律跳过（哪怕版本已变，这正是「版本持续变化时仍受节流」
+     * 的含义）；时间窗已过再判版本，版本未变说明内容自上次推送后没有变化，无需重复推。</p>
+     *
+     * <p>为什么顺序不能反：旧实现把「版本相同」与「时间窗内」用 {@code &&} 串起来，
+     * 而 AutoIO 每 tick 改存储区会让版本每 tick 都变 ⇒ 该条件恒假 ⇒ 整段节流被绕过，
+     * 每 tick 推一整页 54 格。</p>
+     */
+    static boolean shouldSkipStoragePush(boolean force, int version, int lastPushedVersion,
+                                         long now, long lastPushTime, long intervalTicks) {
+        if (force) {
+            return false;
+        }
+        if (lastPushTime != Long.MIN_VALUE && now - lastPushTime < intervalTicks) {
+            return true;
+        }
+        return version == lastPushedVersion;
+    }
+
+    /**
      * 把当前页推给正在看这个界面的玩家。
      *
      * @param force {@code true} 跳过「版本没变」与节流（搜索/排序/滚动这类
@@ -342,12 +369,9 @@ public class CentralKitchenMenu extends AbstractContainerMenu
         }
         long now = serverLevel.getGameTime();
         int version = machine.storageVersion();
-        if (!force) {
-            if (version == lastPushedStorageVersion
-                    && lastPushGameTime != Long.MIN_VALUE
-                    && now - lastPushGameTime < PUSH_INTERVAL_TICKS) {
-                return;
-            }
+        if (shouldSkipStoragePush(force, version, lastPushedStorageVersion, now, lastPushGameTime,
+                PUSH_INTERVAL_TICKS)) {
+            return;
         }
 
         List<ItemStack> page = new ArrayList<>(VISIBLE_STORAGE);
@@ -681,5 +705,29 @@ public class CentralKitchenMenu extends AbstractContainerMenu
     public boolean stillValid(Player player) {
         return machine.getLevel() != null
                 && player.distanceToSqr(machine.getBlockPos().getCenter()) <= 64.0;
+    }
+
+    /**
+     * 实现 {@link IVirtualSlot} 供屏幕的 {@code GuiVirtualSlot} 绑定渲染（Mek 体系标准接法，
+     * 同 SandwichAssemblerMenu 等屏）；行为全走 vanilla {@code Slot} 默认实现，与此前裸 Slot 一致。
+     *
+     * <p><b>不能是 final</b>：{@link StorageSlot} 继承本类并覆写 {@code getItem()}
+     * （客户端要读 {@link CentralKitchenMenu#clientVisible} 镜像而不是真实存储槽），
+     * 标 final 会让 {@code StorageSlot} 无法编译。</p>
+     */
+    private static class VirtualSlot extends Slot implements IVirtualSlot {
+        private VirtualSlot(Container container, int index, int x, int y) {
+            super(container, index, x, y);
+        }
+
+        @Override public IGUIWindow getLinkedWindow() { return null; }
+        @Override public int getActualX() { return x; }
+        @Override public int getActualY() { return y; }
+        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
+        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
+        @Override public ItemStack getStackToRender() { return getItem(); }
+        @Override public boolean shouldDrawOverlay() { return false; }
+        @Override public String getTooltipOverride() { return null; }
+        @Override public Slot getSlot() { return this; }
     }
 }

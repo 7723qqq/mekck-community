@@ -161,7 +161,18 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
      * {@code new SimpleContainerData(DATA_SIZE)} 是符号引用，会自动跟着长大。</p>
      */
     public static final int DATA_ENERGY_HI = 16;
-    public static final int DATA_SIZE = 17;
+    /**
+     * 物品/流体侧配编码（6 面 × 4 bit = 24 bit）的高 16 位。
+     *
+     * <p><b>为什么</b>：侧配编码最大 24 bit，经 {@code ContainerData} 的 16 位有符号通道后只剩低
+     * 16 位（前 4 面），WEST/EAST 两面恒被读成 NONE ⇒ 客户端显示与实际不符，且循环配置永远到不了
+     * {@code PUSH_OUTPUT}。拆两槽后 6 面全部可读回。见 {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     *
+     * <p><b>为什么取值是 17/18</b>：一律<b>追加</b>到槽表末尾，现有下标不动。</p>
+     */
+    public static final int DATA_SIDE_CONFIG_HI = 17;
+    public static final int DATA_FLUID_SIDE_CONFIG_HI = 18;
+    public static final int DATA_SIZE = 19;
 
 
     final MachineKind kind;
@@ -362,7 +373,8 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
                 // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
                 case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
                 case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
-                case DATA_SIDE_CONFIG -> encodeSideConfig();
+                case DATA_SIDE_CONFIG -> encodeSideConfig() & 0xFFFF;
+                case DATA_SIDE_CONFIG_HI -> (encodeSideConfig() >>> 16) & 0xFFFF;
                 case DATA_SPEED_UPGRADE -> getSpeedUpgradeCount();
                 case DATA_ENERGY_UPGRADE -> getEnergyUpgradeCount();
                 case DATA_CREATIVE_UPGRADE -> hasCreativeUpgrade() ? 1 : 0;
@@ -373,7 +385,8 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
                 case DATA_OUTPUT_FLUID -> fluids.getOutputTank().getFluidAmount();
                 case DATA_TEMPERATURE -> (int) Math.round((getTemperatureK() - 273.15) * 100.0);
                 case DATA_UPGRADE_PROGRESS -> (int) Math.round(getUpgradeInstallProgress() * 100.0);
-                case DATA_FLUID_SIDE_CONFIG -> encodeSideConfig(fluids.getFluidSideConfig());
+                case DATA_FLUID_SIDE_CONFIG -> encodeSideConfig(fluids.getFluidSideConfig()) & 0xFFFF;
+                case DATA_FLUID_SIDE_CONFIG_HI -> (encodeSideConfig(fluids.getFluidSideConfig()) >>> 16) & 0xFFFF;
                 case DATA_JUICE_LEVEL -> juiceLevel;
                 case DATA_JUICE_TYPE -> cn.ism.mekck.util.VineryJuice.indexOf(juiceType);
                 default -> 0;
@@ -1407,13 +1420,33 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         return h;
     }
 
+    /**
+     * 输入罐 + 输出罐的「流体 id + 量」指纹。
+     *
+     * <p><b>为什么并入配方缓存键</b>：{@code matchFerment} / {@code matchExtractor} /
+     * {@code matchBeverageAssembly} 在每次匹配时都读输入罐（同型 + 足量）与输出罐（同型 + 容量预检），
+     * 结果随罐内流体变化。原先缓存键只有物品指纹，罐一变就复用旧匹配 ⇒ 机器卡在错误配方或空转。
+     * 见 {@link SimpleMachineRecipes} 中对 {@code be.fluids} 的读取。</p>
+     */
+    private long fluidFingerprint() {
+        long h = 31L + tankFingerprint(fluids.getInputTank().getFluid());
+        return h * 31L + tankFingerprint(fluids.getOutputTank().getFluid());
+    }
+
+    private static long tankFingerprint(net.minecraftforge.fluids.FluidStack stack) {
+        if (stack == null || stack.isEmpty()) return 0L;
+        return (long) net.minecraft.core.registries.BuiltInRegistries.FLUID.getId(stack.getFluid()) * 31L
+                + stack.getAmount();
+    }
+
     private MatchedRecipe findRecipe() {
         if (level == null) return null;
         if (orderRecipeId != null) {
             return findOrderedRecipe(orderRecipeId);
         }
         Object manager = level.getRecipeManager();
-        long key = inputFingerprint();
+        // 物品指纹并入两罐指纹（见 fluidFingerprint 的「为什么」）。
+        long key = inputFingerprint() * 31L + fluidFingerprint();
         if (manager == matchManager && key == matchKey
                 && matchJuiceLevel == juiceLevel && java.util.Objects.equals(matchJuiceType, juiceType)) {
             return matchCached;

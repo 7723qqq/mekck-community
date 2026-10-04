@@ -106,16 +106,27 @@ public final class MekCkFactories {
     public static final RegistryObject<Block> MACHINE_BLOCK;
 
     public static final RegistryObject<Item> MACHINE_ITEM;
-    /** 客户端屏幕绑定用。容器本身已改走 MACHINE_CONTAINER（Mek 体系），
-     *  这里的 MENUS 注册只用于让 {@code UniversalCuttingMachineScreen} 拿到 MenuType。 */
 
-    public static final RegistryObject<MenuType<UniversalCuttingMachineMenu>> MACHINE_MENU =
-            MENUS.register("universal_cutting_machine",
-                    () -> IForgeMenuType.create(
-                            (int id, net.minecraft.world.entity.player.Inventory inv,
-                                    net.minecraft.network.FriendlyByteBuf buf) -> new UniversalCuttingMachineMenu(
-                                            id, inv,
-                                            (cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile) inv.player.level().getBlockEntity(buf.readBlockPos()))));
+    // ⚠️ 这里曾经还有一处 MENUS.register("universal_cutting_machine", …) 作为「屏幕绑定用的 MenuType」。
+    // 它是本模组 2026-10-03 实机故障的根因，已删除 —— 不要加回来：
+    //
+    //   MekCkRegistries.MENUS    = DeferredRegister.create(ForgeRegistries.MENU_TYPES, MOD_ID)
+    //   MACHINE_CONTAINERS_REG   = Mek 的 ContainerTypeDeferredRegister
+    //     └─ 二者最终写的是**同一个 minecraft:menu 注册表**（Mek 的
+    //        ContainerTypeDeferredRegister extends WrappedDeferredRegister<MenuType<?>>）。
+    //   于是在同一注册表里用**同一个名字**注册了两次。Forge 报：
+    //     Registry minecraft:menu: Override did not have an associated owner object.
+    //         Name: mekck:universal_cutting_machine
+    //   紧接着 ForgeRegistry.sync 抛
+    //     "One of more entry values did not copy to the correct id"
+    //   → Minecraft 判定资源包加载失败 → "removing all selected resourcepacks"
+    //   → 强制第二次资源重载 → 第二次 FMLCommonSetupEvent 投递
+    //   → broken mod state → ModelEvent$RegisterGeometryLoaders 被拒
+    //   → 模型加载器表为空 → **所有** forge:composite 模型解析失败（本模组 148 + Mekanism 107
+    //     + Extras 79 + Create 30）→ 贴图紫黑、JEI 不加载、机器不可见。
+    //
+    //   屏幕绑定直接用 MACHINE_CONTAINER.get()（WrappedRegistryObject<MenuType<…>>#get 就是 MenuType），
+    //   与本文件既有的 COOKING_FACTORY_CONTAINER / GRILL_CONTAINER 用法一致。见 ClientEvents。
 
     // Electric Grinding Machine (basic machine, processes kaleidoscope_cookery millstone recipes)
 

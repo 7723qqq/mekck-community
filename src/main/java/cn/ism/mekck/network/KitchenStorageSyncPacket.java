@@ -94,17 +94,11 @@ public final class KitchenStorageSyncPacket {
             return;
         }
         context.enqueueWork(() -> {
-            var player = context.getSender();
-            if (player == null) {
-                return;
-            }
-            // 只作用于「玩家当前正开着的那个中央厨房界面」——
-            // 界面已关掉时 containerMenu 已经不是它，直接丢弃。
-            if (player.containerMenu instanceof CentralKitchenMenu menu
-                    && menu.getMachine() != null
-                    && menu.getMachine().getBlockPos().equals(pos)) {
-                menu.applyStorageSnapshot(scrollRow, sortModeOrdinal, filteredCount, visible);
-            }
+            // 不能在这里向 Context 索取发送方玩家：本包是 S2C，客户端侧那个取值恒为 null
+            // （packet listener 是 ClientPacketListener），旧实现因此每次都提前返回 ⇒
+            // 快照从不落地、界面 54 格恒空。玩家只能由客户端实现类去取，故走门面。
+            cn.ism.mekck.util.ClientPacketBridge.applyStorageSnapshot(
+                    pos, scrollRow, sortModeOrdinal, filteredCount, visible);
         });
         context.setPacketHandled(true);
     }

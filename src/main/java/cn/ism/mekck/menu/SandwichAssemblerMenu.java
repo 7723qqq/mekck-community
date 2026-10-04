@@ -11,6 +11,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.items.SlotItemHandler;
 import cn.ism.mekck.registry.MekCkStandaloneMachines;
+import mekanism.common.inventory.container.IGUIWindow;
+import mekanism.common.inventory.container.slot.IVirtualSlot;
+
+import java.util.function.IntSupplier;
 
 /**
  * 三明治组装机菜单：有序输入格 32（8×4）+ 样品槽 + 材料区 27（9×3）+ 返还槽 3 + 输出槽 + 升级槽 3 + 能源槽。
@@ -20,8 +24,9 @@ public class SandwichAssemblerMenu extends AbstractContainerMenu
 
     public static final int IMAGE_WIDTH = 344;
     public static final int IMAGE_HEIGHT = 244;
-    private static final int ORDERED_COLS = 8;
-    private static final int MATERIAL_COLS = 9;
+    /** 槽位布局常量：屏幕的 GuiVirtualSlot 与本菜单的 addSlot 表达式同源引用。 */
+    public static final int ORDERED_COLS = 8;
+    public static final int MATERIAL_COLS = 9;
 
     private final SandwichAssemblerBlockEntity machine;
 
@@ -57,26 +62,26 @@ public class SandwichAssemblerMenu extends AbstractContainerMenu
 
         // 有序输入格 8×4
         for (int i = 0; i < SandwichAssemblerBlockEntity.ORDERED_SLOTS; i++) {
-            addSlot(new SlotItemHandler(items, SandwichAssemblerBlockEntity.ORDERED_START + i,
+            addSlot(new InputSlot(items, SandwichAssemblerBlockEntity.ORDERED_START + i,
                     8 + (i % ORDERED_COLS) * 18, 20 + (i / ORDERED_COLS) * 18));
         }
         // 材料区 9×3
         for (int i = 0; i < SandwichAssemblerBlockEntity.MATERIAL_SLOTS; i++) {
-            addSlot(new SlotItemHandler(items, SandwichAssemblerBlockEntity.MATERIAL_START + i,
+            addSlot(new InputSlot(items, SandwichAssemblerBlockEntity.MATERIAL_START + i,
                     170 + (i % MATERIAL_COLS) * 18, 20 + (i / MATERIAL_COLS) * 18));
         }
         // 样品槽 / 输出槽 / 返还槽
-        addSlot(new SlotItemHandler(items, SandwichAssemblerBlockEntity.SAMPLE_SLOT, 170, 80));
-        addSlot(new SlotItemHandler(items, SandwichAssemblerBlockEntity.OUTPUT_SLOT, 200, 80));
+        addSlot(new InputSlot(items, SandwichAssemblerBlockEntity.SAMPLE_SLOT, 170, 80));
+        addSlot(new OutputSlot(items, SandwichAssemblerBlockEntity.OUTPUT_SLOT, 200, 80));
         for (int i = 0; i < SandwichAssemblerBlockEntity.RETURN_SLOTS; i++) {
-            addSlot(new SlotItemHandler(items, SandwichAssemblerBlockEntity.RETURN_START + i, 240 + i * 18, 80));
+            addSlot(new OutputSlot(items, SandwichAssemblerBlockEntity.RETURN_START + i, 240 + i * 18, 80));
         }
         // 升级槽
-        addSlot(new SlotItemHandler(items, SandwichAssemblerBlockEntity.SLOT_SPEED_UPGRADE, 170, 104));
-        addSlot(new SlotItemHandler(items, SandwichAssemblerBlockEntity.SLOT_ENERGY_UPGRADE, 170, 122));
-        addSlot(new SlotItemHandler(items, SandwichAssemblerBlockEntity.SLOT_CREATIVE_UPGRADE, 170, 140));
+        addSlot(new UpgradeSlot(items, SandwichAssemblerBlockEntity.SLOT_SPEED_UPGRADE, 170, 104));
+        addSlot(new UpgradeSlot(items, SandwichAssemblerBlockEntity.SLOT_ENERGY_UPGRADE, 170, 122));
+        addSlot(new UpgradeSlot(items, SandwichAssemblerBlockEntity.SLOT_CREATIVE_UPGRADE, 170, 140));
         // 能源槽
-        addSlot(new SlotItemHandler(items, SandwichAssemblerBlockEntity.SLOT_POWER, 310, 8));
+        addSlot(new PowerSlot(items, SandwichAssemblerBlockEntity.SLOT_POWER, 310, 8));
 
         // 玩家背包 + 快捷栏
         int invY = 164;
@@ -189,5 +194,82 @@ public class SandwichAssemblerMenu extends AbstractContainerMenu
     public boolean stillValid(Player player) {
         return machine.getLevel() != null
                 && player.distanceToSqr(machine.getBlockPos().getCenter()) <= 64.0;
+    }
+
+    // ── 轻量槽子类：实现 IVirtualSlot 供屏幕的 GuiVirtualSlot 绑定（Mek 体系标准接法，同
+    // IceFactoryMenu / SmartCookingPotMenu 等）；mayPlace / mayPickup 全走 SlotItemHandler
+    // 默认实现，与此前裸 SlotItemHandler 的行为逐字节一致 ──
+
+    /** 输入类槽（有序格 / 材料区 / 样品槽）。 */
+    private static final class InputSlot extends SlotItemHandler implements IVirtualSlot {
+        private InputSlot(IItemHandler handler, int slot, int x, int y) {
+            super(handler, slot, x, y);
+        }
+
+        @Override
+        public int getMaxStackSize(ItemStack stack) {
+            return getItemHandler().getSlotLimit(getContainerSlot());
+        }
+
+        @Override public IGUIWindow getLinkedWindow() { return null; }
+        @Override public int getActualX() { return x; }
+        @Override public int getActualY() { return y; }
+        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
+        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
+        @Override public ItemStack getStackToRender() { return getItem(); }
+        @Override public boolean shouldDrawOverlay() { return false; }
+        @Override public String getTooltipOverride() { return null; }
+        @Override public Slot getSlot() { return this; }
+    }
+
+    /** 输出 / 返还类槽。 */
+    private static final class OutputSlot extends SlotItemHandler implements IVirtualSlot {
+        private OutputSlot(IItemHandler handler, int slot, int x, int y) {
+            super(handler, slot, x, y);
+        }
+
+        @Override public IGUIWindow getLinkedWindow() { return null; }
+        @Override public int getActualX() { return x; }
+        @Override public int getActualY() { return y; }
+        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
+        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
+        @Override public ItemStack getStackToRender() { return getItem(); }
+        @Override public boolean shouldDrawOverlay() { return false; }
+        @Override public String getTooltipOverride() { return null; }
+        @Override public Slot getSlot() { return this; }
+    }
+
+    /** 升级槽（速度 / 能量 / 创造）。 */
+    private static final class UpgradeSlot extends SlotItemHandler implements IVirtualSlot {
+        private UpgradeSlot(IItemHandler handler, int slot, int x, int y) {
+            super(handler, slot, x, y);
+        }
+
+        @Override public IGUIWindow getLinkedWindow() { return null; }
+        @Override public int getActualX() { return x; }
+        @Override public int getActualY() { return y; }
+        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
+        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
+        @Override public ItemStack getStackToRender() { return getItem(); }
+        @Override public boolean shouldDrawOverlay() { return false; }
+        @Override public String getTooltipOverride() { return null; }
+        @Override public Slot getSlot() { return this; }
+    }
+
+    /** 能源槽。 */
+    private static final class PowerSlot extends SlotItemHandler implements IVirtualSlot {
+        private PowerSlot(IItemHandler handler, int slot, int x, int y) {
+            super(handler, slot, x, y);
+        }
+
+        @Override public IGUIWindow getLinkedWindow() { return null; }
+        @Override public int getActualX() { return x; }
+        @Override public int getActualY() { return y; }
+        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
+        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
+        @Override public ItemStack getStackToRender() { return getItem(); }
+        @Override public boolean shouldDrawOverlay() { return false; }
+        @Override public String getTooltipOverride() { return null; }
+        @Override public Slot getSlot() { return this; }
     }
 }

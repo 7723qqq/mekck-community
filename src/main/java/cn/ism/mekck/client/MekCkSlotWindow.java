@@ -165,11 +165,12 @@ public class MekCkSlotWindow extends GuiWindow {
     public void renderForeground(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         super.renderForeground(guiGraphics, mouseX, mouseY);
         drawTitleText(guiGraphics, Component.translatable("gui.mekck.slot_window.title"), 5);
-        // 每个区块的标题（输入 / 输出 / 存储），左边与自己的第一列对齐
+        // 每个区块的标题（输入 / 输出 / 存储），左边与自己的第一列对齐；
+        // 颜色走 Mek 的 subheadingTextColor()（同 GuiWindow 其它标题），不再硬编码灰
         for (int g = 0; g < groups.size(); g++) {
             Component title = groups.get(g).title();
             guiGraphics.drawString(getFont(), title,
-                    relativeX + groupX(g), relativeY + TITLE_H, 0xFFB0B0B0, false);
+                    relativeX + groupX(g), relativeY + TITLE_H, subheadingTextColor(), false);
         }
     }
 }

@@ -103,6 +103,9 @@ public final class CookingFactoryScreen
                     () -> fluidStackOf(index),
                     () -> capacityOf(index)));
         }
+
+        // 自动补料 / 网络拉料 tab：必须最后注册（命中优先），见基类注释。
+        addNetworkPullTabs();
     }
 
     private FluidStack fluidStackOf(int index) {

@@ -161,7 +161,9 @@ public final class BioreactorMenu extends AbstractContainerMenu {
 
     /** 客户端重建有机物流体；空槽返回 EMPTY。 */
     public FluidStack getFluidStack() {
-        int amount = data.get(BioreactorBlockEntity.DATA_FLUID_AMOUNT);
+        int amount = WideDataSlot.read(data,
+                BioreactorBlockEntity.DATA_FLUID_AMOUNT,
+                BioreactorBlockEntity.DATA_FLUID_AMOUNT_HI);
         if (amount <= 0) {
             return FluidStack.EMPTY;
         }

@@ -326,7 +326,10 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
     }
 
     public int getEncodedSideConfig() {
-        return data.get(SimpleMachineBlockEntity.DATA_SIDE_CONFIG);
+        // 24-bit 侧配拆两槽，裸读低槽会丢 WEST/EAST 两面，见 WideDataSlot。
+        return WideDataSlot.read(data,
+                SimpleMachineBlockEntity.DATA_SIDE_CONFIG,
+                SimpleMachineBlockEntity.DATA_SIDE_CONFIG_HI);
     }
 
     @Override
@@ -339,7 +342,9 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
 
     /** 流体侧面配置（独立于物品侧配）。 */
     public SideMode getFluidSideMode(Direction direction) {
-        int encoded = data.get(SimpleMachineBlockEntity.DATA_FLUID_SIDE_CONFIG);
+        int encoded = WideDataSlot.read(data,
+                SimpleMachineBlockEntity.DATA_FLUID_SIDE_CONFIG,
+                SimpleMachineBlockEntity.DATA_FLUID_SIDE_CONFIG_HI);
         int ordinal = (encoded >> (direction.ordinal() * 4)) & 0xF;
         SideMode[] values = SideMode.values();
         return (ordinal >= 0 && ordinal < values.length) ? values[ordinal] : SideMode.NONE;

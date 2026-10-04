@@ -1,5 +1,5 @@
 {
-  "parent": "mekck:vendor/mekanism_extras/block/factory/planting/infinite",
+  "parent": "mekck:block/mekck/planting_cutting_factory/infinite",
   "display": {
     "thirdperson_righthand": {
       "rotation": [

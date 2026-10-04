@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -45,6 +46,9 @@ public class TestKitchenStorageBrowserSync {
             Path.of("src/main/java/cn/ism/mekck/network/KitchenStorageSyncPacket.java");
     private static final Path MOD_MESSAGES =
             Path.of("src/main/java/cn/ism/mekck/network/ModMessages.java");
+    /** 客户端落地实现类：「按 pos 校验当前界面」这一环现在住在这里（见下面的注释）。 */
+    private static final Path BRIDGE_IMPL =
+            Path.of("src/main/java/cn/ism/mekck/client/ClientPacketBridgeImpl.java");
 
     private static String read(Path path) throws IOException {
         assertTrue("找不到源文件：" + path + "（源码测试需要在仓库根目录跑）", Files.isRegularFile(path));
@@ -198,8 +202,26 @@ public class TestKitchenStorageBrowserSync {
     @Test
     public void packetHandlerActuallyAppliesTheSnapshot() throws IOException {
         String packet = read(PACKET);
-        assertTrue("包处理器没有按 pos 校验「玩家正开着这个界面」", packet.contains("containerMenu"));
-        assertTrue("包处理器必须调用 menu 的快照落地方法", packet.contains("applyStorageSnapshot"));
+        String impl = read(BRIDGE_IMPL);
+
+        // 反向守卫（本条缺陷的根因，务必钉死）：
+        // 这个包是 S2C，客户端侧 Context#getSender() 恒为 null。旧实现写
+        // `var player = context.getSender(); if (player == null) return;`
+        // ⇒ 每次都提前返回 ⇒ 快照从不落地 ⇒ 界面 54 格恒空，而本文件当时照样全绿。
+        // 所以包处理器里**不许**再出现 getSender。
+        assertFalse("S2C 包处理器不能用 getSender()：客户端侧它恒为 null，"
+                        + "会让整个落地分支变成死代码（I-N4 当初就是这么漏的）",
+                packet.contains("getSender()"));
+
+        // 落地必须走客户端门面（不能直接写 Minecraft.getInstance()，否则专用服务端链接失败）。
+        assertTrue("包处理器必须经 ClientPacketBridge 落地到客户端",
+                packet.contains("ClientPacketBridge.applyStorageSnapshot"));
+
+        // 「按 pos 校验玩家正开着这个界面」这一环搬到了客户端实现类：
+        // 那里才能拿到 Minecraft.getInstance().player。
+        assertTrue("客户端实现类没有按 containerMenu + pos 校验当前界面",
+                impl.contains("containerMenu") && impl.contains("getBlockPos().equals(pos)"));
+        assertTrue("客户端实现类必须调用 menu 的快照落地方法", impl.contains("applyStorageSnapshot"));
         // 反向：menu 必须真的有这个方法，否则上面那条是空断言
         assertTrue("menu 上找不到 applyStorageSnapshot 定义（包在调一个不存在的方法）",
                 read(MENU).contains("public void applyStorageSnapshot("));
@@ -233,6 +255,57 @@ public class TestKitchenStorageBrowserSync {
         assertTrue("getFilteredCount() 没找到，判据可能失配", !body.isEmpty());
         assertTrue("getFilteredCount() 必须在客户端读 clientFilteredCount，"
                 + "否则界面显示「共 0 条」", body.contains("clientFilteredCount"));
+    }
+
+    // ── 6. 补推节流：版本持续变化时仍受时间窗约束 ──────────────────────
+
+    /**
+     * 节流判定必须<b>先判时间窗、再判版本</b>，且下沉到纯函数。
+     *
+     * <h3>旧缺陷形态</h3>
+     * {@code if (!force) { if (version == last && … now-last < 4) return; } }` ——
+     * AutoIO 每 tick 改存储区会让 {@code version} 每 tick 都变 ⇒ {@code version == last}
+     * 恒假 ⇒ 整个 {@code if} 恒假 ⇒ <b>节流整段被绕过</b>，每 tick 推一整页 54 格。
+     *
+     * <p>正确语义：{@code force} 立即推；否则时间窗内一律跳过（哪怕版本已变），
+     * 时间窗已过且版本变化才推。所以时间窗比较必须<b>排在</b>版本比较之前，
+     * 且时间窗内是 {@code return true}（跳过）。</p>
+     */
+    @Test
+    public void storagePushThrottleChecksTimeWindowBeforeVersion() throws IOException {
+        String menu = read(MENU);
+        String push = blockOf(menu, "public void pushStorageSync(boolean force)");
+        assertTrue("pushStorageSync() 没找到，判据可能失配", !push.isEmpty());
+        assertTrue("pushStorageSync 必须委托给纯函数 shouldSkipStoragePush（便于单测与复用）",
+                push.contains("shouldSkipStoragePush("));
+        assertFalse("pushStorageSync 不得内联版本比较 —— 旧缺陷正是「版本一变就跳过整段节流」",
+                push.contains("version == lastPushedStorageVersion"));
+        assertFalse("pushStorageSync 不得内联时间窗比较（应下沉到 shouldSkipStoragePush）",
+                push.contains("now - lastPushGameTime < PUSH_INTERVAL_TICKS"));
+
+        String decision = blockOf(menu, "static boolean shouldSkipStoragePush(");
+        assertFalse("找不到 shouldSkipStoragePush（判定被内联回去就没法守卫）", decision.isEmpty());
+        assertTrue("force 必须立即放行", decision.contains("if (force)"));
+
+        int timeGate = decision.indexOf("< intervalTicks");
+        int versionGate = decision.indexOf("version == lastPushedVersion");
+        assertTrue("判定必须同时含时间窗与版本比较（判据可能失配）", timeGate >= 0 && versionGate >= 0);
+        assertTrue("时间窗必须排在版本比较之前 —— 否则版本每 tick 都变时节流整段被绕过，"
+                        + "AutoIO 持续改存储区就会每 tick 推一整页",
+                timeGate < versionGate);
+        String timeBranch = decision.substring(timeGate, versionGate);
+        assertTrue("时间窗内必须直接跳过（return true）：" + timeBranch,
+                timeBranch.contains("return true"));
+    }
+
+    /** 确认第 6 条的判据在本仓确实还能匹配到东西（防改名后静默恒真）。 */
+    @Test
+    public void throttleCriteriaStillMatchSomething() throws IOException {
+        String menu = read(MENU);
+        assertTrue("判据失效：menu 里已找不到 shouldSkipStoragePush",
+                menu.contains("shouldSkipStoragePush("));
+        assertTrue("判据失效：menu 里已找不到 intervalTicks 比较", menu.contains("intervalTicks"));
+        assertTrue("判据失效：menu 里已找不到 lastPushedStorageVersion", menu.contains("lastPushedStorageVersion"));
     }
 
     // ── 判据不许空转 ───────────────────────────────────────────────────

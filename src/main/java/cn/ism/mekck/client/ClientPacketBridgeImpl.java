@@ -1,7 +1,9 @@
 package cn.ism.mekck.client;
 
+import cn.ism.mekck.menu.CentralKitchenMenu;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 
@@ -33,6 +35,23 @@ public final class ClientPacketBridgeImpl {
             if (panel != null) {
                 panel.setData(pos, recipeIds, maxCraftable);
             }
+        }
+    }
+
+    /**
+     * 把中央厨房存储浏览器快照落到当前打开的 {@code CentralKitchenMenu}。
+     *
+     * <p>只作用于「玩家当前正开着的那个中央厨房界面」——界面已关掉时
+     * {@code player.containerMenu} 已经不是它，直接丢弃。</p>
+     */
+    public static void applyStorageSnapshot(BlockPos pos, int scrollRow, int sortModeOrdinal,
+                                            int filteredCount, List<ItemStack> visible) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null
+                && mc.player.containerMenu instanceof CentralKitchenMenu menu
+                && menu.getMachine() != null
+                && menu.getMachine().getBlockPos().equals(pos)) {
+            menu.applyStorageSnapshot(scrollRow, sortModeOrdinal, filteredCount, visible);
         }
     }
 

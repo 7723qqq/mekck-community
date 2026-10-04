@@ -1,17 +1,32 @@
 {
   "variants": {
-    "facing=north": {
+    "facing=north,active=false": {
       "model": "mekck:block/mekck/wine_cellar/wine_cellar"
     },
-    "facing=south": {
+    "facing=north,active=true": {
+      "model": "mekck:block/mekck/wine_cellar/wine_cellar"
+    },
+    "facing=south,active=false": {
       "model": "mekck:block/mekck/wine_cellar/wine_cellar",
       "y": 180
     },
-    "facing=east": {
+    "facing=south,active=true": {
+      "model": "mekck:block/mekck/wine_cellar/wine_cellar",
+      "y": 180
+    },
+    "facing=east,active=false": {
       "model": "mekck:block/mekck/wine_cellar/wine_cellar",
       "y": 90
     },
-    "facing=west": {
+    "facing=east,active=true": {
+      "model": "mekck:block/mekck/wine_cellar/wine_cellar",
+      "y": 90
+    },
+    "facing=west,active=false": {
+      "model": "mekck:block/mekck/wine_cellar/wine_cellar",
+      "y": -90
+    },
+    "facing=west,active=true": {
       "model": "mekck:block/mekck/wine_cellar/wine_cellar",
       "y": -90
     }

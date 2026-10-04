@@ -165,7 +165,9 @@ public final class IceMakerMenu extends AbstractContainerMenu implements ISideCo
 
     /** 从 ContainerData 同步值重建流体（客户端 FluidTank 不进网络同步，直接读会是空罐）。 */
     public FluidStack getWaterStack() {
-        int amount = data.get(IceMakerBlockEntity.DATA_WATER_AMOUNT);
+        int amount = WideDataSlot.read(data,
+                IceMakerBlockEntity.DATA_WATER_AMOUNT,
+                IceMakerBlockEntity.DATA_WATER_AMOUNT_HI);
         if (amount <= 0) return FluidStack.EMPTY;
         int id = data.get(IceMakerBlockEntity.DATA_WATER_FLUID_ID);
         net.minecraft.world.level.material.Fluid fluid = id >= 0
@@ -179,7 +181,10 @@ public final class IceMakerMenu extends AbstractContainerMenu implements ISideCo
     }
 
     public int getEncodedSideConfig() {
-        return data.get(IceMakerBlockEntity.DATA_SIDE_CONFIG);
+        // 24-bit 侧配拆两槽，裸读低槽会丢 WEST/EAST 两面，见 WideDataSlot。
+        return WideDataSlot.read(data,
+                IceMakerBlockEntity.DATA_SIDE_CONFIG,
+                IceMakerBlockEntity.DATA_SIDE_CONFIG_HI);
     }
 
     @Override

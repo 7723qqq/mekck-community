@@ -41,6 +41,9 @@ public class NetworkMissingRequestPacket {
         context.get().enqueueWork(() -> {
             ServerPlayer player = context.get().getSender();
             BlockEntity be = PacketGuard.target(player, packet.pos);
+            // 与 NetworkRecipeRequestPacket 同口径：任何请求都必回响应（首请求不得被丢弃），
+            // 不做「丢弃式」节流；昂贵部分由 MekckAe2.describeNetworkMissing 内部的面板入口
+            // （最短刷新间隔合并）承担，窗口内重复请求复用上次样例结果。
             String text = be == null ? null : cn.ism.mekck.compat.AE2Compat.describeNetworkMissing(
                     be, packet.recipeId, packet.quantity);
             ModMessages.sendToPlayer(new NetworkMissingPacket(packet.pos, packet.recipeId, packet.quantity,

@@ -3,6 +3,7 @@ package cn.ism.mekck.util;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -108,6 +109,35 @@ public class TestAttackRadiusClamp {
             assertTrue(m + " 仍残留「上限不限」的旧钳制写法",
                     !src.contains("Math.min((long) Integer.MAX_VALUE, (long) this.radius + delta)"));
         }
+    }
+
+    /**
+     * 读档路径（{@code readAdditionalSaveData} 里的 {@code tag.getInt("Radius")}）也必须过同一道闸。
+     *
+     * <p>四台机器都把 radius 落盘，裸读回来的旧档值同样能绕过上限（存档可被外部编辑、或来自无上限的旧版本）。
+     * 这与 setter 的闸门是同一缺陷的另一入口 —— 只堵 setter 会留下「旧档即全服扫描器」的后门。</p>
+     */
+    @Test
+    public void radiusReadFromNbtRoutesThroughTheSharedClamp() throws java.io.IOException {
+        String[] machines = {
+                "IceMakerBlockEntity", "IceFactoryBlockEntity",
+                "NutRoasterBlockEntity", "ChocolateCannonBlockEntity"
+        };
+        for (String m : machines) {
+            String path = "src/main/java/cn/ism/mekck/blockentity/" + m + ".java";
+            String src = java.nio.file.Files.readString(
+                    java.nio.file.Path.of(path), java.nio.charset.StandardCharsets.UTF_8);
+            assertTrue(m + " 读档 radius 必须走 IceTargetSearch.clampAttackRadius",
+                    src.contains("radius = IceTargetSearch.clampAttackRadius(tag.getInt(\"Radius\"))"));
+            assertFalse(m + " 仍有绕过闸门的裸读 radius = tag.getInt(\"Radius\")",
+                    src.contains("radius = tag.getInt(\"Radius\")"));
+        }
+        // 顺带钉死本轮删掉的死语句（读取结果被丢弃的 machine.data.get(DATA_ENERGY)）不得回潮。
+        String iceMaker = java.nio.file.Files.readString(
+                java.nio.file.Path.of("src/main/java/cn/ism/mekck/blockentity/IceMakerBlockEntity.java"),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertFalse("IceMakerBlockEntity 又出现了被丢弃结果的 machine.data.get(DATA_ENERGY) 死语句",
+                iceMaker.contains("machine.data.get(DATA_ENERGY);"));
     }
 
     private static String methodBody(String src, String signature) {

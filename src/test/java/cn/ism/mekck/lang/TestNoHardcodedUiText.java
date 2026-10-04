@@ -22,7 +22,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
- * 客户端 i18n 的<b>全域回归护栏</b>：{@code client/} 下不许再有玩家可见的硬编码中文。
+ * 客户端 i18n 的<b>全域回归护栏</b>：{@code src/main/java} 下不许再有玩家可见的硬编码中文。
+ *
+ * <p>第 6 轮把扫描面从 {@code client/} 扩到<b>主源码全目录</b>：证据显示
+ * {@code item/}、{@code blockentity/} 等包仍成片残留玩家可见中文（工具提示、
+ * 订单提示），而这一版判据此前只扫 {@code client/}，{@code MAIN_SRC_DIR} 那条
+ * 只是「判据不空转」的计数探针，管不住它们。扩面后新扫出的存量按
+ * {@link #KNOWN_MIGRATION_DEBT} 登记为债，债清单由反向断言守着（见断言列表）。</p>
  *
  * <h3>这一轮做完了什么</h3>
  * 前一版只守住「已迁走的 45 处」（一个字面量清单 + 一个 10 文件白名单），
@@ -53,16 +59,32 @@ import static org.junit.Assert.assertTrue;
  * <p>这条区分是本文件存在的理由：没有它，要么把 11 条日志诊断也 i18n 成噪音，
  * 要么得到一份随改动不断变长的豁免清单（正是要避免的东西）。</p>
  *
- * <h3>四条断言各防什么</h3>
+ * <h3>五条断言各防什么</h3>
  * <ol>
- *   <li><b>{@link #noHardcodedCjkInPlayerVisibleText}</b> —— 主断言：回流即红。</li>
+ *   <li><b>{@link #noHardcodedCjkInPlayerVisibleText}</b> —— 主断言：回流即红
+ *       （债清单里的文件除外）。</li>
  *   <li><b>{@link #diagnosticExemptionsStaySmall}</b> —— 防豁免清单腐化。</li>
  *   <li><b>{@link #newKeysExistInBothLanguagesAndAreReferenced}</b> ——
  *       防「只加进 zh_cn」导致英文客户端整片看到 raw key（本仓已因此栽过三次，
  *       见 {@link TestLangKeyParity}），以及「加了键却没换干净」。</li>
+ *   <li><b>{@link #everyKnownMigrationDebtStillHasOffenders}</b> ——
+ *       债清单的反向断言：每条必须真的还在违规，防清单变谎话。</li>
  *   <li><b>{@link #theDetectorStillFlagsASyntheticSample}</b> + <b>{@link #theDetectionPatternsStillMatchSomething}</b>
  *       —— 判据自身的生命周期自检，防止正则/词法器某天失配后本文件<b>永远全绿</b>。</li>
  * </ol>
+ *
+ * <h3>main 侧为什么需要扩充「非玩家可见 sink」判据</h3>
+ * 扩到主源码后，扫出的字面量里有大量<b>玩家根本读不到</b>的文本。沿用 client/
+ * 时代那条「所属语句里有没有 logger 调用」够不到它们，于是补齐三类依据，
+ * 每条都在 {@link #isDiagnostic} 里写明类别（不缩小扫描面、也不加文件名白名单）：
+ * <ol>
+ *   <li><b>Forge 配置注释</b>（{@code BUILDER.comment("…")}）—— 只落进
+ *       {@code .toml} 注释，不进任何界面；</li>
+ *   <li><b>异常消息</b>（{@code throw new …("…")}）—— 只进堆栈/开发者日志；</li>
+ *   <li><b>测试断言消息</b>（{@code assertXxx(cond, "…")}）—— dev 专用，玩家读不到。</li>
+ * </ol>
+ * 这三类之外仍有存量玩家可见文案（网络回传的提示、方块升级消息等），
+ * 它们落在 {@link #KNOWN_MIGRATION_DEBT} 而不是被白名单藏起来。
  *
  * <h3>为什么自己写词法扫描而不用正则</h3>
  * 正则版（剥注释 + 匹配字面量）分不清 {@code LOGGER.warn("…{}…")} 里的 {@code {}}
@@ -73,7 +95,7 @@ import static org.junit.Assert.assertTrue;
  */
 public class TestNoHardcodedUiText {
 
-    private static final Path CLIENT_DIR = Path.of("src/main/java/cn/ism/mekck/client");
+    /** 扫描面：主源码全目录（第 6 轮从 {@code client/} 扩到全域）。 */
     private static final Path MAIN_SRC_DIR = Path.of("src/main/java");
     private static final Path LANG_DIR = Path.of("src/main/resources/assets/mekck/lang");
 
@@ -91,6 +113,49 @@ public class TestNoHardcodedUiText {
      * {@link #diagnosticExemptionsStaySmall()} 会守住这个预算。</p>
      */
     private static final List<String> LOG_ONLY_SINKS = List.of("fail(");
+
+    /**
+     * 存量债清单 —— 扩面到主源码后新扫出、但<b>本轮未迁</b>的玩家可见文案文件。
+     *
+     * <p>为什么用清单而不是加白名单判据：这些文件里的中文<b>确实是玩家可见的</b>
+     * （方块升级提示、AE2 拉料/补料回执、订单预览文本、方块说明等），
+     * 只是它们的迁移要么需要打通「服务器字符串 → 客户端 Component」（跨
+     * {@code network/} + {@code client/}，超出本轮改动的文件集），要么属于
+     * 其它任务的域。把判据放宽成「一遇到这些文件就放过」会让新文案继续漏进来；
+     * 换成这份清单后，<b>只有清单内允许有存量，清单外一律要求 0</b>，
+     * 且 {@link #everyKnownMigrationDebtStillHasOffenders} 断言「每条都真的还在违规」，
+     * 迁完不清单会立刻报陈旧 —— 债只减不增。</p>
+     *
+     * <p>路径相对 {@link #MAIN_SRC_DIR}（即 {@code cn/ism/mekck/...}）。</p>
+     */
+    private static final List<String> KNOWN_MIGRATION_DEBT = List.of(
+            // —— 玩家可见，硬编码在服务器侧：字符串经网络原样回传后由客户端 drawString 画出，
+            //    简单地换成语言键会退化成显示 raw key，必须先改消息传输为 Component ——
+            "cn/ism/mekck/blockentity/CentralKitchenBlockEntity.java",   // placeOrder/previewOrder 回执、预留失败原因
+            "cn/ism/mekck/kitchen/KitchenCraftingPlan.java",             // 合成链求解失败原因（同上经 placeOrder 回传）
+            "cn/ism/mekck/ae2/MekckAe2.java",                            // ME 拉料/补料回执与开关状态文本
+            "cn/ism/mekck/compat/AE2Compat.java",                        // 未装 AE2 的回执
+            "cn/ism/mekck/network/KitchenOrderPacket.java",              // 下单成功前缀（本文件不在本轮文件集内）
+            "cn/ism/mekck/blockentity/SimpleMachineBlockEntity.java",    // 果汁/流体拒收 note
+            "cn/ism/mekck/blockentity/SimpleMachineRecipes.java",        // 果汁/流体 intake note
+            // —— 玩家可见，但属其它任务的域/文件（本轮文件集只含 MekCkBlockItem）——
+            "cn/ism/mekck/item/BioreactorBlockItem.java",                // 与 MekCkBlockItem 同型「是/否」，同理可迁
+            "cn/ism/mekck/block/ChocolateCannonBlock.java",
+            "cn/ism/mekck/block/ElectricGrindingMachineBlock.java",
+            "cn/ism/mekck/block/IceFactoryBlock.java",
+            "cn/ism/mekck/block/IceMakerBlock.java",
+            "cn/ism/mekck/block/NutRoasterBlock.java",
+            "cn/ism/mekck/block/PlantingCuttingStationBlock.java",
+            "cn/ism/mekck/block/SimpleMachineBlock.java",
+            "cn/ism/mekck/block/SkeweringMachineBlock.java",
+            "cn/ism/mekck/block/SmartCookingPotBlock.java",              // 9 个方块的「已安装/无法安装升级」提示（可直接改 Component.translatable）
+            "cn/ism/mekck/upgrade/UpgradeInstallHandler.java",           // 同上 + ME 终端下单开关文本
+            "cn/ism/mekck/integration/jei/BioreactorRecipeCategory.java",// JEI 分类内的说明文本
+            "cn/ism/mekck/command/PlantingRecipeGenerator.java",         // 操作员命令的调试输出（发到聊天栏）
+            // —— 判据尚未覆盖的非玩家可见存量（本轮只给「注释/异常/断言」三类开口）——
+            "cn/ism/mekck/config/MekckConfig.java",                      // tierCnName() 的档位中文名，仅供 .comment() 拼注释
+            "cn/ism/mekck/registry/MekCkFactories.java"                  // findFactoryTile 的标签，只进异常消息
+    );
 
     /**
      * logger 绑定：找出所有「被赋值为 {@code getLogger(...)}」的标识符。
@@ -151,9 +216,29 @@ public class TestNoHardcodedUiText {
     private static final Pattern LOG_METHOD_CALL = Pattern.compile(
             "\\b(\\w+)\\s*\\.\\s*(trace|debug|info|warn|error)\\s*\\(");
 
-    /** LogUtils.getLogger().info(...) 这类没有中间变量的写法。 */
+    /**
+     * 大写常量式 logger 名（{@code LOGGER} / {@code KITCHEN_LOG} / {@code SPLASH_LOG} …）。
+     *
+     * <p>补这条是因为跨类静态引用 logger 时 {@link #loggerBindings} 认不到：
+     * {@code CreativeUpgradeFoodRotator.LOGGER.error("…")} 里 {@code LOGGER} 是<b>别的类</b>
+     * 的字段，本文件没有对应的 {@code = getLogger(...)} 绑定。判据取「全大写且含 LOG」
+     * 这一形态而非写死名字，避免把 UI 文案登记成豁免。</p>
+     */
+    private static final Pattern LOGGER_NAME = Pattern.compile("[A-Z_]*LOG[A-Z_]*$|Logger$");
+
+    /**
+     * {@code LogUtils.getLogger().info(...)} / {@code LoggerFactory.getLogger("x").warn(...)}
+     * 这类没有中间变量的内联写法。
+     */
     private static final Pattern LOGUTILS_LOG_CALL = Pattern.compile(
-            "LogUtils\\s*\\.\\s*getLogger\\s*\\(\\s*\\)\\s*\\.\\s*(trace|debug|info|warn|error)\\s*\\(");
+            "(?:LogUtils|LoggerFactory)\\s*\\.\\s*getLogger\\s*\\([^)]*\\)\\s*\\."
+                    + "\\s*(trace|debug|info|warn|error)\\s*\\(");
+
+    /** 异常构造（异常消息只进堆栈/开发者日志，不进任何界面）。 */
+    private static final Pattern THROW_NEW = Pattern.compile("\\bthrow new\\b");
+
+    /** 测试断言消息（dev 专用，玩家读不到）。 */
+    private static final Pattern ASSERT_CALL = Pattern.compile("\\bassert[A-Z]\\w*\\s*\\(");
 
     /** CJK 统一表意文字 + 全角标点。 */
     private static final Pattern CJK = Pattern.compile(
@@ -204,34 +289,84 @@ public class TestNoHardcodedUiText {
             "gui.mekck.ui.growth_status.missing", "gui.mekck.ui.growth_status.tier_low",
             "gui.mekck.ui.growth_need", "gui.mekck.ui.growth_need_tier_low");
 
-    // ── 1. 主断言：全域扫 client/，玩家可见文案不许有 CJK ──────────────
+    /**
+     * 第 6 轮为 {@code item/}、{@code blockentity/} 迁出文案新增的语言键。
+     *
+     * <p>命名沿用既有风格：共享开关词落 {@code gui.mekck.ui.*}，方块工具提示落
+     * {@code tooltip.mekck.*}，中央厨房订单态落 {@code gui.mekck.kitchen.*}。
+     * {@code tooltip.mekck.linked_mod.<modid>} 一批由代码<b>拼接</b>引用
+     * （{@code "tooltip.mekck.linked_mod." + modId}），{@link #isReferenced} 认前缀拼法，
+     * 不会误判成「加了键没引用」。</p>
+     */
+    private static final List<String> ROUND6_KEYS = List.of(
+            // 通用是/否（tooltip 与方块物品共用）
+            "gui.mekck.ui.yes", "gui.mekck.ui.no",
+            // 中央厨房订单态与摘要
+            "gui.mekck.kitchen.note.module_removed", "gui.mekck.kitchen.note.waiting_intermediate",
+            "gui.mekck.kitchen.note.missing_fluid", "gui.mekck.kitchen.note.waiting_thread",
+            "gui.mekck.kitchen.note.no_power",
+            // 联动机器提示（模组名 + 前缀/分隔符）
+            "tooltip.mekck.linked_mod.prefix", "tooltip.mekck.linked_mod.separator",
+            "tooltip.mekck.linked_mod.youkaishomecoming", "tooltip.mekck.linked_mod.kaleidoscope_cookery",
+            "tooltip.mekck.linked_mod.bakeries", "tooltip.mekck.linked_mod.trailandtales",
+            "tooltip.mekck.linked_mod.meadow", "tooltip.mekck.linked_mod.farm_and_charm",
+            "tooltip.mekck.linked_mod.brewery", "tooltip.mekck.linked_mod.drinkbeer",
+            "tooltip.mekck.linked_mod.vinery", "tooltip.mekck.linked_mod.kaleidoscope_tavern",
+            "tooltip.mekck.linked_mod.bakery", "tooltip.mekck.linked_mod.herbalbrews",
+            "tooltip.mekck.linked_mod.simplytea",
+            // 单机依赖/特殊提示
+            "tooltip.mekck.needs_mod.barbequesdelight", "tooltip.mekck.needs_mod.someassemblyrequired",
+            "tooltip.mekck.needs_mod.mekmm", "tooltip.mekck.needs_mekanism_extras",
+            "tooltip.mekck.needs_avaritia", "tooltip.mekck.nutrient_reduction",
+            "tooltip.mekck.sandwich_assembler.stacking_warning",
+            "tooltip.mekck.central_kitchen.manual_only", "tooltip.mekck.central_kitchen.auto_expand",
+            "tooltip.mekck.central_kitchen.dual_temp");
+
+    // ── 1. 主断言：全域扫主源码，玩家可见文案不许有 CJK ────────────────
 
     @Test
     public void noHardcodedCjkInPlayerVisibleText() throws IOException {
-        assertTrue("找不到 client 源码目录（测试需在仓库根目录运行）", Files.isDirectory(CLIENT_DIR));
+        assertTrue("找不到主源码目录（测试需在仓库根目录运行）", Files.isDirectory(MAIN_SRC_DIR));
 
         List<String> offenders = new ArrayList<>();
-        for (Path file : javaFilesUnder(CLIENT_DIR)) {
-            String code = Files.readString(file, StandardCharsets.UTF_8);
-            Lexer lexer = new Lexer(code);
-            // 必须先跑词法器再取 codeText()：commentRanges 是在遍历中攒出来的
-            Set<String> loggers = loggerBindings(lexer.codeText());
-            for (Literal lit : lexer.stringLiterals()) {
-                if (!CJK.matcher(lit.text).find()) {
-                    continue;
-                }
-                String statement = lexer.statementOf(lit);
-                if (isDiagnostic(statement, loggers)) {
-                    continue;
-                }
-                offenders.add(CLIENT_DIR.relativize(file) + ":" + lit.line
-                        + "  \"" + lit.text + "\"  ->  " + statement);
+        for (Path file : javaFilesUnder(MAIN_SRC_DIR)) {
+            String rel = MAIN_SRC_DIR.relativize(file).toString().replace('\\', '/');
+            // 债清单内的文件允许有存量，其「仍在违规」由反向断言单独守；清单外一律要求 0。
+            if (KNOWN_MIGRATION_DEBT.contains(rel)) {
+                continue;
+            }
+            for (String line : findOffenders(file)) {
+                offenders.add(rel + ":" + line);
             }
         }
-        assertEquals("client/ 下这些 CJK 字面量是玩家可见的 UI 文案，应改用 gui.mekck.ui.* 语言键"
-                        + "（日志诊断不在此列：它们只写日志，玩家读不到）：\n  "
+        assertEquals("主源码里这些 CJK 字面量是玩家可见的 UI 文案，应改用 gui.mekck.*/tooltip.mekck.* 语言键"
+                        + "（日志诊断、Forge 配置注释、异常/断言消息不在此列，见 isDiagnostic）：\n  "
                         + String.join("\n  ", offenders),
                 List.of(), offenders);
+    }
+
+    /**
+     * 扫一个文件里所有「玩家可见」的 CJK 字面量，返回 {@code 行号 "文本" -> 语句} 形式的清单。
+     *
+     * <p>判据与主断言完全同源：先跑词法器再取 {@code codeText()}（commentRanges 是在遍历中攒出来的），
+     * 用 {@link #loggerBindings} 认出 logger、再用 {@link #isDiagnostic} 排除非玩家可见 sink。</p>
+     */
+    private static List<String> findOffenders(Path file) throws IOException {
+        String code = Files.readString(file, StandardCharsets.UTF_8);
+        Lexer lexer = new Lexer(code);
+        Set<String> loggers = loggerBindings(lexer.codeText());
+        List<String> out = new ArrayList<>();
+        for (Literal lit : lexer.stringLiterals()) {
+            if (!CJK.matcher(lit.text).find()) {
+                continue;
+            }
+            String statement = lexer.statementOf(lit);
+            if (isDiagnostic(statement, loggers)) {
+                continue;
+            }
+            out.add(lit.line + "  \"" + lit.text + "\"  ->  " + statement);
+        }
+        return out;
     }
 
     // ── 2. 防豁免清单腐化 ──────────────────────────────────────────────
@@ -252,6 +387,31 @@ public class TestNoHardcodedUiText {
                 LOG_ONLY_SINKS.size() <= MAX_LOG_ONLY_SINKS);
     }
 
+    /**
+     * 债清单反向断言：{@link #KNOWN_MIGRATION_DEBT} 里<b>每一条都必须真的还在违规</b>。
+     *
+     * <p>参照 {@code TestNoClientSymbolsInCommonCode.KNOWN_VIOLATIONS} 的做法：
+     * 它不检查「清单为空」，而检查「清单里的每一条都真的还存在」—— 有人把某个文件的
+     * 文案迁干净却忘了从清单删条目时，清单会骗你说「还有债」从而掩盖新违规。
+     * 债只减不增，靠的就是这条。</p>
+     */
+    @Test
+    public void everyKnownMigrationDebtStillHasOffenders() throws IOException {
+        List<String> stale = new ArrayList<>();
+        for (String rel : KNOWN_MIGRATION_DEBT) {
+            Path file = MAIN_SRC_DIR.resolve(rel);
+            if (!Files.isRegularFile(file)) {
+                stale.add(rel + "  →  文件已不存在，请从 KNOWN_MIGRATION_DEBT 里删掉");
+                continue;
+            }
+            if (findOffenders(file).isEmpty()) {
+                stale.add(rel + "  →  已不再有玩家可见 CJK，请从 KNOWN_MIGRATION_DEBT 里删掉");
+            }
+        }
+        assertTrue("KNOWN_MIGRATION_DEBT 里有陈旧条目（清单会骗人，掩盖新违规）：\n  "
+                + String.join("\n  ", stale), stale.isEmpty());
+    }
+
     // ── 3. 新键在两份语言里都存在，且真的被引用 ─────────────────────────
 
     @Test
@@ -259,18 +419,21 @@ public class TestNoHardcodedUiText {
         Set<String> en = keysOf(LANG_DIR.resolve("en_us.json"));
         Set<String> zh = keysOf(LANG_DIR.resolve("zh_cn.json"));
 
+        List<String> checked = new ArrayList<>(NEW_KEYS);
+        checked.addAll(ROUND6_KEYS);
+
         Set<String> missing = new TreeSet<>();
-        for (String key : NEW_KEYS) {
+        for (String key : checked) {
             if (!en.contains(key)) missing.add("en_us 缺 " + key);
             if (!zh.contains(key)) missing.add("zh_cn 缺 " + key);
         }
         assertEquals("本轮新增的语言键有缺失：\n  " + String.join("\n  ", missing),
                 Set.of(), missing);
 
-        String allClient = readAllClientCode();
+        String allMain = readAllMainCode();
         Set<String> unreferenced = new TreeSet<>();
-        for (String key : NEW_KEYS) {
-            if (!isReferenced(key, allClient)) {
+        for (String key : checked) {
+            if (!isReferenced(key, allMain)) {
                 unreferenced.add(key);
             }
         }
@@ -298,6 +461,7 @@ public class TestNoHardcodedUiText {
                     private static final Logger LOGGER = LoggerFactory.getLogger("x");
                     void draw() {
                         String a = "半径:";                 // UI：必须被抓
+                        String b = "\\u534A\\u5F84:";        // UI（unicode 转义伪装）：必须被抓
                         LOGGER.warn("半径: 诊断文本");        // 日志：必须放过
                         fail(obj, "读取或解析失败", e);        // 只写日志的辅助：必须放过
                     }
@@ -311,9 +475,9 @@ public class TestNoHardcodedUiText {
                 flagged.add(lit.text);
             }
         }
-        assertEquals("判据在合成样本上没抓出唯一那条 UI 文案 —— 判据已失配，"
-                        + "主断言 noHardcodedCjkInPlayerVisibleText 会永远全绿",
-                List.of("半径:"), flagged);
+        assertEquals("判据在合成样本上没抓出两条 UI 文案（直接中文 + unicode 转义伪装）—— "
+                        + "判据已失配，主断言 noHardcodedCjkInPlayerVisibleText 会永远全绿",
+                List.of("半径:", "半径:"), flagged);
     }
 
     /**
@@ -344,10 +508,21 @@ public class TestNoHardcodedUiText {
     // ── 诊断判定 ───────────────────────────────────────────────────────
 
     /**
-     * 这个字面量是否只流向日志。
+     * 这个字面量是否<b>不</b>流向玩家可见位置（日志 / 配置注释 / 异常 / 断言）。
      *
-     * <p>判据是「所属语句里有没有 logger 调用」，而不是「文本像不像日志」：
-     * 玩家能在屏幕上看到 {@code "抽取失败"} 这样的词，不能因为它像诊断就放过。</p>
+     * <p>判据基于<b>数据流</b>而不是文本形状：玩家能在屏幕上看到 {@code "抽取失败"}
+     * 这样的词，不能因为它像诊断就放过。五类依据依次是：</p>
+     * <ol>
+     *   <li>内联 logger 调用（{@code LogUtils/LoggerFactory.getLogger(...).warn(...)}）；</li>
+     *   <li>绑定了变量名的 logger 调用（{@link #loggerBindings} 认出的变量，
+     *       以及跨类静态引用的 {@link #LOGGER_NAME} 常量名）；</li>
+     *   <li>{@link #LOG_ONLY_SINKS} 里「只写日志」的辅助方法；</li>
+     *   <li>{@code .comment(...)} —— Forge 配置注释内容，只进 .toml，不进界面；</li>
+     *   <li>{@code throw new ...} / {@code assertXxx(...)} —— 异常与测试断言消息，
+     *       只进堆栈/开发者日志。扩面到主源码后这两类是最大宗的假阳性来源。</li>
+     * </ol>
+     * 每一条都只针对<b>一种明确的数据流</b>，不是按文件名/目录开洞，所以不会
+     * 把新增的玩家可见文案一起放过。</p>
      *
      * @param statement 字面量所属语句（已去注释，由 {@link Lexer#statementOf} 给出）
      * @param loggers   该文件里认出的 logger 变量名
@@ -358,9 +533,18 @@ public class TestNoHardcodedUiText {
         }
         Matcher m = LOG_METHOD_CALL.matcher(statement);
         while (m.find()) {
-            if (loggers.contains(m.group(1))) {
+            if (loggers.contains(m.group(1)) || LOGGER_NAME.matcher(m.group(1)).find()) {
                 return true;
             }
+        }
+        if (statement.contains(".comment(")) {
+            return true;
+        }
+        if (THROW_NEW.matcher(statement).find()) {
+            return true;
+        }
+        if (ASSERT_CALL.matcher(statement).find()) {
+            return true;
         }
         for (String sink : LOG_ONLY_SINKS) {
             if (statement.contains(sink)) {
@@ -491,7 +675,30 @@ public class TestNoHardcodedUiText {
             while (i < n) {
                 char c = src.charAt(i);
                 if (c == '\\' && i + 1 < n) {
-                    // 保留转义原样：判据只关心有没有 CJK，不需要还原语义
+                    // 转义原样保留曾是个洞：源文件里用 unicode 转义写中文，字面内容是
+                    // 纯 ASCII，判据看不见（NetworkOrderPanel 的 66 处转义躲过了六轮）。
+                    // 所以 unicode 转义在这里解码成真实字符；其余转义仍原样保留。
+                    if (src.charAt(i + 1) == 'u') {
+                        int h = i + 2;
+                        while (h < n && src.charAt(h) == 'u') {
+                            // JLS 允许多个 u：\uuuu0041（注释里写成 \\uuuu0041 防 javac 预解码）
+                            h++;
+                        }
+                        int cp = 0;
+                        int k = 0;
+                        for (; k < 4 && h + 4 <= n; k++) {
+                            int d = Character.digit(src.charAt(h + k), 16);
+                            if (d < 0) {
+                                break;
+                            }
+                            cp = (cp << 4) | d;
+                        }
+                        if (k == 4) {
+                            sb.appendCodePoint(cp);
+                            i = h + 4;
+                            continue;
+                        }
+                    }
                     sb.append(c).append(src.charAt(i + 1));
                     i += 2;
                     continue;
@@ -570,9 +777,9 @@ public class TestNoHardcodedUiText {
         }
     }
 
-    private static String readAllClientCode() throws IOException {
+    private static String readAllMainCode() throws IOException {
         StringBuilder sb = new StringBuilder();
-        for (Path file : javaFilesUnder(CLIENT_DIR)) {
+        for (Path file : javaFilesUnder(MAIN_SRC_DIR)) {
             sb.append(Files.readString(file, StandardCharsets.UTF_8)).append('\n');
         }
         return sb.toString();

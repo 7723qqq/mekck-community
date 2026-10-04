@@ -1,5 +1,5 @@
 {
-  "parent": "mekck:vendor/mekanism_extras/block/factory/planting/supreme",
+  "parent": "mekck:block/mekck/planting_cutting_factory/supreme",
   "display": {
     "thirdperson_righthand": {
       "rotation": [

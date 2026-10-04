@@ -30,6 +30,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraftforge.common.extensions.IForgeMenuType;
 import net.minecraftforge.registries.RegistryObject;
+import static cn.ism.mekck.UniversalCuttingMachine.MOD_ID;
 import static cn.ism.mekck.registry.MekCkRegistries.BLOCKS;
 import static cn.ism.mekck.registry.MekCkRegistries.BLOCK_ENTITIES;
 import static cn.ism.mekck.registry.MekCkRegistries.ITEMS;
@@ -73,18 +74,76 @@ public final class MekCkStandaloneMachines {
     public static final RegistryObject<MenuType<IceMakerMenu>> ICE_MAKER_MENU = MENUS.register(
             "ice_maker", () -> IForgeMenuType.create(IceMakerMenu::new));
 
-    // Wine Cellar (陈化窖/时间悖论产生器，F20：独立容器方块，无固定 energy/tick ⇒ MekCkBlockItem 默认构造)
+    // Wine Cellar (陈化窖/时间悖论产生器，F20：独立容器方块)
+    //
+    // 2026-10-03 迁到 Mek 体系：方块/物品/方块实体/容器全部走 Mek 的注册器
+    // （与电力烧烤架 `GRILL_CONTAINER` 同款），**注册名一字不改**（仍是 mekck:wine_cellar），
+    // 旧存档已放置的方块不会变空气。
+    //
+    // 迁移的原因见 {WineCellarMenu} 类注释：旧的 SlotItemHandler 槽 Mek 不认，
+    // 屏幕只能手画一份 GuiVirtualSlot，于是同一个槽在菜单与屏幕各有一套坐标（靠 ±1 凑合）。
 
-    public static final RegistryObject<Block> WINE_CELLAR_BLOCK = BLOCKS.register("wine_cellar", WineCellarBlock::new);
+    public static final mekanism.common.registration.impl.ContainerTypeDeferredRegister WINE_CELLAR_CONTAINERS_REG =
+            new mekanism.common.registration.impl.ContainerTypeDeferredRegister(MOD_ID);
 
-    public static final RegistryObject<Item> WINE_CELLAR_ITEM = ITEMS.register("wine_cellar",
-            () -> new MekCkBlockItem(WINE_CELLAR_BLOCK.get(), new Item.Properties()));
+    public static final mekanism.common.registration.impl.ContainerTypeRegistryObject<WineCellarMenu> WINE_CELLAR_CONTAINER;
 
-    public static final RegistryObject<BlockEntityType<WineCellarBlockEntity>> WINE_CELLAR_BLOCK_ENTITY = BLOCK_ENTITIES.register(
-            "wine_cellar", () -> BlockEntityType.Builder.of(WineCellarBlockEntity::new, WINE_CELLAR_BLOCK.get()).build(null));
+    public static final mekanism.common.registration.impl.BlockDeferredRegister WINE_CELLAR_BLOCKS_REG =
+            new mekanism.common.registration.impl.BlockDeferredRegister(MOD_ID);
 
-    public static final RegistryObject<MenuType<WineCellarMenu>> WINE_CELLAR_MENU = MENUS.register(
-            "wine_cellar", () -> IForgeMenuType.create(WineCellarMenu::new));
+    public static final mekanism.common.registration.impl.ItemDeferredRegister WINE_CELLAR_ITEMS_REG =
+            new mekanism.common.registration.impl.ItemDeferredRegister(MOD_ID);
+
+    public static final mekanism.common.registration.impl.TileEntityTypeDeferredRegister WINE_CELLAR_TILES_REG =
+            new mekanism.common.registration.impl.TileEntityTypeDeferredRegister(MOD_ID);
+
+    /** 方块与物品的注册句柄（{@code BlockRegistryObject} 自带 block+item，一次注册两样）。 */
+    public static final mekanism.common.registration.impl.BlockRegistryObject<WineCellarBlock, MekCkBlockItem> WINE_CELLAR_HANDLE;
+
+    /** 方块实体类型 —— 由 Mek 的注册器建，{@code BlockTile} 与 ticker 都认它。 */
+    public static final mekanism.common.registration.impl.TileEntityTypeRegistryObject<WineCellarBlockEntity> WINE_CELLAR_TILE;
+
+    static {
+        // ⚠️ 顺序陷阱：BlockType 的 withGui / tileRef 参数是**延迟 Supplier**，
+        // 它们只在 Mek 真正求值（放置 / 开 GUI）时才调用，但 Java 的**明确赋值**规则
+        // 不允许在静态块里前向引用尚未赋值的 final 字段（实测报「可能尚未初始化变量」）。
+        // 解法与 GrillBlock 同款：先用局部变量串起依赖，最后统一赋给 final 字段。
+        mekanism.common.registration.impl.ContainerTypeRegistryObject<WineCellarMenu> container =
+                WINE_CELLAR_CONTAINERS_REG.register(
+                        "wine_cellar", WineCellarBlockEntity.class, WineCellarMenu::new);
+
+        // BlockType 需要容器与 tile，而两者都必须先有方块 —— 用延迟 Supplier 破这个环。
+        // 注意 tile 的 Supplier 同样不能前向引用 final 字段，故也走局部变量。
+        java.util.concurrent.atomic.AtomicReference<mekanism.common.registration.impl.TileEntityTypeRegistryObject<WineCellarBlockEntity>> tileRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        mekanism.common.content.blocktype.BlockTypeTile<WineCellarBlockEntity> blockType =
+                WineCellarBlock.blockTypeFor(() -> container, tileRef::get);
+
+        WINE_CELLAR_HANDLE = WINE_CELLAR_BLOCKS_REG.register("wine_cellar",
+                () -> new WineCellarBlock(blockType,
+                        p -> p.strength(3.5F).sound(net.minecraft.world.level.block.SoundType.WOOD)
+                                .requiresCorrectToolForDrops()),
+                block -> new MekCkBlockItem(block, new Item.Properties()));
+
+        // 两个 ticker 都必须显式给：getTicker(boolean) 只是原样返回存进去的那个、没有任何兜底
+        // （实测字节码：ifeq 取 serverTicker / else 取 clientTicker，直接 areturn）。
+        // 不填就是 null，而 Level 只在 ticker 非 null 时才驱动方块实体 —— 机器会「放着不动」。
+        //
+        // ⚠️ 必须传 Mek 自己的 {@code TileEntityMekanism.tickServer/tickClient}，
+        // **不能**传本模组自己写的静态方法：Mek 的 tickServer 在调 {@code onUpdateServer()}
+        // （偏移 97）之前还要跑 frequency / upgrade 组件、chunkloader、
+        // 以及 {@code Attribute.setActive + setBlockAndUpdate} 那一段。
+        // 自己写一个「只做陈化」的 ticker 会静默跳过它们 ——
+        // 最直接的症状是<b>升级卡的 20 tick 安装读条永不推进</b>（卡放进去永远不生效）。
+        // 本机的每 tick 逻辑在 {@code WineCellarBlockEntity#onUpdateServer}。
+        WINE_CELLAR_TILE = WINE_CELLAR_TILES_REG.register(WINE_CELLAR_HANDLE,
+                (pos, state) -> new WineCellarBlockEntity(WINE_CELLAR_HANDLE, pos, state),
+                (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickClient(level, pos, state, tile),
+                (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickServer(level, pos, state, tile));
+
+        WINE_CELLAR_CONTAINER = container;
+        tileRef.set(WINE_CELLAR_TILE);
+    }
 
     // Central Kitchen (中央厨房：终极机器)
 
@@ -249,7 +308,7 @@ public final class MekCkStandaloneMachines {
         event.accept(SKEWERING_MACHINE_ITEM.get());
         event.accept(BIOREACTOR_ITEM.get());
         event.accept(ICE_MAKER_ITEM.get());
-        event.accept(WINE_CELLAR_ITEM.get());
+        event.accept(WINE_CELLAR_HANDLE.getItemStack());
         event.accept(CENTRAL_KITCHEN_ITEM.get());
         event.accept(SANDWICH_ASSEMBLER_ITEM.get());
         event.accept(CHOCOLATE_CANNON_ITEM.get());

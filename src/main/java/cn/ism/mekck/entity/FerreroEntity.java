@@ -267,12 +267,14 @@ public class FerreroEntity extends ThrowableItemProjectile {
             // 两个来源的窗口一改一改就不同，而共键意味着「谁后命中谁说了算」——
             // 短窗口的费列罗会把长窗口的冰块的恢复刻覆盖掉，反之亦然。
             // 各自独立之后，FreezeAiReaper 也能分别判断该由谁恢复。
-            long restoreTick = serverLevel.getServer().getTickCount() + 40L;
+            long restoreTick = serverLevel.getGameTime() + 40L;
             mob.getPersistentData().putLong(FERRERO_AI_RESTORE_KEY, restoreTick);
-            final long scheduled = restoreTick;
-            serverLevel.getServer().tell(new net.minecraft.server.TickTask((int) scheduled, () -> {
+            // TickTask 只按会话基准调度（tick 字段本就是会话内计数）；到期判据与写入侧同源，
+            // 用持久基准 getGameTime，重启后 gameTime 延续而 getTickCount 归零。
+            int scheduleTick = serverLevel.getServer().getTickCount() + 40;
+            serverLevel.getServer().tell(new net.minecraft.server.TickTask(scheduleTick, () -> {
                 if (mob.isAlive()
-                        && mob.getPersistentData().getLong(FERRERO_AI_RESTORE_KEY) <= serverLevel.getServer().getTickCount()) {
+                        && mob.getPersistentData().getLong(FERRERO_AI_RESTORE_KEY) <= serverLevel.getGameTime()) {
                     mob.setNoAi(false);
                     mob.getPersistentData().remove(FERRERO_AI_RESTORE_KEY);
                 }

@@ -20,6 +20,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -30,6 +31,7 @@ import net.minecraftforge.network.NetworkHooks;
 import javax.annotation.Nullable;
 import cn.ism.mekck.registry.MekCkEffects;
 import cn.ism.mekck.registry.MekCkEntities;
+import cn.ism.mekck.util.FreezeAiReaper;
 
 /**
  * 冰块实体：外观为原版冰块（IBlockDisplayReader 通过 getBlockState 渲染），
@@ -217,14 +219,18 @@ public class IceCubeEntity extends FallingBlockEntity {
         if (hasFlag(FLAG_REMOVE_AI) && e instanceof Mob mob && e.isAlive()) {
             mob.setNoAi(true);
             if (level instanceof ServerLevel serverLevel) {
-                // 重复命中时刷新恢复时间：以持久化数据记录最晚恢复刻，避免旧的定时任务提前恢复 AI。
-                long restoreTick = serverLevel.getServer().getTickCount() + 40L;
-                mob.getPersistentData().putLong("mekck:ai_restore_tick", restoreTick);
-                final long scheduled = restoreTick;
-                serverLevel.getServer().tell(new net.minecraft.server.TickTask((int) scheduled, () -> {
+                // 恢复刻用持久基准 getGameTime：跨重启延续；getTickCount 每会话归零，
+                // 用它写档会让重启后的比较（reaper 用 getGameTime）对不上，生物永久无 AI。
+                long restoreTick = serverLevel.getGameTime() + 40L;
+                mob.getPersistentData().putLong(FreezeAiReaper.ICE_CUBE_AI_RESTORE_KEY, restoreTick);
+                // TickTask 只按会话基准调度（它的 tick 字段本就是会话内计数）；到期判据仍看持久基准。
+                int scheduleTick = serverLevel.getServer().getTickCount() + 40;
+                serverLevel.getServer().tell(new net.minecraft.server.TickTask(scheduleTick, () -> {
                     if (mob.isAlive()
-                            && mob.getPersistentData().getLong("mekck:ai_restore_tick") <= serverLevel.getServer().getTickCount()) {
+                            && mob.getPersistentData().getLong(FreezeAiReaper.ICE_CUBE_AI_RESTORE_KEY)
+                                    <= serverLevel.getGameTime()) {
                         mob.setNoAi(false);
+                        mob.getPersistentData().remove(FreezeAiReaper.ICE_CUBE_AI_RESTORE_KEY);
                     }
                 }));
             }
@@ -256,6 +262,7 @@ public class IceCubeEntity extends FallingBlockEntity {
     protected void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putFloat("IceDamage", getDamage());
+        tag.putFloat("IceSplash", getSplashDamage());
         tag.putByte("IceFlags", this.entityData.get(DATA_FLAGS));
     }
 
@@ -263,6 +270,11 @@ public class IceCubeEntity extends FallingBlockEntity {
     protected void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
         this.entityData.set(DATA_DAMAGE, tag.getFloat("IceDamage"));
+        // 旧档无 IceSplash 键时不覆盖：保留 defineSynchedData 的默认溅射 5.0，
+        // 否则 getFloat 返回 0 会把老存档的冰块溅射静默清零。
+        if (tag.contains("IceSplash", Tag.TAG_FLOAT)) {
+            this.entityData.set(DATA_SPLASH, tag.getFloat("IceSplash"));
+        }
         this.entityData.set(DATA_FLAGS, tag.getByte("IceFlags"));
     }
 

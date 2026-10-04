@@ -97,5 +97,8 @@ public final class CuttingMachineFactoryScreen extends MekCkFactoryScreenBase<Cu
         // 进度条：一行式档位每并行槽一条（上游 GuiFactory / GuiExtraFactory 的做法），
         // 悬浮窗布局主面板上没有机器槽、居中一条。几何与理由见 MekCkFactoryScreenBase。
         addFactoryProgressBars(menu::getProgressRatio);
+
+        // 自动补料 / 网络拉料 tab：必须最后注册（命中优先），见基类注释。
+        addNetworkPullTabs();
     }
 }

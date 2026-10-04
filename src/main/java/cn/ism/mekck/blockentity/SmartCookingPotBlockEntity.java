@@ -125,7 +125,18 @@ public final class SmartCookingPotBlockEntity extends BlockEntity implements Men
      * 免得「下标 2 是能量」这种知识只存在于两处字面量里。</p>
      */
     public static final int DATA_ENERGY_HI = 17;
-    public static final int DATA_SIZE = 18;
+    /**
+     * 三个流体罐量的高 16 位，追加到槽表末尾。
+     *
+     * <p><b>为什么</b>：容量 {@link #FLUID_CAPACITY} = {@code Integer.MAX_VALUE}，量经 16 位有符号通道后
+     * 一超 32767 就被读成负数 ⇒ 菜单侧 {@code amount <= 0 → EMPTY}，满罐显示空。三罐各自拆两槽，
+     * 与 tankIndex 一一对应（{@code DATA_FLUID_AMOUNT_HI0 + tankIndex}）。见
+     * {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     */
+    public static final int DATA_FLUID_AMOUNT_HI0 = 18;
+    public static final int DATA_FLUID_AMOUNT_HI1 = 19;
+    public static final int DATA_FLUID_AMOUNT_HI2 = 20;
+    public static final int DATA_SIZE = 21;
 
     public static final int DATA_PROGRESS = 0;
     public static final int DATA_PROCESS_TIME = 1;
@@ -325,9 +336,12 @@ public final class SmartCookingPotBlockEntity extends BlockEntity implements Men
                 case 7 -> orderCompleted;
                 case 8 -> hasCreativeUpgrade() ? 1 : 0;
                 case 9 -> redstoneControl.ordinal();
-                case DATA_FLUID_AMOUNT0 -> fluidAmount(0);
-                case DATA_FLUID_AMOUNT1 -> fluidAmount(1);
-                case DATA_FLUID_AMOUNT2 -> fluidAmount(2);
+                case DATA_FLUID_AMOUNT0 -> fluidAmount(0) & 0xFFFF;
+                case DATA_FLUID_AMOUNT_HI0 -> (fluidAmount(0) >>> 16) & 0xFFFF;
+                case DATA_FLUID_AMOUNT1 -> fluidAmount(1) & 0xFFFF;
+                case DATA_FLUID_AMOUNT_HI1 -> (fluidAmount(1) >>> 16) & 0xFFFF;
+                case DATA_FLUID_AMOUNT2 -> fluidAmount(2) & 0xFFFF;
+                case DATA_FLUID_AMOUNT_HI2 -> (fluidAmount(2) >>> 16) & 0xFFFF;
                 case DATA_FLUID_TYPE0 -> fluidTypeId(0);
                 case DATA_FLUID_TYPE1 -> fluidTypeId(1);
                 case DATA_FLUID_TYPE2 -> fluidTypeId(2);

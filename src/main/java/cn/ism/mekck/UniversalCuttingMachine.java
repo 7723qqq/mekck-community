@@ -207,6 +207,11 @@ public final class UniversalCuttingMachine {
         MekCkFactories.GRILL_BLOCKS_REG.register(bus);
         MekCkFactories.GRILL_TILES_REG.register(bus);
         MekCkFactories.GRILL_CONTAINERS_REG.register(bus);
+        // 陈化窖（2026-10-03 迁到 Mek 体系）：同上，三件套必须成组出现。
+        MekCkStandaloneMachines.WINE_CELLAR_BLOCKS_REG.register(bus);
+        MekCkStandaloneMachines.WINE_CELLAR_ITEMS_REG.register(bus);
+        MekCkStandaloneMachines.WINE_CELLAR_TILES_REG.register(bus);
+        MekCkStandaloneMachines.WINE_CELLAR_CONTAINERS_REG.register(bus);
         bus.addListener(this::addCreativeTabContents);
         bus.addListener(this::onCommonSetup);
         // 配置文件生成到 config/mekck/mekck-common.toml（与 planting 等配置文件同目录）
@@ -316,7 +321,37 @@ public final class UniversalCuttingMachine {
         });
     }
 
+    /**
+     * 是否已完成过本模组的 common setup。
+     *
+     * <h3>为什么必须自己上这道闸（2026-10-03 实机定位）</h3>
+     * {@code FMLCommonSetupEvent} 在本环境下会被<b>投递两次</b>（两次运行实测均如此，
+     * 与本次改动无关；同一次运行里 Mekanism 也打了两次 "Mod loaded."）。而下面两步
+     * <b>都不是幂等的</b>：
+     * <ul>
+     *   <li>{@code CriteriaTriggers.register} —— 第二次抛
+     *       {@code IllegalArgumentException: Duplicate criterion id mekck:network_connected}；</li>
+     *   <li>{@code ModMessages.register} 里的 {@code SimpleChannel.registerMessage} —— 重复注册同一 id 也会抛。</li>
+     * </ul>
+     * 该异常让本模组进入 FML 的 <b>broken mod state</b>，后果是灾难性的连锁：
+     * <pre>
+     *   RegisterGeometryLoaders 被拒 → 模型加载器表为空（"Registered loaders:" 后面什么都没有）
+     *   → 所有 forge:composite 模型解析失败（mekck 148 + mekanism 107 + extras 79 + create 30）
+     *   → BuildCreativeModeTabContentsEvent 被拒 → 创造模式物品栏为空、物品不可见
+     * </pre>
+     * 崩溃日志里 mekck 的状态是 {@code ERROR}，而 {@code Suspected Mods: NONE} —— 归因看不到它。
+     *
+     * <p>所以「事件为什么投递两次」不是本模组能控制的事，但「重复投递不该把自己搞崩」是。
+     * 用这个 volatile 标记只做一次，重复投递成为无害的 no-op。</p>
+     */
+    private static volatile boolean commonSetupDone;
+
     private void onCommonSetup(FMLCommonSetupEvent event) {
+        if (commonSetupDone) {
+            // 重复投递：全部注册都已在第一次完成，直接返回（详见 commonSetupDone 的注释）。
+            return;
+        }
+        commonSetupDone = true;
         // 自定义进度触发器：mekck 机器接入 ME 网络（网络厨师学徒）
         net.minecraft.advancements.CriteriaTriggers.register(cn.ism.mekck.advancement.NetworkConnectedTrigger.get());
         event.enqueueWork(ModMessages::register);

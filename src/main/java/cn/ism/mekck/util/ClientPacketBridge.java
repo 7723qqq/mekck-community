@@ -108,6 +108,27 @@ public final class ClientPacketBridge {
                 pos, recipeId, quantity, text);
     }
 
+    /**
+     * 把中央厨房存储浏览器快照落到客户端当前打开的那个 {@code CentralKitchenMenu}。非客户端侧为 no-op。
+     *
+     * <p><b>为什么必须走门面而不是在包里直接取玩家</b>：这个包是 S2C，收到时
+     * {@code NetworkEvent.Context#getSender()} 恒为 {@code null}（客户端侧的 packet listener 是
+     * {@code ClientPacketListener}，不是 {@code ServerGamePacketListenerImpl}）。早期实现在
+     * {@code handle} 里用 {@code getSender()} 取玩家并 {@code if (player == null) return;}，
+     * 于是每次都提前返回、快照<b>从未落地</b>，界面 54 格恒空（I-N4 实际未修）。
+     * 又因为不能直接写 {@code Minecraft.getInstance()}（那会让本类在专用服务端链接失败），
+     * 所以玩家只能在客户端实现类里取 —— 就是这里。</p>
+     */
+    public static void applyStorageSnapshot(BlockPos pos, int scrollRow, int sortModeOrdinal,
+                                            int filteredCount, List<net.minecraft.world.item.ItemStack> visible) {
+        if (!resolve()) {
+            return;
+        }
+        invoke("applyStorageSnapshot",
+                new Class<?>[]{BlockPos.class, int.class, int.class, int.class, List.class},
+                pos, scrollRow, sortModeOrdinal, filteredCount, visible);
+    }
+
     private static void invoke(String name, Class<?>[] types, Object... args) {
         try {
             impl.getMethod(name, types).invoke(null, args);

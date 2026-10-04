@@ -44,7 +44,10 @@ public class KitchenModuleWindow extends GuiWindow {
     private int selectedRow = -1;
 
     public KitchenModuleWindow(IGuiWrapper gui, CentralKitchenMenu menu) {
-        super(gui, gui.getWidth() / 2 - 100, 10, 200, 196, mekanism.common.inventory.container.SelectedWindowData.WindowType.UPGRADE);
+        // 窗口身份必须用 UNSPECIFIED（同 NetworkOrderWindow）：UPGRADE 会与升级窗共用
+        // 「上次位置」存档，先开升级窗再开本窗会弹到升级窗的旧位置上。
+        super(gui, gui.getWidth() / 2 - 100, 10, 200, 196,
+                mekanism.common.inventory.container.SelectedWindowData.WindowType.UNSPECIFIED);
         this.menu = menu;
         interactionStrategy = InteractionStrategy.ALL;
         for (KitchenFamily f : KitchenFamily.values()) {

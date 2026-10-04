@@ -156,8 +156,13 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
         outputSlot = MekCkSlot.output(SLOT_LIMIT, listener, OUTPUT_X, OUTPUT_Y);
         builder.addSlot(outputSlot);
 
-        // 升级槽：速度卡与能量卡各一格。旧实现是「插一张卡 = 一级」，
-        // 与 Mek 原生一致，所以直接用 Mek 的升级槽。
+        // 升级槽：速度卡与能量卡各一格。它们确实是 TileComponentUpgrade 自带升级槽的
+        // 重复（组件另有 upgradeSlot/upgradeOutputSlot，javap 已证，GUI 也由组件槽渲染），
+        // 功能上是死的；但**不能因此删掉** —— 槽下标本身就是存档格式的一部分：
+        // 本机 getInventorySlots(null) 的插入序决定 Mek Items 的 byte 下标，
+        // 删掉后 5 槽旧档变 3 槽（0/1 不变，2 电源），旧档原下标 2/3 的升级卡会落进电源槽
+        // （被当作能量物品消耗）、原下标 4 的电源物品被丢弃。真要删必须先做槽位迁移。
+        // ⚠️ 保留原位；顺序（输入→输出→速度卡→能量卡→电源）由 TestMekCkSlot 冻结。
         builder.addSlot(mekanism.common.inventory.slot.UpgradeInventorySlot.input(listener,
                 Set.of(Upgrade.SPEED)));
         builder.addSlot(mekanism.common.inventory.slot.UpgradeInventorySlot.input(listener,

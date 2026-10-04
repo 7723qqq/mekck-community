@@ -26,6 +26,7 @@ libs/
 *.ipr
 *.iws
 .vscode/
+.trae/
 .settings/
 .classpath
 .project
@@ -41,6 +42,8 @@ desktop.ini
 *.log
 *.tmp
 _mekckf_*/
+# 本地启动验证脚本（含本机游戏目录路径，不入库）
+.launch-verify.py
 
 # ── Python 工具的字节码缓存 ───────────────────────────
 __pycache__/

@@ -15,6 +15,7 @@ import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -129,6 +130,40 @@ public class TestWideDataSlot {
         }
     }
 
+    // ================== 2b. 侧配编码 / 大流体量的往返 ==================
+
+    /**
+     * 24-bit 侧配编码与真实大罐流体量必须无损往返。
+     *
+     * <p>这是本轮新增两类「同型残留」的锚点：侧配是 6 面 × 4 bit = 24 bit，裸读低槽只拿得到前 4 面
+     * ⇒ WEST/EAST 恒 NONE；流体量 480000 / {@code Integer.MAX_VALUE} 裸读低槽会被读成负数 ⇒
+     * 菜单侧 {@code amount <= 0 → EMPTY}，满罐显示空。</p>
+     */
+    @Test
+    public void sideConfigAndFluidAmountsRoundTrip() {
+        int[] values = {
+                0,                       // 6 面全 NONE
+                0x3F3F3F,                // 6 面全 PUSH_OUTPUT（ordinal=3）
+                0x00F000,                // 仅 1 面非零
+                480_000,                 // Bioreactor FLUID_CAPACITY
+                256_000,                 // IceMaker WATER_CAPACITY
+                32767, 32768
+        };
+        for (int value : values) {
+            assertEquals("拆两槽必须无损还原（值 " + value + "）",
+                    value, WideDataSlot.combine(
+                            throughRealPacket(WideDataSlot.low(value)),
+                            throughRealPacket(WideDataSlot.high(value))));
+        }
+        // 回归锚点：WEST(ordinal 4)/EAST(ordinal 5) 位于 bit16..23，只读低槽会得到 0 —— 旧实现
+        // 的「WEST/EAST 恒 NONE」正是这么来的。
+        int westEastPush = (3 << 16) | (3 << 20);
+        assertEquals("WEST/EAST 全在高 16 位：低槽为 0", 0, WideDataSlot.low(westEastPush));
+        assertEquals("WEST/EAST 必须靠高位槽才能读回", westEastPush, WideDataSlot.combine(
+                throughRealPacket(WideDataSlot.low(westEastPush)),
+                throughRealPacket(WideDataSlot.high(westEastPush))));
+    }
+
     // ================== 3. 覆盖面：不许只拆一半 ==================
 
     private static String read(Path path) throws IOException {
@@ -206,6 +241,74 @@ public class TestWideDataSlot {
         assertTrue("一个 getEnergy() 都没扫到，判据失效了", seen >= 10);
         assertEquals("这些菜单的 getEnergy() 仍在单槽裸读（只有低 16 位，会变成负数）：\n",
                 Set.of(), offenders);
+    }
+
+    // ================== 4. 侧配 / 流体量 / 容量的覆盖面 ==================
+
+    /**
+     * 4-bit 侧配家族的菜单 {@code getEncodedSideConfig()} 必须走 {@link WideDataSlot#read}。
+     *
+     * <p>判据沿用 {@link #noMenuReadsEnergyFromASingleSlot()}：只看方法体，避免误伤别处的
+     * {@code data.get}。2-bit 家族（12 bit，装得下 16 位）与未注册方块的菜单可单槽，列入白名单。</p>
+     */
+    @Test
+    public void noFourBitMenuReadsSideConfigFromASingleSlot() throws IOException {
+        Set<String> allowedSingleRead = Set.of(
+                "SmartCookingPotMenu.java",         // 2-bit 家族
+                "SkeweringMachineMenu.java",        // 2-bit 家族
+                "PlantingCuttingStationMenu.java",  // 2-bit 家族
+                "ElectricGrindingMachineMenu.java", // 2-bit 家族
+                "IceFactoryMenu.java");             // 4-bit 但方块未注册、不可达，其 BE 同批未拆
+        Set<String> offenders = new TreeSet<>();
+        int seen = 0;
+        for (Path file : javaFiles(MENU_DIR)) {
+            String src = read(file);
+            String name = file.getFileName().toString();
+            String body = methodBody(src, "public int getEncodedSideConfig()");
+            if (body == null) {
+                continue;
+            }
+            seen++;
+            if (body.contains("data.get(") && !body.contains("WideDataSlot.read")
+                    && !allowedSingleRead.contains(name)) {
+                offenders.add(name);
+            }
+        }
+        assertTrue("一个 getEncodedSideConfig() 都没扫到，判据失效了", seen >= 8);
+        assertEquals("这些菜单的 getEncodedSideConfig() 仍在单槽裸读（24-bit 编码会丢 WEST/EAST 两面）：\n",
+                Set.of(), offenders);
+    }
+
+    /**
+     * 大罐（容量 &gt; 32767）的菜单流体 getter 必须走 {@link WideDataSlot#read}。
+     *
+     * <p>只列容量确定超界的三个菜单；如实测的 8000 罐（ChocolateCannon）等仍可单槽。</p>
+     */
+    @Test
+    public void noWideTankMenuReadsFluidAmountFromASingleSlot() throws IOException {
+        String[][] wideTanks = {
+                {"BioreactorMenu.java", "public FluidStack getFluidStack()"},          // 480,000
+                {"SmartCookingPotMenu.java", "public FluidStack getFluidStack(int tankIndex)"}, // MAX_VALUE
+                {"IceMakerMenu.java", "public FluidStack getWaterStack()"},            // 256,000
+        };
+        for (String[] t : wideTanks) {
+            String body = methodBody(read(MENU_DIR.resolve(t[0])), t[1]);
+            assertNotNull(t[0] + " 里找不到 " + t[1] + "（改名了就同步更新本测试）", body);
+            assertTrue(t[0] + " 的流体量仍在单槽裸读（>32767 会变负数 → 满罐显示空）",
+                    body.contains("WideDataSlot.read"));
+        }
+    }
+
+    /** 陈酿窖容量必须取客户端已知常量，而非 16 位通道里的 4 亿（会读成负数）。 */
+    @Test
+    public void wineCellarCapacityComesFromConstantNotADataSlot() throws IOException {
+        String body = methodBody(read(MENU_DIR.resolve("WineCellarMenu.java")),
+                "public int getEnergyCapacity()");
+        assertNotNull("WineCellarMenu 里找不到 getEnergyCapacity()", body);
+        assertTrue("陈酿窖容量必须返回 WineCellarBlockEntity.ENERGY_CAPACITY 常量",
+                body.contains("WineCellarBlockEntity.ENERGY_CAPACITY"));
+        assertTrue("getEnergyCapacity() 不得再读 DATA_CAPACITY 槽（4 亿经 16 位通道为负数）",
+                !body.contains("data.get("));
     }
 
     /** 按花括号配对截取 {@code signature} 之后的方法体；找不到返回 null。 */

@@ -358,10 +358,18 @@ public class TestMenuQuickMoveSlotRanges {
             new Menu("SkeweringMachineMenu.java", 89, set("powerSlotIndex"), map(),
                     "3 输入 + 产物 + 返还 + 速度 + 能量 + 81 存储 + 能源 = 8+STORAGE_SLOT_COUNT"),
             new Menu("SmartCookingPotMenu.java", 92, set("powerSlotIndex"), map(),
-                    "6 输入 + 产物 + 返还 + 速度 + 能量 + 81 存储 + 能源 = 11+STORAGE_SLOT_COUNT"),
+                    "6 输入 + 产物 + 返还 + 速度 + 能量 + 81 存储 + 能源 = 11+STORAGE_SLOT_COUNT"));
 
-            new Menu("WineCellarMenu.java", 10, set(), map(),
-                    "9 存储 + 能源 = TOTAL_SLOTS"));
+    // ── 已不在表里的两个菜单（都是从「自研 AbstractContainerMenu」迁到 Mek 容器）────
+    //
+    // GrillMenu：迁到 Mek 原生 TileEntityConfigurableMachine 体系后不再手写 quickMoveStack
+    // （由 MekanismContainer 接管），本类的四条断言对它已无对象。缺陷记录保留在类注释里，
+    // 因为那是 A3 规则的来源。
+    //
+    // WineCellarMenu：2026-10-03 同样迁到 MekanismTileContainer，手写的 quickMoveStack
+    // （9 存储格 + 电源槽的双区间搬运）整段删除 —— 分区边界、单槽目标、机器槽先于玩家槽
+    // 这三条断言的全部输入都不存在了。**这不是把断言放宽**：判据「menu/ 下有多少个手写
+    // quickMoveStack，MENUS 表就得有多少条」仍然逐台生效，只是这台机器不再有手写实现。
 
     private static List<String> menuFilesWithQuickMove() throws IOException {
         List<String> files = new ArrayList<>();

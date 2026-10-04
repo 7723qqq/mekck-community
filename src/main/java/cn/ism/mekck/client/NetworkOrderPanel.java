@@ -328,7 +328,7 @@ public final class NetworkOrderPanel {
         guiGraphics.setColor(1.0f, 1.0f, 1.0f, 1.0f);
 
         // 表头：标题 + 来源切换 + 分隔线
-        guiGraphics.drawString(font, isMe() ? "ME \u7F51\u7EDC\u4E0B\u5355" : "\u672C\u673A\u4E0B\u5355",
+        guiGraphics.drawString(font, isMe() ? tr("gui.mekck.ui.order_source.me") : tr("gui.mekck.ui.order_source.local"),
                 panelX + 8, panelY + 6, AE_TEXT_ACCENT);
         renderModeButtons(guiGraphics, font, panelX, panelY, panelW, mouseX, mouseY);
         guiGraphics.fill(panelX + 4, panelY + 21, panelX + panelW - 4, panelY + 22, AE_BORDER);
@@ -358,13 +358,13 @@ public final class NetworkOrderPanel {
         if (recipes.isEmpty()) {
             String msg;
             if (!isMe()) {
-                msg = "\u673A\u5668\u91CC\u6CA1\u6709\u53EF\u505A\u7684\u6750\u6599"; // 机器里没有可做的材料
+                msg = tr("gui.mekck.ui.empty_local"); // 机器里没有可做的材料
             } else if (!AE2Compat.isLoaded()) {
-                msg = "\u672A\u5B89\u88C5 AE2\uFF0C\u65E0\u6CD5\u4F7F\u7528 ME \u7F51\u7EDC\u4E0B\u5355";
+                msg = tr("gui.mekck.ui.empty_no_ae2");
             } else {
                 msg = dataRequested
-                        ? "ME\u7F51\u7EDC\u4E2D\u65E0\u53EF\u7528\u98DF\u6750"
-                        : "\u6B63\u5728\u83B7\u53D6ME\u7F51\u7EDC\u6570\u636E...";
+                        ? tr("gui.mekck.ui.empty_me")
+                        : tr("gui.mekck.ui.loading_me");
             }
             guiGraphics.drawString(font, msg, rowX + 2, listTop + 8, AE_TEXT_DIM);
         }
@@ -395,8 +395,8 @@ public final class NetworkOrderPanel {
             if (hovered) {
                 guiGraphics.renderTooltip(font, List.of(
                                 result.isEmpty() ? Component.translatable("gui.mekck.ui.unknown") : result.getHoverName(),
-                                Component.literal(craftable ? ("\u53EF\u505A " + maxQty + " \u6B21")
-                                        : "\u6750\u6599\u4E0D\u8DB3")),
+                                craftable ? Component.translatable("gui.mekck.ui.craftable_times", maxQty)
+                                        : Component.translatable("gui.mekck.ui.materials_insufficient")),
                         Optional.empty(), mouseX, mouseY);
             }
         }
@@ -416,7 +416,7 @@ public final class NetworkOrderPanel {
         // 数量区
         int qtyBtnX = rowX;
         guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.quantity", quantity).getString(), qtyBtnX, layoutQtyBtnY - 12, AE_TEXT_YELLOW);
-        String[] qtyLabels = {"1", "16", "32", "64", "\u81EA", "Max"};
+        String[] qtyLabels = {"1", "16", "32", "64", tr("gui.mekck.ui.quantity_custom"), "Max"};
         for (int i = 0; i < qtyLabels.length; i++) {
             int bx = qtyBtnX + i * (layoutQtyBtnW + 2);
             boolean active = i == 4 && customInput;
@@ -436,7 +436,7 @@ public final class NetworkOrderPanel {
             GuiUtils.blitNineSlicedSized(guiGraphics, AE_TEXT_FIELD, inputX - 1, inputY - 1, inputW, 13,
                     4, 128, 128, 0, 0, 128, 128);
             guiGraphics.setColor(1.0f, 1.0f, 1.0f, 1.0f);
-            String shown = customText.isEmpty() ? "\u8F93\u5165\u6570\u91CF..." : customText;
+            String shown = customText.isEmpty() ? tr("gui.mekck.ui.input_quantity") : customText;
             guiGraphics.drawString(font, shown, inputX + 2, inputY + 2, customText.isEmpty() ? AE_TEXT_DIM : AE_TEXT);
         }
 
@@ -455,10 +455,10 @@ public final class NetworkOrderPanel {
         // 确认 / 取消
         int confirmX = panelX + (panelW - layoutConfirmW * 2 - 8) / 2;
         drawAeButton(guiGraphics, font, confirmX, layoutConfirmY, layoutConfirmW, 18,
-                "\u786E\u8BA4\u4E0B\u5355", false,
+                tr("gui.mekck.ui.confirm_order"), false,
                 isHovered(mouseX, mouseY, confirmX, layoutConfirmY, layoutConfirmW, 18));
         drawAeButton(guiGraphics, font, confirmX + layoutConfirmW + 8, layoutConfirmY, layoutConfirmW, 18,
-                "\u53D6\u6D88", false,
+                tr("gui.mekck.ui.cancel"), false,
                 isHovered(mouseX, mouseY, confirmX + layoutConfirmW + 8, layoutConfirmY, layoutConfirmW, 18));
     }
 
@@ -484,7 +484,7 @@ public final class NetworkOrderPanel {
         int btnH = 14;
         int localX = panelX + panelW - btnW * 2 - 8;
         int netX = panelX + panelW - btnW - 4;
-        drawAeButton(guiGraphics, font, localX, panelY + 4, btnW, btnH, "\u672C\u673A", !meMode,
+        drawAeButton(guiGraphics, font, localX, panelY + 4, btnW, btnH, tr("gui.mekck.ui.mode_local"), !meMode,
                 isHovered(mouseX, mouseY, localX, panelY + 4, btnW, btnH));
         drawAeButton(guiGraphics, font, netX, panelY + 4, btnW, btnH, "ME", meMode,
                 isHovered(mouseX, mouseY, netX, panelY + 4, btnW, btnH));
@@ -515,6 +515,11 @@ public final class NetworkOrderPanel {
         guiGraphics.fill(x + 1, y + 1, x + w - 1, y + h - 1, fill);
         int labelW = font.width(label);
         guiGraphics.drawString(font, label, x + (w - labelW) / 2, y + (h - 9) / 2 + 1, AE_TEXT);
+    }
+
+    /** 语言键取词：本面板不在 GuiElement 体系内，与 Mek 的 tooltip 通道一样直接走 Component.translatable。 */
+    private static String tr(String key, Object... args) {
+        return Component.translatable(key, args).getString();
     }
 
     private static boolean isHovered(double mouseX, double mouseY, int x, int y, int w, int h) {

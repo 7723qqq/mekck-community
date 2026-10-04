@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Map.Entry;
+import java.util.stream.Stream;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -195,6 +196,18 @@ public final class PlantingRecipeGenerator {
 
          // BotanyPots 作物配方收集：作为「无种植配方 → 有 BP 配方 → 转换」优先级中的第二级
          boolean botanyPotsInstalled = isBotanyPotsInstalled();
+         // IE 未安装时 plant_ie 里的 cloche 配方整批是坏的（type 解析失败，每次启动刷 20 条 ERROR）
+         // ⇒ 不生成，并清掉上一轮留下的旧文件（否则换环境后旧文件仍在那里继续报错）。
+         // 目录本身已在上面 createDirectories 建好，这里只需在 IE 缺席时清空它。
+         boolean ieInstalled = isImmersiveEngineeringInstalled();
+         if (!ieInstalled) {
+            purgeDirectory(clocheRecipeDir, "plant_ie (Immersive Engineering not installed)");
+         }
+         // 同理：mekmm 未装时 mekmm:planting 类型不存在，那批配方全是坏的 ⇒ 不生成并清旧文件。
+         boolean mekmmInstalled = isMekmmInstalled();
+         if (!mekmmInstalled) {
+            purgeDirectory(recipeDir, "planting (mekmm not installed)");
+         }
          Map<Item, BotanyCropData> botanyCrops = collectBotanyPotsCropRecipes(server);
          // 土壤 categories（生长方块格判定）：必须在写任何 plantcut 配方之前收集好
          collectBotanyPotsSoilRecipes(server);
@@ -257,13 +270,17 @@ public final class PlantingRecipeGenerator {
 
    private static void deleteDirectoryRecursively(Path dir) throws IOException {
       if (Files.exists(dir)) {
-         Files.walk(dir).sorted(Comparator.reverseOrder()).forEach(path -> {
-            try {
-               Files.deleteIfExists(path);
-            } catch (IOException var2) {
-               LOGGER.error("Failed to delete: {}", path, var2);
-            }
-         });
+         // try-with-resources：Files.walk 返回的 Stream 持有打开的目录句柄，
+         // 未关闭时在 Windows 上会把整棵已删目录锁住，后续重建/覆盖静默失败。
+         try (Stream<Path> paths = Files.walk(dir)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+               try {
+                  Files.deleteIfExists(path);
+               } catch (IOException var2) {
+                  LOGGER.error("Failed to delete: {}", path, var2);
+               }
+            });
+         }
       }
    }
 
@@ -568,8 +585,11 @@ public final class PlantingRecipeGenerator {
                      jsonMekmm.addProperty("secondaryChance", 0.8);
                   }
 
-                  Path pathMekmm = recipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-                  Files.writeString(pathMekmm, GSON.toJson(jsonMekmm));
+                  // mekmm 未装 ⇒ mekmm:planting 类型不存在，跳过写入（plantcut 等其余配方不受影响）
+                  if (isMekmmInstalled()) {
+                     Path pathMekmm = recipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
+                     Files.writeString(pathMekmm, GSON.toJson(jsonMekmm));
+                  }
                   JsonObject jsonCloche = new JsonObject();
                   jsonCloche.addProperty("type", "immersiveengineering:cloche");
                   JsonObject inputCloche = new JsonObject();
@@ -601,8 +621,11 @@ public final class PlantingRecipeGenerator {
                   soil.addProperty("item", "minecraft:dirt");
                   jsonCloche.add("soil", soil);
                   jsonCloche.addProperty("time", 800);
-                  Path pathCloche = clocheRecipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-                  Files.writeString(pathCloche, GSON.toJson(jsonCloche));
+                  // IE 未装 ⇒ cloche 配方无法解析，跳过写入（mekmm/plantcut 配方不受影响）
+                  if (isImmersiveEngineeringInstalled()) {
+                     Path pathCloche = clocheRecipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
+                     Files.writeString(pathCloche, GSON.toJson(jsonCloche));
+                  }
                   generatePlantCutJson(plantcutRecipeDir, seedId, mainOutputId, recipeOutputCount, hasSecondaryOutput, seedId, 0.8F, server);
                   // 依据战利品表为 BotanyPots 生成植物盆 crop 配方（任务 3）
                   if (botanyPotsInstalled) {
@@ -671,8 +694,11 @@ public final class PlantingRecipeGenerator {
                mainOutputJson.addProperty("count", recipeOutputCount);
                mainOutputJson.addProperty("item", seedId.toString());
                jsonMekmm.add("mainOutput", mainOutputJson);
-               Path pathMekmm = recipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-               Files.writeString(pathMekmm, GSON.toJson(jsonMekmm));
+               // mekmm 未装 ⇒ mekmm:planting 类型不存在，跳过写入（plantcut 等其余配方不受影响）
+               if (isMekmmInstalled()) {
+                  Path pathMekmm = recipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
+                  Files.writeString(pathMekmm, GSON.toJson(jsonMekmm));
+               }
                ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(block);
                JsonObject jsonCloche = new JsonObject();
                jsonCloche.addProperty("type", "immersiveengineering:cloche");
@@ -693,8 +719,11 @@ public final class PlantingRecipeGenerator {
                soil.addProperty("item", "minecraft:dirt");
                jsonCloche.add("soil", soil);
                jsonCloche.addProperty("time", 800);
-               Path pathCloche = clocheRecipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-               Files.writeString(pathCloche, GSON.toJson(jsonCloche));
+               // IE 未装 ⇒ cloche 配方无法解析，跳过写入（mekmm/plantcut 配方不受影响）
+               if (isImmersiveEngineeringInstalled()) {
+                  Path pathCloche = clocheRecipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
+                  Files.writeString(pathCloche, GSON.toJson(jsonCloche));
+               }
                generatePlantCutJson(plantcutRecipeDir, seedId, seedId, recipeOutputCount, false, null, 0.0F, server);
                if (botanyPotsInstalled) {
                   writeBotanyPotsCropJson(botanyPotsRecipeDir, seedId, blockId, seedId, recipeOutputCount, false, null, 0.0F);
@@ -924,6 +953,69 @@ public final class PlantingRecipeGenerator {
    }
 
    /**
+    * 沉浸工程（Immersive Engineering）的园艺玻璃罩配方类型是否可用。
+    *
+    * <h3>为什么必须判（本仓实测缺陷）</h3>
+    * {@code plant_ie} 目录下的配方全部写成 {@code "type": "immersiveengineering:cloche"}，
+    * 而原实现<b>无条件生成</b>它们。IE 未安装时（本机 2026-10-03 实测）配方序列化器里没有
+    * 这个 type ⇒ 每一条都在 {@code RecipeManager.fromJson} 抛
+    * {@code JsonSyntaxException: Invalid or unsupported recipe type}，一次启动刷 20 条 ERROR：
+    * <pre>
+    * Parsing error loading recipe mekck:plant_ie/minecraft_sweet_berries
+    * com.google.gson.JsonSyntaxException: Invalid or unsupported recipe type 'immersiveengineering:cloche'
+    * </pre>
+    * 判据与 {@link #isBotanyPotsInstalled()} 同源（查 recipe type 是否已注册），
+    * 不用 {@code ModList.isLoaded} 是刻意的：即使装了 IE，只要它的 cloche 类型没注册成功，
+    * 生成出来的仍是坏配方，所以以「类型真的可用」为准。
+    */
+   private static boolean isImmersiveEngineeringInstalled() {
+      return cn.ism.mekck.util.RecipeCache.type(IE_CLOCHE_TYPE_ID) != null;
+   }
+
+   /** 沉浸工程园艺玻璃罩的配方类型 id。 */
+   private static final net.minecraft.resources.ResourceLocation IE_CLOCHE_TYPE_ID =
+           new net.minecraft.resources.ResourceLocation("immersiveengineering", "cloche");
+
+   /** 通用机械：更多机器（mekmm）的种植配方类型 id。 */
+   private static final net.minecraft.resources.ResourceLocation MEKMM_PLANTING_TYPE_ID =
+           new net.minecraft.resources.ResourceLocation("mekmm", "planting");
+
+   /**
+    * mekmm（通用机械：更多机器）的种植配方类型是否可用。
+    *
+    * <h3>为什么必须判（本仓实测缺陷）</h3>
+    * {@code recipeDir} 下的配方写成 {@code "type": "mekmm:planting"}，而原实现<b>无条件生成</b>。
+    * mekmm 未安装时（本机 2026-10-03 实测）每一条都在 {@code RecipeManager.fromJson} 抛
+    * {@code Invalid or unsupported recipe type 'mekmm:planting'}，一次启动刷 20 条 ERROR；
+    * 与之相邻的 {@code plant_ie} 又是 20 条 —— 合计 40 条。
+    *
+    * <p>判据与 {@link #isBotanyPotsInstalled()} / {@link #isImmersiveEngineeringInstalled()} 同源：
+    * 以「配方类型真的已注册」为准，而不是 {@code ModList.isLoaded}。</p>
+    */
+   private static boolean isMekmmInstalled() {
+      return cn.ism.mekck.util.RecipeCache.type(MEKMM_PLANTING_TYPE_ID) != null;
+   }
+
+   /**
+    * 清空一个由本生成器独占的配方目录（不存在即空操作，失败只记日志不中断生成）。
+    *
+    * <p>用途：可选依赖卸载后，上一轮写进存档 datapack 的配方文件仍然留在那里，
+    * 而它们引用的 recipe type 已经不存在 ⇒ 每次启动都继续刷解析错误。
+    * 仅对 {@link #generate} 顶部那 4 个「只由本方法创建并写入」的目录调用。</p>
+    */
+   private static void purgeDirectory(Path dir, String label) {
+      if (!Files.exists(dir)) {
+         return;
+      }
+      try {
+         deleteDirectoryRecursively(dir);
+         LOGGER.info("Purged stale generated recipes: {}", label);
+      } catch (IOException e) {
+         LOGGER.error("Failed to purge stale generated recipes at {}; will overwrite in place", dir, e);
+      }
+   }
+
+   /**
     * 收集全部 BotanyPots 作物配方（type=botanypots:crop），按种子物品建立映射。
     * 通过反射读取 BasicCrop.getSeed()/getResults() 与 HarvestEntry 的 getChance/getItem/getMinRolls/getMaxRolls，
     * 不引入 BotanyPots 编译依赖（未安装时返回空表）。
@@ -1060,8 +1152,11 @@ public final class PlantingRecipeGenerator {
          jsonMekmm.add("secondaryOutput", secondaryOutput);
          jsonMekmm.addProperty("secondaryChance", secondaryChance);
       }
-      Path pathMekmm = recipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-      Files.writeString(pathMekmm, GSON.toJson(jsonMekmm));
+      // mekmm 未装 ⇒ mekmm:planting 类型不存在，跳过写入（plantcut 等其余配方不受影响）
+      if (isMekmmInstalled()) {
+         Path pathMekmm = recipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
+         Files.writeString(pathMekmm, GSON.toJson(jsonMekmm));
+      }
 
       JsonObject jsonCloche = new JsonObject();
       jsonCloche.addProperty("type", "immersiveengineering:cloche");
@@ -1087,8 +1182,11 @@ public final class PlantingRecipeGenerator {
       soil.addProperty("item", "minecraft:dirt");
       jsonCloche.add("soil", soil);
       jsonCloche.addProperty("time", 800);
-      Path pathCloche = clocheRecipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-      Files.writeString(pathCloche, GSON.toJson(jsonCloche));
+      // IE 未装 ⇒ cloche 配方无法解析，跳过写入（mekmm/plantcut 配方不受影响）
+      if (isImmersiveEngineeringInstalled()) {
+         Path pathCloche = clocheRecipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
+         Files.writeString(pathCloche, GSON.toJson(jsonCloche));
+      }
 
       generatePlantCutJson(plantcutRecipeDir, seedId, mainId, mainCount, hasSecondary, secondaryId, secondaryChance, server);
       LOGGER.info("Generated planting recipes from BotanyPots: {} -> {} x{}", new Object[]{seedId, mainId, mainCount});

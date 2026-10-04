@@ -172,10 +172,13 @@ public class TestBlockDropInvariants {
             }
         }
 
-        // 第四轮切菜机迁到 Mek BlockTile 后不再覆写 getDrops（改由 BlockMekanism.onRemove
-        // + 战利品表接管），被本测试扫到的方块从 10 降到 9。阈值跟着实际数量走，
-        // 但保留「必须扫到若干台」这一层 —— 它防的是正则失配导致的全绿。
-        assertTrue("护栏空转了：一张表都没检查到（checked=" + checked + "）", checked >= 9);
+        // 阈值跟着实际数量走，而不是钉死一个数字：这个集合只会**收缩** ——
+        // 每台从「自研 BaseEntityBlock + getDrops 返空」迁到 Mek 的 BlockTile
+        // （不再覆写 getDrops，改由战利品表接管）时就离开这份名单。
+        // 第四轮切菜机 10→9，2026-10-03 陈化窖 9→8。
+        // **这不是把判据放宽**：下面那条 offenders 断言对名单里每一台逐条生效，
+        // 而且「抑制战利品表的方块不许再带一张死表」这条规则本身一个字没改。
+        assertTrue("护栏空转了：一张表都没检查到（checked=" + checked + "）", checked >= 8);
         assertTrue("以下方块抑制战利品表却又带着一张死表：\n  " + String.join("\n  ", offenders),
                 offenders.isEmpty());
     }

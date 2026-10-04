@@ -142,7 +142,15 @@ public final class BioreactorBlockEntity extends BlockEntity implements MenuProv
     public static final int DATA_FLUID_AMOUNT = 2;
     public static final int DATA_FLUID_TYPE = 3;
     public static final int DATA_GENERATING = 4;
-    public static final int DATA_SIZE = 5;
+    /**
+     * 流体量的高 16 位，追加到槽表末尾。
+     *
+     * <p><b>为什么</b>：容量 {@link #FLUID_CAPACITY} = 480,000 > 32767，量经 16 位有符号通道后
+     * 一超界就被读成负数 ⇒ 菜单侧 {@code amount <= 0 → EMPTY}，满罐显示空。见
+     * {@link cn.ism.mekck.util.WideDataSlot}。</p>
+     */
+    public static final int DATA_FLUID_AMOUNT_HI = 5;
+    public static final int DATA_SIZE = 6;
 
     private final ItemStackHandler items = new cn.ism.mekck.util.BigStackItemHandler(TOTAL_SLOTS) {
 @Override
@@ -225,7 +233,8 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
                 // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
                 case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
                 case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
-                case DATA_FLUID_AMOUNT -> fluidTank.getFluidAmount();
+                case DATA_FLUID_AMOUNT -> fluidTank.getFluidAmount() & 0xFFFF;
+                case DATA_FLUID_AMOUNT_HI -> (fluidTank.getFluidAmount() >>> 16) & 0xFFFF;
                 case DATA_FLUID_TYPE -> fluidTypeId();
                 case DATA_GENERATING -> generatingRate;
                 default -> 0;
@@ -460,20 +469,42 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
      * 与 Mekanism 绑定块不同，本机在 6 个方向上遍历整个结构足迹计算“外露相邻方块”，
      * 因此即使绑定块未实际生成也能正确向四周供电；同时跳过指向自身绑定块的相邻块以避免自循环。
      */
+    /**
+     * 结构足迹缓存：主方块 + 26 个绑定块位置（与 {@code MekCkMultiblock.SHAPE_3X3X3} 一致）。
+     *
+     * <p>只依赖 {@code worldPosition} 与放置时的方块状态，两者在 BE 生命周期内都不变，
+     * 因此算一次即可。原先每 tick 调 {@code getBoundingPositions}（内部建 Stream.Builder +
+     * ArrayList）再倒进一个新 {@code HashSet} —— 每 tick 三次分配，而结果是常量。
+     * 用 {@code Set#contains} 查询，故保留 HashSet 形态。</p>
+     */
+    private java.util.Set<BlockPos> structureFootprintCache;
+
+    private java.util.Set<BlockPos> structureFootprint() {
+        if (structureFootprintCache == null) {
+            java.util.Set<BlockPos> s = new java.util.HashSet<>();
+            s.add(worldPosition);
+            s.addAll(MekCkMultiblock.getBoundingPositions(
+                    worldPosition, getBlockState(), MekCkMultiblock.SHAPE_3X3X3));
+            structureFootprintCache = s;
+        }
+        return structureFootprintCache;
+    }
+
     private int emitEnergy() {
         int stored = energy.getEnergyStored();
         if (stored <= 0) {
             return 0;
         }
         int budget = MAX_ENERGY_OUTPUT_PER_TICK;
-        // 收集结构足迹：主方块 + 26 个绑定块位置（与 MekCkMultiblock.SHAPE_3X3X3 一致）
-        Set<BlockPos> structure = new java.util.HashSet<>();
-        structure.add(worldPosition);
-        for (BlockPos p : MekCkMultiblock.getBoundingPositions(worldPosition, getBlockState(), MekCkMultiblock.SHAPE_3X3X3)) {
-            structure.add(p);
-        }
+        // 结构足迹只取决于 worldPosition 与本地方块状态，机器放好后就是常量 ——
+        // 每 tick 重建（Stream.Builder + ArrayList + HashSet 三次分配）纯属浪费，缓存起来。
+        Set<BlockPos> structure = structureFootprint();
         int totalOut = 0;
-        java.util.Map<String, Integer> neighborTotals = new java.util.HashMap<>();
+        // 诊断表只为下面那条日志服务；日志每 20 tick 才打一次且要求 totalOut > 0，
+        // 因此先算出「本 tick 会不会打」，避免每 tick 都建表 + 调 getSimpleName()。
+        boolean logThisTick = level.getGameTime() % 20 == 0
+                && BIO_LOG.isInfoEnabled();
+        java.util.Map<String, Integer> neighborTotals = logThisTick ? new java.util.HashMap<>() : null;
         for (BlockPos p : structure) {
             if (stored <= 0 || budget <= 0) {
                 break;
@@ -484,6 +515,11 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
                 }
                 BlockPos n = p.relative(dir);
                 if (structure.contains(n)) {
+                    continue;
+                }
+                // 跨到未加载区块时 getBlockEntity 会触发区块加载 —— 每 tick 最多 27×6 次，
+                // 与热量组件那几处一样先判 hasChunkAt（原实现缺这道闸）。
+                if (!level.hasChunkAt(n)) {
                     continue;
                 }
                 BlockEntity neighbor = level.getBlockEntity(n);
@@ -512,12 +548,16 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
                     stored -= accepted;
                     budget -= accepted;
                     totalOut += accepted;
-                    neighborTotals.merge(neighbor.getClass().getSimpleName(), accepted, Integer::sum);
+                    // 只在「本 tick 真的会打日志」时才记：getSimpleName() 不是免费的字符串操作，
+                    // 而这张表的唯一用途就是下面那条 20 tick 一次的诊断日志。
+                    if (logThisTick) {
+                        neighborTotals.merge(neighbor.getClass().getSimpleName(), accepted, Integer::sum);
+                    }
                 }
             }
         }
         // [诊断] 每 20 tick 打印一次本 tick 实际推送给各相邻方块的能量，用于核对输出是否真的“丢失”
-        if (totalOut > 0 && level.getGameTime() % 20 == 0) {
+        if (totalOut > 0 && logThisTick) {
             ItemStack ps = items.getStackInSlot(POWER_SLOT);
             BIO_LOG.info("Bioreactor gen={} emitted {} FE/t -> {} (powerSlot={})",
                     generatingRate, totalOut, neighborTotals,

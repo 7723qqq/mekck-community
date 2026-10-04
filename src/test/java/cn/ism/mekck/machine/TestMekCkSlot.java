@@ -181,6 +181,51 @@ public class TestMekCkSlot {
     }
 
     /**
+     * 切菜机的机器槽布局 <b>冻结</b>：恰好 5 个，相对顺序
+     * [输入] → [输出] → [速度卡] → [能量卡] → [电源]。
+     *
+     * <p><b>为什么不许删掉那两个手工 {@code UpgradeInventorySlot}</b>：它们确实是
+     * {@code TileComponentUpgrade} 自带升级槽的重复（组件另有两个，{@code javap} 已证），
+     * 功能上是死的；但<b>槽下标本身就是存档格式的一部分</b> —— 本机
+     * {@code getInventorySlots(null)} 的插入序决定 Mek {@code Items} 的 byte 下标，
+     * 删除后 5 槽旧档变 3 槽（0/1 不变，2 电源）：旧档原下标 2/3 的升级卡会落进电源槽
+     * （被当作能量物品消耗）、原下标 4 的电源物品被丢弃。真要删必须先做槽位迁移。</p>
+     *
+     * <p>变异点：在本方法体里任意位置插入/删除一个 {@code builder.addSlot(...)}，
+     * 槽数或相对顺序即变，本断言变红。</p>
+     */
+    @Test
+    public void cuttingMachineSlotLayoutIsFrozenForSaveCompat() throws IOException {
+        String source = cn.ism.mekck.TestSourceText.read(
+                "src/main/java/cn/ism/mekck/machine/cutting/UniversalCuttingMachineTile.java");
+        String body = cn.ism.mekck.TestSourceText.methodBody(source,
+                "protected IInventorySlotHolder getInitialInventory(IContentsListener listener) {");
+        assertTrue("找不到切菜机的 getInitialInventory", !body.isEmpty());
+
+        assertEquals("切菜机的机器槽必须恰好 5 个（输入/输出/速度卡/能量卡/电源）—— 槽下标是"
+                        + "存档格式的一部分，增删任一槽都会让旧档错位/丢物；要改必须先做槽位迁移",
+                5, countOf(body, "builder.addSlot("));
+
+        int input = body.indexOf("builder.addSlot(inputSlot);");
+        int output = body.indexOf("builder.addSlot(outputSlot);");
+        int speed = body.indexOf("Set.of(Upgrade.SPEED)");
+        int energy = body.indexOf("Set.of(Upgrade.ENERGY)");
+        int power = body.indexOf("builder.addSlot(powerSlot);");
+        assertTrue("槽序必须是 [输入] → [输出] → [速度卡] → [能量卡] → [电源]（下标即存档下标）",
+                input >= 0 && output > input && speed > output && energy > speed && power > energy);
+    }
+
+    private static int countOf(String haystack, String needle) {
+        int count = 0;
+        int at = haystack.indexOf(needle);
+        while (at >= 0) {
+            count++;
+            at = haystack.indexOf(needle, at + needle.length());
+        }
+        return count;
+    }
+
+    /**
      * {@code MekCkSlot} 必须在构造器里把 {@code obeyStackLimit} 关掉。
      *
      * <p>7 参构造把它钉成 {@code true}（{@code javap} 偏移 11~13），而 {@code getLimit}

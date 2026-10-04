@@ -146,6 +146,15 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
      * 攻击同一目标的冰块保持排队（逐 tick 依次生成），攻击不同目标的冰块在同一 tick 一起生成。
      */
     private final java.util.LinkedHashMap<LivingEntity, Integer> pendingAttackTargets = new java.util.LinkedHashMap<>();
+    /**
+     * 索敌结果缓存：创造升级让 {@code attackTimer = 1} ⇒ 每 tick 攻击一次，
+     * 而半径 > 64 时 {@code IceTargetSearch} 要遍历全部已加载实体 —— 不缓存就是每 tick 全服扫描。
+     * 与 {@code ChocolateCannonBlockEntity} 那份同实现（抽到 {@code IceTargetSearch.CandidateCache}）。
+     */
+    private final cn.ism.mekck.util.IceTargetSearch.CandidateCache targetCache =
+            new cn.ism.mekck.util.IceTargetSearch.CandidateCache();
+
+
     private float pendingDamage;
     private boolean pendingAoe;
     /** 本次发射的溅射伤害（低温 5 / 凛冰 20 / 龙霜 40）。 */
@@ -474,7 +483,9 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
     }
 
     public void setTargetType(int type) {
-        this.targetType = type;
+        // 与半径同一道闸：值来自网络包，越界值虽被 matchesTarget 的 default 兜底不会崩，
+        // 但会写进存档并让 GUI 显示与实际行为不一致。见 IceTargetSearch#clampTargetType。
+        this.targetType = cn.ism.mekck.util.IceTargetSearch.clampTargetType(type);
         setChanged();
     }
 
@@ -683,11 +694,28 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
         return tier.energyPerTick > 0 ? tier.energyPerTick : 60;
     }
 
+    /**
+     * 每槽复用的配方包装器。
+     *
+     * <p>原实现每次调用都 {@code new RecipeWrapper(new SingleSlotHandler(inSlot))}：本方法是
+     * {@code serverTick} 里 {@code for (i < processes)} 的循环体，而奇点档 {@code processes = 81}
+     * ⇒ <b>每 tick 每机器 162 次分配 + 81 次 getRecipeFor</b>。
+     * {@code SingleSlotHandler} 每次都从 {@code items} 实时读该槽（不缓存内容），
+     * 因此按槽缓存一个实例与每次新建<b>行为等价</b>。同 {@code IceMakerBlockEntity#recipeWrapper}。</p>
+     */
+    private final java.util.Map<Integer, net.minecraftforge.items.wrapper.RecipeWrapper> slotProbeCache =
+            new java.util.HashMap<>();
+
+    private net.minecraftforge.items.wrapper.RecipeWrapper slotProbe(int inSlot) {
+        return slotProbeCache.computeIfAbsent(inSlot,
+                s -> new net.minecraftforge.items.wrapper.RecipeWrapper(new SingleSlotHandler(s)));
+    }
+
     private IceMakeRecipe getRecipeForSlot(Level level, int inSlot) {
         if (level == null) return null;
         // 仅检查该输入槽
-        var probe = new net.minecraftforge.items.wrapper.RecipeWrapper(new SingleSlotHandler(inSlot));
-        var holder = level.getRecipeManager().getRecipeFor(MekCkRecipeTypes.ICE_MAKE_RECIPE_TYPE.get(), probe, level);
+        var holder = level.getRecipeManager().getRecipeFor(
+                MekCkRecipeTypes.ICE_MAKE_RECIPE_TYPE.get(), slotProbe(inSlot), level);
         IceMakeRecipe r = holder.orElse(null);
         if (r == null) return null;
         return r;
@@ -785,8 +813,8 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
         attackTimer = MekckConfig.getIceAttackInterval();
 
         // 索敌：小半径走 AABB 快速路径，超大半径遍历已加载实体（避免巨型 AABB 导致 section key 溢出崩溃）
-        List<LivingEntity> candidates = cn.ism.mekck.util.IceTargetSearch.findTargets(
-                level, worldPosition, this.radius, this::matchesTarget);
+        List<LivingEntity> candidates = targetCache.get(
+                level, worldPosition, this.radius, this.targetType, this::matchesTarget);
 
         int count = Math.min(profile.targetCount, candidates.size());
         LivingEntity highestHp = null;
@@ -973,8 +1001,10 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
             for (int i = 0; i < Math.min(arr.length, progress.length); i++) progress[i] = arr[i];
         }
         attackTimer = tag.getInt("AttackTimer");
-        targetType = tag.getInt("TargetType");
-        radius = tag.getInt("Radius");
+        // 存档里的旧值（写入时未夹紧）也可能是越界的，读回时一并归一化。
+        targetType = cn.ism.mekck.util.IceTargetSearch.clampTargetType(tag.getInt("TargetType"));
+        // 读档半径同样必须过唯一钳制闸门：存档里的旧值/被改过的值不能绕过上限（见 TestAttackRadiusClamp）。
+        radius = IceTargetSearch.clampAttackRadius(tag.getInt("Radius"));
         if (tag.contains("SideConfig", Tag.TAG_BYTE_ARRAY)) {
             byte[] sideBytes = tag.getByteArray("SideConfig");
             for (int i = 0; i < Math.min(sideBytes.length, 6); i++) {

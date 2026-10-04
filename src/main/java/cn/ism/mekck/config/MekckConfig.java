@@ -1061,5 +1061,6 @@ public final class MekckConfig {
         // 配置值从 spec 实时读取，仅需清空缓存的解析结果。
         iceAttackHostileCache = null;
         bioreactorEternalFoodsCache = null;
+        cn.ism.mekck.util.BioreactorFuels.invalidateFuelCache();
     }
 }

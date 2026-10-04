@@ -130,6 +130,44 @@ public final class PacketGuard {
         }
     }
 
+    // ==================== 面板只读请求的最短刷新间隔（第六轮补）====================
+
+    /**
+     * 面板只读请求（ME 可下单列表 / 缺料清单）触发全量样板重建的最短间隔（tick）。
+     *
+     * <p>10 = 0.5s。取值理由：客户端连点刷新、快速切换配方/数量时，同一批请求会在几 tick
+     * 内到达，0.5s 窗口足以把它们合并成一次重建；而超过 0.5s 的真实操作会立刻重建，
+     * 面板不会「过期」。一次全量重建要重扫全网库存并逐条配方构建样板
+     * （{@code MekckAe2.refreshPatterns}），必须限制频率，否则客户端可无限刷新打满服务端主线程。</p>
+     */
+    public static final int PANEL_REFRESH_MIN_TICKS = 10;
+
+    /**
+     * 本次面板请求是否应执行真实刷新（纯逻辑，便于普通 JVM 单测）。
+     *
+     * <p><b>只回答「要不要重建样板」，从不代表「丢弃请求」</b>：返回 false 时调用方仍必须用
+     * 上次缓存的结果回响应。这正是与 {@link #expensiveRequest} 的取舍差别 —— 后者在冷却期
+     * 对不同请求返回 false 即「静默丢弃」，若照搬到面板上会让打开面板的首个请求落空、面板空白；
+     * 面板是只读的，窗口内缓存结果与实时结果的差异可忽略，所以选择
+     * <b>合并（reuse）而非丢弃（drop）</b>，保证「任何请求都得到响应，首个请求必刷」。</p>
+     *
+     * @param nowTick          服务端当前游戏刻（{@code Level#getGameTime}）
+     * @param lastRefreshTick  上次真实刷新的刻；{@code <0} 表示从未刷新
+     * @param minIntervalTicks 最短间隔
+     * @return true = 应真实刷新；false = 复用缓存结果
+     */
+    public static boolean panelRefreshDue(long nowTick, long lastRefreshTick, int minIntervalTicks) {
+        if (lastRefreshTick < 0) {
+            // 从未刷新（含面板打开的首个请求）→ 必须刷新，否则会回空缓存造成面板空白。
+            return true;
+        }
+        if (nowTick < lastRefreshTick) {
+            // 存档重载 / 时钟回拨：间隔不可比，保守地刷新一次。
+            return true;
+        }
+        return nowTick - lastRefreshTick >= minIntervalTicks;
+    }
+
     /**
      * 该玩家是否有权操作此坐标上的方块实体。
      *
@@ -166,7 +204,9 @@ public final class PacketGuard {
      *
      * <p>这与 {@link #allowed} 是<b>互补</b>而非重复：{@code allowed} 回答
      * 「客户端能不能碰这台机器」，本方法回答「这个包该不该由这一侧处理」。
-     * C2S 包靠前者，S2C 包靠后者 —— 此前 24 个 C2S 有 23 个走了 {@code allowed}，
+     * C2S 包靠前者，S2C 包靠后者 —— 现在 22 个包（17 C2S + 5 S2C）全部受检：
+     * 17 个 C2S 都走 {@code allowed/target}，5 个 S2C 都走 {@code fromServer}
+     * （数字由 {@code TestPacketGuardCoverage} 机械校验，改包时以测试为准）。
      * 而 5 个 S2C 一个方向校验都没有。</p>
      *
      * <p>被拒时只记一次 WARN 并返回 false，调用方应立刻 {@code setPacketHandled(true)}

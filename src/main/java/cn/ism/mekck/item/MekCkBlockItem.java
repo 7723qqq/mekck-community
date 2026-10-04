@@ -221,29 +221,30 @@ public class MekCkBlockItem extends BlockItem {
      * Checks for barbequesdelight, mekanism_extras, avaritia, and avaritia_delight.
      */
     /**
-     * 联动机器支持的模组表：{机器注册名关键字, "modid|中文名", ...}。
+     * 联动机器支持的模组表：{机器注册名关键字, modid, ...}。
      * 只要**任意一个**模组存在机器就有配方可做；全部缺失时才给出提示。
+     *
+     * <p>这里只存 modid、不再存显示名：显示名改走
+     * {@code tooltip.mekck.linked_mod.<modid>} 语言键（en/zh 同批），
+     * 于是本表不再含任何玩家可见硬编码文本（下方 tooltip 由客户端渲染，
+     * 故 {@code getString()} 在客户端解析出本地化名称）。</p>
      */
     private static final String[][] LINKED_MODS = {
-            {"sushi_maker", "youkaishomecoming|妖怪们的归家"},
-            {"average_slicer", "kaleidoscope_cookery|森罗物语：厨房", "bakeries|烘焙坊"},
-            {"curd_maker", "trailandtales|樱途旅事", "meadow|青青草甸"},
-            {"dehydrator", "youkaishomecoming|妖怪们的归家", "farm_and_charm|沉浸农艺"},
-            {"fermenter", "youkaishomecoming|妖怪们的归家", "bakeries|烘焙坊",
-                    "brewery|盛节精酿", "drinkbeer|喝啤酒啦"},
-            {"steamer", "youkaishomecoming|妖怪们的归家"},
-            {"winery", "vinery|葡园酒香", "kaleidoscope_tavern|森罗物语：酒馆"},
-            {"juicer", "vinery|葡园酒香", "kaleidoscope_tavern|森罗物语：酒馆"},
-            {"bakery_oven", "bakery|馥郁烘焙", "bakeries|烘焙坊"},
-            {"stove", "farm_and_charm|沉浸农艺", "bakeries|烘焙坊",
-                    "herbalbrews|煨茶酝露", "meadow|青青草甸"},
-            {"cocktail_shaker", "kaleidoscope_tavern|森罗物语：酒馆"},
-            {"blender", "bakeries|烘焙坊"},
-            {"tea_brewer", "simplytea|简单的茶"},
-            {"electric_grinding_machine", "kaleidoscope_cookery|森罗物语：厨房",
-                    "bakeries|烘焙坊", "farm_and_charm|沉浸农艺"},
-            {"smart_cooking_pot", "kaleidoscope_cookery|森罗物语：厨房",
-                    "youkaishomecoming|妖怪们的归家"},
+            {"sushi_maker", "youkaishomecoming"},
+            {"average_slicer", "kaleidoscope_cookery", "bakeries"},
+            {"curd_maker", "trailandtales", "meadow"},
+            {"dehydrator", "youkaishomecoming", "farm_and_charm"},
+            {"fermenter", "youkaishomecoming", "bakeries", "brewery", "drinkbeer"},
+            {"steamer", "youkaishomecoming"},
+            {"winery", "vinery", "kaleidoscope_tavern"},
+            {"juicer", "vinery", "kaleidoscope_tavern"},
+            {"bakery_oven", "bakery", "bakeries"},
+            {"stove", "farm_and_charm", "bakeries", "herbalbrews", "meadow"},
+            {"cocktail_shaker", "kaleidoscope_tavern"},
+            {"blender", "bakeries"},
+            {"tea_brewer", "simplytea"},
+            {"electric_grinding_machine", "kaleidoscope_cookery", "bakeries", "farm_and_charm"},
+            {"smart_cooking_pot", "kaleidoscope_cookery", "youkaishomecoming"},
     };
 
     /** 联动机器的模组依赖提示：全部缺失时才显示。 */
@@ -253,17 +254,22 @@ public class MekCkBlockItem extends BlockItem {
             boolean anyLoaded = false;
             StringBuilder names = new StringBuilder();
             for (int i = 1; i < entry.length; i++) {
-                String[] parts = entry[i].split("\\|");
-                if (parts.length < 2) continue;
-                if (ModList.get().isLoaded(parts[0])) {
+                String modId = entry[i];
+                if (ModList.get().isLoaded(modId)) {
                     anyLoaded = true;
                     break;
                 }
-                if (names.length() > 0) names.append("、");
-                names.append('[').append(parts[1]).append(']').append(parts[0]);
+                if (names.length() > 0) {
+                    names.append(Component.translatable("tooltip.mekck.linked_mod.separator").getString());
+                }
+                names.append('[')
+                        .append(Component.translatable("tooltip.mekck.linked_mod." + modId).getString())
+                        .append(']').append(modId);
             }
             if (!anyLoaded) {
-                tooltip.add(Component.literal("该机器需要安装以下模组之一才有作用：" + names)
+                tooltip.add(Component.translatable("tooltip.mekck.linked_mod.prefix")
+                        .append(Component.literal(names.toString())
+                                .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())))
                         .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
             }
             return;
@@ -279,27 +285,27 @@ public class MekCkBlockItem extends BlockItem {
         // Check if this is a barbequesdelight-related machine (grill or skewer)
         boolean isBarbequesMachine = path.contains("grill") || path.contains("skewer");
         if (isBarbequesMachine && !ModList.get().isLoaded("barbequesdelight")) {
-            tooltip.add(Component.literal("该机器需要安装[烧烤乐事]barbequesdelight才有作用")
+            tooltip.add(Component.translatable("tooltip.mekck.needs_mod.barbequesdelight")
                     .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
         }
 
         // 三明治组装机：需要 Some Assembly Required（联动功能，非硬依赖）
         if (path.contains("sandwich_assembler")) {
             if (!ModList.get().isLoaded("someassemblyrequired")) {
-                tooltip.add(Component.literal("该机器需要安装[三明治]someassemblyrequired才有作用")
+                tooltip.add(Component.translatable("tooltip.mekck.needs_mod.someassemblyrequired")
                         .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
             }
-            tooltip.add(Component.literal("层数过多会导致三明治的 NBT 过大，可能影响性能甚至超出网络同步限制，请谨慎堆叠")
+            tooltip.add(Component.translatable("tooltip.mekck.sandwich_assembler.stacking_warning")
                     .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
         }
 
         // 中央厨房：说明书式提示（首行用途描述由 getMachineDescription 的 lang 键提供）
         if (path.contains("central_kitchen")) {
-            tooltip.add(Component.literal("默认只在下单时加工（不会自动消耗存储区材料）；每个模块可单独开启自动加工")
+            tooltip.add(Component.translatable("tooltip.mekck.central_kitchen.manual_only")
                     .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
-            tooltip.add(Component.literal("缺少中间产物时会自动展开合成链（例如先切牛肉馅再烹饪），最多 3 层")
+            tooltip.add(Component.translatable("tooltip.mekck.central_kitchen.auto_expand")
                     .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
-            tooltip.add(Component.literal("双独立温度：发热侧供烘焙/烧烤等系列，制冷侧供制冰系列；正面为冷端、背面为热端")
+            tooltip.add(Component.translatable("tooltip.mekck.central_kitchen.dual_temp")
                     .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
         }
 
@@ -309,7 +315,7 @@ public class MekCkBlockItem extends BlockItem {
         // Check if this is a planting-cutting machine (station or factory): requires mekmm nutrient gas
         boolean isPlantingCuttingMachine = path.contains("planting_cutting");
         if (isPlantingCuttingMachine && !ModList.get().isLoaded("mekmm")) {
-            tooltip.add(Component.literal("该机器需要安装[mekmm]通用机械：更多机器才能运行")
+            tooltip.add(Component.translatable("tooltip.mekck.needs_mod.mekmm")
                     .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
         }
         // 种植切配工厂：烈焰炽焱及以上等级内置营养液消耗减免
@@ -323,7 +329,7 @@ public class MekCkBlockItem extends BlockItem {
                 default -> -1;
             };
             if (reduction > 0) {
-                tooltip.add(Component.literal("营养液消耗减免：" + reduction + "%")
+                tooltip.add(Component.translatable("tooltip.mekck.nutrient_reduction", reduction + "%")
                         .withStyle(style -> style.withColor(EnumColor.AQUA.getColor())));
             }
         }
@@ -338,7 +344,7 @@ public class MekCkBlockItem extends BlockItem {
             if (tier.ordinal() > CuttingMachineFactoryTier.ULTIMATE.ordinal()
                     && tier.ordinal() <= CuttingMachineFactoryTier.INFINITE.ordinal()) {
                 if (!ModList.get().isLoaded("mekanism_extras")) {
-                    tooltip.add(Component.literal("终极以上等级的工厂需要安装通用机械：拓展以添加合成表")
+                    tooltip.add(Component.translatable("tooltip.mekck.needs_mekanism_extras")
                             .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
                 }
             }
@@ -352,7 +358,7 @@ public class MekCkBlockItem extends BlockItem {
                 boolean hasAvaritia = ModList.get().isLoaded("avaritia");
                 boolean hasAvaritiaDelight = ModList.get().isLoaded("avaritia_delight");
                 if (!hasAvaritia || !hasAvaritiaDelight) {
-                    tooltip.add(Component.literal("悖论无限以上等级的工厂需要安装无尽贪婪与无尽乐事以添加合成表")
+                    tooltip.add(Component.translatable("tooltip.mekck.needs_avaritia")
                             .withStyle(style -> style.withColor(EnumColor.GRAY.getColor())));
                 }
             }
@@ -380,7 +386,7 @@ public class MekCkBlockItem extends BlockItem {
         // 存有物品：是/否（标签淡蓝色，值灰色）
         tooltip.add(Component.translatable("tooltip.mekck.detail_has_items")
                 .withStyle(style -> style.withColor(EnumColor.AQUA.getColor()))
-                .append(Component.literal(hasSustainedItems(stack) ? "是" : "否")
+                .append(Component.translatable(hasSustainedItems(stack) ? "gui.mekck.ui.yes" : "gui.mekck.ui.no")
                         .withStyle(style -> style.withColor(EnumColor.GRAY.getColor()))));
     }
 

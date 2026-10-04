@@ -22,8 +22,10 @@ import static org.junit.Assert.assertTrue;
  * <h3>为什么需要它</h3>
  * {@link PacketGuard} 本身的逻辑有 {@code TestPacketGuard} 钉着，
  * 但「写得好」和「被用上」是两件事。第三轮审查实测的覆盖面是
- * <b>24 个 C2S 里 23 个</b>调了 {@code allowed/target}、<b>5 个 S2C 里 0 个</b>校验方向 ——
+ * <b>全部 C2S 里只差一个</b>调了 {@code allowed/target}、<b>5 个 S2C 里 0 个</b>校验方向 ——
  * 这个数字没有被任何东西守住，下一个新增包会落回「默认不校验」。
+ * （当前实际是 22 个包：17 C2S + 5 S2C，全部受检；具体计数以本文件的断言为准，
+ * 早期注释里的 24/23 是第四轮删掉 8 个包之前的旧数字。）
  *
  * <p>方向问题尤其隐蔽：Forge 的 {@code SimpleChannel} 不按登记方向拒收反向投递，
  * 客户端可以直接构造本该服务端下发的包。后果多数是良性（写静态表/空实现），

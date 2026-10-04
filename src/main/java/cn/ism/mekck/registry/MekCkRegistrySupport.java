@@ -12,26 +12,18 @@ import static cn.ism.mekck.UniversalCuttingMachine.MOD_ID;
  * 注册期辅助：按注册名取回他人注册项的视图、以及延迟取回 tile 类型（破 BlockType↔tile 的循环依赖）。
  *
  * <p>本类由 {@code UniversalCuttingMachine} 拆出（注册中枢拆分）。成员文本与拆分前
- * 逐字一致；本类必须<b>早于任何注册事件</b>被触碰一次 —— 见 {@link #init()}。</p>
+ * 逐字一致。</p>
+ *
+ * <p><b>本类不持有任何注册条目，因此无需被触碰。</b>{@link MekCkRegistries#registerAll}
+ * 的触碰名单是按「该注册类的代码里是否真的出现 {@code DeferredRegister} / {@code .register(}」
+ * 自动判定的（见 {@code TestRegistryInitContract}），本类只有取句柄的方法，判据下天然不在名单里。
+ * 这里曾经有一个空的 {@code init()} 与「必须早于注册事件被触碰」的注释，但那与代码相反 ——
+ * 本类没有静态初始化器往注册表加东西，留着只会让后来者为一个不存在的注册项去 registerAll
+ * 里登记触碰。删掉空方法与那句契约。</p>
  */
 public final class MekCkRegistrySupport {
 
     private MekCkRegistrySupport() {
-    }
-
-    /**
-     * 触碰式初始化：由 {@code UniversalCuttingMachine} 的构造器调用。
-     *
-     * <h3>为什么需要它</h3>
-     * 条目是在本类的<b>静态初始化器</b>里加进
-     * {@link cn.ism.mekck.registry.MekCkRegistries} 的 {@code DeferredRegister} 的，
-     * 而 {@code DeferredRegister} 是在 {@code register(bus)} 时挂上注册事件监听器、
-     * 事件触发时才去读那张表。若本类因「谁都没引用」而晚于注册事件才初始化，
-     * 它的条目会<b>静默地一个都不注册</b> —— 方块放下去变空气、菜单取不到，
-     * 而且没有任何报错。所以构造器必须显式触碰每一个注册类，
-     * 而不是依赖「反正会被引用到」。
-     */
-    public static void init() {
     }
 
     static <T, U extends T> RegistryObject<U> registryView(String id, net.minecraftforge.registries.IForgeRegistry<T> registry) {

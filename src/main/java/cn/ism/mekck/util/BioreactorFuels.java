@@ -27,6 +27,45 @@ public final class BioreactorFuels {
     private BioreactorFuels() {
     }
 
+    // ── 规则 C 的缓存：配置条目解析后的「物品注册名 → 每单位 mb」─────────────
+    //
+    // getMBPerUnit 是每 tick 路径（BioreactorBlockEntity 对每个输入槽各调一次，最多 16 次/tick）；
+    // 而 MekckConfig.getBioreactorFuels() 每次都 new ArrayList<>(...) 拷贝整份配置，
+    // 再对每条做 substring + trim + 字符串比较 —— 每槽每 tick 一次全表拷贝与线性扫描。
+    // 配置只在重载时变，因此解析一次缓存起来即可。
+    private static Map<String, Integer> fuelCache;
+
+    private static synchronized Map<String, Integer> fuels() {
+        if (fuelCache != null) {
+            return fuelCache;
+        }
+        Map<String, Integer> map = new HashMap<>();
+        for (String entry : MekckConfig.getBioreactorFuels()) {
+            int eq = entry.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            String id = entry.substring(0, eq).trim();
+            try {
+                map.put(id, Math.max(1, Integer.parseInt(entry.substring(eq + 1).trim())));
+            } catch (NumberFormatException ignored) {
+                map.put(id, 0); // 与原逻辑一致：解析失败即 0（不可转化）
+            }
+        }
+        fuelCache = map;
+        return map;
+    }
+
+    /**
+     * 配置重载后调用：丢掉规则 C 的解析缓存。
+     *
+     * <p>与规则 A 的 {@code cachedLevel} 按实例判断不同，配置列表变了但引用可能仍是
+     * 同一个对象，因此必须显式失效。{@code MekckConfig} 的重载入口应调用本方法。</p>
+     */
+    public static synchronized void invalidateFuelCache() {
+        fuelCache = null;
+    }
+
     // 规则 A 的缓存：物品注册名 → 每单位 mb。按 Level 实例构建一次。
     private static Map<ResourceLocation, Integer> crushingCache;
     private static Level cachedLevel;
@@ -83,19 +122,10 @@ public final class BioreactorFuels {
             return customMb != null ? customMb : ETERNAL_MB;
         }
 
-        // 规则 C：mekck.toml 中 [bioreactor] fuels 条目 "注册名=每单位mb"
-        for (String entry : MekckConfig.getBioreactorFuels()) {
-            int eq = entry.indexOf('=');
-            if (eq <= 0) {
-                continue;
-            }
-            if (itemId.toString().equals(entry.substring(0, eq).trim())) {
-                try {
-                    return Math.max(1, Integer.parseInt(entry.substring(eq + 1).trim()));
-                } catch (NumberFormatException ignored) {
-                    return 0;
-                }
-            }
+        // 规则 C：mekck.toml 中 [bioreactor] fuels 条目 "注册名=每单位mb"（已解析缓存，见 fuels()）
+        Integer custom = fuels().get(itemId.toString());
+        if (custom != null) {
+            return custom;
         }
 
         // 规则 A：Mekanism 粉碎配方产出生物燃料 → X 生物燃料 → X*200 mb

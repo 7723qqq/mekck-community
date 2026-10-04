@@ -704,6 +704,21 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
         }
     }
 
+    /**
+     * 必须注销 AE2 网格宿主，否则 {@code MekckAe2.HOSTS} 条目永久残留。
+     *
+     * <p>本类是 {@code INetworkPullable}，因此 {@code NetworkChefProgress.isAe2Machine} 判定通过，
+     * {@code MekckAe2.attachCapabilities} 会 {@code HOSTS.computeIfAbsent(be, ...)} 建条目。而
+     * {@code HOSTS} 是 WeakHashMap、其 value 又强引用 key（owner），条目<b>无法被 GC 回收</b>，
+     * 只能靠 {@code AE2Compat.onRemoved → destroy → HOSTS.remove} 显式清理。其余 12 个同类 BE
+     * 都有这个覆写，本类此前缺失 ⇒ 每放置一台就把 BlockEntity 永久钉在静态 map 里。</p>
+     */
+    @Override
+    public void setRemoved() {
+        super.setRemoved();
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);

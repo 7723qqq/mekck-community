@@ -8,7 +8,9 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import mezz.jei.api.constants.VanillaTypes;
@@ -267,16 +269,19 @@ public class PlantingCuttingRecipeCategory implements IRecipeCategory<PlantingCu
     }
 
     private static List<ItemStack> getNutrientProviders() {
-        // 兜底物品：mekmm 营养液桶（若未来注册）→ mekmm 营养糊剂桶 → 空
-        ItemStack bucket = new ItemStack(ForgeRegistries.ITEMS.getValue(
-                new ResourceLocation("mekmm", "nutrient_solution_bucket")), 1);
-        if (!bucket.isEmpty()) {
-            return Collections.singletonList(bucket);
+        // 兜底物品：mekmm 营养液桶（若未来注册）→ mekmm 营养糊剂桶 → 空。
+        // mekmm 只是可选依赖：未安装时 getValue 返回 null，而 new ItemStack(null, 1) 的第一步
+        // 就是 ItemLike.asItem() 解引用 ⇒ 直接 NPE（本分类无条件注册），所以必须先判空再构造；
+        // 语义保持「优先气体、退化到桶物品、都没有就空」，写法对齐 JEIPlugin.makeWineCellarInfoRecipe。
+        Item bucketItem = ForgeRegistries.ITEMS.getValue(
+                new ResourceLocation("mekmm", "nutrient_solution_bucket"));
+        if (bucketItem != null && bucketItem != Items.AIR) {
+            return Collections.singletonList(new ItemStack(bucketItem, 1));
         }
-        ItemStack paste = new ItemStack(ForgeRegistries.ITEMS.getValue(
-                new ResourceLocation("mekmm", "nutritional_paste_bucket")), 1);
-        if (!paste.isEmpty()) {
-            return Collections.singletonList(paste);
+        Item pasteItem = ForgeRegistries.ITEMS.getValue(
+                new ResourceLocation("mekmm", "nutritional_paste_bucket"));
+        if (pasteItem != null && pasteItem != Items.AIR) {
+            return Collections.singletonList(new ItemStack(pasteItem, 1));
         }
         return Collections.emptyList();
     }

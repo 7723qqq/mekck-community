@@ -26,6 +26,8 @@ import net.minecraftforge.fluids.FluidStack;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.Containers;
 import net.minecraft.world.phys.Vec3;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -61,6 +63,8 @@ import java.util.Set;
  * 取跨罐最大值——与 {@code drainOf} 的「单罐足量」判定<b>同一口径</b>。
  */
 public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CookingFactoryExecutor.class);
 
     /**
      * 与旧存档<b>逐字同名</b>的键：{@code MekCkLegacyMachineNbt} 只换位置不改名。
@@ -472,14 +476,12 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
         if (bound <= 0) {
             return 0;
         }
-        // 再逐单位校验可行性。贪心首匹配会挑错栈（两个 Ingredient 都能被同一栈
-        // 满足时），旧实现因此出现过「材料被错误消耗、进度条空转、订单永不完成」。
-        for (int unit = 0; unit < bound; unit++) {
-            if (findAssignment(scan, all) == null) {
-                return unit;
-            }
-        }
-        return bound;
+        // 再逐单位「真消耗」地校验可行性。只证明「1 份可行」是错的——两个 Ingredient
+        // 能被同一栈同时满足时（重叠配料），第 k 份的互异槽位分配可能失败；旧实现在
+        // 未被消耗的同一 scan 上反复调用纯函数 findAssignment，每轮结果恒同，于是把
+        // 解析上界 bound 当成了可行份数。planUnits 在「槽位计数镜像」上逐单位递减，
+        // 与 consumeIngredients 共用同一入口，「预检说能做 N 份」严格蕴含「这 N 份都扣得动」。
+        return planUnits(scan, all, bound).length;
     }
 
     /** 某种配料在「输入 + 存储」里一共还剩几个。配料为空视为无限。 */
@@ -572,20 +574,23 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
     }
 
     /**
-     * 扣固体配料 —— 逐单位做「回溯分配 → 各扣 1 个」。
+     * 扣固体配料 —— 按 {@link #planUnits} 算出的分配计划逐单位「各扣 1 个」。
      *
      * <p><b>必须回溯而不是贪心</b>：一个 Ingredient 可以被多个栈满足，
      * 而一张配方可能有两个 Ingredient 都能被同一个栈满足。贪心取首个匹配时，
      * 第一个 Ingredient 抢走了第二个唯一能用的栈，于是「校验说能做、扣的时候扣不动」
      * ——旧实现的症状是材料被错误消耗、进度条空转、订单永不完成，
-     * AE2 网络按精确物品抽料时最容易触发（AE2 时代的实测故障）。
-     * 分配逻辑与 {@link #batchSize} 里的可行性校验<b>是同一个方法</b>，
-     * 所以「能匹配」严格蕴含「能消耗」。</p>
+     * AE2 网络按精确物品抽料时最容易触发（AE2 时代的实测故障）。</p>
+     *
+     * <p>预检（{@link #batchSize}）与这里<b>共用同一分配入口</b> {@link #planUnits}：
+     * 预检返回的份数就是该计划的行数，所以按计划逐单位扣减不会中途失败——
+     * 旧实现「扣了一半失败、整批流体已扣、零产出且无日志」的路径至此消失。</p>
      *
      * <p>返还物按<b>每个单位的实际匹配栈</b>算：空碗/空瓶来自那件被扣掉的物品，
      * 不是来自配方声明（同一个 Ingredient 匹配到水桶与水瓶时返还物不同）。</p>
      *
-     * @return false = 扣不动（理论上不该发生：批量已用同款分配校验过）
+     * @return false = 扣不动（计划与真实槽位不一致，理论上不该发生）；
+     *         此时打 WARN 记录配方 id / 请求份数 / 失败单位，不静默
      */
     private boolean consumeIngredients(List<IInventorySlot> scan, Recipe<?> recipe, int batch) {
         List<Ingredient> all = allToConsume(recipe);
@@ -595,16 +600,40 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
         // 返还物先攒着、最后统一落槽：逐单位边扣边插会让扫描集合在本单位中途变形，
         // 而扫描集合正是下一单位分配的下标依据（旧实现第 1206-1208 行同款理由）。
         List<ItemStack> pendingReturns = new ArrayList<>();
-        for (int unit = 0; unit < batch; unit++) {
-            int[] assignment = findAssignment(scan, all);
-            if (assignment == null) {
-                return false;
-            }
+        int[][] plan = planUnits(scan, all, batch);
+        if (plan.length < batch) {
+            LOGGER.warn("CookingFactory batch feasibility diverged from live inventory: recipe={}, requested={}, plannable={}",
+                    recipe.getId(), batch, plan.length);
+            return false;
+        }
+        int consumed = consumePlan(scan, all, plan, pendingReturns);
+        giveBackRemainingItems(pendingReturns);
+        if (consumed < batch) {
+            LOGGER.warn("CookingFactory ingredient consumption stopped early: recipe={}, requested={}, consumed={}",
+                    recipe.getId(), batch, consumed);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 按计划逐单位扣减真实槽位。返回<b>完整扣完的份数</b>，任一槽与计划不符即停在当前份。
+     *
+     * <p>抽成 {@code static} 是为能在裸 JVM 里用假槽位断言（真机器需要
+     * {@code BlockEntityType} 注册表），也保证它与预检用的镜像分配走同一份计划。</p>
+     */
+    static int consumePlan(List<IInventorySlot> scan, List<Ingredient> all,
+                           int[][] plan, List<ItemStack> pendingReturns) {
+        int unit = 0;
+        for (int[] assignment : plan) {
             for (int i = 0; i < all.size(); i++) {
                 int slotIndex = assignment[i];
+                if (slotIndex < 0 || slotIndex >= scan.size()) {
+                    return unit;
+                }
                 ItemStack stack = scan.get(slotIndex).getStack();
                 if (stack.isEmpty()) {
-                    return false;
+                    return unit;
                 }
                 // 快照是「缩量之前」的那 1 个：剩余物判定看的是被扣掉的是哪件东西。
                 ItemStack snapshot = stack.copyWithCount(1);
@@ -615,27 +644,71 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
                 pendingReturns.addAll(
                         FluidIngredientHelper.getReturnStacksForConsumed(snapshot, all.get(i)));
             }
+            unit++;
         }
-        giveBackRemainingItems(pendingReturns);
-        return true;
+        return unit;
     }
 
     /**
-     * 回溯分配：给每种配料挑一个互不相同的槽。返回 {@code all.get(i) → 槽下标}，
-     * 无解时返回 null。
+     * 逐单位分配计划 —— <b>预检与消耗共用的唯一入口</b>。
+     *
+     * <p>在「槽位计数镜像」上跑与真实扫描同一套回溯分配：{@code sample} 记每个槽当前的
+     * 代表栈（耗尽即置空）、{@code remaining} 记剩余个数。每定下一单位的
+     * {@code 配料 → 槽下标} 分配，就按分配把对应槽的计数减 1，于是<b>下一单位看到的是
+     * 已被消耗过的状态</b>——这正是旧实现缺的一步（它对未被消耗的 scan 反复调用纯函数，
+     * 每轮结果恒同，只证明 1 份可行）。</p>
+     *
+     * <p>返回数组的行数即真实可行份数（{@code <= maxUnits}）；每行与该单位在真实槽位上
+     * 应执行的分配一致，故 {@link #consumePlan} 按此逐单位扣减不会中途失败。</p>
+     *
+     * @param maxUnits 解析上界（由 {@link #batchSize} 用配料总数 / 流体 / 倍增给出），
+     *                 也即循环封顶——避免对奇点档的 {@code stackMultiplier} 空转
+     */
+    static int[][] planUnits(List<IInventorySlot> scan, List<Ingredient> all, int maxUnits) {
+        if (scan == null || all == null || all.isEmpty() || maxUnits <= 0) {
+            return new int[0][];
+        }
+        int slots = scan.size();
+        ItemStack[] sample = new ItemStack[slots];
+        int[] remaining = new int[slots];
+        for (int i = 0; i < slots; i++) {
+            ItemStack stack = scan.get(i).getStack();
+            // sample 只作匹配读，不写回真实槽位；remaining 为 0 时视为空。
+            sample[i] = stack.isEmpty() ? ItemStack.EMPTY : stack;
+            remaining[i] = stack.isEmpty() ? 0 : stack.getCount();
+        }
+        List<int[]> plan = new ArrayList<>();
+        for (int unit = 0; unit < maxUnits; unit++) {
+            int[] assignment = findAssignment(sample, remaining, all);
+            if (assignment == null) {
+                break;
+            }
+            plan.add(assignment);
+            for (int i = 0; i < all.size(); i++) {
+                int slot = assignment[i];
+                if (--remaining[slot] <= 0) {
+                    sample[slot] = ItemStack.EMPTY;
+                }
+            }
+        }
+        return plan.toArray(new int[0][]);
+    }
+
+    /**
+     * 回溯分配（作用在 {@link #planUnits} 的计数镜像上）：给每种配料挑一个互不相同的槽，
+     * 返回 {@code all.get(i) → 槽下标}，无解时返回 null。{@code remaining[i] <= 0} 的槽视作空。
      *
      * <p>排序用「候选最少的配料先分」（最少剩余值启发式），否则
      * 144 格存储的扫描里最坏情况会退化成阶乘。逐字对齐旧实现的
      * {@code findCustomMatches} + {@code backtrackCustomMatches}。</p>
      */
-    static int[] findAssignment(List<IInventorySlot> scan, List<Ingredient> ingredients) {
+    static int[] findAssignment(ItemStack[] sample, int[] remaining, List<Ingredient> ingredients) {
         int count = ingredients.size();
         List<List<Integer>> matches = new ArrayList<>(count);
         for (Ingredient ingredient : ingredients) {
             List<Integer> matching = new ArrayList<>();
-            for (int i = 0; i < scan.size(); i++) {
-                ItemStack stack = scan.get(i).getStack();
-                if (!stack.isEmpty() && ingredient.test(stack)) {
+            for (int i = 0; i < sample.length; i++) {
+                if (remaining[i] > 0 && !sample[i].isEmpty() && ingredient.test(sample[i])) {
                     matching.add(i);
                 }
             }
@@ -650,7 +723,7 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
         }
         order.sort(java.util.Comparator.comparingInt(i -> matches.get(i).size()));
         int[] result = new int[count];
-        boolean[] used = new boolean[scan.size()];
+        boolean[] used = new boolean[sample.length];
         return backtrack(matches, order, 0, used, result) ? result : null;
     }
 

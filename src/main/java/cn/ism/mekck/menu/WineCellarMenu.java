@@ -1,188 +1,109 @@
 package cn.ism.mekck.menu;
 
-import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.WineCellarBlockEntity;
-import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.WideDataSlot;
-import mekanism.common.inventory.container.IGUIWindow;
-import mekanism.common.inventory.container.slot.IVirtualSlot;
-import net.minecraft.core.BlockPos;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ContainerData;
-import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.Level;
-import net.minecraftforge.items.ItemStackHandler;
-import net.minecraftforge.items.SlotItemHandler;
-
-import java.util.function.IntSupplier;
+import cn.ism.mekck.menu.slot.MekCkSlots;
 import cn.ism.mekck.registry.MekCkStandaloneMachines;
+import mekanism.common.inventory.container.tile.MekanismTileContainer;
+import net.minecraft.world.entity.player.Inventory;
 
 /**
- * 陈化窖（F20）菜单：9 个普通储存格（既放酒也取酒，箱子式）+ 电源槽（§F45）+ 玩家物品栏；
- * ContainerData 同步每格进度 / 能量 / 当前倍速 / 陈化中格数。无输出槽、无燃料槽、无升级槽。
+ * 陈化窖（F20）菜单 —— Mek 体系版。
+ *
+ * <h3>本类为什么只剩这么点</h3>
+ * 迁移前它有 190 行：9 个 {@code StoreSlot} + 1 个 {@code PowerSlot} 两个手写的
+ * {@code SlotItemHandler implements IVirtualSlot} 私有类、逐格 {@code addSlot}、
+ * 玩家背包槽、{@code quickMoveStack}、{@code stillValid}、以及 8 个直接从
+ * {@code ContainerData} 读数的 getter。
+ *
+ * <p>其中绝大部分是<b>被自研体系逼出来的</b>，不是设计：</p>
+ * <ul>
+ *   <li><b>手写槽类</b>：{@code SlotItemHandler} 继承原版 {@code Slot}，Mek 的
+ *       {@code GuiMekanism.addSlots()} 不认它（只对 {@code InventoryContainerSlot} 建 widget），
+ *       所以每个槽都要手写一遍 {@code IVirtualSlot} 的 8 个方法，屏幕再用手画的
+ *       {@code GuiVirtualSlot} 补一份渲染——<b>于是同一个槽在菜单与屏幕各有一套坐标，
+ *       靠 ±1 凑合</b>。这正是本次重写的动因。</li>
+ *   <li><b>逐格 addSlot</b>：Mek 的 {@code MekanismTileContainer.addSlots()} 会遍历
+ *       {@code tile.getInventorySlots(null)} 自动装配，槽的坐标就是 tile 建槽时写进去的。</li>
+ *   <li><b>数据 getter</b>：{@code addDataSlots(ContainerData)} 换成
+ *       {@code WineCellarBlockEntity.addContainerTrackers} 的 Mek 同步通道后，
+ *       菜单直接问 tile 即可——两侧同一入口，不必再经下标读 ContainerData。</li>
+ * </ul>
+ *
+ * <p>玩家背包/快捷栏/副手也由 {@code MekanismContainer.addSlots()} 挂好，
+ * 与其余 Mek 体系机器一致。</p>
  */
-public final class WineCellarMenu extends AbstractContainerMenu {
-    // 3×3 储存格网格（与 WineCellarScreen 一致）
-    public static final int GRID_X0 = 62;
-    public static final int GRID_Y0 = 18;
-    public static final int GRID_SPACING = 18;
-    public static final int GRID_COLS = 3;
-    public static final int INV_TOP = 103;
-    public static final int IMAGE_WIDTH = 176;
-    public static final int IMAGE_HEIGHT = 184;
-    /** §F45：电源槽坐标（与 Screen 的 GuiVirtualSlot 完全一致，点击命中按 Slot.x/y 判定）。 */
-    public static final int POWER_X = 6;
-    public static final int POWER_Y = 12;
+public final class WineCellarMenu extends MekanismTileContainer<WineCellarBlockEntity> {
 
-    private final WineCellarBlockEntity machine;
-    private final ContainerData data;
-
-    public WineCellarMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
-        this(containerId, inventory,
-                (WineCellarBlockEntity) inventory.player.level().getBlockEntity(buffer.readBlockPos()));
+    public WineCellarMenu(int containerId, Inventory inventory, WineCellarBlockEntity tile) {
+        super(resolveContainer(), containerId, inventory, tile);
     }
 
-    public WineCellarMenu(int containerId, Inventory inventory, WineCellarBlockEntity machine) {
-        this(containerId, inventory, machine, machine.getData());
-    }
-
-    public WineCellarMenu(int containerId, Inventory inventory, WineCellarBlockEntity machine, ContainerData data) {
-        super(MekCkStandaloneMachines.WINE_CELLAR_MENU.get(), containerId);
-        this.machine = machine;
-        this.data = data;
-
-        ItemStackHandler items = machine.getItems();
-        for (int i = 0; i < WineCellarBlockEntity.SLOT_COUNT; i++) {
-            int row = i / GRID_COLS;
-            int col = i % GRID_COLS;
-            addSlot(new StoreSlot(items, i, GRID_X0 + col * GRID_SPACING, GRID_Y0 + row * GRID_SPACING));
+    /**
+     * 容器类型从注册表取回。
+     *
+     * <p>父类要求非空（{@code MekanismContainer} 用它做 {@code IContainerTracker} 的身份标识）。
+     * 与 {@code CuttingMachineFactoryMenu#resolveContainer} 同款：拿不到就抛出<b>指明根因</b>的
+     * 异常，而不是把 null 传给父类。</p>
+     */
+    private static mekanism.common.registration.impl.ContainerTypeRegistryObject<WineCellarMenu> resolveContainer() {
+        mekanism.common.registration.impl.ContainerTypeRegistryObject<WineCellarMenu> container =
+                MekCkStandaloneMachines.WINE_CELLAR_CONTAINER;
+        if (container == null) {
+            throw new IllegalStateException("陈化窖容器尚未注册（WINE_CELLAR_CONTAINER == null）");
         }
-
-        // §F45：电源槽（能量物品/红石），左上角，同急冻制冰机对位
-        addSlot(new PowerSlot(items, WineCellarBlockEntity.SLOT_POWER, POWER_X, POWER_Y));
-
-        int invLeft = (IMAGE_WIDTH - 162) / 2;
-        for (int row = 0; row < 3; row++) {
-            for (int column = 0; column < 9; column++) {
-                addSlot(new Slot(inventory, column + row * 9 + 9, invLeft + column * 18, INV_TOP + row * 18));
-            }
-        }
-        for (int column = 0; column < 9; column++) {
-            addSlot(new Slot(inventory, column, invLeft + column * 18, INV_TOP + 58));
-        }
-
-        addDataSlots(data);
+        return container;
     }
 
-    public WineCellarBlockEntity getMachine() {
-        return machine;
-    }
+    // ================== 读数：全部问 tile（两侧同一入口） ==================
 
-    public BlockPos getBlockPos() {
-        return machine.getBlockPos();
-    }
-
-    @Override
-    public boolean stillValid(Player player) {
-        Level level = player.level();
-        return level.getBlockEntity(machine.getBlockPos()) == machine
-                && player.distanceToSqr(machine.getBlockPos().getX() + 0.5D, machine.getBlockPos().getY() + 0.5D,
-                machine.getBlockPos().getZ() + 0.5D) <= 64.0D;
-    }
-
-    @Override
-    public ItemStack quickMoveStack(Player player, int index) {
-        Slot slot = slots.get(index);
-        if (!slot.hasItem()) return ItemStack.EMPTY;
-        ItemStack stack = slot.getItem();
-        ItemStack copy = stack.copy();
-        int machineSlots = WineCellarBlockEntity.TOTAL_SLOTS;
-        if (index < machineSlots) {
-            if (!moveItemStackTo(stack, machineSlots, slots.size(), true)) return ItemStack.EMPTY;
-        } else {
-            // 玩家 → 机器：能量物品优先入电源槽，其余入 9 储存格
-            if (WineCellarBlockEntity.isUsablePowerItem(stack)) {
-                if (!moveItemStackTo(stack, WineCellarBlockEntity.SLOT_POWER,
-                        WineCellarBlockEntity.SLOT_POWER + 1, false)) return ItemStack.EMPTY;
-            } else if (!moveItemStackTo(stack, 0, WineCellarBlockEntity.SLOT_COUNT, false)) return ItemStack.EMPTY;
-        }
-        if (stack.isEmpty()) slot.set(ItemStack.EMPTY);
-        else slot.setChanged();
-        return copy;
-    }
-
-    // ================== 数据访问（客户端从 ContainerData 读） ==================
+    /** 存量（展示用 int；真实值是 Mek 的 FloatingLong，见 tile）。 */
     public int getEnergy() {
-        return WideDataSlot.read(data,
-                WineCellarBlockEntity.DATA_ENERGY,
-                WineCellarBlockEntity.DATA_ENERGY_HI);
+        return (int) Math.min(Integer.MAX_VALUE, getTileEntity().getEnergyForDisplay());
     }
 
     public int getEnergyCapacity() {
-        return data.get(WineCellarBlockEntity.DATA_CAPACITY);
+        return (int) Math.min(Integer.MAX_VALUE, WineCellarBlockEntity.ENERGY_CAPACITY);
     }
 
     public int getSpeed() {
-        return data.get(WineCellarBlockEntity.DATA_SPEED);
+        return getTileEntity().getSpeed();
     }
 
     public int getActiveCount() {
-        return data.get(WineCellarBlockEntity.DATA_ACTIVE);
+        return getTileEntity().getActiveCount();
     }
 
     /** 第 slot 格进度百分比（-1 = 空格/非酒）。 */
     public int getSlotProgress(int slot) {
-        if (slot < 0 || slot >= WineCellarBlockEntity.SLOT_COUNT) return 0;
-        return data.get(WineCellarBlockEntity.DATA_PROGRESS0 + slot);
+        return getTileEntity().progressPercent(slot);
     }
 
-    /** §F45：电源槽（只收能量物品/红石），坐标与 Screen 的 GuiVirtualSlot 对齐。 */
-    private static final class PowerSlot extends SlotItemHandler implements IVirtualSlot {
-        private PowerSlot(ItemStackHandler handler, int slot, int x, int y) {
-            super(handler, slot, x, y);
-        }
-
-        @Override
-        public boolean mayPlace(ItemStack stack) {
-            return PowerSlotUtil.isValidEnergyItem(stack);
-        }
-
-        @Override public boolean isActive() { return true; }
-        @Override public IGUIWindow getLinkedWindow() { return null; }
-        @Override public int getActualX() { return x; }
-        @Override public int getActualY() { return y; }
-        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
-        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
-        @Override public ItemStack getStackToRender() { return getItem(); }
-        @Override public boolean shouldDrawOverlay() { return false; }
-        @Override public String getTooltipOverride() { return null; }
-        @Override public Slot getSlot() { return this; }
+    /**
+     * 方块坐标 —— 屏幕发网络包（如 {@code WineCellarConfigPacket}）时要用。
+     *
+     * <p>迁移前这个方法是菜单自己实现（直接问 machine）；现在问父类持有的 tile 即可，
+     * 语义不变。</p>
+     */
+    public net.minecraft.core.BlockPos getBlockPos() {
+        return getTileEntity().getBlockPos();
     }
 
-    /** 普通储存格（IVirtualSlot 以关闭原版槽底、交给 GuiVirtualSlot 绘制）。 */
-    private static final class StoreSlot extends SlotItemHandler implements IVirtualSlot {
-        private StoreSlot(ItemStackHandler handler, int slot, int x, int y) {
-            super(handler, slot, x, y);
-        }
+    /**
+     * 电源槽在 {@code menu.slots} 里的下标 —— 屏幕定位或诊断用。
+     *
+     * <p>槽位顺序由 tile 的 {@code getInitialInventory} 决定：9 个存储格在前、
+     * 电源槽最后，因此下标恒为 {@link WineCellarBlockEntity#SLOT_POWER}。</p>
+     */
+    public int getPowerSlotIndex() {
+        return WineCellarBlockEntity.SLOT_POWER;
+    }
 
-        @Override
-        public int getMaxStackSize(ItemStack stack) {
-            return getItemHandler().getSlotLimit(getContainerSlot());
-        }
-
-        @Override public boolean isActive() { return true; }
-        @Override public IGUIWindow getLinkedWindow() { return null; }
-        @Override public int getActualX() { return x; }
-        @Override public int getActualY() { return y; }
-        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
-        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
-        @Override public ItemStack getStackToRender() { return getItem(); }
-        @Override public boolean shouldDrawOverlay() { return false; }
-        @Override public String getTooltipOverride() { return null; }
-        @Override public Slot getSlot() { return this; }
+    /**
+     * 存储格在 {@code menu.slots} 里的下标（0..8），坐标见 {@link MekCkSlots.WineCellar}。
+     *
+     * <p>菜单不再自己算坐标——那是 tile 建槽时写死的，这里是<b>唯一</b>的坐标出处。</p>
+     */
+    public int getStorageSlotIndex(int storageIndex) {
+        return storageIndex;
     }
 }

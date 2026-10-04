@@ -32,6 +32,7 @@ import mekanism.common.tile.prefab.TileEntityConfigurableMachine;
 import mekanism.common.util.MekanismUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import org.slf4j.Logger;
@@ -118,7 +119,8 @@ import java.util.Set;
  * {@code getTier()} 的返回类型）一个字符都不许改</b>，否则切菜工厂存档里的存储卡
  * 会在读档时被 {@code isSupportedBy(STORAGE, null)} 静默判 false，且没有任何日志。
  */
-public abstract class MekCkMachineTile extends TileEntityConfigurableMachine implements ISustainedData {
+public abstract class MekCkMachineTile extends TileEntityConfigurableMachine
+        implements ISustainedData, cn.ism.mekck.ae2.INetworkPullable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MekCkMachineTile.class);
 
@@ -310,6 +312,82 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
     /** 本工艺家族。{@code null} 表示方块未携带工艺信息。 */
     public MekCkFactoryType getFactoryType() {
         return typeFromBlock();
+    }
+
+    // ── AE2 网络拉料（docs/2026-09-30-功能实现口径.md §2.4：基类统一实现，不给每个家族各写一份）──
+    //
+    // INetworkPullable 是旧方块实体时代的契约，{@code getNetworkPullItems()} 的返回类型被
+    // 写死成 Forge 的 {@code ItemStackHandler}；本 tile 的槽是 Mek 的 {@link IInventorySlot}，
+    // 中间用 {@link MekCkSlotHandler} 只读视图适配（不持有 ItemStack，读写直接落到槽对象，
+    // 视图与真身永不失同步）。接口补齐后：6 个工厂家族 + 电力烧烤架自动拿回「网络拉料 /
+    // 自动补料」tab（{@code NetworkPullButton} 按 {@code instanceof} 判定）与面板 ME 下单。
+
+    /** {@link MekCkSlotHandler} 视图缓存。{@code getInitialInventory} 每实例只跑一次，懒加载即可。 */
+    private MekCkSlotHandler pullItemsView;
+
+    @Override
+    public net.minecraft.world.level.block.entity.BlockEntity getNetworkPullable() {
+        return this;
+    }
+
+    @Override
+    public int[] getInputSlotRange() {
+        // 区间是 **MekCkSlotHandler 视图的下标**（视图只含输入槽），不是 menu.slots 下标。
+        // inputSlots 在父类构造器内经 getInitialInventory 赋值；null 只出现在构造期窗口。
+        return inputSlots == null ? new int[]{0, 0} : new int[]{0, inputSlots.size()};
+    }
+
+    @Override
+    public net.minecraftforge.items.ItemStackHandler getNetworkPullItems() {
+        MekCkSlotHandler view = pullItemsView;
+        if (view == null) {
+            view = new MekCkSlotHandler(getInputSlots());
+            pullItemsView = view;
+        }
+        return view;
+    }
+
+    @Override
+    public boolean supportsAutoPull() {
+        // 与制冰工厂的遗留实现同口径：按「每类型上限」（配置 auto_pull_stack_limit）批量补，
+        // LagMonitor 限流在 MekckAe2 侧。
+        return true;
+    }
+
+    @Override
+    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+        if (level == null) {
+            return List.of();
+        }
+        MekCkFactoryType family = getFactoryType();
+        ResourceLocation typeId = family == null ? null : networkPullRecipeTypeId(family);
+        if (typeId == null) {
+            return List.of();
+        }
+        List<IInventorySlot> inputs = getInputSlots();
+        ItemStack slot0 = inputs.isEmpty() ? ItemStack.EMPTY : inputs.get(0).getStack();
+        return cn.ism.mekck.util.NetworkPullHelper.currentOrUnion(level, slot0, typeId);
+    }
+
+    /**
+     * 家族 → 拉料配方类型 id（{@code NetworkPullHelper.currentOrUnion} 的「当前或并集」口径
+     * 需要一个类型 id）。注册名与各家族 Executor 的实际查找逐字对齐：
+     * 切菜走 FarmersDelight 的 cutting、烹饪走 FarmersDelight 的 cooking
+     * （烹饪家族另有 farm_and_charm / avaritia_delight 扩展类型，拉料口径暂取主类型，
+     * 与遗留单机的单类型局限一致）；种植切配的注册名是 {@code plantcut}（不是
+     * {@code planting_cutting}），制冰是 {@code ice_make} —— 都以 MekCkRecipeTypes 的
+     * 注册名为准，不能由家族名推导。
+     */
+    protected ResourceLocation networkPullRecipeTypeId(MekCkFactoryType family) {
+        return switch (family) {
+            case CUTTING -> new ResourceLocation("farmersdelight", "cutting");
+            case PLANTING_CUTTING -> new ResourceLocation("mekck", "plantcut");
+            case COOKING -> new ResourceLocation("farmersdelight", "cooking");
+            case SKEWERING -> new ResourceLocation("mekck", "skewering");
+            case GRILLING -> new ResourceLocation("mekck", "grilling");
+            case GRINDING -> new ResourceLocation("mekck", "grinding");
+            case ICE -> new ResourceLocation("mekck", "ice_make");
+        };
     }
 
     // ── 槽位与能量 ───────────────────────────────────────────────────────
@@ -1925,13 +2003,17 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine imp
     // 因此 MekCK 自有的键必须自己接这一钩子，否则「挖掉再放下」等于整机清零。
     //
     // ⚠️ 键契约（与战利品表 copy_nbt 的 target 路径逐字对齐，全部在 BE 存档根 / mekData 根）：
-    //   MekCkSlots        (CompoundTag)  int 下标槽位存档，见 MekCkSlotNbt
-    //   mekckExecutor     (CompoundTag)  执行器自有状态（订单等）
-    //   MekCkWorkProgress (int)          进度条
-    //   MekCkNative       (int)          存档格式版本
-    //   GasTank           (CompoundTag)  种植切配的营养液罐（家族钩子）
-    //   FluidTanks        (CompoundTag)  烹饪的三个流体罐（家族钩子）
-    //   MekckPlacerUuid   (UUID)         放置者归属（PlacerPersist，可选）
+    //   MekCkSlots             (CompoundTag)  int 下标槽位存档，见 MekCkSlotNbt
+    //   mekckExecutor          (CompoundTag)  执行器自有状态（订单等）
+    //   MekCkWorkProgressArray (int[])        每路并行各自的进度（v2 权威键）
+    //   MekCkSorting           (boolean)      输入槽自动分选开关
+    //   MekCkNative            (int)          存档格式版本
+    //   GasTank                (CompoundTag)  种植切配的营养液罐（家族钩子）
+    //   FluidTanks             (CompoundTag)  烹饪的三个流体罐（家族钩子）
+    //   MekckPlacerUuid        (UUID)         放置者归属（PlacerPersist，可选）
+    // v1 的 MekCkWorkProgress（单个 int）**不在**本契约内：写侧自 v2 起只写
+    // MekCkWorkProgressArray，战利品表若仍复制它只会把一个读侧从不认领的键搬进掉落物；
+    // 只有读侧 readWorkProgress 为旧档保留那一次 fallback。
     // AE2 节点键（MekckAe2Main / MekckAe2Extra1..7 / MekCkAutoSel）<b>刻意不搬</b>：
     // 节点在拆机时已被 AE2Compat.onRemoved 销毁，重新放置时应按新节点重新入网。
 

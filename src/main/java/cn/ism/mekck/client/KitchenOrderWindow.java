@@ -40,8 +40,10 @@ public class KitchenOrderWindow extends GuiWindow {
     private int familyMaskCache = -1;
 
     public KitchenOrderWindow(IGuiWrapper gui, CentralKitchenMenu menu) {
+        // 窗口身份必须用 UNSPECIFIED（同 NetworkOrderWindow）：UPGRADE 会与升级窗共用
+        // 「上次位置」存档，先开升级窗再开本窗会弹到升级窗的旧位置上。
         super(gui, gui.getWidth() / 2 - 120, 18, 240, 176,
-                mekanism.common.inventory.container.SelectedWindowData.WindowType.UPGRADE);
+                mekanism.common.inventory.container.SelectedWindowData.WindowType.UNSPECIFIED);
         this.menu = menu;
         interactionStrategy = InteractionStrategy.ALL;
     }

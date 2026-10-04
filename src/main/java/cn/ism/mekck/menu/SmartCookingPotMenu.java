@@ -278,7 +278,10 @@ public final class SmartCookingPotMenu extends AbstractContainerMenu implements 
 
     /** 客户端重建指定槽位的 FluidStack；空槽返回 EMPTY。 */
     public FluidStack getFluidStack(int tankIndex) {
-        int amount = data.get(SmartCookingPotBlockEntity.DATA_FLUID_AMOUNT0 + tankIndex);
+        // 量拆两槽（满罐可达 Integer.MAX_VALUE，裸读低槽会被读成负数 → 误判空罐），类型仍单槽。
+        int amount = WideDataSlot.read(data,
+                SmartCookingPotBlockEntity.DATA_FLUID_AMOUNT0 + tankIndex,
+                SmartCookingPotBlockEntity.DATA_FLUID_AMOUNT_HI0 + tankIndex);
         if (amount <= 0) return FluidStack.EMPTY;
         int typeId = data.get(SmartCookingPotBlockEntity.DATA_FLUID_TYPE0 + tankIndex);
         Fluid fluid = typeId >= 0 ? BuiltInRegistries.FLUID.byId(typeId) : Fluids.EMPTY;

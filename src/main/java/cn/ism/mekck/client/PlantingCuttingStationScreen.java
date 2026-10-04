@@ -32,7 +32,6 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
 public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCuttingStationMenu> implements NetworkOrderHost {
     private final cn.ism.mekck.client.BigStackHud bigStackHud = new cn.ism.mekck.client.BigStackHud();
-    private boolean upgradePage = false;
 
     // Mekanism-style tab positions
     // Left side: config tab
@@ -63,14 +62,9 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
     private static final ResourceLocation CONFIG_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "configuration.png");
     private static final ResourceLocation UPGRADE_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "upgrade.png");
 
-    // Upgrade slot positions (on upgrade page, matching menu slot positions)
-    // Left column: speed (8,17), energy (8,53)
-    // Right column: gas (152,17), creative (152,35)
-    private static final int UPGRADE_SLOT_X = 8;
-    private static final int UPGRADE_SPEED_Y = 17;
-    private static final int UPGRADE_ENERGY_Y = 53;
-    private static final int UPGRADE_CREATIVE_Y = 35;
-    private static final int UPGRADE_GAS_Y = 17;
+    // Upgrade slot positions（升级浮层时代的旧坐标常量）已随浮层一起删除：
+    // 升级界面迁到全项目统一的 GuiUpgradeWindow（menu 实现了 IUpgradeMenu，
+    // 气体/创造升级在窗口里由 MekCkUpgradeType.GAS/CREATIVE 呈现）。
 
     public PlantingCuttingStationScreen(PlantingCuttingStationMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -171,7 +165,6 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
      */
     private void addTabElements() {
         // ── 左列（2 个）──
-        // 旧行为：点侧配 tab 会顺带收起升级浮层，此副作用原样保留。
         addRenderableWidget(new MekCkTabElement(this, CONFIG_TEXTURE, TAB_X, CONFIG_TAB_Y, true,
                 MekCkTabElement.OUTER, MekCkTabElement.INNER,
                 () -> false,
@@ -179,7 +172,6 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
                 () -> List.of(Component.translatable("tooltip.mekck.side_config")),
                 () -> {
                     openSideConfigWindow();
-                    upgradePage = false;
                 }, null));
 
         // ME 下单在 Mek 里无对应图标：保留本模组自绘的「清单 + 向下箭头」图标，只取官方染色。
@@ -189,13 +181,14 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
                 TAB_X, ORDER_TAB_Y, true, null, () -> orderTab));
 
         // ── 右列（2 个）──
-        // 本屏的「升级 tab」切的是自制浮层（旧 btnState 也以 upgradePage 为准），不弹 Mek 升级窗。
+        // 「升级 tab」开全项目统一的 GuiUpgradeWindow（同 SimpleMachineScreen 等屏）；
+        // tab 的点亮态跟随窗口是否打开（比固定 false 更接近 Mek GuiWindowCreatorTab 的 disableTab 语义）。
         addRenderableWidget(new MekCkTabElement(this, UPGRADE_TEXTURE, imageWidth, UPGRADE_TAB_Y, false,
                 MekCkTabElement.OUTER, MekCkTabElement.INNER,
-                () -> upgradePage,
+                () -> getWindows().stream().anyMatch(w -> w instanceof GuiUpgradeWindow),
                 mekanism.client.SpecialColors.TAB_UPGRADE,
                 () -> List.of(Component.translatable("tooltip.mekck.upgrade")),
-                this::toggleUpgradePage, null));
+                this::openUpgradeWindow, null));
 
         addRenderableWidget(redstoneTab());
 
@@ -208,10 +201,11 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
         }
     }
 
-    /** 升级浮层开关（原在 mouseClicked 内联，迁出为 tab 动作；含旧有的 setUpgradePageActive 同步）。 */
-    private void toggleUpgradePage() {
-        upgradePage = !upgradePage;
-        menu.setUpgradePageActive(upgradePage);
+    /** 升级窗开关：窗口的构造/关闭会经 menu.setUpgradePageActive 激活/停用升级槽（GuiUpgradeWindow 自己管）。 */
+    private void openUpgradeWindow() {
+        if (getWindows().stream().noneMatch(w -> w instanceof GuiUpgradeWindow)) {
+            addWindow(new GuiUpgradeWindow(this, menu));
+        }
     }
 
     /**
@@ -349,82 +343,10 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
             }
         }
 
-        int x = leftPos;
-        int y = topPos;
-
-        // Upgrade page overlay (on top of everything)
-        if (upgradePage) {
-            renderUpgradePage(guiGraphics, x, y);
-        }
+        // 自制升级浮层已删：升级界面走全项目统一的 GuiUpgradeWindow（升级 tab 打开）。
 
         // 侧栏 4 个 tab 的 tooltip 已迁到 MekCkTabElement#renderToolTip，
         // 由 GuiMekanism#renderLabels 在渲染管线最后一层统一派发。
-    }
-
-    private void renderUpgradePage(GuiGraphics guiGraphics, int x, int y) {
-        // Semi-transparent overlay
-        guiGraphics.fill(x + 3, y + 3, x + imageWidth - 3, y + imageHeight - 3, 0xCC000000);
-
-        int slotX = x + UPGRADE_SLOT_X;
-        int speedY = y + UPGRADE_SPEED_Y;
-        int energyY = y + UPGRADE_ENERGY_Y;
-        int creativeY = y + UPGRADE_CREATIVE_Y;
-        int gasY = y + UPGRADE_GAS_Y;
-        int rightSlotX = x + 152; // right column X position
-
-        // Speed upgrade slot (left column, top)
-        guiGraphics.blit(SlotType.INPUT.getTexture(), slotX - 1, speedY - 1, 0, 0, 18, 18, 18, 18);
-        int speedCount = menu.getSpeedUpgradeCount();
-        if (speedCount > 0) {
-            String speedText = "S" + (speedCount > 1 ? "x" + speedCount : "");
-            guiGraphics.drawString(font, speedText, slotX + 2, speedY + 4, 0xFFFFFFFF);
-        }
-        // 复用 UpgradeHelper 的曲线常量：GUI 显示的倍率必须与方块实体实际生效的倍率同源，
-        // 否则调整升级曲线后这里会显示过期数值。
-        double speedMult = cn.ism.mekck.upgrade.UpgradeHelper.speedMultiplier(speedCount);
-        guiGraphics.drawString(font, String.format("Speed: %d (%.1fx)", speedCount, speedMult), slotX + 22, speedY + 4, 0xFFFFFFFF);
-
-        // Energy upgrade slot (left column, bottom)
-        guiGraphics.blit(SlotType.INPUT.getTexture(), slotX - 1, energyY - 1, 0, 0, 18, 18, 18, 18);
-        int energyCount = menu.getEnergyUpgradeCount();
-        if (energyCount > 0) {
-            String energyText = "E" + (energyCount > 1 ? "x" + energyCount : "");
-            guiGraphics.drawString(font, energyText, slotX + 2, energyY + 4, 0xFFFFFFFF);
-        }
-        double consumptionMult = cn.ism.mekck.upgrade.UpgradeHelper.energyConsumptionMultiplier(energyCount);
-        double capacityMult = cn.ism.mekck.upgrade.UpgradeHelper.energyCapacityMultiplier(energyCount);
-        guiGraphics.drawString(font, String.format("Energy: %d (%.2fx/%.1fx)", energyCount, consumptionMult, capacityMult), slotX + 22, energyY + 4, 0xFFFFFFFF);
-
-        // Gas upgrade slot (right column, top)
-        guiGraphics.blit(SlotType.INPUT.getTexture(), rightSlotX - 1, gasY - 1, 0, 0, 18, 18, 18, 18);
-        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.slot.gas").getString(), rightSlotX + 18 + 2, gasY + 4, 0xFFFFFFFF);
-
-        // Creative upgrade slot (right column, middle)
-        // ⚠️ 原先这里是 `boolean hasCreative = menu.getEnergyCapacity() > ENERGY_CAPACITY;`
-        // 然后**再也没用过它**（死变量），而那条判据本身也是错的：ContainerData 经
-        // ClientboundContainerSetDataPacket 传输时对每个值用 writeShort（**16 位有符号**），
-        // 10 万的容量到客户端会被 readShort() 符号扩展成 **-31072**
-        // （0x186A0 → 低 16 位 0x86A0 → 作为 short 是负数），于是 `-31072 > 100_000` 恒假。
-        //
-        // 注意别被「100000 - 65536 = 34464」那种说法骗了：那只是**无符号**解读，
-        // 而 readShort() 返回有符号 short，赋给 int 字段时会发生符号扩展。
-        // -31072 是 TestWideDataSlot#channelIsSixteenBitSigned 拿真实包往返实测出来的。
-        //
-        // 现在改读专用的 DATA_CREATIVE_UPGRADE（值域 {0,1}，不可能溢出），与
-        // client/MekCkUpgradeType 里 `case CREATIVE -> menu.getCreativeUpgradeCount()`
-        // 的既有约定一致。
-        //
-        // 状态表现刻意用**文字着色**而不是换槽位贴图：javap 实测 Mek 的
-        // mekanism.client.gui.element.slot.SlotType 只有 NORMAL / DIGITAL / POWER /
-        // EXTRA / INPUT / INPUT_2 / OUTPUT / OUTPUT_2 / OUTPUT_WIDE / OUTPUT_LARGE /
-        // ORE / INNER_HOLDER_SLOT —— **没有 CREATIVE**，拿 POWER 顶替会给出误导性的图标。
-        boolean hasCreative = menu.getCreativeUpgradeCount() > 0;
-        guiGraphics.blit(SlotType.INPUT.getTexture(), rightSlotX - 1, creativeY - 1, 0, 0, 18, 18, 18, 18);
-        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.slot.creative").getString(), rightSlotX + 18 + 2, creativeY + 4,
-                hasCreative ? 0xFFFF55 : 0xFFFFFFFF);
-
-        // Label at top
-        guiGraphics.drawString(font, Component.translatable("gui.mekck.upgrades").getString(), x + 10, y + 10, 0xFFFFFFFF);
     }
 
     @Override

@@ -34,6 +34,9 @@ import cn.ism.mekck.registry.MekCkStandaloneMachines;
 public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.entity.BlockEntity
         implements MenuProvider, cn.ism.mekck.ae2.INetworkPullable {
 
+    /** 材料兜底掉落的告警出口：玩家读不到，只为服务端排查「守恒被打破」。 */
+    private static final org.slf4j.Logger KITCHEN_LOG = org.slf4j.LoggerFactory.getLogger("mekck.centralkitchen");
+
     /** 机器模块槽数量（预留扩展空间）。 */
     public static final int MODULE_SLOTS = 20;
     /** 存储区格数。 */
@@ -70,6 +73,69 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         public double progressRatio() {
             return totalTime <= 0 ? 0.0 : Math.min(1.0, (double) progress / totalTime);
         }
+    }
+
+    /**
+     * 订单数上限。
+     *
+     * <p>此前 {@code orders} <b>没有任何上限</b>：{@code placeOrder} 由玩家包下发（受
+     * {@code PacketGuard.expensiveRequest} 5 tick 节流），但 AE2 那条路径
+     * （{@code MekckAe2} 的 {@code pushPattern → startOrder}）<b>不受玩家节流限制</b> ——
+     * 一个 ME 终端持续派发合成任务就能让订单列表无界增长。每个 {@code KitchenOrder}
+     * 带一个 18 槽 {@code BigStackItemHandler} 加步骤列表，且全部随存档序列化，
+     * 于是内存与存档体积一起涨。</p>
+     *
+     * <p>取 64：正常玩法（含自动加工）远达不到；到顶只是拒绝新订单并给出明确原因，
+     * 已排队的订单照常跑完，不会丢正在加工的产物。</p>
+     */
+    public static final int MAX_ORDERS = 64;
+
+    // ── 停滞订单的提示文案（常量，按需解析一次）────────────────────────────
+    //
+    // 这四条原本每 tick 对每个停滞订单都 Component.translatable(...).getString() 一次：
+    // 该调用要查语言表并做格式化，不是免费操作，而结果每次都完全相同。
+    // 厨房里积压几十个 PAUSED 订单时，就是每 tick 几十次翻译 + 字符串拼接。
+    // 语言表在客户端切换语言后才变，故用 lazy holder 解析一次即可（服务端启动时
+    // 语言尚未就绪，不能放在静态初始化里）。
+    private static volatile String noteWaitingIntermediate;
+    private static volatile String noteMissingFluid;
+    private static volatile String noteWaitingThread;
+    private static volatile String noteNoPower;
+
+    private static String noteWaitingIntermediate() {
+        String v = noteWaitingIntermediate;
+        if (v == null) {
+            v = Component.translatable("gui.mekck.kitchen.note.waiting_intermediate").getString();
+            noteWaitingIntermediate = v;
+        }
+        return v;
+    }
+
+    private static String noteMissingFluid() {
+        String v = noteMissingFluid;
+        if (v == null) {
+            v = Component.translatable("gui.mekck.kitchen.note.missing_fluid").getString();
+            noteMissingFluid = v;
+        }
+        return v;
+    }
+
+    private static String noteWaitingThread() {
+        String v = noteWaitingThread;
+        if (v == null) {
+            v = Component.translatable("gui.mekck.kitchen.note.waiting_thread").getString();
+            noteWaitingThread = v;
+        }
+        return v;
+    }
+
+    private static String noteNoPower() {
+        String v = noteNoPower;
+        if (v == null) {
+            v = Component.translatable("gui.mekck.kitchen.note.no_power").getString();
+            noteNoPower = v;
+        }
+        return v;
     }
 
     /** 订单列表（每订单独立暂存区，不跨订单共享中间产物）。 */
@@ -306,6 +372,10 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                         Math.max(1, count), 3);
         if (!plan.ok()) return plan.failure;
         if (plan.steps.isEmpty()) return "该配方无需加工";
+        if (orders.size() >= MAX_ORDERS) {
+            // 到顶即拒绝，不挤掉已有订单（已排队的正在加工，丢弃会丢产物）。
+            return "订单队列已满（上限 " + MAX_ORDERS + "）：请等待现有订单完成";
+        }
 
         var order = new cn.ism.mekck.kitchen.KitchenOrder(nextOrderId++, plan.steps);
         // 预留叶子材料：从存储区移入订单暂存区
@@ -373,6 +443,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                             step.output.getCount(), Math.max(1, step.batches)),
                     cn.ism.mekck.util.CountMath::addClamp);
         }
+        boolean bufferFull = false;
         for (var e : needed.entrySet()) {
             int remaining = e.getValue();
             for (int slot = STORAGE_START; slot < OUTPUT_START && remaining > 0; slot++) {
@@ -382,10 +453,23 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                 var taken = items.extractItem(slot, take, false);
                 int leftover = insertIntoBuffer(order, taken);
                 remaining -= (taken.getCount() - leftover);
+                if (leftover > 0) {
+                    // 为什么：leftover 已经从存储区抽走了，既不回插也不掉落就等于凭空销毁玩家材料。
+                    // 暂存区满时同一物品的后续槽也不可能再装下，故直接结束该材料的预留。
+                    var spill = taken.copyWithCount(leftover);
+                    var back = insertIntoStorage(spill);
+                    if (!back.isEmpty()) {
+                        dropReservedOverflow(back);
+                    }
+                    bufferFull = true;
+                    break;
+                }
             }
             if (remaining > 0) {
-                return "存储区缺少材料：" + new net.minecraft.world.item.ItemStack(e.getKey()).getHoverName().getString()
-                        + " ×" + remaining;
+                String name = new net.minecraft.world.item.ItemStack(e.getKey()).getHoverName().getString();
+                return bufferFull
+                        ? "订单暂存区已满：" + name + " ×" + remaining
+                        : "存储区缺少材料：" + name + " ×" + remaining;
             }
         }
         return null;
@@ -433,6 +517,22 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         return remainder.getCount();
     }
 
+    /**
+     * 订单材料回插存储区后仍放不下的最后兜底：掉落到世界并告警。
+     *
+     * <p>为什么不变量要求这样做：这些材料在上一步已经被 {@code extractItem} 从存储区抽走，
+     * 「进 buffer + 回存储 + 掉落 + 缺口」必须等于抽出的量，缺口必须为 0。
+     * 既不回插也不掉落就等于凭空销毁玩家材料，且不会有任何可见症状。</p>
+     */
+    private void dropReservedOverflow(net.minecraft.world.item.ItemStack stack) {
+        Level level = getLevel();
+        if (level != null) {
+            cn.ism.mekck.util.BigStackDrops.dropAbove(level, getBlockPos(), stack);
+        }
+        KITCHEN_LOG.warn("[mekck] 中央厨房订单预留材料既装不进暂存区也退不回存储区，已掉落到世界：{} ×{} @{}",
+                stack.getHoverName().getString(), stack.getCount(), getBlockPos());
+    }
+
     /** 把订单暂存区里的东西退回存储区（下单失败时回滚）。 */
     private void refundBuffer(cn.ism.mekck.kitchen.KitchenOrder order) {
         for (int i = 0; i < order.buffer.getSlots(); i++) {
@@ -469,13 +569,13 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
             var ability = abilityOf(step.family);
             if (ability == null) {
                 order.setState(cn.ism.mekck.kitchen.KitchenOrder.State.PAUSED);
-                order.setNote("模块已移除：" + step.family.id);
+                order.setNote(Component.translatable("gui.mekck.kitchen.note.module_removed", step.family.id).getString());
                 continue;
             }
             // 暂存区是否已备齐该步骤材料
             if (!bufferHas(order, step.inputs)) {
                 order.setState(cn.ism.mekck.kitchen.KitchenOrder.State.PAUSED);
-                order.setNote("等待中间产物");
+                order.setNote(noteWaitingIntermediate());
                 continue;
             }
             // 流体校验（步骤若需要水 / 奶，必须由流体罐提供）
@@ -489,7 +589,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                         && fluidTank.hasEnoughOf(false, step.fluidNeed.milkMb);
                 if (!enough) {
                     order.setState(cn.ism.mekck.kitchen.KitchenOrder.State.PAUSED);
-                    order.setNote("缺少流体（水/奶）");
+                    order.setNote(noteMissingFluid());
                     continue;
                 }
             }
@@ -498,7 +598,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
             int threads = Math.max(1, ability.threads());
             if (used >= threads) {
                 order.setState(cn.ism.mekck.kitchen.KitchenOrder.State.PENDING);
-                order.setNote("等待该系列线程空闲");
+                order.setNote(noteWaitingThread());
                 continue;
             }
             busyThreads.put(step.family, used + 1);
@@ -515,7 +615,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
             int need = energyPerTickFor(step.family);
             if (energy.getEnergyStored() < need) {
                 order.setState(cn.ism.mekck.kitchen.KitchenOrder.State.PAUSED);
-                order.setNote("电力不足");
+                order.setNote(noteNoPower());
                 continue;
             }
             energy.extractEnergy(need, false);
@@ -924,6 +1024,21 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
 
     // ================== AE2 网络拉料 ==================
 
+    /**
+     * 必须注销 AE2 网格宿主，否则 {@code MekckAe2.HOSTS} 条目永久残留。
+     *
+     * <p>本类是 {@code INetworkPullable}，因此 {@code NetworkChefProgress.isAe2Machine} 判定通过，
+     * {@code MekckAe2.attachCapabilities} 会 {@code HOSTS.computeIfAbsent(be, ...)} 建条目。而
+     * {@code HOSTS} 是 WeakHashMap、其 value 又强引用 key（owner），条目<b>无法被 GC 回收</b>，
+     * 只能靠 {@code AE2Compat.onRemoved → destroy → HOSTS.remove} 显式清理。其余 12 个同类 BE
+     * 都有这个覆写，本类此前缺失 ⇒ 每放置一台就把 BlockEntity 永久钉在静态 map 里。</p>
+     */
+    @Override
+    public void setRemoved() {
+        super.setRemoved();
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
+    }
+
     @Override
     public net.minecraft.world.level.block.entity.BlockEntity getNetworkPullable() {
         return this;
@@ -1122,20 +1237,6 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     /** 订单数量。 */
     public int orderCount() {
         return orders.size();
-    }
-
-    /** 把订单列表摘要为一行文本（供界面显示）。 */
-    public String orderSummary() {
-        if (orders.isEmpty()) return "无订单";
-        StringBuilder sb = new StringBuilder();
-        for (var o : orders) {
-            var step = o.currentStep();
-            sb.append('#').append(o.id()).append(' ')
-              .append(step == null ? "完成中" : step.family.id)
-              .append(" (").append(o.stepIndex()).append('/').append(o.steps().size()).append(") ")
-              .append(o.note().isEmpty() ? "" : o.note()).append("; ");
-        }
-        return sb.toString();
     }
 
     /** 当前运行中的线程数（供界面显示）。 */
@@ -1441,7 +1542,12 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                     order.restoreProgress(ot.getInt("StepProgress"), ot.getInt("StepTotal"));
                 }
                 order.setState(cn.ism.mekck.kitchen.KitchenOrder.State.RUNNING);
-                orders.add(order);
+                // 读档同样受上限约束：老存档可能是在没有上限时写下的，
+                // 超出的部分直接丢弃（正在加工的产物已在 buffer 里，随订单一起丢会失真，
+                // 但这个量级的存档本身就是异常；宁可截断也不要带着无界列表继续跑）。
+                if (orders.size() < MAX_ORDERS) {
+                    orders.add(order);
+                }
             }
         }
         if (tag.contains("NextOrderId")) nextOrderId = Math.max(nextOrderId, tag.getInt("NextOrderId"));

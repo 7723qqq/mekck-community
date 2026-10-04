@@ -120,7 +120,12 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
      * <p>取值 = 旧 {@code DATA_SIZE}，即<b>追加</b>到槽表末尾：现有下标一律不动。</p>
      */
     public static final int DATA_ENERGY_HI = 15;
-    public static final int DATA_SIZE = 16;
+    /**
+     * 侧配编码（6 面 × 4 bit = 24 bit）的高 16 位，追加到槽表末尾：
+     * 不拆则 WEST/EAST 两面经 16 位有符号通道后恒为 NONE（见 {@link cn.ism.mekck.util.WideDataSlot}）。
+     */
+    public static final int DATA_SIDE_CONFIG_HI = 16;
+    public static final int DATA_SIZE = 17;
 
     /** 目标类型：0=敌对生物（配置文件敌对列表），1=全部生物，2=非敌对生物（动物）。 */
     public static final int TARGET_HOSTILE = 0;
@@ -289,7 +294,8 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
                 // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
                 case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
                 case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
-                case DATA_SIDE_CONFIG -> encodeSideConfig();
+                case DATA_SIDE_CONFIG -> encodeSideConfig() & 0xFFFF;
+                case DATA_SIDE_CONFIG_HI -> (encodeSideConfig() >>> 16) & 0xFFFF;
                 case DATA_SPEED_UPGRADE -> getSpeedUpgradeCount();
                 case DATA_ENERGY_UPGRADE -> getEnergyUpgradeCount();
                 case DATA_CREATIVE_UPGRADE -> hasCreativeUpgrade() ? 1 : 0;
@@ -494,7 +500,9 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
     }
 
     public void setTargetType(int type) {
-        this.targetType = type;
+        // 与半径同一道闸：值来自网络包，越界值虽被 matchesTarget 的 default 兜底不会崩，
+        // 但会写进存档并让 GUI 显示与实际行为不一致。见 IceTargetSearch#clampTargetType。
+        this.targetType = cn.ism.mekck.util.IceTargetSearch.clampTargetType(type);
         setChanged();
     }
 
@@ -1263,8 +1271,10 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
             }
         }
         attackTimer = tag.getInt("AttackTimer");
-        targetType = tag.getInt("TargetType");
-        radius = tag.getInt("Radius");
+        // 存档里的旧值（写入时未夹紧）也可能是越界的，读回时一并归一化。
+        targetType = cn.ism.mekck.util.IceTargetSearch.clampTargetType(tag.getInt("TargetType"));
+        // 读档半径同样必须过唯一钳制闸门：存档里的旧值/被改过的值不能绕过上限（见 TestAttackRadiusClamp）。
+        radius = IceTargetSearch.clampAttackRadius(tag.getInt("Radius"));
         if (tag.contains("SideConfig", Tag.TAG_BYTE_ARRAY)) {
             byte[] sideBytes = tag.getByteArray("SideConfig");
             for (int i = 0; i < Math.min(sideBytes.length, 6); i++) {

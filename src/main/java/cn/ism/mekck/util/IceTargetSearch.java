@@ -55,6 +55,91 @@ public final class IceTargetSearch {
     public static final int MIN_ATTACK_RADIUS = 4;
 
     /**
+     * 目标类型的<b>合法取值数</b>：{@code 0 = 敌对 / 1 = 全部 / 2 = 动物}。
+     *
+     * <p>四个攻击型 BE 各自的 {@code TARGET_HOSTILE / TARGET_ALL / TARGET_ANIMAL} 常量都是
+     * 0/1/2，因此这里只用一个上界即可覆盖全部。与半径同理：<b>不要在四个 BE 里各写一份夹紧</b>。</p>
+     */
+    public static final int TARGET_TYPE_COUNT = 3;
+
+    /**
+     * 把目标类型夹到 {@code [0, TARGET_TYPE_COUNT - 1]}。
+     *
+     * <h3>为什么需要它</h3>
+     * {@code IceAttackConfigPacket} 的 {@code mode == 0} 会把客户端给的 {@code value} 直接交给
+     * {@code setTargetType(...)}。半径那一支早已走 {@link #clampAttackRadius}，但类型这一支
+     * <b>四个 BE 全都原样赋值</b>。虽然 {@code matchesTarget} 的 {@code switch} 有
+     * {@code default -> hostile} 兜底、不会崩，但越界值会：
+     * <ul>
+     *   <li>写进存档（{@code tag.putInt("TargetType", ...)}）并在重载后继续生效；</li>
+     *   <li>让 GUI 的显示（{@code t == 0 ? hostile : t == 1 ? all : animal}）与实际行为不一致，
+     *       玩家看到的是「动物」而机器打的是「敌对」。</li>
+     * </ul>
+     * 与半径保持同一道闸，不一致本身就是缺陷。
+     */
+    public static int clampTargetType(int type) {
+        return Math.max(0, Math.min(TARGET_TYPE_COUNT - 1, type));
+    }
+
+    // ==================== 索敌结果缓存 ====================
+
+    /**
+     * 候选列表的复用 tick 数。
+     *
+     * <p>4 = 0.2 秒。取值理由同 {@code ChocolateCannonBlockEntity#CANDIDATE_CACHE_TICKS}：
+     * 目标的选择与伤害判定仍然每 tick 重算，只有「重新扫一遍世界里的实体」被节流，
+     * 因此可见影响仅是<b>新进入射程的敌人最多晚 0.2 秒被发现</b>。</p>
+     */
+    public static final int CANDIDATE_CACHE_TICKS = 4;
+
+    /**
+     * 一台机器的索敌缓存。
+     *
+     * <p>四个攻击型 BE 里原本只有 {@code ChocolateCannonBlockEntity} 有这份缓存，
+     * 而 {@code IceMakerBlockEntity} / {@code NutRoasterBlockEntity} 装上创造升级后
+     * {@code attackTimer = 1} ⇒ <b>每 tick 攻击一次</b>，再叠上半径 &gt; 64 走
+     * {@code getEntities().getAll()} 的全服实体遍历分支，两三台就能吃掉 TPS。
+     * 抽到这里是为了让四台机器共用同一份实现，而不是各写一份。</p>
+     *
+     * <p><b>失效条件</b>：半径、目标类型变化，或缓存超过 {@link #CANDIDATE_CACHE_TICKS} tick。
+     * 缓存里可能留有已死亡的实体，调用方在遍历时仍需判 {@code isAlive()}（原本就该判）。</p>
+     */
+    public static final class CandidateCache {
+        private java.util.List<LivingEntity> cached;
+        private long cachedTick = Long.MIN_VALUE;
+        private int cachedRadius = -1;
+        private int cachedTargetType = -1;
+
+        /**
+         * 取本 tick 的候选目标；缓存有效时直接复用，否则重新扫描。
+         *
+         * @param filter 目标类型过滤（与 {@link #findTargets} 的 {@code filter} 同义）
+         */
+        public java.util.List<LivingEntity> get(Level level, BlockPos machinePos, int radius,
+                                                int targetType, Predicate<LivingEntity> filter) {
+            long now = level.getGameTime();
+            if (cached != null
+                    && cachedRadius == radius
+                    && cachedTargetType == targetType
+                    && now >= cachedTick
+                    && now - cachedTick < CANDIDATE_CACHE_TICKS) {
+                return cached;
+            }
+            java.util.List<LivingEntity> found = findTargets(level, machinePos, radius, filter);
+            cached = found;
+            cachedTick = now;
+            cachedRadius = radius;
+            cachedTargetType = targetType;
+            return found;
+        }
+
+        /** 半径/类型被外部改掉时由调用方主动清一次（不调也没错，最多多用 4 tick 旧值）。 */
+        public void invalidate() {
+            cached = null;
+        }
+    }
+
+    /**
      * 半径把攻击半径夹到 {@code [MIN_ATTACK_RADIUS, MAX_ATTACK_RADIUS]}。
      *
      * <p>四个 BE 的两个半径 setter 共用这一个入口，<b>不要</b>在各 BE 里各写一份

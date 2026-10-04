@@ -95,6 +95,23 @@ public abstract class MekCkFactoryScreenBase<TILE extends MekCkMachineTile,
     }
 
     /**
+     * 「自动补料 / 网络拉料」两枚 tab —— {@code MekCkMachineTile} 补实现
+     * {@code INetworkPullable} 后，工厂家族拿回 AE2 拉料能力（docs/2026-09-30-功能实现口径.md
+     * §2.4 的已知缺口就此关闭）。
+     *
+     * <p>必须在各屏 {@code addGuiElements} 的<b>末尾</b>调用：Mek 的 {@code mouseClicked}
+     * 对 {@code children()} 倒序遍历、命中即返回，越晚注册命中优先。未装 AE2 时
+     * {@code isVisible()} 为假、什么都不挂。</p>
+     */
+    protected void addNetworkPullTabs() {
+        if (NetworkPullButton.isVisible()) {
+            for (var tab : NetworkPullButton.register(this, tile.getBlockPos())) {
+                addRenderableWidget(tab);
+            }
+        }
+    }
+
+    /**
      * 竖直能源条。
      *
      * <p>直接吃 tile 的能量容器（{@code GuiVerticalPowerBar} 有

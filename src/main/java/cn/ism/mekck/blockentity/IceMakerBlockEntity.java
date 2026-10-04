@@ -140,7 +140,14 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
      * <p>取值 = 旧 {@code DATA_SIZE}，即<b>追加</b>到槽表末尾：现有下标一律不动。</p>
      */
     public static final int DATA_ENERGY_HI = 20;
-    public static final int DATA_SIZE = 21;
+    /**
+     * 侧配编码（6 面 × 4 bit = 24 bit）的高 16 位，追加到槽表末尾：
+     * 不拆则 WEST/EAST 两面经 16 位有符号通道后恒为 NONE（见 {@link cn.ism.mekck.util.WideDataSlot}）。
+     */
+    public static final int DATA_SIDE_CONFIG_HI = 21;
+    /** 水罐流体量的高 16 位：容量 {@link #WATER_CAPACITY} = 256,000 > 32767，不拆满罐会被读成负数/空罐。 */
+    public static final int DATA_WATER_AMOUNT_HI = 22;
+    public static final int DATA_SIZE = 23;
 
     /** 目标类型：0=敌对生物（配置文件敌对列表），1=全部生物，2=非敌对生物（动物）。 */
     public static final int TARGET_HOSTILE = 0;
@@ -184,6 +191,15 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
      * 攻击同一目标的冰块保持排队（逐 tick 依次生成），攻击不同目标的冰块在同一 tick 一起生成。
      */
     private final java.util.LinkedHashMap<LivingEntity, Integer> pendingAttackTargets = new java.util.LinkedHashMap<>();
+    /**
+     * 索敌结果缓存：创造升级让 {@code attackTimer = 1} ⇒ 每 tick 攻击一次，
+     * 而半径 > 64 时 {@code IceTargetSearch} 要遍历全部已加载实体 —— 不缓存就是每 tick 全服扫描。
+     * 与 {@code ChocolateCannonBlockEntity} 那份同实现（抽到 {@code IceTargetSearch.CandidateCache}）。
+     */
+    private final cn.ism.mekck.util.IceTargetSearch.CandidateCache targetCache =
+            new cn.ism.mekck.util.IceTargetSearch.CandidateCache();
+
+
     private float pendingDamage;
     private boolean pendingAoe;
     /** 本次发射的溅射伤害（低温 5 / 凛冰 20 / 龙霜 40）。 */
@@ -312,7 +328,8 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
                 // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
                 case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
                 case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
-                case DATA_SIDE_CONFIG -> encodeSideConfig();
+                case DATA_SIDE_CONFIG -> encodeSideConfig() & 0xFFFF;
+                case DATA_SIDE_CONFIG_HI -> (encodeSideConfig() >>> 16) & 0xFFFF;
                 case DATA_SPEED_UPGRADE -> getSpeedUpgradeCount();
                 case DATA_ENERGY_UPGRADE -> getEnergyUpgradeCount();
                 case DATA_CREATIVE_UPGRADE -> hasCreativeUpgrade() ? 1 : 0;
@@ -324,7 +341,8 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
                 case DATA_CB5 -> items.getStackInSlot(CB_SLOT_5).isEmpty() ? 0 : 1;
                 case DATA_TARGET_TYPE -> targetType;
                 case DATA_RADIUS -> radius;
-                case DATA_WATER_AMOUNT -> waterTank.getFluidAmount();
+                case DATA_WATER_AMOUNT -> waterTank.getFluidAmount() & 0xFFFF;
+                case DATA_WATER_AMOUNT_HI -> (waterTank.getFluidAmount() >>> 16) & 0xFFFF;
                 case DATA_WATER_FLUID_ID -> waterTank.getFluid().isEmpty() ? -1
                         : net.minecraft.core.registries.BuiltInRegistries.FLUID.getId(waterTank.getFluid().getFluid());
                 case DATA_CURRENT_TEMP -> (int) Math.round((getTemperatureK() - 273.15) * 100.0);
@@ -638,7 +656,9 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     }
 
     public void setTargetType(int type) {
-        this.targetType = type;
+        // 与半径同一道闸：值来自网络包，越界值虽被 matchesTarget 的 default 兜底不会崩，
+        // 但会写进存档并让 GUI 显示与实际行为不一致。见 IceTargetSearch#clampTargetType。
+        this.targetType = cn.ism.mekck.util.IceTargetSearch.clampTargetType(type);
         setChanged();
     }
 
@@ -916,10 +936,6 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
 
         BlockState newState = state.setValue(IceMakerBlock.ACTIVE, machine.progress > 0);
         if (newState != state) level.setBlock(pos, newState, 3);
-
-        if (!level.isClientSide) {
-            machine.data.get(DATA_ENERGY);
-        }
     }
 
     /** 复用的配方包装器：原先每次配方查找都要 new RecipeWrapper(items)，而这是每 tick 调用的路径。 */
@@ -1022,8 +1038,8 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
         attackTimer = hasCreative ? 1 : buffedInterval(MekckConfig.getIceAttackInterval());
 
         // 索敌：小半径走 AABB 快速路径，超大半径遍历已加载实体（避免巨型 AABB 导致 section key 溢出崩溃）
-        java.util.List<LivingEntity> candidates = cn.ism.mekck.util.IceTargetSearch.findTargets(
-                level, worldPosition, this.radius, this::matchesTarget);
+        java.util.List<LivingEntity> candidates = targetCache.get(
+                level, worldPosition, this.radius, this.targetType, this::matchesTarget);
 
         int count = Math.min(profile.targetCount, candidates.size());
         LivingEntity highestHp = null;
@@ -1213,8 +1229,10 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
             heatComponent.load(tag.getCompound("HeatCapacitor"));
         }
         attackTimer = tag.getInt("AttackTimer");
-        targetType = tag.getInt("TargetType");
-        radius = tag.getInt("Radius");
+        // 存档里的旧值（写入时未夹紧）也可能是越界的，读回时一并归一化。
+        targetType = cn.ism.mekck.util.IceTargetSearch.clampTargetType(tag.getInt("TargetType"));
+        // 读档半径同样必须过唯一钳制闸门：存档里的旧值/被改过的值不能绕过上限（见 TestAttackRadiusClamp）。
+        radius = IceTargetSearch.clampAttackRadius(tag.getInt("Radius"));
         if (tag.contains("SideConfig", Tag.TAG_BYTE_ARRAY)) {
             byte[] sideBytes = tag.getByteArray("SideConfig");
             for (int i = 0; i < Math.min(sideBytes.length, 6); i++) {

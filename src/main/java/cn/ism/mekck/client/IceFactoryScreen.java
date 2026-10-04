@@ -215,7 +215,7 @@ public final class IceFactoryScreen extends GuiMekanism<IceFactoryMenu> implemen
         // ── 左列（2 个）──
         addTab(CONFIG_TEXTURE, TAB_X, CONFIG_TAB_Y, true,
                 () -> false, SpecialColors.TAB_CONFIGURATION,
-                "tooltip.mekck.side_config", this::openSideConfigWindow);
+                "gui.mekck.ui.side_config_short", this::openSideConfigWindow);
 
         // ME 下单在 Mek 里无对应图标：保留本模组自绘的「清单 + 向下箭头」图标，只取官方染色。
         // 面板本体已从「屏幕手绘覆盖层」迁进 Mek 虚拟窗口（NetworkOrderWindow）。

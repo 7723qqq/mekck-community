@@ -191,7 +191,10 @@ public final class ChocolateCannonMenu extends AbstractContainerMenu implements 
     }
 
     public int getEncodedSideConfig() {
-        return data.get(ChocolateCannonBlockEntity.DATA_SIDE_CONFIG);
+        // 24-bit 侧配拆两槽，裸读低槽会丢 WEST/EAST 两面，见 WideDataSlot。
+        return WideDataSlot.read(data,
+                ChocolateCannonBlockEntity.DATA_SIDE_CONFIG,
+                ChocolateCannonBlockEntity.DATA_SIDE_CONFIG_HI);
     }
 
     @Override

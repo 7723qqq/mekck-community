@@ -84,6 +84,9 @@ public final class SkeweringFactoryScreen extends MekCkFactoryScreenBase<Skeweri
         // 落在输入三格与输出一列之间的空带里，纵向对齐输入行的中线。
         addSingleProgressBar(() -> menu.getProgressRatio(0), 0,
                 38 + SkeweringFactoryTile.INPUT_SLOTS * 18, GAP_BETWEEN, 41 + 18 / 2);
+
+        // 自动补料 / 网络拉料 tab：必须最后注册（命中优先），见基类注释。
+        addNetworkPullTabs();
     }
 
     @Override

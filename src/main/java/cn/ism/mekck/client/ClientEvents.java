@@ -41,7 +41,7 @@ import static cn.ism.mekck.registry.MekCkFactories.GRINDING_MACHINE_MENU;
 import static cn.ism.mekck.registry.MekCkEntities.ICE_CUBE_ENTITY;
 import static cn.ism.mekck.registry.MekCkFactories.ICE_FACTORY_MENU;
 import static cn.ism.mekck.registry.MekCkStandaloneMachines.ICE_MAKER_MENU;
-import static cn.ism.mekck.registry.MekCkFactories.MACHINE_MENU;
+import static cn.ism.mekck.registry.MekCkFactories.MACHINE_CONTAINER;
 import static cn.ism.mekck.registry.MekCkStandaloneMachines.NUT_ROASTER_MENU;
 import static cn.ism.mekck.registry.MekCkFactories.PLANTING_CUTTING_CONTAINER;
 import static cn.ism.mekck.registry.MekCkFactories.PLANTING_CUTTING_STATION_MENU;
@@ -50,7 +50,7 @@ import static cn.ism.mekck.registry.MekCkStandaloneMachines.SANDWICH_ASSEMBLER_M
 import static cn.ism.mekck.registry.MekCkLegacyMachines.SIMPLE_MACHINE_MENU;
 import static cn.ism.mekck.registry.MekCkFactories.SKEWERING_FACTORY_CONTAINER;
 import static cn.ism.mekck.registry.MekCkStandaloneMachines.SKEWERING_MACHINE_MENU;
-import static cn.ism.mekck.registry.MekCkStandaloneMachines.WINE_CELLAR_MENU;
+import static cn.ism.mekck.registry.MekCkStandaloneMachines.WINE_CELLAR_CONTAINER;
 
 /**
  * 客户端初始化事件：屏幕注册、模型层定义、客户端资源重载监听。
@@ -68,7 +68,9 @@ public final class ClientEvents {
     public static void onClientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
             // GuideME 指南书注册已移到 mod 构造器（必须早于首次资源重载，见构造器注释）
-            MenuScreens.register(MACHINE_MENU.get(), UniversalCuttingMachineScreen::new);
+            // 屏幕绑定用 Mek 容器对象（它与 MENUS 写同一个 minecraft:menu 注册表，
+            // 因此绝不能再单独用 MENUS 注册一次同名项 —— 见 MekCkFactories 里那段警告）。
+            MenuScreens.register(MACHINE_CONTAINER.get(), UniversalCuttingMachineScreen::new);
             MenuScreens.register(FACTORY_MENU.get(), CuttingMachineFactoryScreen::new);
             MenuScreens.register(GRINDING_MACHINE_MENU.get(), ElectricGrindingMachineScreen::new);
             MenuScreens.register(GRINDING_FACTORY_MENU.get(), GrindingFactoryScreen::new);
@@ -82,7 +84,7 @@ public final class ClientEvents {
             MenuScreens.register(PLANTING_CUTTING_STATION_MENU.get(), PlantingCuttingStationScreen::new);
             MenuScreens.register(BIOREACTOR_MENU.get(), BioreactorScreen::new);
             MenuScreens.register(ICE_MAKER_MENU.get(), IceMakerScreen::new);
-            MenuScreens.register(WINE_CELLAR_MENU.get(), WineCellarScreen::new);
+            MenuScreens.register(WINE_CELLAR_CONTAINER.get(), WineCellarScreen::new);
             MenuScreens.register(CENTRAL_KITCHEN_MENU.get(), cn.ism.mekck.client.CentralKitchenScreen::new);
             MenuScreens.register(SANDWICH_ASSEMBLER_MENU.get(), cn.ism.mekck.client.SandwichAssemblerScreen::new);
             if (MekckConfig.isIceFactoryEnabled()) {

@@ -106,6 +106,67 @@ public final class PowerSlotUtil {
     }
 
     /**
+     * 从物品抽能、把 FE 数量回报给调用方 —— <b>不依赖 Forge {@link EnergyStorage}</b> 的重载。
+     *
+     * <h3>为什么需要它（2026-10-03 迁移）</h3>
+     * 陈化窖等机器迁到 Mek 体系后，内部能量是 {@code MachineEnergyContainer}
+     * （Mek 的 {@code FloatingLong} 容器），形参类型与上面那个重载接不上。
+     *
+     * <p>本重载把「机器能量容器」抽象成两件事：<b>还能装多少</b>（{@code space}）
+     * 与<b>抽到的量交给谁</b>（{@code sink}，返回实际接受量）。
+     * 两条分支（能量物品 / 红石转换）的口径与 {@link #drain} 逐位一致——
+     * 同一份 {@value #REDSTONE_ENERGY} FE/份、同一份每 tick 份数上限。</p>
+     *
+     * @param stack           槽位内的物品（红石分支会就地 {@code shrink}）
+     * @param space           机器当前<b>还能接收</b>的 FE（容量 − 存量）；≤0 直接返回 false
+     * @param redstonePerTick 每 tick 最多消费的红石份数（0 = 不做红石转换）
+     * @param sink            接收能量的回调，返回<b>实际接受</b>的 FE
+     * @return 本次是否发生了能量转移或物品数量变化
+     */
+    public static boolean drainTo(ItemStack stack, long space, int redstonePerTick,
+                                  java.util.function.LongUnaryOperator sink) {
+        if (stack.isEmpty() || space <= 0L || sink == null) {
+            return false;
+        }
+        boolean changed = false;
+        long needed = space;
+
+        // 1. 能量物品（物品侧仍是 Forge IEnergyStorage，与机器侧迁到 Mek 无关）
+        LazyOptional<IEnergyStorage> cap = stack.getCapability(ForgeCapabilities.ENERGY, null);
+        if (cap.isPresent()) {
+            IEnergyStorage src = cap.resolve().orElse(null);
+            if (src != null && src.canExtract()) {
+                int want = (int) Math.min(needed, Integer.MAX_VALUE);
+                int toExtract = src.extractEnergy(want, true);
+                if (toExtract > 0) {
+                    long got = sink.applyAsLong(toExtract);
+                    if (got > 0) {
+                        src.extractEnergy((int) got, false);
+                        changed = true;
+                        needed -= got;
+                    }
+                }
+            }
+        }
+
+        // 2. 红石 → 能量（与 drain 同口径）
+        if (needed > 0 && redstonePerTick > 0 && isRedstone(stack) && stack.getCount() > 0) {
+            int toConsume = Math.min(stack.getCount(), redstonePerTick);
+            long canAdd = Math.min(needed / REDSTONE_ENERGY, toConsume);
+            if (canAdd > 0) {
+                long added = sink.applyAsLong(canAdd * REDSTONE_ENERGY);
+                int consumed = (int) (added / REDSTONE_ENERGY);
+                if (consumed > 0) {
+                    stack.shrink(consumed);
+                    changed = true;
+                }
+            }
+        }
+
+        return changed;
+    }
+
+    /**
      * 把机器内部能量充入槽位中的可充电物品（发电机能量槽的输出行为）。
      * 仅当物品可接收能量、且未满、且机器当前存有能量时生效。
      *

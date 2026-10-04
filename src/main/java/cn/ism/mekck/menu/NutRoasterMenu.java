@@ -143,7 +143,10 @@ public final class NutRoasterMenu extends AbstractContainerMenu implements ISide
     }
 
     public int getEncodedSideConfig() {
-        return data.get(NutRoasterBlockEntity.DATA_SIDE_CONFIG);
+        // 24-bit 侧配拆两槽，裸读低槽会丢 WEST/EAST 两面，见 WideDataSlot。
+        return WideDataSlot.read(data,
+                NutRoasterBlockEntity.DATA_SIDE_CONFIG,
+                NutRoasterBlockEntity.DATA_SIDE_CONFIG_HI);
     }
 
     @Override

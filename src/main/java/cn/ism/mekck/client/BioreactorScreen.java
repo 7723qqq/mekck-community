@@ -12,6 +12,7 @@ import mekanism.client.gui.element.slot.SlotType;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
 import mekanism.common.inventory.container.slot.IVirtualSlot;
 import mekanism.common.inventory.container.slot.SlotOverlay;
+import mekanism.common.inventory.warning.WarningTracker.WarningType;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -90,7 +91,11 @@ public final class BioreactorScreen extends GuiMekanism<BioreactorMenu> {
         // 有机物流体条
         addRenderableWidget(new GuiCkFluidGauge(this,
                 FLUID_GAUGE_X, FLUID_GAUGE_Y,
-                () -> menu.getFluidStack(), () -> menu.getFluidCapacity()));
+                () -> menu.getFluidStack(), () -> menu.getFluidCapacity())
+                // 发电机没有「能量不足」问题，倒是流体输出满会停机 —— 对齐 Mek 的
+                // NO_SPACE_IN_OUTPUT 语义（GuiFactory 副产品条同款），满时 gauge 叠半幅警示纹 + 警告 tab。
+                .warning(WarningType.NO_SPACE_IN_OUTPUT,
+                        () -> menu.getFluidStack().getAmount() >= menu.getFluidCapacity()));
 
         // 能源槽（能量物品）
         GuiVirtualSlot powerVs = new GuiVirtualSlot(SlotType.POWER, this, POWER_SLOT_X, POWER_SLOT_Y);
