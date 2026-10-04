@@ -130,7 +130,7 @@ public class PlantingCuttingFactoryTile extends MekCkMachineTile implements IMek
     public static Gas resolveNutrientGas() {
         try {
             Gas gas = mekanism.api.MekanismAPI.gasRegistry().getValue(
-                    new net.minecraft.resources.ResourceLocation(NUTRIENT_GAS_NAMESPACE, NUTRIENT_GAS_ID));
+                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(NUTRIENT_GAS_NAMESPACE, NUTRIENT_GAS_ID));
             return gas == null || gas == mekanism.api.MekanismAPI.EMPTY_GAS ? null : gas;
         } catch (Exception e) {
             return null;

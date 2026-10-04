@@ -25,10 +25,10 @@ import java.util.List;
  */
 public class IceMakeRecipeCategory implements IRecipeCategory<IceMakeRecipe> {
 
-    private static final ResourceLocation SLOT_INPUT = new ResourceLocation("mekck", "textures/gui/slot/input.png");
+    private static final ResourceLocation SLOT_INPUT = ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/slot/input.png");
     // 制冰机只有单一产物（无副产物），输出槽使用 18×18 单格贴图（与输入槽同款通用槽）
-    private static final ResourceLocation SLOT_OUTPUT = new ResourceLocation("mekck", "textures/gui/slot/input.png");
-    private static final ResourceLocation PROGRESS_BAR = new ResourceLocation("mekck", "textures/gui/progress/bar.png");
+    private static final ResourceLocation SLOT_OUTPUT = ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/slot/input.png");
+    private static final ResourceLocation PROGRESS_BAR = ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/progress/bar.png");
 
     private static final int PROGRESS_W = 25;
     private static final int PROGRESS_H = 9;
@@ -59,13 +59,11 @@ public class IceMakeRecipeCategory implements IRecipeCategory<IceMakeRecipe> {
 
     private final RecipeType<IceMakeRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public IceMakeRecipeCategory(IGuiHelper helper, RecipeType<IceMakeRecipe> recipeType, ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.ice_maker");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -77,11 +75,6 @@ public class IceMakeRecipeCategory implements IRecipeCategory<IceMakeRecipe> {
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override

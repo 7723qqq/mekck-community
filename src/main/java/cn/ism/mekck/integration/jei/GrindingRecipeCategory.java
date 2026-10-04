@@ -39,13 +39,11 @@ public class GrindingRecipeCategory implements IRecipeCategory<GrindingRecipe> {
 
     private final RecipeType<GrindingRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public GrindingRecipeCategory(IGuiHelper helper, RecipeType<GrindingRecipe> recipeType, ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.electric_grinding_machine");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -57,11 +55,6 @@ public class GrindingRecipeCategory implements IRecipeCategory<GrindingRecipe> {
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override

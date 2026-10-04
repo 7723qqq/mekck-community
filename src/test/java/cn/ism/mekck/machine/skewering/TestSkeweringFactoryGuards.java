@@ -215,7 +215,7 @@ public class TestSkeweringFactoryGuards {
      */
     private static Recipe<?> threadingRecipe(Ingredient tool, int toolCount) {
         return new KaleidoscopeGrillingCompat.VirtualRecipe(
-                new ResourceLocation("mekck", "threading/test"),
+                ResourceLocation.fromNamespaceAndPath("mekck", "threading/test"),
                 tool, Ingredient.of(Items.COOKED_BEEF), toolCount, null, 0,
                 new ItemStack(Items.COOKED_BEEF));
     }

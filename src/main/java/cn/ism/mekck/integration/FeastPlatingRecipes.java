@@ -186,8 +186,7 @@ public final class FeastPlatingRecipes {
                 int bakedIn = countContainerInCrafting(manager, registries, block, container.getItem());
                 int needContainers = Math.max(1, maxServings - bakedIn);
 
-                ResourceLocation id = new ResourceLocation(UniversalCuttingMachine.MOD_ID,
-                        PREFIX + blockId.getNamespace() + "/" + blockId.getPath());
+                ResourceLocation id = ResourceLocation.fromNamespaceAndPath(UniversalCuttingMachine.MOD_ID, PREFIX + blockId.getNamespace() + "/" + blockId.getPath());
                 if (existingIds.contains(id)) continue;
                 if (alreadyConverted(byType, block, serving)) continue;
 

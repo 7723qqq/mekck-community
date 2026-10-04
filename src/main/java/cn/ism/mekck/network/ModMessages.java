@@ -28,7 +28,7 @@ public final class ModMessages {
      */
     private static final String PROTOCOL_VERSION = "2";
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
-            new ResourceLocation(UniversalCuttingMachine.MOD_ID, "side_config"),
+            ResourceLocation.fromNamespaceAndPath(UniversalCuttingMachine.MOD_ID, "side_config"),
             () -> PROTOCOL_VERSION,
             PROTOCOL_VERSION::equals,
             PROTOCOL_VERSION::equals);

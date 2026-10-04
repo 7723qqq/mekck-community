@@ -38,9 +38,17 @@ public class TestJeiTextureSizes {
     private static final Path JEI_DIR = Path.of("src/main/java/cn/ism/mekck/integration/jei");
     private static final Path ASSETS_DIR = Path.of("src/main/resources/assets/mekck");
 
-    /** 贴图常量声明：{@code ResourceLocation NAME = new ResourceLocation("mekck", "textures/....png");} */
+    /**
+     * 贴图常量声明。
+     *
+     * <p>写法有两种，都要认：迁移前的 {@code new ResourceLocation("mekck", "textures/....png")}
+     * 与迁移后的 {@code ResourceLocation.fromNamespaceAndPath("mekck", "textures/....png")}
+     * （1.20.6 起 {@code new ResourceLocation} 被标记 forRemoval，本仓已整体迁走）。
+     * 只认其中一种会让下面的判据悄悄扫不到任何调用点、空转通过。</p>
+     */
     private static final Pattern TEXTURE_CONST = Pattern.compile(
-            "ResourceLocation\\s+(\\w+)\\s*=\\s*new\\s+ResourceLocation\\s*\\(\\s*\"mekck\"\\s*,\\s*\"([^\"]+\\.png)\"\\s*\\)");
+            "ResourceLocation\\s+(\\w+)\\s*=\\s*(?:new\\s+ResourceLocation|ResourceLocation\\.fromNamespaceAndPath)"
+                    + "\\s*\\(\\s*\"mekck\"\\s*,\\s*\"([^\"]+\\.png)\"\\s*\\)");
 
     /** int 常量声明：{@code static final int NAME = 42;} */
     private static final Pattern INT_CONST = Pattern.compile(

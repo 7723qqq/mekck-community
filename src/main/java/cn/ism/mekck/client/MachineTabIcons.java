@@ -15,7 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 public final class MachineTabIcons {
     /** 下单 / 订单 tab：清单 + 向下箭头。 */
     public static final ResourceLocation ORDER =
-            new ResourceLocation("mekck", "textures/gui/icon_order.png");
+            ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/icon_order.png");
 
     private MachineTabIcons() {
     }

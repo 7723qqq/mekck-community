@@ -50,7 +50,7 @@ public class MekCkPullTab extends GuiTabElementType<BlockEntity, MekCkPullTab.Pu
 
         @Override
         public ResourceLocation getResource() {
-            return new ResourceLocation("mekck", "textures/gui/" + path);
+            return ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/" + path);
         }
 
         @Override

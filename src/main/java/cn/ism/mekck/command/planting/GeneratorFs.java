@@ -166,7 +166,11 @@ public final class GeneratorFs {
                continue;
             }
             try {
-               ResourceLocation id = new ResourceLocation(itemId);
+               ResourceLocation id = ResourceLocation.tryParse(itemId);
+               if (id == null) {
+                  PlantingRecipeGenerator.LOGGER.warn("Blacklist contains invalid item ID: {}", itemId);
+                  continue;
+               }
                Item item = (Item)ForgeRegistries.ITEMS.getValue(id);
                if (item != null) {
                   blacklist.add(item);

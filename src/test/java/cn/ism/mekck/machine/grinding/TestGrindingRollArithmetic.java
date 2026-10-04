@@ -283,7 +283,7 @@ public class TestGrindingRollArithmetic {
 
             @Override
             public net.minecraft.resources.ResourceLocation getId() {
-                return new net.minecraft.resources.ResourceLocation("mekck", id);
+                return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("mekck", id);
             }
         };
     }

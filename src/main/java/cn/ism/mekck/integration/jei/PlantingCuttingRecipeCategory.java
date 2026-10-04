@@ -43,12 +43,12 @@ import java.util.List;
 public class PlantingCuttingRecipeCategory implements IRecipeCategory<PlantingCuttingRecipe> {
 
     // ── Bundled textures (mekck) ──────────────────────────────────────────────
-    private static final ResourceLocation SLOT_INPUT = new ResourceLocation("mekck", "textures/gui/slot/input.png");
-    private static final ResourceLocation SLOT_EXTRA = new ResourceLocation("mekck", "textures/gui/slot/extra.png");
-    private static final ResourceLocation SLOT_POWER = new ResourceLocation("mekck", "textures/gui/slot/power.png");
-    private static final ResourceLocation SLOT_POWER_OVERLAY = new ResourceLocation("mekck", "textures/gui/slot/overlay_power.png");
-    private static final ResourceLocation SLOT_OUTPUT_WIDE = new ResourceLocation("mekck", "textures/gui/slot/output_wide.png");
-    private static final ResourceLocation PROGRESS_BAR = new ResourceLocation("mekck", "textures/gui/progress/bar.png");
+    private static final ResourceLocation SLOT_INPUT = ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/slot/input.png");
+    private static final ResourceLocation SLOT_EXTRA = ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/slot/extra.png");
+    private static final ResourceLocation SLOT_POWER = ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/slot/power.png");
+    private static final ResourceLocation SLOT_POWER_OVERLAY = ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/slot/overlay_power.png");
+    private static final ResourceLocation SLOT_OUTPUT_WIDE = ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/slot/output_wide.png");
+    private static final ResourceLocation PROGRESS_BAR = ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/progress/bar.png");
 
     private static final int PROGRESS_W = 25;
     private static final int PROGRESS_H = 9;
@@ -104,13 +104,11 @@ public class PlantingCuttingRecipeCategory implements IRecipeCategory<PlantingCu
 
     private final RecipeType<PlantingCuttingRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public PlantingCuttingRecipeCategory(IGuiHelper helper, RecipeType<PlantingCuttingRecipe> recipeType, ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.planting_cutting_station");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -122,11 +120,6 @@ public class PlantingCuttingRecipeCategory implements IRecipeCategory<PlantingCu
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override
@@ -160,7 +153,7 @@ public class PlantingCuttingRecipeCategory implements IRecipeCategory<PlantingCu
         boolean gasAdded = false;
         try {
             mekanism.api.chemical.gas.Gas gas = mekanism.api.MekanismAPI.gasRegistry()
-                    .getValue(new net.minecraft.resources.ResourceLocation("mekmm", "nutrient_solution"));
+                    .getValue(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("mekmm", "nutrient_solution"));
             if (gas != null) {
                 builder.addSlot(RecipeIngredientRole.CATALYST, EXTRA_X + 1, EXTRA_Y + 1)
                         .addIngredient(mekanism.client.jei.MekanismJEI.TYPE_GAS,
@@ -276,12 +269,12 @@ public class PlantingCuttingRecipeCategory implements IRecipeCategory<PlantingCu
         // 就是 ItemLike.asItem() 解引用 ⇒ 直接 NPE（本分类无条件注册），所以必须先判空再构造；
         // 语义保持「优先气体、退化到桶物品、都没有就空」，写法对齐 JEIPlugin.makeWineCellarInfoRecipe。
         Item bucketItem = ForgeRegistries.ITEMS.getValue(
-                new ResourceLocation("mekmm", "nutrient_solution_bucket"));
+                ResourceLocation.fromNamespaceAndPath("mekmm", "nutrient_solution_bucket"));
         if (bucketItem != null && bucketItem != Items.AIR) {
             return Collections.singletonList(new ItemStack(bucketItem, 1));
         }
         Item pasteItem = ForgeRegistries.ITEMS.getValue(
-                new ResourceLocation("mekmm", "nutritional_paste_bucket"));
+                ResourceLocation.fromNamespaceAndPath("mekmm", "nutritional_paste_bucket"));
         if (pasteItem != null && pasteItem != Items.AIR) {
             return Collections.singletonList(new ItemStack(pasteItem, 1));
         }

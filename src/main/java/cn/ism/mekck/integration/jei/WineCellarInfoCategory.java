@@ -37,13 +37,11 @@ public class WineCellarInfoCategory implements IRecipeCategory<WineCellarInfoRec
 
     private final RecipeType<WineCellarInfoRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public WineCellarInfoCategory(IGuiHelper helper, RecipeType<WineCellarInfoRecipe> recipeType, ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.wine_cellar");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -55,11 +53,6 @@ public class WineCellarInfoCategory implements IRecipeCategory<WineCellarInfoRec
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override

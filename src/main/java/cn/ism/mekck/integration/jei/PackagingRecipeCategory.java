@@ -41,13 +41,11 @@ public class PackagingRecipeCategory implements IRecipeCategory<PackagingRecipe>
 
     private final RecipeType<PackagingRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public PackagingRecipeCategory(IGuiHelper helper, RecipeType<PackagingRecipe> recipeType, ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.packaging_station");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -59,11 +57,6 @@ public class PackagingRecipeCategory implements IRecipeCategory<PackagingRecipe>
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override

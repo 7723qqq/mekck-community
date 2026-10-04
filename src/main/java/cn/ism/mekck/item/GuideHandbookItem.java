@@ -49,7 +49,7 @@ public class GuideHandbookItem extends Item {
      * 这也保证专用服务器上本类被加载时不会触碰任何客户端类。</p>
      */
     private static void openGuide() {
-        cn.ism.mekck.compat.GuideMECompat.openGuide(new ResourceLocation(GUIDE_NAMESPACE, GUIDE_PATH));
+        cn.ism.mekck.compat.GuideMECompat.openGuide(ResourceLocation.fromNamespaceAndPath(GUIDE_NAMESPACE, GUIDE_PATH));
     }
 
     @Override

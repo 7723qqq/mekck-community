@@ -48,13 +48,11 @@ public class BioreactorRecipeCategory implements IRecipeCategory<BioreactorJeiRe
 
     private final RecipeType<BioreactorJeiRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public BioreactorRecipeCategory(IGuiHelper helper, RecipeType<BioreactorJeiRecipe> recipeType, ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.bioreactor");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -66,11 +64,6 @@ public class BioreactorRecipeCategory implements IRecipeCategory<BioreactorJeiRe
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override

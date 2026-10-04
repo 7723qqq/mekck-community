@@ -138,7 +138,7 @@ public class TestGrindingLegacyOrderMigration {
         GrindingFactoryExecutor executor = new GrindingFactoryExecutor();
         executor.load(executorTagOf(migrated));
 
-        assertEquals(new net.minecraft.resources.ResourceLocation("kaleidoscope_cookery", "millstone"),
+        assertEquals(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("kaleidoscope_cookery", "millstone"),
                 executor.getOrderRecipeId());
         assertEquals(5, executor.getOrderQuantity());
         assertEquals(3, executor.getOrderCompleted());

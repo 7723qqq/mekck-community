@@ -62,7 +62,7 @@ public final class SimpleMachineScreen extends GuiMekanism<SimpleMachineMenu> im
     private static final int JUICE_BAR_Y = 66;
 
     /** vinery 皮肤背景（纯字符串 RL，不复制资源、无编译期依赖；装了 vinery 才引用得到）。 */
-    private static final ResourceLocation VINERY_BG = new ResourceLocation("vinery", "textures/gui/fermentation_barrel_gui.png");
+    private static final ResourceLocation VINERY_BG = ResourceLocation.fromNamespaceAndPath("vinery", "textures/gui/fermentation_barrel_gui.png");
     /**
      * {@code fermentation_barrel_gui.png} 的**图集真实尺寸**（实测 256×256，GUI 框架只占左上 176×166）。
      * blit 的最后两个参数是图集尺寸，必须填 256/256；若误填 176/166 会把整张背景横向压 256/176≈1.45 倍、

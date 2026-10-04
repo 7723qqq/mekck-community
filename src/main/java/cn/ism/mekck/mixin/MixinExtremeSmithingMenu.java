@@ -34,9 +34,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "committee.nova.mods.avaritia.common.menu.ExtremeSmithingMenu", remap = false)
 public abstract class MixinExtremeSmithingMenu {
 
-    private static final ResourceLocation SINGULARITY_CUTTING = new ResourceLocation("mekck", "avaritia_cutting_factory");
-    private static final ResourceLocation SINGULARITY_COOKING = new ResourceLocation("mekck", "avaritia_cooking_factory");
-    private static final Item INFINITY_UPGRADE = ForgeRegistries.ITEMS.getValue(new ResourceLocation("avaritia", "infinity_upgrade"));
+    private static final ResourceLocation SINGULARITY_CUTTING = ResourceLocation.fromNamespaceAndPath("mekck", "avaritia_cutting_factory");
+    private static final ResourceLocation SINGULARITY_COOKING = ResourceLocation.fromNamespaceAndPath("mekck", "avaritia_cooking_factory");
+    private static final Item INFINITY_UPGRADE = ForgeRegistries.ITEMS.getValue(ResourceLocation.fromNamespaceAndPath("avaritia", "infinity_upgrade"));
 
     // remap = false 同上：`Shadow.remap` 默认 true、不继承类级设置，而本 mixin 用的是
     // `targets = "..."` 字符串形式（目标类可能不在编译期 classpath 上），无从解析。

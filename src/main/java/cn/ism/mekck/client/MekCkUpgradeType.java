@@ -14,11 +14,11 @@ import net.minecraftforge.registries.ForgeRegistries;
  */
 public enum MekCkUpgradeType {
 
-    SPEED("speed", new ResourceLocation("mekanism", "upgrade_speed"), EnumColor.RED),
-    ENERGY("energy", new ResourceLocation("mekanism", "upgrade_energy"), EnumColor.BRIGHT_GREEN),
-    STACK("stack", new ResourceLocation("mekanism_extras", "upgrade_stack"), EnumColor.DARK_GREEN),
-    CREATIVE("creative", new ResourceLocation("mekanism_extras", "upgrade_creative"), EnumColor.DARK_AQUA),
-    GAS("gas", new ResourceLocation("mekanism", "upgrade_gas"), EnumColor.YELLOW);
+    SPEED("speed", ResourceLocation.fromNamespaceAndPath("mekanism", "upgrade_speed"), EnumColor.RED),
+    ENERGY("energy", ResourceLocation.fromNamespaceAndPath("mekanism", "upgrade_energy"), EnumColor.BRIGHT_GREEN),
+    STACK("stack", ResourceLocation.fromNamespaceAndPath("mekanism_extras", "upgrade_stack"), EnumColor.DARK_GREEN),
+    CREATIVE("creative", ResourceLocation.fromNamespaceAndPath("mekanism_extras", "upgrade_creative"), EnumColor.DARK_AQUA),
+    GAS("gas", ResourceLocation.fromNamespaceAndPath("mekanism", "upgrade_gas"), EnumColor.YELLOW);
 
     public final String id;
     private final ResourceLocation iconId;

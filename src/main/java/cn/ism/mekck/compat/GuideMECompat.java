@@ -42,7 +42,7 @@ public final class GuideMECompat {
 
     /** 客户端打开 mekck 指南（专用服务器不会调用）。 */
     public static void openGuide() {
-        openGuide(new ResourceLocation("mekck", "guide"));
+        openGuide(ResourceLocation.fromNamespaceAndPath("mekck", "guide"));
     }
 
     /**

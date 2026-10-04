@@ -36,7 +36,7 @@ public final class ChocolateTagScanner {
 
     /** 巧克力标签（费列罗配方的 extra 输入）。 */
     public static final TagKey<Item> CHOCOLATE_TAG =
-            TagKey.create(Registries.ITEM, new ResourceLocation(UniversalCuttingMachine.MOD_ID, "mekck_chocolate"));
+            TagKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(UniversalCuttingMachine.MOD_ID, "mekck_chocolate"));
 
     private ChocolateTagScanner() {
     }

@@ -109,7 +109,12 @@ public class FerreroRecipe implements Recipe<RecipeWrapper> {
     public static class Serializer implements RecipeSerializer<FerreroRecipe> {
 
         private static FluidStack fluidFromJson(JsonObject json) {
-            ResourceLocation fluidId = new ResourceLocation(GsonHelper.getAsString(json, "fluid"));
+            String rawId = GsonHelper.getAsString(json, "fluid");
+            // tryParse 对非法 id 返回 null（不抛异常）——自己抛出，保住「数据包写错了」这条可读信息。
+            ResourceLocation fluidId = ResourceLocation.tryParse(rawId);
+            if (fluidId == null) {
+                throw new com.google.gson.JsonSyntaxException("非法流体 id: " + rawId);
+            }
             Fluid fluid = ForgeRegistries.FLUIDS.getValue(fluidId);
             if (fluid == null) {
                 throw new com.google.gson.JsonSyntaxException("未知流体: " + fluidId);

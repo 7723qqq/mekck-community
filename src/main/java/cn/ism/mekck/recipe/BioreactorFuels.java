@@ -75,7 +75,7 @@ public final class BioreactorFuels {
             return;
         }
         Map<ResourceLocation, Integer> map = new HashMap<>();
-        ItemStack bioFuel = new ItemStack(ForgeRegistries.ITEMS.getValue(new ResourceLocation("mekanism", "bio_fuel")));
+        ItemStack bioFuel = new ItemStack(ForgeRegistries.ITEMS.getValue(ResourceLocation.fromNamespaceAndPath("mekanism", "bio_fuel")));
         if (!bioFuel.isEmpty()) {
             for (ItemStackToItemStackRecipe recipe : MekanismRecipeType.CRUSHING.getRecipes(level)) {
                 if (recipe.isIncomplete()) {

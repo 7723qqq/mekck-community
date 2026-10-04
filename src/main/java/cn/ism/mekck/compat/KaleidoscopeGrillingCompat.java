@@ -172,7 +172,7 @@ public final class KaleidoscopeGrillingCompat {
 
     /** 用材料组合生成烟火"未完成烤串"（带 SkewerIngredientStacks NBT）。 */
     public static ItemStack makeCustomSkewer(List<ItemStack> ingredients) {
-        Item unfinished = ForgeRegistries.ITEMS.getValue(new ResourceLocation(MOD_ID, "unfinished_skewer"));
+        Item unfinished = ForgeRegistries.ITEMS.getValue(ResourceLocation.fromNamespaceAndPath(MOD_ID, "unfinished_skewer"));
         ItemStack skewer = unfinished != null ? new ItemStack(unfinished) : new ItemStack(Items.STICK);
         ListTag stacks = new ListTag();
         ListTag legacy = new ListTag();
@@ -359,8 +359,7 @@ public final class KaleidoscopeGrillingCompat {
         List<VirtualRecipe> out = new ArrayList<>();
         Ingredient stick = Ingredient.of(Items.STICK);
         for (ThreadingDef def : defs) {
-            ResourceLocation id = new ResourceLocation(MOD_ID,
-                    THREADING_ID_PREFIX + def.key().replace(':', '_').replace('/', '_'));
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath(MOD_ID, THREADING_ID_PREFIX + def.key().replace(':', '_').replace('/', '_'));
             Ingredient first = def.groups().get(0);
             Ingredient rest = null;
             if (def.groups().size() > 1) {
@@ -389,7 +388,7 @@ public final class KaleidoscopeGrillingCompat {
         }
         ItemStack result = makeCustomSkewer(ingredients);
         result.setCount(Math.max(1, quantity));
-        return new VirtualRecipe(new ResourceLocation(MOD_ID, "threading/custom"), stick, first, 1, rest, 1, result);
+        return new VirtualRecipe(ResourceLocation.fromNamespaceAndPath(MOD_ID, "threading/custom"), stick, first, 1, rest, 1, result);
     }
 
     /** 把烟火烤制配对包装为虚拟烧烤配方（ingredient=生串，产物=熟串）；§F29 同款派生缓存。 */
@@ -402,7 +401,7 @@ public final class KaleidoscopeGrillingCompat {
         for (GrillingPair pair : pairs) {
             ResourceLocation rawId = ForgeRegistries.ITEMS.getKey(pair.input().getItem());
             if (rawId == null) continue;
-            ResourceLocation id = new ResourceLocation(MOD_ID, "grilling/" + rawId.getPath());
+            ResourceLocation id = ResourceLocation.fromNamespaceAndPath(MOD_ID, "grilling/" + rawId.getPath());
             out.add(new VirtualRecipe(id, null, Ingredient.of(pair.input()), 1, null, 0, pair.output()));
         }
         grillingVirtualSource = pairs;

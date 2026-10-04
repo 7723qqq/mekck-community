@@ -49,13 +49,11 @@ public class ExtractingRecipeCategory implements IRecipeCategory<ExtractingRecip
 
     private final RecipeType<ExtractingRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public ExtractingRecipeCategory(IGuiHelper helper, RecipeType<ExtractingRecipe> recipeType, ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.smart_extractor");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -67,11 +65,6 @@ public class ExtractingRecipeCategory implements IRecipeCategory<ExtractingRecip
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override
@@ -113,8 +106,11 @@ public class ExtractingRecipeCategory implements IRecipeCategory<ExtractingRecip
                     slot.addFluidStack(f, in.amount);
                 }
             } else {
-                Fluid f = ForgeRegistries.FLUIDS.getValue(new ResourceLocation(in.idOrTag));
-                if (f != null) slot.addFluidStack(f, in.amount);
+                ResourceLocation inId = ResourceLocation.tryParse(in.idOrTag);
+                if (inId != null) {
+                    Fluid f = ForgeRegistries.FLUIDS.getValue(inId);
+                    if (f != null) slot.addFluidStack(f, in.amount);
+                }
             }
         }
         if (!recipe.getFluidResult().isEmpty()) {
@@ -136,8 +132,10 @@ public class ExtractingRecipeCategory implements IRecipeCategory<ExtractingRecip
     private static List<Fluid> fluidsOfTag(String tagName) {
         var manager = ForgeRegistries.FLUIDS.tags();
         if (manager == null) return Collections.emptyList();
+        ResourceLocation tagId = ResourceLocation.tryParse(tagName);
+        if (tagId == null) return Collections.emptyList();
         var tags = manager.getTag(net.minecraft.tags.TagKey.create(
-                net.minecraft.core.registries.Registries.FLUID, new ResourceLocation(tagName)));
+                net.minecraft.core.registries.Registries.FLUID, tagId));
         if (tags == null) return Collections.emptyList();
         List<Fluid> list = new ArrayList<>();
         for (Fluid f : tags) list.add(f);

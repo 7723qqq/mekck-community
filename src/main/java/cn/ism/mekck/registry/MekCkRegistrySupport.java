@@ -27,7 +27,7 @@ public final class MekCkRegistrySupport {
     }
 
     static <T, U extends T> RegistryObject<U> registryView(String id, net.minecraftforge.registries.IForgeRegistry<T> registry) {
-        return RegistryObject.create(new ResourceLocation(MOD_ID, id), registry);
+        return RegistryObject.create(ResourceLocation.fromNamespaceAndPath(MOD_ID, id), registry);
     }
 
     /**

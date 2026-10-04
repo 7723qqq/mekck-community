@@ -41,10 +41,10 @@ public final class BioreactorRenderer implements BlockEntityRenderer<BioreactorB
 
 
     private static final ResourceLocation MESH =
-            new ResourceLocation(UniversalCuttingMachine.MOD_ID, "models/mesh/bioreactor.obj");
+            ResourceLocation.fromNamespaceAndPath(UniversalCuttingMachine.MOD_ID, "models/mesh/bioreactor.obj");
 
     private static final RenderType RENDER_TYPE = MekCkRenderTypes.objCutoutNoCull(
-            new ResourceLocation(UniversalCuttingMachine.MOD_ID, "textures/block/mekck/bioreactor/bioreactor.png"));
+            ResourceLocation.fromNamespaceAndPath(UniversalCuttingMachine.MOD_ID, "textures/block/mekck/bioreactor/bioreactor.png"));
 
     /** 各层在 OBJ 中的分组名；顺序与层的堆叠顺序一致。 */
     private static final List<String> LAYER_GROUPS =

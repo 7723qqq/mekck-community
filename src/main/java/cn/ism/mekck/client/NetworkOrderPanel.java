@@ -71,8 +71,8 @@ public final class NetworkOrderPanel {
     private static final int MAX_ROWS = 6;
     private static final int MIN_ROWS = 2;
 
-    private static final ResourceLocation AE_PANEL = new ResourceLocation("ae2", "textures/guis/background.png");
-    private static final ResourceLocation AE_TEXT_FIELD = new ResourceLocation("ae2", "textures/guis/text_field.png");
+    private static final ResourceLocation AE_PANEL = ResourceLocation.fromNamespaceAndPath("ae2", "textures/guis/background.png");
+    private static final ResourceLocation AE_TEXT_FIELD = ResourceLocation.fromNamespaceAndPath("ae2", "textures/guis/text_field.png");
 
     // AE 风格配色（与烹饪/穿串工厂的 ME 面板一致）
     private static final int AE_BORDER = 0xFF7BA8CC;

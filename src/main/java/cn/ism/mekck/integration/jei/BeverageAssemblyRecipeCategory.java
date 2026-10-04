@@ -44,13 +44,11 @@ public class BeverageAssemblyRecipeCategory implements IRecipeCategory<BeverageA
 
     private final RecipeType<BeverageAssemblyRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public BeverageAssemblyRecipeCategory(IGuiHelper helper, RecipeType<BeverageAssemblyRecipe> recipeType, ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.beverage_blender");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -62,11 +60,6 @@ public class BeverageAssemblyRecipeCategory implements IRecipeCategory<BeverageA
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override

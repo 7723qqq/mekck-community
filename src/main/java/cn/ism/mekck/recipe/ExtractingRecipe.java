@@ -84,14 +84,18 @@ public class ExtractingRecipe implements Recipe<RecipeWrapper> {
                 return false;
             }
             if (idOrTag.startsWith("#")) {
-                TagKey<Fluid> tagId = TagKey.create(Registries.FLUID, new ResourceLocation(idOrTag.substring(1)));
+                // 数据包里的 tag 名同样可能是非法字符：tryParse 返回 null 时无法构造 TagKey，
+                // 按本 javadoc 承诺的「保守不匹配」处理（旧构造器在此处是直接抛异常）。
+                ResourceLocation tagName = ResourceLocation.tryParse(idOrTag.substring(1));
+                if (tagName == null) return false;
+                TagKey<Fluid> tagId = TagKey.create(Registries.FLUID, tagName);
                 // tags() 恒非 null，但 getTag(...) 可能是 null —— tag 没被任何注册表绑定时
                 // 就是 null。按 javadoc 承诺的「保守不匹配」返回 false。
                 var holder = ForgeRegistries.FLUIDS.tags().getTag(tagId);
                 return holder != null && holder.contains(fluid);
             }
-            ResourceLocation fid = new ResourceLocation(idOrTag);
-            return fid.equals(ForgeRegistries.FLUIDS.getKey(fluid));
+            ResourceLocation fid = ResourceLocation.tryParse(idOrTag);
+            return fid != null && fid.equals(ForgeRegistries.FLUIDS.getKey(fluid));
         }
     }
 
@@ -209,7 +213,13 @@ public class ExtractingRecipe implements Recipe<RecipeWrapper> {
                 result = ShapedRecipe.itemStackFromJson(GsonHelper.getAsJsonObject(json, "result"));
             } else {
                 FluidInput out = fluidInputFromJson(GsonHelper.getAsJsonObject(json, "fluidResult"));
-                Fluid fluid = ForgeRegistries.FLUIDS.getValue(new ResourceLocation(out.idOrTag));
+                // tryParse 对非法 id 返回 null（不抛异常）——这里必须自己抛出，
+                // 否则会退化成 getValue(null) 的 NPE，把「数据包写错了」这条可读信息糊掉。
+                ResourceLocation outId = ResourceLocation.tryParse(out.idOrTag);
+                if (outId == null) {
+                    throw new com.google.gson.JsonSyntaxException("非法产物流体 id: " + out.idOrTag + " @ " + recipeId);
+                }
+                Fluid fluid = ForgeRegistries.FLUIDS.getValue(outId);
                 if (fluid == null) {
                     throw new com.google.gson.JsonSyntaxException("未知产物流体: " + out.idOrTag + " @ " + recipeId);
                 }

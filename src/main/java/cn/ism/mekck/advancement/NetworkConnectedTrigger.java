@@ -16,7 +16,7 @@ import org.jetbrains.annotations.NotNull;
  */
 public class NetworkConnectedTrigger extends SimpleCriterionTrigger<NetworkConnectedTrigger.Instance> {
 
-    public static final ResourceLocation ID = new ResourceLocation("mekck", "network_connected");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("mekck", "network_connected");
 
     private static final NetworkConnectedTrigger INSTANCE = new NetworkConnectedTrigger();
 

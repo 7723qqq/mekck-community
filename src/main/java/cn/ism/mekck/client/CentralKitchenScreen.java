@@ -82,7 +82,7 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
     private static final int SORT_H = 14;
     /** 侧栏 tab 图标：侧配 / 下单用 Mek 与本模组 tab 图标；模块（可安装）借用 Mek upgrade 图标。 */
     private static final ResourceLocation CONFIG_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "configuration.png");
-    private static final ResourceLocation ORDER_TEXTURE = new ResourceLocation("mekck", "textures/gui/icon_order.png");
+    private static final ResourceLocation ORDER_TEXTURE = ResourceLocation.fromNamespaceAndPath("mekck", "textures/gui/icon_order.png");
     private static final ResourceLocation MODULE_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "upgrade.png");
 
     /**

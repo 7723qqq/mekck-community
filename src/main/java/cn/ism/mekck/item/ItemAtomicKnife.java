@@ -55,7 +55,7 @@ public class ItemAtomicKnife extends ItemEnergized {
 
     /** 农夫乐事可切方块标签（按 ID 引用，兼容编译/运行版本差异）。 */
     private static final TagKey<Block> MINEABLE_WITH_KNIFE = TagKey.create(Registries.BLOCK,
-            new ResourceLocation("farmersdelight", "mineable/knife"));
+            ResourceLocation.fromNamespaceAndPath("farmersdelight", "mineable/knife"));
 
     public ItemAtomicKnife(Properties properties) {
         super(MekanismConfig.gear.disassemblerChargeRate, MekanismConfig.gear.disassemblerMaxEnergy,

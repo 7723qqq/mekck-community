@@ -36,7 +36,7 @@ public final class FluidIngredientHelper {
 
     /** Forge tag key for milk fluids (used via item tag for matching) */
     public static final TagKey<Item> FORGE_MILK_ITEM_TAG =
-            TagKey.create(BuiltInRegistries.ITEM.key(), new ResourceLocation("forge", "milk"));
+            TagKey.create(BuiltInRegistries.ITEM.key(), ResourceLocation.fromNamespaceAndPath("forge", "milk"));
 
     private FluidIngredientHelper() {}
 

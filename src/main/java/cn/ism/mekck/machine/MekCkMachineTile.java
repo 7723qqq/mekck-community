@@ -380,13 +380,13 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine
      */
     protected ResourceLocation networkPullRecipeTypeId(MekCkFactoryType family) {
         return switch (family) {
-            case CUTTING -> new ResourceLocation("farmersdelight", "cutting");
-            case PLANTING_CUTTING -> new ResourceLocation("mekck", "plantcut");
-            case COOKING -> new ResourceLocation("farmersdelight", "cooking");
-            case SKEWERING -> new ResourceLocation("mekck", "skewering");
-            case GRILLING -> new ResourceLocation("mekck", "grilling");
-            case GRINDING -> new ResourceLocation("mekck", "grinding");
-            case ICE -> new ResourceLocation("mekck", "ice_make");
+            case CUTTING -> ResourceLocation.fromNamespaceAndPath("farmersdelight", "cutting");
+            case PLANTING_CUTTING -> ResourceLocation.fromNamespaceAndPath("mekck", "plantcut");
+            case COOKING -> ResourceLocation.fromNamespaceAndPath("farmersdelight", "cooking");
+            case SKEWERING -> ResourceLocation.fromNamespaceAndPath("mekck", "skewering");
+            case GRILLING -> ResourceLocation.fromNamespaceAndPath("mekck", "grilling");
+            case GRINDING -> ResourceLocation.fromNamespaceAndPath("mekck", "grinding");
+            case ICE -> ResourceLocation.fromNamespaceAndPath("mekck", "ice_make");
         };
     }
 

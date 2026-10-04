@@ -27,10 +27,10 @@ public abstract class MekCkRenderTypes extends RenderType {
      * 只需替换这 4 个常量，调用方不用动。</p>
      */
     private static final ResourceLocation[] ICE_TEXTURES = {
-            new ResourceLocation("minecraft", "textures/block/frosted_ice.png"),
-            new ResourceLocation("minecraft", "textures/block/frosted_ice.png"),
-            new ResourceLocation("minecraft", "textures/block/frosted_ice.png"),
-            new ResourceLocation("minecraft", "textures/block/frosted_ice.png")
+            ResourceLocation.fromNamespaceAndPath("minecraft", "textures/block/frosted_ice.png"),
+            ResourceLocation.fromNamespaceAndPath("minecraft", "textures/block/frosted_ice.png"),
+            ResourceLocation.fromNamespaceAndPath("minecraft", "textures/block/frosted_ice.png"),
+            ResourceLocation.fromNamespaceAndPath("minecraft", "textures/block/frosted_ice.png")
     };
 
     /** 按贴图档位缓存的 {@link RenderType}。首次使用时填充，之后恒定复用。 */
@@ -86,7 +86,7 @@ public abstract class MekCkRenderTypes extends RenderType {
         if (!path.endsWith(".png")) {
             path = path + ".png";
         }
-        return new ResourceLocation(loc.getNamespace(), path);
+        return ResourceLocation.fromNamespaceAndPath(loc.getNamespace(), path);
     }
 
     /**

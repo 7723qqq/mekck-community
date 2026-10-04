@@ -80,7 +80,7 @@ public class TestIceCombatGuards {
     /** 森罗虚拟配方同形的配方：机器侧反射读 public 字段 {@code tool} / {@code ingredientCount}。 */
     private static Recipe<?> threadingRecipe(Ingredient tool, int toolCount) {
         return new KaleidoscopeGrillingCompat.VirtualRecipe(
-                new ResourceLocation("mekck", "threading/test"),
+                ResourceLocation.fromNamespaceAndPath("mekck", "threading/test"),
                 tool, Ingredient.of(Items.COOKED_BEEF), toolCount, null, 0,
                 new ItemStack(Items.COOKED_BEEF));
     }

@@ -150,6 +150,7 @@ public final class UniversalCuttingMachine {
     /** 创造升级的 49 种食物提示是否已发过（与种植调试信息各自独立）。 */
     private static boolean creativeUpgradeHintSent = false;
 
+    @SuppressWarnings("removal") // ModLoadingContext.get()：见构造器内注释，1.20.1 上无替代入口
     public UniversalCuttingMachine(FMLJavaModLoadingContext context) {
         IEventBus bus = context.getModEventBus();
         // 十个通用延迟注册器 + 触碰所有注册类（详见 MekCkRegistries#registerAll）
@@ -219,6 +220,9 @@ public final class UniversalCuttingMachine {
         bus.addListener(this::addCreativeTabContents);
         bus.addListener(this::onCommonSetup);
         // 配置文件生成到 config/mekck/mekck-common.toml（与 planting 等配置文件同目录）
+        // ModLoadingContext.get() 自 Forge 1.21.1 起 forRemoval，但 47.4.16（本项目锁定的版本）
+        // 里它仍是唯一入口：registerConfig 是实例方法，ModLoadingContext 没有静态等价物。
+        // 升到新版 Forge 时这里要跟着换成新版 mod 构造器上的 config 注册入口。
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, MekckConfig.SPEC, "mekck/mekck-common.toml");
         bus.register(MekckConfig.class);
 

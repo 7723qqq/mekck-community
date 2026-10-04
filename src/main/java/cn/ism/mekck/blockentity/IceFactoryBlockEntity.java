@@ -376,8 +376,12 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
             return;
         }
         if (tracker.getInstalled() <= 0) return;
-        net.minecraft.world.item.Item item = net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(
-                new net.minecraft.resources.ResourceLocation(itemId));
+        // itemId 是上面的固定字面量，拆成 ns/path 走非空的 fromNamespaceAndPath
+        // （单参 tryParse 返回可空类型，注册表查询不接受 null）。
+        int sep = itemId.indexOf(':');
+        ResourceLocation upgradeId = ResourceLocation.fromNamespaceAndPath(
+                itemId.substring(0, sep), itemId.substring(sep + 1));
+        net.minecraft.world.item.Item item = net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(upgradeId);
         if (item == null || item == net.minecraft.world.item.Items.AIR) return;
         ItemStack give = new ItemStack(item, 1);
         ItemStack inSlot = items.getStackInSlot(slot);
@@ -586,7 +590,7 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
     public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         if (level == null) return List.of();
         return cn.ism.mekck.ae2.NetworkPullHelper.currentOrUnion(level, items.getStackInSlot(0),
-                new ResourceLocation("mekck", "ice_make"));
+                ResourceLocation.fromNamespaceAndPath("mekck", "ice_make"));
     }
 
     public int getProcesses() {

@@ -126,7 +126,10 @@ public enum KitchenFamily {
 
     /** 图标物品栈（未注册时返回空栈）。 */
     public net.minecraft.world.item.ItemStack icon() {
-        var item = net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(new ResourceLocation(iconItem));
+        // iconItem 是内置枚举常量，tryParse 不会返回 null；仍判一次以免将来有人改成外部配置。
+        var iconId = ResourceLocation.tryParse(iconItem);
+        if (iconId == null) return net.minecraft.world.item.ItemStack.EMPTY;
+        var item = net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(iconId);
         return item == null ? net.minecraft.world.item.ItemStack.EMPTY
                 : new net.minecraft.world.item.ItemStack(item);
     }

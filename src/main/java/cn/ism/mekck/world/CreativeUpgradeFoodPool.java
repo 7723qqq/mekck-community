@@ -44,7 +44,7 @@ public final class CreativeUpgradeFoodPool {
     /** 黑名单：创造专属 / 无正常来源 / 会自指的物品。 */
     private static final Set<ResourceLocation> BLACKLIST = Set.of(
             // 本配方自己的产物：绝不能出现在自己的材料里
-            new ResourceLocation("mekanism_extras", "upgrade_creative")
+            ResourceLocation.fromNamespaceAndPath("mekanism_extras", "upgrade_creative")
     );
 
     /**

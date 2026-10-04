@@ -182,7 +182,11 @@ public class PlantingCuttingRecipe implements Recipe<RecipeWrapper> {
             if (json.has("soils")) {
                 List<ItemStack> soilStacks = new ArrayList<>();
                 for (JsonElement elem : GsonHelper.getAsJsonArray(json, "soils")) {
-                    Item soilItem = ForgeRegistries.ITEMS.getValue(new ResourceLocation(elem.getAsString()));
+                    // 数据包里的 id 非法时旧构造器会抛；这里跳过该条（其余 soil 照常生效），
+                    // 不让一条写错的 soil 毁掉整张配方。
+                    ResourceLocation soilId = ResourceLocation.tryParse(elem.getAsString());
+                    if (soilId == null) continue;
+                    Item soilItem = ForgeRegistries.ITEMS.getValue(soilId);
                     if (soilItem != null) {
                         soilStacks.add(new ItemStack(soilItem));
                     }

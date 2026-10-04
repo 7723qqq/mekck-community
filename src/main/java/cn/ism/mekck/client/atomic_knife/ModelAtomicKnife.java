@@ -25,8 +25,8 @@ import org.jetbrains.annotations.NotNull;
  */
 public class ModelAtomicKnife extends MekanismJavaModel {
 
-    public static final ModelLayerLocation KNIFE_LAYER = new ModelLayerLocation(new ResourceLocation("mekck", "atomic_knife"), "main");
-    private static final ResourceLocation KNIFE_TEXTURE = new ResourceLocation("mekck", "render/atomic_knife.png");
+    public static final ModelLayerLocation KNIFE_LAYER = new ModelLayerLocation(ResourceLocation.fromNamespaceAndPath("mekck", "atomic_knife"), "main");
+    private static final ResourceLocation KNIFE_TEXTURE = ResourceLocation.fromNamespaceAndPath("mekck", "render/atomic_knife.png");
 
     private static final ModelPartData TOP_R1 = new ModelPartData("top_r1", CubeListBuilder.create()
           .texOffs(4, 13).addBox(-1.0F, -3.5F, -0.5F, 2.0F, 4.0F, 1.0F, new CubeDeformation(0.0F)),

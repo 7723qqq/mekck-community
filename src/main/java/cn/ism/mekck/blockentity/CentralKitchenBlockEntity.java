@@ -1071,7 +1071,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     private static mekanism.api.chemical.gas.Gas resolveNutrientGas() {
         try {
             return mekanism.api.MekanismAPI.gasRegistry().getValue(
-                    new net.minecraft.resources.ResourceLocation("mekmm", "nutrient_solution"));
+                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("mekmm", "nutrient_solution"));
         } catch (Throwable t) {
             return null;
         }

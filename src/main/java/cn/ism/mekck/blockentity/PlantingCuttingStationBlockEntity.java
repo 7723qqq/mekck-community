@@ -798,7 +798,7 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
     public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         if (level == null) return List.of();
         return cn.ism.mekck.ae2.NetworkPullHelper.currentOrUnion(level, items.getStackInSlot(0),
-                new net.minecraft.resources.ResourceLocation("mekck", "plantcut"));
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("mekck", "plantcut"));
     }
 
     public ContainerData getData() {

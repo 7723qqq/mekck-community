@@ -52,12 +52,12 @@ public final class MekCkFluids {
             consumer.accept(new IClientFluidTypeExtensions() {
                 @Override
                 public net.minecraft.resources.ResourceLocation getStillTexture() {
-                    return new net.minecraft.resources.ResourceLocation("minecraft:block/water_still");
+                    return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("minecraft", "block/water_still");
                 }
 
                 @Override
                 public net.minecraft.resources.ResourceLocation getFlowingTexture() {
-                    return new net.minecraft.resources.ResourceLocation("minecraft:block/water_flow");
+                    return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("minecraft", "block/water_flow");
                 }
 
                 @Override
@@ -101,12 +101,12 @@ public final class MekCkFluids {
             consumer.accept(new IClientFluidTypeExtensions() {
                 @Override
                 public net.minecraft.resources.ResourceLocation getStillTexture() {
-                    return new net.minecraft.resources.ResourceLocation("minecraft:block/water_still");
+                    return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("minecraft", "block/water_still");
                 }
 
                 @Override
                 public net.minecraft.resources.ResourceLocation getFlowingTexture() {
-                    return new net.minecraft.resources.ResourceLocation("minecraft:block/water_flow");
+                    return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("minecraft", "block/water_flow");
                 }
 
                 @Override

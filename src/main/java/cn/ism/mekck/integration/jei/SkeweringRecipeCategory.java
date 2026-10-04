@@ -56,14 +56,12 @@ public class SkeweringRecipeCategory implements IRecipeCategory<MekCkSkeweringRe
 
     private final RecipeType<MekCkSkeweringRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public SkeweringRecipeCategory(IGuiHelper helper, RecipeType<MekCkSkeweringRecipe> recipeType,
                                    ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.smart_skewering_machine");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -75,11 +73,6 @@ public class SkeweringRecipeCategory implements IRecipeCategory<MekCkSkeweringRe
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override

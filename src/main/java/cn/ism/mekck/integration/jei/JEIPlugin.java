@@ -40,7 +40,7 @@ import static cn.ism.mekck.registry.MekCkFactories.FACTORY_BLOCKS;
 
 @JeiPlugin
 public class JEIPlugin implements IModPlugin {
-    private static final ResourceLocation ID = new ResourceLocation("mekck", "jei_plugin");
+    private static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("mekck", "jei_plugin");
 
     // Reuse Farmer's Delight's recipe types by using the same ResourceLocation
     public static final RecipeType<CuttingBoardRecipe> CUTTING_TYPE =
@@ -520,7 +520,7 @@ public class JEIPlugin implements IModPlugin {
 
     /** 造陈化窖介绍页的示例瓶：装了 vinery 就用 {@code vinery:wine_bottle} 带 Year NBT 演示“普通→更陈”；否则空。 */
     private static WineCellarInfoRecipe makeWineCellarInfoRecipe() {
-        net.minecraft.resources.ResourceLocation bottleId = new net.minecraft.resources.ResourceLocation("vinery", "wine_bottle");
+        net.minecraft.resources.ResourceLocation bottleId = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("vinery", "wine_bottle");
         Item bottleItem = ForgeRegistries.ITEMS.getValue(bottleId);
         if (bottleItem == null || bottleItem == net.minecraft.world.item.Items.AIR) {
             return new WineCellarInfoRecipe(ItemStack.EMPTY, ItemStack.EMPTY);

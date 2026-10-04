@@ -16,18 +16,18 @@ import java.lang.reflect.Method;
  * </p>
  */
 public final class GuideMECompatImpl {
-    private static final ResourceLocation GUIDE_ID = new ResourceLocation(UniversalCuttingMachine.MOD_ID, "guide");
+    private static final ResourceLocation GUIDE_ID = ResourceLocation.fromNamespaceAndPath(UniversalCuttingMachine.MOD_ID, "guide");
     /** 本模组指南的内容目录：assets/mekck/mekckguide/ */
     private static final String GUIDE_FOLDER = "mekckguide";
     /**
      * 为其他模组撰写的指南（本模组只提供内容与注册；命名空间 {@code mekguide} 是**未来独立新 mod** 的命名空间，
      * 内容位于 {@code assets/mekguide/<folder>/}——将来拆 mod 时只需搬走目录与注册代码，正文零改动）。
      */
-    private static final ResourceLocation MEK_GUIDE_ID = new ResourceLocation("mekguide", "mek");
+    private static final ResourceLocation MEK_GUIDE_ID = ResourceLocation.fromNamespaceAndPath("mekguide", "mek");
     /** 通用机械：扩展（Mekanism Extras）指南，内容位于 assets/mekguide/meke/。 */
-    private static final ResourceLocation MEKE_GUIDE_ID = new ResourceLocation("mekguide", "meke");
+    private static final ResourceLocation MEKE_GUIDE_ID = ResourceLocation.fromNamespaceAndPath("mekguide", "meke");
     /** 通用机械：更多机器（mekmm）指南（F13），内容位于 assets/mekguide/mekmm/。 */
-    private static final ResourceLocation MEKMM_GUIDE_ID = new ResourceLocation("mekguide", "mekmm");
+    private static final ResourceLocation MEKMM_GUIDE_ID = ResourceLocation.fromNamespaceAndPath("mekguide", "mekmm");
 
     private GuideMECompatImpl() {
     }

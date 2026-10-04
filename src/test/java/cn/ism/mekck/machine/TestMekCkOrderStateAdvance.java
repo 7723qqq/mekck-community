@@ -33,7 +33,7 @@ public class TestMekCkOrderStateAdvance {
     @Test
     public void advancingPastIntMaxDoesNotWrapToNegative() {
         MekCkOrderState order = new MekCkOrderState();
-        order.setOrder(new net.minecraft.resources.ResourceLocation("mekck", "x"), Integer.MAX_VALUE);
+        order.setOrder(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("mekck", "x"), Integer.MAX_VALUE);
         // 反复推进直到夹取生效：旧实现在这里早就绕成负数了。
         for (int i = 0; i < 5; i++) {
             order.advance(Integer.MAX_VALUE);
@@ -46,7 +46,7 @@ public class TestMekCkOrderStateAdvance {
     @Test
     public void theClampedTotalIsStillReportedAsComplete() {
         MekCkOrderState order = new MekCkOrderState();
-        order.setOrder(new net.minecraft.resources.ResourceLocation("mekck", "x"), Integer.MAX_VALUE);
+        order.setOrder(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("mekck", "x"), Integer.MAX_VALUE);
         order.advance(Integer.MAX_VALUE);
         // 关键：夹到 MAX_VALUE 之后「已满」必须成立 —— 否则订单永远挂着。
         assertTrue("夹到 MAX_VALUE 之后应判定为已完成", order.advance(1));
@@ -63,7 +63,7 @@ public class TestMekCkOrderStateAdvance {
     @Test
     public void nonPositiveDeltaDoesNotMoveProgress() {
         MekCkOrderState order = new MekCkOrderState();
-        order.setOrder(new net.minecraft.resources.ResourceLocation("mekck", "x"), 10);
+        order.setOrder(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("mekck", "x"), 10);
         order.advance(3);
         assertFalse("delta ≤ 0 不推进，但仍要如实回答「是否已满」", order.advance(0));
         assertEquals(3, order.getCompleted());
@@ -89,7 +89,7 @@ public class TestMekCkOrderStateAdvance {
                 1_000_000, Integer.MAX_VALUE - 1, Integer.MAX_VALUE, -1
         };
         net.minecraft.resources.ResourceLocation id =
-                new net.minecraft.resources.ResourceLocation("mekck", "x");
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("mekck", "x");
         int mismatches = 0;
         int cases = 0;
         for (int completed : values) {

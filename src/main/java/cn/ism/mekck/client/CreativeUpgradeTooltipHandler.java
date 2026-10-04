@@ -25,7 +25,7 @@ public final class CreativeUpgradeTooltipHandler {
 
     /** 目标物品 id（通用机械：扩展的创造升级）。 */
     private static final ResourceLocation TARGET =
-            new ResourceLocation("mekanism_extras", "upgrade_creative");
+            ResourceLocation.fromNamespaceAndPath("mekanism_extras", "upgrade_creative");
 
     private CreativeUpgradeTooltipHandler() {
     }

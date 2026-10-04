@@ -41,13 +41,11 @@ public class GrapePressingRecipeCategory implements IRecipeCategory<GrapePressin
 
     private final RecipeType<GrapePressingRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public GrapePressingRecipeCategory(IGuiHelper helper, RecipeType<GrapePressingRecipe> recipeType, ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.juicer");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -59,11 +57,6 @@ public class GrapePressingRecipeCategory implements IRecipeCategory<GrapePressin
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override

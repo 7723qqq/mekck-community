@@ -37,7 +37,7 @@ public final class MekCkRecipeTypes {
     }
 
     public static final RegistryObject<RecipeType<PlantingCuttingRecipe>> PLANTING_CUTTING_RECIPE_TYPE = RECIPE_TYPES.register("plantcut",
-            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "plantcut")));
+            () -> RecipeType.simple(ResourceLocation.fromNamespaceAndPath(MOD_ID, "plantcut")));
 
     public static final RegistryObject<RecipeSerializer<PlantingCuttingRecipe>> PLANTING_CUTTING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("plantcut",
             PlantingCuttingRecipe.Serializer::new);
@@ -45,7 +45,7 @@ public final class MekCkRecipeTypes {
     // Ice Make recipe (急冻制冰机 / 制冰工厂)
 
     public static final RegistryObject<RecipeType<IceMakeRecipe>> ICE_MAKE_RECIPE_TYPE = RECIPE_TYPES.register("ice_make",
-            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "ice_make")));
+            () -> RecipeType.simple(ResourceLocation.fromNamespaceAndPath(MOD_ID, "ice_make")));
 
     public static final RegistryObject<RecipeSerializer<IceMakeRecipe>> ICE_MAKE_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("ice_make",
             IceMakeRecipe.Serializer::new);
@@ -53,7 +53,7 @@ public final class MekCkRecipeTypes {
     // Ferrero recipe (巧克力大炮：物品+extra+2流体 → 费列罗巧克力)
 
     public static final RegistryObject<RecipeType<cn.ism.mekck.recipe.FerreroRecipe>> FERRERO_RECIPE_TYPE = RECIPE_TYPES.register("ferrero",
-            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "ferrero")));
+            () -> RecipeType.simple(ResourceLocation.fromNamespaceAndPath(MOD_ID, "ferrero")));
 
     public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.FerreroRecipe>> FERRERO_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("ferrero",
             cn.ism.mekck.recipe.FerreroRecipe.Serializer::new);
@@ -61,7 +61,7 @@ public final class MekCkRecipeTypes {
     // Nut Roasting recipe (坚果爆炒机：1 输入 → 1 输出)
 
     public static final RegistryObject<RecipeType<cn.ism.mekck.recipe.NutRoastingRecipe>> NUT_ROASTING_RECIPE_TYPE = RECIPE_TYPES.register("nut_roasting",
-            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "nut_roasting")));
+            () -> RecipeType.simple(ResourceLocation.fromNamespaceAndPath(MOD_ID, "nut_roasting")));
 
     public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.NutRoastingRecipe>> NUT_ROASTING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("nut_roasting",
             cn.ism.mekck.recipe.NutRoastingRecipe.Serializer::new);
@@ -69,7 +69,7 @@ public final class MekCkRecipeTypes {
     // Grinding recipe (§F19 D 半：电力研磨机磨粉，单入单出，照 nut_roasting 模板)
 
     public static final RegistryObject<RecipeType<cn.ism.mekck.recipe.GrindingRecipe>> GRINDING_RECIPE_TYPE = RECIPE_TYPES.register("grinding",
-            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "grinding")));
+            () -> RecipeType.simple(ResourceLocation.fromNamespaceAndPath(MOD_ID, "grinding")));
 
     public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.GrindingRecipe>> GRINDING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("grinding",
             cn.ism.mekck.recipe.GrindingRecipe.Serializer::new);
@@ -77,7 +77,7 @@ public final class MekCkRecipeTypes {
     // Extracting recipe (§F19 C+E 半：智能萃取机专属，多物品+可选流体 → 流体|物品 双产物形态二选一)
 
     public static final RegistryObject<RecipeType<cn.ism.mekck.recipe.ExtractingRecipe>> EXTRACTING_RECIPE_TYPE = RECIPE_TYPES.register("extracting",
-            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "extracting")));
+            () -> RecipeType.simple(ResourceLocation.fromNamespaceAndPath(MOD_ID, "extracting")));
 
     public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.ExtractingRecipe>> EXTRACTING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("extracting",
             cn.ism.mekck.recipe.ExtractingRecipe.Serializer::new);
@@ -85,7 +85,7 @@ public final class MekCkRecipeTypes {
     // Beverage assembly recipe (饮品调配机 F11 §四.2：杯 + 可选小料 + 饮品流体 → 杯装饮品)
 
     public static final RegistryObject<RecipeType<cn.ism.mekck.recipe.BeverageAssemblyRecipe>> BEVERAGE_ASSEMBLY_RECIPE_TYPE = RECIPE_TYPES.register("beverage_assembly",
-            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "beverage_assembly")));
+            () -> RecipeType.simple(ResourceLocation.fromNamespaceAndPath(MOD_ID, "beverage_assembly")));
 
     public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.BeverageAssemblyRecipe>> BEVERAGE_ASSEMBLY_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("beverage_assembly",
             cn.ism.mekck.recipe.BeverageAssemblyRecipe.Serializer::new);
@@ -93,7 +93,7 @@ public final class MekCkRecipeTypes {
     // Packaging recipe (包材组装机 F7 §四.4：若干输入材料 → 1 个空容器/包材，无流体)
 
     public static final RegistryObject<RecipeType<cn.ism.mekck.recipe.PackagingRecipe>> PACKAGING_RECIPE_TYPE = RECIPE_TYPES.register("packaging",
-            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "packaging")));
+            () -> RecipeType.simple(ResourceLocation.fromNamespaceAndPath(MOD_ID, "packaging")));
 
     public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.PackagingRecipe>> PACKAGING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("packaging",
             cn.ism.mekck.recipe.PackagingRecipe.Serializer::new);
@@ -101,7 +101,7 @@ public final class MekCkRecipeTypes {
     // Grape pressing recipe (鲜果榨汁机 葡萄压榨：N 份葡萄 + 空葡萄酒瓶 → 瓶装葡萄汁，纯物品无流体)
 
     public static final RegistryObject<RecipeType<cn.ism.mekck.recipe.GrapePressingRecipe>> GRAPE_PRESSING_RECIPE_TYPE = RECIPE_TYPES.register("grape_pressing",
-            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "grape_pressing")));
+            () -> RecipeType.simple(ResourceLocation.fromNamespaceAndPath(MOD_ID, "grape_pressing")));
 
     public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.GrapePressingRecipe>> GRAPE_PRESSING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("grape_pressing",
             cn.ism.mekck.recipe.GrapePressingRecipe.Serializer::new);
@@ -109,7 +109,7 @@ public final class MekCkRecipeTypes {
     // Skewering recipe (串烧工厂：主料 + 辅料 + 签子 → 串烧物，签子不消耗)
 
     public static final RegistryObject<RecipeType<cn.ism.mekck.recipe.MekCkSkeweringRecipe>> SKEWERING_RECIPE_TYPE = RECIPE_TYPES.register("skewering",
-            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "skewering")));
+            () -> RecipeType.simple(ResourceLocation.fromNamespaceAndPath(MOD_ID, "skewering")));
 
     public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.MekCkSkeweringRecipe>> SKEWERING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("skewering",
             cn.ism.mekck.recipe.MekCkSkeweringRecipe.Serializer::new);
@@ -117,7 +117,7 @@ public final class MekCkRecipeTypes {
     // Grilling recipe (烧烤工厂自有：单输入 → 烤制产物，产物为独立的"烤"变体而非复用熟肉)
 
     public static final RegistryObject<RecipeType<cn.ism.mekck.recipe.MekCkGrillingRecipe>> GRILLING_RECIPE_TYPE = RECIPE_TYPES.register("grilling",
-            () -> RecipeType.simple(new ResourceLocation(MOD_ID, "grilling")));
+            () -> RecipeType.simple(ResourceLocation.fromNamespaceAndPath(MOD_ID, "grilling")));
 
     public static final RegistryObject<RecipeSerializer<cn.ism.mekck.recipe.MekCkGrillingRecipe>> GRILLING_RECIPE_SERIALIZER = RECIPE_SERIALIZERS.register("grilling",
             cn.ism.mekck.recipe.MekCkGrillingRecipe.Serializer::new);

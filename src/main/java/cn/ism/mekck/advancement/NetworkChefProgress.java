@@ -25,7 +25,7 @@ public final class NetworkChefProgress {
 
     /** 进度资源 ID（子进度）。触发器 ID 见 {@link NetworkConnectedTrigger#ID}。 */
     public static final net.minecraft.resources.ResourceLocation ADVANCEMENT_ID =
-            new net.minecraft.resources.ResourceLocation("mekck", "network_chef_apprentice");
+            net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("mekck", "network_chef_apprentice");
 
     /** 内存重试队列：UUID → 剩余重试次数（服务端主线程访问；仅队列非空时处理，不每 tick 全服扫描）。 */
     private static final Map<UUID, Integer> RETRY = new HashMap<>();

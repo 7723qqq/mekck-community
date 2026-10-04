@@ -49,7 +49,7 @@ public class TestGrindingOrderEngine {
     @Test
     public void orderSaveWritesTheThreeKeys() {
         GrindingFactoryExecutor executor = executor();
-        executor.setOrder(new ResourceLocation("kaleidoscope_cookery", "millstone"), 7);
+        executor.setOrder(ResourceLocation.fromNamespaceAndPath("kaleidoscope_cookery", "millstone"), 7);
 
         CompoundTag tag = new CompoundTag();
         executor.save(tag);
@@ -78,7 +78,7 @@ public class TestGrindingOrderEngine {
     @Test
     public void orderRoundTripsThroughTheTag() {
         GrindingFactoryExecutor written = executor();
-        written.setOrder(new ResourceLocation("mekck", "grinding"), 5);
+        written.setOrder(ResourceLocation.fromNamespaceAndPath("mekck", "grinding"), 5);
 
         CompoundTag tag = new CompoundTag();
         written.save(tag);
@@ -86,7 +86,7 @@ public class TestGrindingOrderEngine {
         GrindingFactoryExecutor read = executor();
         read.load(tag);
 
-        assertEquals(new ResourceLocation("mekck", "grinding"), read.getOrderRecipeId());
+        assertEquals(ResourceLocation.fromNamespaceAndPath("mekck", "grinding"), read.getOrderRecipeId());
         assertEquals(5, read.getOrderQuantity());
         assertEquals(0, read.getOrderCompleted());
     }
@@ -116,7 +116,7 @@ public class TestGrindingOrderEngine {
     @Test
     public void orderLoadWithNoKeyClearsAStaleOrder() {
         GrindingFactoryExecutor executor = executor();
-        executor.setOrder(new ResourceLocation("mekck", "grinding"), 3);
+        executor.setOrder(ResourceLocation.fromNamespaceAndPath("mekck", "grinding"), 3);
         assertEquals(3, executor.getOrderQuantity());
 
         // 空标签 = 「这台机器没有订单」这一存档形态（刚放下的机器、取消订单后存盘）
@@ -225,9 +225,9 @@ public class TestGrindingOrderEngine {
     @Test
     public void orderQuantityIsAtLeastOne() {
         GrindingFactoryExecutor executor = executor();
-        executor.setOrder(new ResourceLocation("mekck", "grinding"), 0);
+        executor.setOrder(ResourceLocation.fromNamespaceAndPath("mekck", "grinding"), 0);
         assertEquals(1, executor.getOrderQuantity());
-        executor.setOrder(new ResourceLocation("mekck", "grinding"), -3);
+        executor.setOrder(ResourceLocation.fromNamespaceAndPath("mekck", "grinding"), -3);
         assertEquals(1, executor.getOrderQuantity());
     }
 
@@ -243,7 +243,7 @@ public class TestGrindingOrderEngine {
         executor.load(tag);
         assertEquals(2, executor.getOrderCompleted());
 
-        executor.setOrder(new ResourceLocation("mekck", "grinding"), 8);
+        executor.setOrder(ResourceLocation.fromNamespaceAndPath("mekck", "grinding"), 8);
         assertEquals("换单后完成计数必须归零", 0, executor.getOrderCompleted());
         assertEquals(8, executor.getOrderQuantity());
     }
@@ -252,7 +252,7 @@ public class TestGrindingOrderEngine {
     @Test
     public void clearingAnOrderZeroesEveryReading() {
         GrindingFactoryExecutor executor = executor();
-        executor.setOrder(new ResourceLocation("mekck", "grinding"), 4);
+        executor.setOrder(ResourceLocation.fromNamespaceAndPath("mekck", "grinding"), 4);
         executor.clearOrder();
 
         assertNull(executor.getOrderRecipeId());

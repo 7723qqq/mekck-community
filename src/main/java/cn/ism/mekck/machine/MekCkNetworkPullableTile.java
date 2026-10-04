@@ -139,7 +139,7 @@ public abstract class MekCkNetworkPullableTile extends TileEntityConfigurableMac
         List<Ingredient> unions = new ArrayList<>();
         for (String typeId : networkPullRecipeTypeIds()) {
             Ingredient union = RecipeInputMatcher.unionFirstIngredients(
-                    getLevel(), new ResourceLocation(typeId));
+                    getLevel(), ResourceLocation.tryParse(typeId));
             if (!union.isEmpty()) {
                 unions.add(union);
             }

@@ -39,13 +39,11 @@ public class NutRoastingRecipeCategory implements IRecipeCategory<NutRoastingRec
 
     private final RecipeType<NutRoastingRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public NutRoastingRecipeCategory(IGuiHelper helper, RecipeType<NutRoastingRecipe> recipeType, ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.nut_roaster");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -57,11 +55,6 @@ public class NutRoastingRecipeCategory implements IRecipeCategory<NutRoastingRec
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override

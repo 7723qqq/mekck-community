@@ -94,9 +94,9 @@ public final class BioreactorBlockEntity extends BlockEntity implements MenuProv
 
     /** 外部燃料流体（可能未安装对应模组，此时为 null）。 */
     private static final Fluid MEAT_FLUID =
-            ForgeRegistries.FLUIDS.getValue(new ResourceLocation("industrialforegoing", "meat"));
+            ForgeRegistries.FLUIDS.getValue(ResourceLocation.fromNamespaceAndPath("industrialforegoing", "meat"));
     private static final Fluid NUTRITIONAL_PASTE_FLUID =
-            ForgeRegistries.FLUIDS.getValue(new ResourceLocation("mekanism", "nutritional_paste"));
+            ForgeRegistries.FLUIDS.getValue(ResourceLocation.fromNamespaceAndPath("mekanism", "nutritional_paste"));
 
     /** 燃料流体（注册名）→ 每 mb 发电量（FE）。 */
     private static final java.util.Map<ResourceLocation, Integer> FUEL_FE_PER_MB = new java.util.HashMap<>();

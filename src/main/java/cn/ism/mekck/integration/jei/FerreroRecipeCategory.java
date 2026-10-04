@@ -51,13 +51,11 @@ public class FerreroRecipeCategory implements IRecipeCategory<FerreroRecipe> {
 
     private final RecipeType<FerreroRecipe> recipeType;
     private final Component title;
-    private final IDrawable background;
     private final IDrawable icon;
 
     public FerreroRecipeCategory(IGuiHelper helper, RecipeType<FerreroRecipe> recipeType, ItemStack iconStack) {
         this.recipeType = recipeType;
         this.title = Component.translatable("block.mekck.chocolate_cannon");
-        this.background = helper.createBlankDrawable(PANEL_W, PANEL_H);
         this.icon = helper.createDrawableIngredient(VanillaTypes.ITEM_STACK, iconStack);
     }
 
@@ -69,11 +67,6 @@ public class FerreroRecipeCategory implements IRecipeCategory<FerreroRecipe> {
     @Override
     public Component getTitle() {
         return title;
-    }
-
-    @Override
-    public IDrawable getBackground() {
-        return background;
     }
 
     @Override

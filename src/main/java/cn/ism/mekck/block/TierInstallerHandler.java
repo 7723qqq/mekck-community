@@ -66,29 +66,29 @@ public final class TierInstallerHandler {
     private static final Map<ResourceLocation, CuttingMachineFactoryTier> INSTALLERS = new HashMap<>();
 
     static {
-        INSTALLERS.put(new ResourceLocation("mekanism", "basic_tier_installer"), CuttingMachineFactoryTier.BASIC);
-        INSTALLERS.put(new ResourceLocation("mekanism", "advanced_tier_installer"), CuttingMachineFactoryTier.ADVANCED);
-        INSTALLERS.put(new ResourceLocation("mekanism", "elite_tier_installer"), CuttingMachineFactoryTier.ELITE);
-        INSTALLERS.put(new ResourceLocation("mekanism", "ultimate_tier_installer"), CuttingMachineFactoryTier.ULTIMATE);
-        INSTALLERS.put(new ResourceLocation("mekanism_extras", "absolute_tier_installer"), CuttingMachineFactoryTier.ABSOLUTE);
-        INSTALLERS.put(new ResourceLocation("mekanism_extras", "supreme_tier_installer"), CuttingMachineFactoryTier.SUPREME);
-        INSTALLERS.put(new ResourceLocation("mekanism_extras", "cosmic_tier_installer"), CuttingMachineFactoryTier.COSMIC);
-        INSTALLERS.put(new ResourceLocation("mekanism_extras", "infinite_tier_installer"), CuttingMachineFactoryTier.INFINITE);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekanism", "basic_tier_installer"), CuttingMachineFactoryTier.BASIC);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekanism", "advanced_tier_installer"), CuttingMachineFactoryTier.ADVANCED);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekanism", "elite_tier_installer"), CuttingMachineFactoryTier.ELITE);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekanism", "ultimate_tier_installer"), CuttingMachineFactoryTier.ULTIMATE);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekanism_extras", "absolute_tier_installer"), CuttingMachineFactoryTier.ABSOLUTE);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekanism_extras", "supreme_tier_installer"), CuttingMachineFactoryTier.SUPREME);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekanism_extras", "cosmic_tier_installer"), CuttingMachineFactoryTier.COSMIC);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekanism_extras", "infinite_tier_installer"), CuttingMachineFactoryTier.INFINITE);
         // MekCK 自有的三个最终等级安装器
-        INSTALLERS.put(new ResourceLocation("mekck", "crystal_matrix_tier_installer"), CuttingMachineFactoryTier.CRYSTAL_MATRIX);
-        INSTALLERS.put(new ResourceLocation("mekck", "nebula_tier_installer"), CuttingMachineFactoryTier.NEBULA);
-        INSTALLERS.put(new ResourceLocation("mekck", "singularity_tier_installer"), CuttingMachineFactoryTier.SINGULARITY);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekck", "crystal_matrix_tier_installer"), CuttingMachineFactoryTier.CRYSTAL_MATRIX);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekck", "nebula_tier_installer"), CuttingMachineFactoryTier.NEBULA);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekck", "singularity_tier_installer"), CuttingMachineFactoryTier.SINGULARITY);
         // 无尽乐事的刀：本身是「对应等级工厂方块的合成材料」，同时也可直接当安装器使用
         // （对切菜/烹饪工厂无效——那两台用刀当合成材料，见下方 cuttingCooking 限制）
-        INSTALLERS.put(new ResourceLocation("mekck", "blaze_tier_installer"), CuttingMachineFactoryTier.BLAZE);
-        INSTALLERS.put(new ResourceLocation("avaritia_delight", "blaze_knife"), CuttingMachineFactoryTier.BLAZE);
-        INSTALLERS.put(new ResourceLocation("avaritia_delight", "crystal_knife"), CuttingMachineFactoryTier.CRYSTAL_MATRIX);
-        INSTALLERS.put(new ResourceLocation("avaritia_delight", "neutronium_knife"), CuttingMachineFactoryTier.NEBULA);
-        INSTALLERS.put(new ResourceLocation("avaritia_delight", "infinity_knife"), CuttingMachineFactoryTier.SINGULARITY);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("mekck", "blaze_tier_installer"), CuttingMachineFactoryTier.BLAZE);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("avaritia_delight", "blaze_knife"), CuttingMachineFactoryTier.BLAZE);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("avaritia_delight", "crystal_knife"), CuttingMachineFactoryTier.CRYSTAL_MATRIX);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("avaritia_delight", "neutronium_knife"), CuttingMachineFactoryTier.NEBULA);
+        INSTALLERS.put(ResourceLocation.fromNamespaceAndPath("avaritia_delight", "infinity_knife"), CuttingMachineFactoryTier.SINGULARITY);
     }
 
     /** 无尽升级组件（Re-Avaritia）：不消耗，每次使用扣 1 点耐久。 */
-    private static final ResourceLocation INFINITY_UPGRADE = new ResourceLocation("avaritia", "infinity_upgrade");
+    private static final ResourceLocation INFINITY_UPGRADE = ResourceLocation.fromNamespaceAndPath("avaritia", "infinity_upgrade");
 
     /** 升级进行中标记：方块 onRemove 据此跳过"破坏掉落"，避免升级时掉落机器本体。 */
     private static boolean upgrading = false;
