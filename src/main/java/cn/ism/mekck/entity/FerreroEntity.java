@@ -27,7 +27,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkHooks;
 
 import javax.annotation.Nullable;
-import cn.ism.mekck.util.FreezeAiReaper;
+import cn.ism.mekck.event.FreezeAiReaper;
 import cn.ism.mekck.registry.MekCkEntities;
 import cn.ism.mekck.registry.MekCkItems;
 
@@ -50,7 +50,7 @@ public class FerreroEntity extends ThrowableItemProjectile {
 
     /**
      * 免 AI 的恢复刻键 —— <b>与冰块的刻意分开</b>，理由与兜底回收器见
-     * {@link cn.ism.mekck.util.FreezeAiReaper}。
+     * {@link cn.ism.mekck.event.FreezeAiReaper}。
      *
      * <p>原先这里与 {@code IceCubeEntity} 共用 {@code "mekck:ai_restore_tick"}，
      * 于是「谁后命中谁说了算」：短窗口的费列罗会覆盖掉长窗口的冰块写的恢复刻。</p>
@@ -166,7 +166,7 @@ public class FerreroEntity extends ThrowableItemProjectile {
         }
         if (this.getY() < level.getMinBuildHeight() - 1) {
             // 落出世界：不再爆炸，释放本弹的伤害预留
-            cn.ism.mekck.util.ChocolateCannonReservations.release(this);
+            cn.ism.mekck.blockentity.ChocolateCannonReservations.release(this);
             this.discard();
             return;
         }
@@ -195,7 +195,7 @@ public class FerreroEntity extends ThrowableItemProjectile {
         }
 
         // 让发射方大炮释放针对本弹的伤害预留（若本弹由大炮发射且对方仍在场）
-        cn.ism.mekck.util.ChocolateCannonReservations.release(this);
+        cn.ism.mekck.blockentity.ChocolateCannonReservations.release(this);
         this.discard();
     }
 
@@ -314,7 +314,7 @@ public class FerreroEntity extends ThrowableItemProjectile {
      */
     @Override
     public void remove(Entity.RemovalReason reason) {
-        cn.ism.mekck.util.ChocolateCannonReservations.release(this);
+        cn.ism.mekck.blockentity.ChocolateCannonReservations.release(this);
         super.remove(reason);
     }
 }

@@ -10,8 +10,8 @@ import cn.ism.mekck.item.ColdBrewTier;
 import cn.ism.mekck.item.ColdBrewUpgradeItem;
 import cn.ism.mekck.menu.IceMakerMenu;
 import cn.ism.mekck.recipe.IceMakeRecipe;
-import cn.ism.mekck.util.RecipeInputMatcher;
-import cn.ism.mekck.util.ColdBrewHelper;
+import cn.ism.mekck.recipe.RecipeInputMatcher;
+import cn.ism.mekck.item.ColdBrewHelper;
 import cn.ism.mekck.util.PowerSlotUtil;
 import cn.ism.mekck.upgrade.UpgradeHelper;
 import net.minecraft.core.BlockPos;
@@ -808,14 +808,14 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     @Override public boolean supportsAutoPull() { return true; }
 
     @Override
-    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+    public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         ItemStack slot0 = items.getStackInSlot(INPUT_SLOT);
         if (!slot0.isEmpty()) {
-            return List.of(new cn.ism.mekck.util.AE2InputSpec(net.minecraft.world.item.crafting.Ingredient.of(slot0.getItem())));
+            return List.of(new cn.ism.mekck.ae2.AE2InputSpec(net.minecraft.world.item.crafting.Ingredient.of(slot0.getItem())));
         }
-        net.minecraft.world.item.crafting.Ingredient union = cn.ism.mekck.util.RecipeInputMatcher.unionFirstIngredients(
+        net.minecraft.world.item.crafting.Ingredient union = cn.ism.mekck.recipe.RecipeInputMatcher.unionFirstIngredients(
                 level, new ResourceLocation("mekck", "ice_make"));
-        return union.isEmpty() ? List.of() : List.of(new cn.ism.mekck.util.AE2InputSpec(union));
+        return union.isEmpty() ? List.of() : List.of(new cn.ism.mekck.ae2.AE2InputSpec(union));
     }
 
     public ContainerData getData() {

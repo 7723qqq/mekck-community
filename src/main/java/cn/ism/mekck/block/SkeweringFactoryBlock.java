@@ -1,6 +1,7 @@
 package cn.ism.mekck.block;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
+import cn.ism.mekck.machine.IFactoryTierProvider;
 import cn.ism.mekck.machine.skewering.SkeweringFactoryTile;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import mekanism.api.math.FloatingLong;
@@ -40,7 +41,8 @@ import java.util.function.UnaryOperator;
  * 不挂就是 {@code hasSound() == false}，机器工作时彻底静音。
  * 这里改借旋转类机器的循环音，语义上比浓饰舱近。</p>
  */
-public final class SkeweringFactoryBlock extends BlockTile<SkeweringFactoryTile, BlockTypeTile<SkeweringFactoryTile>> {
+public final class SkeweringFactoryBlock extends BlockTile<SkeweringFactoryTile, BlockTypeTile<SkeweringFactoryTile>>
+        implements IFactoryTierProvider {
 
     private final CuttingMachineFactoryTier tier;
 

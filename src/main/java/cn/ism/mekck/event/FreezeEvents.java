@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.event;
 
 import cn.ism.mekck.UniversalCuttingMachine;
 import net.minecraft.resources.ResourceLocation;
@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import cn.ism.mekck.registry.MekCkEffects;
+import cn.ism.mekck.util.MaxLootRandom;
 
 /**
  * 失温 / 永冻效果的事件处理（FORGE 总线）：

@@ -124,7 +124,7 @@ public final class SmartCookingPotBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof SmartCookingPotBlockEntity machine) {
+        if (!state.is(newState.getBlock()) && !TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof SmartCookingPotBlockEntity machine) {
             // Save block entity data (including inventory) to the item stack and drop it
             ItemStack stack = new ItemStack(this);
             machine.saveToItem(stack);

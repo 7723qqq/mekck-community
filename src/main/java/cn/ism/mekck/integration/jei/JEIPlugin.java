@@ -10,7 +10,7 @@ import cn.ism.mekck.recipe.FerreroRecipe;
 import cn.ism.mekck.recipe.IceMakeRecipe;
 import cn.ism.mekck.recipe.NutRoastingRecipe;
 import cn.ism.mekck.recipe.PlantingCuttingRecipe;
-import cn.ism.mekck.util.BioreactorFuels;
+import cn.ism.mekck.recipe.BioreactorFuels;
 import cn.ism.mekck.compat.KaleidoscopeCompat;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;

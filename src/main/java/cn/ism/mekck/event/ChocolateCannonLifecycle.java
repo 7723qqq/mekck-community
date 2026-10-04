@@ -1,5 +1,6 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.event;
 
+import cn.ism.mekck.blockentity.ChocolateCannonReservations;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraftforge.event.level.LevelEvent;

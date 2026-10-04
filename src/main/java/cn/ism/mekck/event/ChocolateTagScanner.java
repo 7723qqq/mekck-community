@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.event;
 
 import cn.ism.mekck.UniversalCuttingMachine;
 import net.minecraft.core.Holder;

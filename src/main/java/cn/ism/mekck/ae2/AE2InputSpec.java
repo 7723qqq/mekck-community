@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.ae2;
 
 import net.minecraft.world.item.crafting.Ingredient;
 

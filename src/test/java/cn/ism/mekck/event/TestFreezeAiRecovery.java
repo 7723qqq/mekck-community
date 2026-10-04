@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.event;
 
 import cn.ism.mekck.effect.EternalFreezeEffect;
 import org.junit.BeforeClass;
@@ -49,7 +49,7 @@ import static org.junit.Assert.assertTrue;
 public class TestFreezeAiRecovery {
 
     private static final Path SRC = Path.of("src", "main", "java", "cn", "ism", "mekck");
-    private static final Path REAPER = SRC.resolve("util").resolve("FreezeAiReaper.java");
+    private static final Path REAPER = SRC.resolve("event").resolve("FreezeAiReaper.java");
     private static final Path ICE_CUBE = SRC.resolve("entity").resolve("IceCubeEntity.java");
     private static final Path FERRERO = SRC.resolve("entity").resolve("FerreroEntity.java");
     private static final Path EFFECT = SRC.resolve("effect").resolve("EternalFreezeEffect.java");

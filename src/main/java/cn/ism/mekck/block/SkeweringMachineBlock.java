@@ -105,7 +105,7 @@ public final class SkeweringMachineBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof SkeweringMachineBlockEntity machine) {
+        if (!state.is(newState.getBlock()) && !TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof SkeweringMachineBlockEntity machine) {
             // Save block entity data (including inventory) to the item stack and drop it
             ItemStack stack = new ItemStack(this);
             machine.saveToItem(stack);

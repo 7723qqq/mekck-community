@@ -147,7 +147,7 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
                     return ItemStack.EMPTY;
                 }
             } else if (machine.getLevel() != null
-                    && cn.ism.mekck.util.RecipeInputMatcher.matchesPlantingSeed(machine.getLevel(), stack)) {
+                    && cn.ism.mekck.recipe.RecipeInputMatcher.matchesPlantingSeed(machine.getLevel(), stack)) {
                 // 种子 → 输入格
                 if (!MekCkTransfer.moveItemStackTo(stack, slots, PlantingCuttingStationBlockEntity.INPUT_SLOT,
                         PlantingCuttingStationBlockEntity.INPUT_SLOT + 1, false)) {

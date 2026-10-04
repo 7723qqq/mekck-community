@@ -1,7 +1,5 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.item;
 
-import cn.ism.mekck.item.ColdBrewTier;
-import cn.ism.mekck.item.ColdBrewUpgradeItem;
 import net.minecraft.world.item.ItemStack;
 
 /**

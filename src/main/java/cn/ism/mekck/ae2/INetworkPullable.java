@@ -1,6 +1,5 @@
 package cn.ism.mekck.ae2;
 
-import cn.ism.mekck.util.AE2InputSpec;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.List;

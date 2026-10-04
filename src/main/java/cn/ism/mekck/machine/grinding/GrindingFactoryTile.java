@@ -1,7 +1,7 @@
 package cn.ism.mekck.machine.grinding;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
-import cn.ism.mekck.block.GrindingFactoryBlock;
+import cn.ism.mekck.machine.IFactoryTierProvider;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.machine.MekCkFactoryType;
 import cn.ism.mekck.machine.MekCkMachineTile;
@@ -86,7 +86,7 @@ public class GrindingFactoryTile extends MekCkMachineTile implements IMekCkPorte
      */
     @Override
     protected CuttingMachineFactoryTier tierFromBlock() {
-        if (blockProvider != null && blockProvider.getBlock() instanceof GrindingFactoryBlock block) {
+        if (blockProvider != null && blockProvider.getBlock() instanceof IFactoryTierProvider block) {
             return block.getTier();
         }
         return null;

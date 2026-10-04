@@ -2,7 +2,7 @@ package cn.ism.mekck.blockentity;
 
 import cn.ism.mekck.machine.MekCkSlot;
 import cn.ism.mekck.machine.MekCkSlotHandler;
-import cn.ism.mekck.util.RecipeInputMatcher;
+import cn.ism.mekck.recipe.RecipeInputMatcher;
 import cn.ism.mekck.upgrade.UpgradeHelper;
 import mekanism.api.Action;
 import mekanism.api.AutomationType;
@@ -881,13 +881,13 @@ public final class GrillBlockEntity extends TileEntityConfigurableMachine
     }
 
     @Override
-    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+    public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         ItemStack slot0 = inputSlot.getStack();
         if (!slot0.isEmpty()) {
-            return List.of(new cn.ism.mekck.util.AE2InputSpec(Ingredient.of(slot0.getItem())));
+            return List.of(new cn.ism.mekck.ae2.AE2InputSpec(Ingredient.of(slot0.getItem())));
         }
-        Ingredient union = cn.ism.mekck.util.RecipeInputMatcher.unionFirstIngredients(getLevel(), GRILLING_TYPE_ID);
-        return union.isEmpty() ? List.of() : List.of(new cn.ism.mekck.util.AE2InputSpec(union));
+        Ingredient union = cn.ism.mekck.recipe.RecipeInputMatcher.unionFirstIngredients(getLevel(), GRILLING_TYPE_ID);
+        return union.isEmpty() ? List.of() : List.of(new cn.ism.mekck.ae2.AE2InputSpec(union));
     }
 
     /** AE2 侧看到的槽位视图（{@code MekckAe2} 的产物回写走它）。 */

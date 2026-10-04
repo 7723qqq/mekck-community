@@ -1,6 +1,7 @@
 package cn.ism.mekck.block;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
+import cn.ism.mekck.machine.IFactoryTierProvider;
 import cn.ism.mekck.machine.grinding.GrindingFactoryTile;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import mekanism.api.math.FloatingLong;
@@ -43,7 +44,8 @@ import java.util.function.UnaryOperator;
  *       {@code data/mekck/loot_tables/blocks/<id>.json} 接管。</li>
  * </ul>
  */
-public final class GrindingFactoryBlock extends BlockTile<GrindingFactoryTile, BlockTypeTile<GrindingFactoryTile>> {
+public final class GrindingFactoryBlock extends BlockTile<GrindingFactoryTile, BlockTypeTile<GrindingFactoryTile>>
+        implements IFactoryTierProvider {
 
     private final CuttingMachineFactoryTier tier;
 

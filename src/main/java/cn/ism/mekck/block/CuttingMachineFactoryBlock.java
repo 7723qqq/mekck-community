@@ -1,6 +1,7 @@
 package cn.ism.mekck.block;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
+import cn.ism.mekck.machine.IFactoryTierProvider;
 import cn.ism.mekck.machine.cutting.CuttingFactoryTile;
 import mekanism.api.math.FloatingLong;
 import mekanism.api.text.ILangEntry;
@@ -42,7 +43,8 @@ import java.util.function.UnaryOperator;
  * 与方块侧配的 {@code SideMode} 枚举一并作废：前者由 Mek 升级 tab 取代，
  * 后者由 {@code ISideConfiguration} 取代。</p>
  */
-public final class CuttingMachineFactoryBlock extends BlockTile<CuttingFactoryTile, BlockTypeTile<CuttingFactoryTile>> {
+public final class CuttingMachineFactoryBlock extends BlockTile<CuttingFactoryTile, BlockTypeTile<CuttingFactoryTile>>
+        implements IFactoryTierProvider {
 
     private final CuttingMachineFactoryTier tier;
 

@@ -1,6 +1,7 @@
 package cn.ism.mekck.block;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
+import cn.ism.mekck.machine.IFactoryTierProvider;
 import cn.ism.mekck.machine.cooking.CookingFactoryTile;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.util.FluidContainerInteract;
@@ -52,7 +53,8 @@ import java.util.function.UnaryOperator;
  * 旧的 {@code FluidContainerInteract.tryFillMachine(IFluidHandler, ItemStack)}
  * 因此原样可用，不需要改。</p>
  */
-public final class CookingFactoryBlock extends BlockTile<CookingFactoryTile, BlockTypeTile<CookingFactoryTile>> {
+public final class CookingFactoryBlock extends BlockTile<CookingFactoryTile, BlockTypeTile<CookingFactoryTile>>
+        implements IFactoryTierProvider {
 
     private final CuttingMachineFactoryTier tier;
 

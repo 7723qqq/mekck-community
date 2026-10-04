@@ -120,7 +120,7 @@ public final class IceFactoryBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof IceFactoryBlockEntity machine) {
+        if (!state.is(newState.getBlock()) && !TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof IceFactoryBlockEntity machine) {
             ItemStack stack = new ItemStack(this);
             machine.saveToItem(stack);
             Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);

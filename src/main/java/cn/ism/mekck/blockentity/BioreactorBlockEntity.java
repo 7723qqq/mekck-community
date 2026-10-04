@@ -4,10 +4,10 @@ import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.block.BioreactorBlock;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.menu.BioreactorMenu;
-import cn.ism.mekck.util.BioreactorFuels;
+import cn.ism.mekck.recipe.BioreactorFuels;
 import cn.ism.mekck.util.MekCkMultiblock;
 import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.RecipeInputMatcher;
+import cn.ism.mekck.recipe.RecipeInputMatcher;
 
 import java.util.Set;
 import mekanism.api.Upgrade;
@@ -289,14 +289,14 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
     @Override public boolean supportsAutoPull() { return true; } // ME 持续补料：按"每类型上限"（配置 auto_pull_stack_limit）批量补，受 LagMonitor 限流
 
     @Override
-    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+    public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         ItemStack slot0 = items.getStackInSlot(0);
         if (slot0.isEmpty()) {
             // 能力边界：生物反应堆燃料集由配置/Mekanism 粉碎/食物营养动态决定，
             // 无法安全构造并集；空槽时不拉料（玩家先放入一种燃料即可拉取同类）。
             return List.of();
         }
-        return List.of(new cn.ism.mekck.util.AE2InputSpec(net.minecraft.world.item.crafting.Ingredient.of(slot0.getItem())));
+        return List.of(new cn.ism.mekck.ae2.AE2InputSpec(net.minecraft.world.item.crafting.Ingredient.of(slot0.getItem())));
     }
 
     public int getPowerSlot() {

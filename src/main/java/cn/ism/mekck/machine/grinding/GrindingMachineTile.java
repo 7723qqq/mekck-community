@@ -10,7 +10,7 @@ import cn.ism.mekck.menu.slot.SlotDef;
 import cn.ism.mekck.upgrade.UpgradeHelper;
 import cn.ism.mekck.util.PowerSlotUtil;
 import cn.ism.mekck.util.RecipeCache;
-import cn.ism.mekck.util.RecipeInputMatcher;
+import cn.ism.mekck.recipe.RecipeInputMatcher;
 import mekanism.api.Action;
 import mekanism.api.AutomationType;
 import mekanism.api.IContentsListener;

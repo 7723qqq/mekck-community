@@ -1,6 +1,5 @@
 package cn.ism.mekck.block;
 
-import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
 import cn.ism.mekck.item.FerreroUpgradeItem;
 import cn.ism.mekck.upgrade.UpgradeHelper;
@@ -107,7 +106,7 @@ public final class ChocolateCannonBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof ChocolateCannonBlockEntity machine) {
+        if (!state.is(newState.getBlock()) && !TierInstallerHandler.isUpgrading() && level.getBlockEntity(pos) instanceof ChocolateCannonBlockEntity machine) {
             ItemStack stack = new ItemStack(this);
             machine.saveToItem(stack);
             Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);

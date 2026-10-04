@@ -11,8 +11,8 @@ import cn.ism.mekck.item.ColdBrewTier;
 import cn.ism.mekck.item.ColdBrewUpgradeItem;
 import cn.ism.mekck.menu.IceFactoryMenu;
 import cn.ism.mekck.recipe.IceMakeRecipe;
-import cn.ism.mekck.util.RecipeInputMatcher;
-import cn.ism.mekck.util.ColdBrewHelper;
+import cn.ism.mekck.recipe.RecipeInputMatcher;
+import cn.ism.mekck.item.ColdBrewHelper;
 import cn.ism.mekck.util.PowerSlotUtil;
 import cn.ism.mekck.upgrade.UpgradeHelper;
 import net.minecraft.core.BlockPos;
@@ -583,9 +583,9 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
     @Override public boolean supportsAutoPull() { return true; } // ME 持续补料：按"每类型上限"（配置 auto_pull_stack_limit）批量补，受 LagMonitor 限流
 
     @Override
-    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+    public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         if (level == null) return List.of();
-        return cn.ism.mekck.util.NetworkPullHelper.currentOrUnion(level, items.getStackInSlot(0),
+        return cn.ism.mekck.ae2.NetworkPullHelper.currentOrUnion(level, items.getStackInSlot(0),
                 new ResourceLocation("mekck", "ice_make"));
     }
 

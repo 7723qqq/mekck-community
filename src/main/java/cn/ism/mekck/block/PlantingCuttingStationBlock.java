@@ -131,7 +131,7 @@ public final class PlantingCuttingStationBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading()) {
+        if (!state.is(newState.getBlock()) && !TierInstallerHandler.isUpgrading()) {
             // 清理绑定方块（整体一起破坏）
             MekCkMultiblock.removeBoundingBlocks(level, pos, state, BOUNDING_SHAPE);
             if (level.getBlockEntity(pos) instanceof PlantingCuttingStationBlockEntity machine) {

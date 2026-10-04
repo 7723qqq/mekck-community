@@ -31,7 +31,7 @@ import net.minecraftforge.network.NetworkHooks;
 import javax.annotation.Nullable;
 import cn.ism.mekck.registry.MekCkEffects;
 import cn.ism.mekck.registry.MekCkEntities;
-import cn.ism.mekck.util.FreezeAiReaper;
+import cn.ism.mekck.event.FreezeAiReaper;
 
 /**
  * 冰块实体：外观为原版冰块（IBlockDisplayReader 通过 getBlockState 渲染），

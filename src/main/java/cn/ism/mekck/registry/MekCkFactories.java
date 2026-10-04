@@ -926,7 +926,7 @@ public final class MekCkFactories {
      *
      * <p>但 {@code FACTORY_BLOCKS} / {@code FACTORY_ITEMS} / {@code FACTORY_MENU} 是本类的公开 API，
      * 本任务<b>之外</b>还有三个文件按原类型读它们：
-     * {@code util/TierInstallerHandler}（两个 private 辅助方法，参数类型写死
+     * {@code block/TierInstallerHandler}（两个 private 辅助方法，参数类型写死
      * {@code Map<..., RegistryObject<Block>>}）、{@code integration/jei/JEIPlugin}、
      * {@code ClientEvents}。改这三个字段的类型会波及任务清单之外的文件。
      *

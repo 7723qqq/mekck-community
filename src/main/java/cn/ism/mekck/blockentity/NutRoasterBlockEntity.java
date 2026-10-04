@@ -8,7 +8,7 @@ import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.entity.RoastedHazelnutEntity;
 import cn.ism.mekck.menu.NutRoasterMenu;
 import cn.ism.mekck.recipe.NutRoastingRecipe;
-import cn.ism.mekck.util.RecipeInputMatcher;
+import cn.ism.mekck.recipe.RecipeInputMatcher;
 import cn.ism.mekck.util.IceTargetSearch;
 import cn.ism.mekck.util.PowerSlotUtil;
 import cn.ism.mekck.upgrade.UpgradeHelper;
@@ -558,14 +558,14 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
     @Override public boolean supportsAutoPull() { return true; }
 
     @Override
-    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+    public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         ItemStack slot0 = items.getStackInSlot(INPUT_SLOT);
         if (!slot0.isEmpty()) {
-            return List.of(new cn.ism.mekck.util.AE2InputSpec(net.minecraft.world.item.crafting.Ingredient.of(slot0.getItem())));
+            return List.of(new cn.ism.mekck.ae2.AE2InputSpec(net.minecraft.world.item.crafting.Ingredient.of(slot0.getItem())));
         }
-        net.minecraft.world.item.crafting.Ingredient union = cn.ism.mekck.util.RecipeInputMatcher.unionFirstIngredients(
+        net.minecraft.world.item.crafting.Ingredient union = cn.ism.mekck.recipe.RecipeInputMatcher.unionFirstIngredients(
                 level, new ResourceLocation("mekck", "nut_roasting"));
-        return union.isEmpty() ? List.of() : List.of(new cn.ism.mekck.util.AE2InputSpec(union));
+        return union.isEmpty() ? List.of() : List.of(new cn.ism.mekck.ae2.AE2InputSpec(union));
     }
 
     public ContainerData getData() {

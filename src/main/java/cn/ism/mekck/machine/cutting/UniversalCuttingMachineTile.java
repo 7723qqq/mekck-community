@@ -151,7 +151,7 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
         // 不校验的后果是玩家/管道能把升级卡丢进输入槽，界面照收不误却永远不参与加工。
         inputSlot = MekCkSlot.inputFiltered(SLOT_LIMIT,
                 (stack, automation) -> !isAnyUpgradeItem(stack)
-                        && cn.ism.mekck.util.RecipeInputMatcher.matchesCutting(getLevel(), stack),
+                        && cn.ism.mekck.recipe.RecipeInputMatcher.matchesCutting(getLevel(), stack),
                 listener, INPUT_X, INPUT_Y);
         builder.addSlot(inputSlot);
 

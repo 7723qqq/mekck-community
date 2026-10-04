@@ -1,10 +1,6 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.recipe;
 
 import cn.ism.mekck.UniversalCuttingMachine;
-import cn.ism.mekck.recipe.FerreroRecipe;
-import cn.ism.mekck.recipe.IceMakeRecipe;
-import cn.ism.mekck.recipe.NutRoastingRecipe;
-import cn.ism.mekck.recipe.PlantingCuttingRecipe;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;

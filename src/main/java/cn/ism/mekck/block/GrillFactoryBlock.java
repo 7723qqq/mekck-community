@@ -1,6 +1,7 @@
 package cn.ism.mekck.block;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
+import cn.ism.mekck.machine.IFactoryTierProvider;
 import cn.ism.mekck.machine.grill.GrillFactoryTile;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import mekanism.api.math.FloatingLong;
@@ -41,7 +42,8 @@ import java.util.function.UnaryOperator;
  *   <li><b>方块侧 {@code SideMode} 枚举</b>。由 {@code ISideConfiguration} 取代。</li>
  * </ul>
  */
-public final class GrillFactoryBlock extends BlockTile<GrillFactoryTile, BlockTypeTile<GrillFactoryTile>> {
+public final class GrillFactoryBlock extends BlockTile<GrillFactoryTile, BlockTypeTile<GrillFactoryTile>>
+        implements IFactoryTierProvider {
 
     private final CuttingMachineFactoryTier tier;
 

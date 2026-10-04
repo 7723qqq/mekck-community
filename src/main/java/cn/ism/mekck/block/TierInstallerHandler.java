@@ -1,23 +1,11 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.block;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.UniversalCuttingMachine;
-import cn.ism.mekck.block.CookingFactoryBlock;
-import cn.ism.mekck.block.CuttingMachineFactoryBlock;
-import cn.ism.mekck.block.ElectricGrindingMachineBlock;
-import cn.ism.mekck.block.GrillBlock;
-import cn.ism.mekck.block.GrillFactoryBlock;
-import cn.ism.mekck.block.GrindingFactoryBlock;
-import cn.ism.mekck.block.IceFactoryBlock;
-import cn.ism.mekck.block.IceMakerBlock;
-import cn.ism.mekck.block.PlantingCuttingFactoryBlock;
-import cn.ism.mekck.block.PlantingCuttingStationBlock;
-import cn.ism.mekck.block.SkeweringFactoryBlock;
-import cn.ism.mekck.block.SkeweringMachineBlock;
-import cn.ism.mekck.block.SmartCookingPotBlock;
-import cn.ism.mekck.block.UniversalCuttingMachineBlock;
 import cn.ism.mekck.machine.MekCkMachineTile;
 import cn.ism.mekck.machine.MekCkSlotNbt;
+import cn.ism.mekck.registry.MekCkFactories;
+import cn.ism.mekck.util.MekCkMultiblock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
@@ -39,7 +27,6 @@ import net.minecraftforge.registries.RegistryObject;
 
 import java.util.HashMap;
 import java.util.Map;
-import cn.ism.mekck.registry.MekCkFactories;
 
 /**
  * 工厂安装器支持（对齐 Mekanism ItemTierInstaller 的升级语义）：
@@ -64,6 +51,13 @@ import cn.ism.mekck.registry.MekCkFactories;
  *       无尽升级组件是唯一例外（按上一行规则）。</li>
  *   <li>升级保留方块实体数据（物品/能量/进度/侧边配置/红石/流体等），种植切配站/工厂同步迁移上方绑定块。</li>
  * </ul>
+ *
+ * <h3>为什么住在 {@code block/} 而不是 {@code util/} 或 {@code upgrade/}</h3>
+ * 本类操作的全部对象都是 {@link Block} 子类：它 {@code instanceof} 逐类判定 13 个方块类型、
+ * 从 {@link MekCkFactories} 的档位表取目标方块、再原地替换方块。放在 {@code block/} 里
+ * 这些类型引用是<b>同包</b>（import 归零）；而放在 {@code upgrade/} 会新增
+ * {@code upgrade → block} 13 条边，与既有的 {@code block → upgrade} 11 条边构成循环。
+ * 同理放 {@code event/} 亦会形成 {@code event ↔ block} 循环。
  */
 @Mod.EventBusSubscriber(modid = UniversalCuttingMachine.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class TierInstallerHandler {

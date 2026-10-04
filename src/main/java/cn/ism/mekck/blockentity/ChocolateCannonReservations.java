@@ -1,6 +1,5 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.blockentity;
 
-import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
 import cn.ism.mekck.entity.FerreroEntity;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;

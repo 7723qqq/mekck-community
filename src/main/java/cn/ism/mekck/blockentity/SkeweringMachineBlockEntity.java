@@ -7,7 +7,7 @@ import cn.ism.mekck.block.SkeweringMachineBlock;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.menu.SkeweringMachineMenu;
 import cn.ism.mekck.machine.skewering.SkeweringFactoryExecutor;
-import cn.ism.mekck.util.RecipeInputMatcher;
+import cn.ism.mekck.recipe.RecipeInputMatcher;
 import cn.ism.mekck.util.AutoIO;
 import cn.ism.mekck.util.LagMonitor;
 import cn.ism.mekck.util.PowerSlotUtil;
@@ -793,7 +793,7 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
     @Override public boolean supportsAutoPull() { return true; } // ME 持续补料：按"每类型上限"（配置 auto_pull_stack_limit）批量补，受 LagMonitor 限流
 
     @Override
-    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+    public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         if (level == null) return List.of();
         net.minecraft.world.item.crafting.RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(
                 new ResourceLocation("barbequesdelight", "skewering"));
@@ -803,9 +803,9 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
             List<net.minecraft.world.item.crafting.Ingredient> ings = r.getIngredients();
             if (ings.isEmpty()) continue;
             if (!ings.get(0).isEmpty() && !ings.get(0).test(items.getStackInSlot(INPUT_SLOT_START))) continue;
-            List<cn.ism.mekck.util.AE2InputSpec> specs = new java.util.ArrayList<>();
+            List<cn.ism.mekck.ae2.AE2InputSpec> specs = new java.util.ArrayList<>();
             for (net.minecraft.world.item.crafting.Ingredient ing : ings) {
-                if (!ing.isEmpty()) specs.add(new cn.ism.mekck.util.AE2InputSpec(ing));
+                if (!ing.isEmpty()) specs.add(new cn.ism.mekck.ae2.AE2InputSpec(ing));
             }
             return specs;
         }

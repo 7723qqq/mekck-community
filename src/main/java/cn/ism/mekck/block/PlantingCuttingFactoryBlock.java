@@ -1,6 +1,7 @@
 package cn.ism.mekck.block;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
+import cn.ism.mekck.machine.IFactoryTierProvider;
 import cn.ism.mekck.machine.plantingcutting.PlantingCuttingFactoryTile;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.util.MekCkMultiblock;
@@ -44,7 +45,8 @@ import java.util.stream.Stream;
  * </ol>
  */
 public final class PlantingCuttingFactoryBlock
-        extends BlockTile<PlantingCuttingFactoryTile, BlockTypeTile<PlantingCuttingFactoryTile>> {
+        extends BlockTile<PlantingCuttingFactoryTile, BlockTypeTile<PlantingCuttingFactoryTile>>
+        implements IFactoryTierProvider {
 
     /**
      * 1×2×1 多方块形状：主方块 + 上方 1 个绑定方块。
@@ -122,7 +124,7 @@ public final class PlantingCuttingFactoryBlock
     /** 拆绑定方块：多方块整体破坏。物品掉落交给 Mek 的 onRemove + loot table。 */
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading()) {
+        if (!state.is(newState.getBlock()) && !TierInstallerHandler.isUpgrading()) {
             MekCkMultiblock.removeBoundingBlocks(level, pos, state, BOUNDING_SHAPE);
         }
         super.onRemove(state, level, pos, newState, movedByPiston);

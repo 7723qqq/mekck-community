@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.recipe;
 
 import cn.ism.mekck.config.MekckConfig;
 import mekanism.api.recipes.ItemStackToItemStackRecipe;

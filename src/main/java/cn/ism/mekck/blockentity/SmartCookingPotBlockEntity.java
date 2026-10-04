@@ -7,7 +7,7 @@ import cn.ism.mekck.block.SmartCookingPotBlock;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.machine.cooking.CookingFactoryExecutor;
 import cn.ism.mekck.menu.SmartCookingPotMenu;
-import cn.ism.mekck.util.RecipeInputMatcher;
+import cn.ism.mekck.recipe.RecipeInputMatcher;
 import cn.ism.mekck.util.AutoIO;
 import cn.ism.mekck.util.FluidContainerInteract;
 import cn.ism.mekck.util.FluidIngredientHelper;
@@ -581,7 +581,7 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
                     java.util.stream.Stream.concat(
                             java.util.stream.Stream.concat(
                                     cn.ism.mekck.util.RecipeCache.all(level, ModRecipeTypes.COOKING.get()).stream(),
-                                    cn.ism.mekck.util.RecipeInputMatcher.getPotCookingRecipes(level).stream()),
+                                    cn.ism.mekck.recipe.RecipeInputMatcher.getPotCookingRecipes(level).stream()),
                             KaleidoscopeCompat.isLoaded()
                                     ? KaleidoscopeCompat.getAllKaleidoscopeRecipes(level).stream()
                                     : java.util.stream.Stream.empty()
@@ -690,7 +690,7 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
         if (KaleidoscopeCompat.isKaleidoscopeRecipe(recipe)) {
             return KaleidoscopeCompat.getSolidIngredients(recipe);
         }
-        if (cn.ism.mekck.util.RecipeInputMatcher.isPotCookingRecipe(recipe)) {
+        if (cn.ism.mekck.recipe.RecipeInputMatcher.isPotCookingRecipe(recipe)) {
             return new ArrayList<>(recipe.getIngredients());
         }
         return List.of();
@@ -724,7 +724,7 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
         if (KaleidoscopeCompat.isKaleidoscopeRecipe(recipe)) {
             return recipe.getResultItem(level.registryAccess());
         }
-        if (cn.ism.mekck.util.RecipeInputMatcher.isPotCookingRecipe(recipe)) {
+        if (cn.ism.mekck.recipe.RecipeInputMatcher.isPotCookingRecipe(recipe)) {
             return recipe.getResultItem(level.registryAccess());
         }
         return ItemStack.EMPTY;
@@ -1212,15 +1212,15 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
     @Override public boolean supportsAutoPull() { return true; } // ME 持续补料：按"每类型上限"（配置 auto_pull_stack_limit）批量补，受 LagMonitor 限流
 
     @Override
-    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+    public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         if (level == null) return List.of();
         // 取第一个当前可下料的配方（含农夫乐事/沉浸农艺 pot_cooking/森罗），返回其固体材料
         for (Recipe<?> recipe : getAvailableRecipes()) {
             List<Ingredient> solid = getSolidIngredients(recipe);
             if (solid.isEmpty()) continue;
-            List<cn.ism.mekck.util.AE2InputSpec> specs = new ArrayList<>();
+            List<cn.ism.mekck.ae2.AE2InputSpec> specs = new ArrayList<>();
             for (Ingredient ing : solid) {
-                if (!ing.isEmpty()) specs.add(new cn.ism.mekck.util.AE2InputSpec(ing));
+                if (!ing.isEmpty()) specs.add(new cn.ism.mekck.ae2.AE2InputSpec(ing));
             }
             return specs;
         }
@@ -1278,7 +1278,7 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
             if (canMatchAllIngredientsWithExtras(recipe, allItems)) available.add(recipe);
         }
         // 沉浸农艺 pot_cooking
-        for (Recipe<?> recipe : cn.ism.mekck.util.RecipeInputMatcher.getPotCookingRecipes(level)) {
+        for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeInputMatcher.getPotCookingRecipes(level)) {
             List<Ingredient> solidIngredients = getSolidIngredients(recipe);
             if (solidIngredients.isEmpty()) continue;
             if (canMatchAllIngredientsWithExtras(recipe, allItems)) available.add(recipe);

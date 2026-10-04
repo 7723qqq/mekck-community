@@ -355,7 +355,7 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine
     }
 
     @Override
-    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+    public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         if (level == null) {
             return List.of();
         }
@@ -366,7 +366,7 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine
         }
         List<IInventorySlot> inputs = getInputSlots();
         ItemStack slot0 = inputs.isEmpty() ? ItemStack.EMPTY : inputs.get(0).getStack();
-        return cn.ism.mekck.util.NetworkPullHelper.currentOrUnion(level, slot0, typeId);
+        return cn.ism.mekck.ae2.NetworkPullHelper.currentOrUnion(level, slot0, typeId);
     }
 
     /**

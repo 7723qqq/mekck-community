@@ -69,7 +69,7 @@ import cn.ism.mekck.registry.MekCkStandaloneMachines;
  * <p>
  * 索敌为爆炸收益驱动而非最近目标：在射程内以每个敌人为潜在爆炸中心评估
  * （有效命中伤害 + 击杀奖励，扣距离惩罚），再叠加上飞行中弹药的伤害预留
- * （见 {@link cn.ism.mekck.util.ChocolateCannonReservations}）以避免对已被
+ * （见 {@link cn.ism.mekck.blockentity.ChocolateCannonReservations}）以避免对已被
  * 注定炸死的目标重复开火，并按剩余收益重新选择新目标。
  * </p>
  */
@@ -191,11 +191,11 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
         public boolean isItemValid(int slot, @NotNull ItemStack stack) {
             if (slot == INPUT_SLOT) {
                 // 输入格只接受费列罗配方的物品输入
-                return !isAnyUpgrade(stack) && cn.ism.mekck.util.RecipeInputMatcher.matchesFerreroInput(level, stack);
+                return !isAnyUpgrade(stack) && cn.ism.mekck.recipe.RecipeInputMatcher.matchesFerreroInput(level, stack);
             }
             if (slot == EXTRA_SLOT) {
                 // extra 格只接受费列罗配方的 extra 输入
-                return !isAnyUpgrade(stack) && cn.ism.mekck.util.RecipeInputMatcher.matchesFerreroExtra(level, stack);
+                return !isAnyUpgrade(stack) && cn.ism.mekck.recipe.RecipeInputMatcher.matchesFerreroExtra(level, stack);
             }
             if (slot == OUTPUT_SLOT) return false;
             if (slot == SLOT_SPEED_UPGRADE) return UpgradeHelper.isSpeedUpgrade(stack);
@@ -643,9 +643,9 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
     @Override public boolean supportsAutoPull() { return true; } // ME 持续补料：按"每类型上限"（配置 auto_pull_stack_limit）批量补，受 LagMonitor 限流
 
     @Override
-    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+    public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         if (level == null) return List.of();
-        return cn.ism.mekck.util.NetworkPullHelper.currentOrUnion(level, items.getStackInSlot(0),
+        return cn.ism.mekck.ae2.NetworkPullHelper.currentOrUnion(level, items.getStackInSlot(0),
                 new net.minecraft.resources.ResourceLocation("mekck", "ferrero"));
     }
 
@@ -955,7 +955,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
         }
 
         // 先清理本世界已过期/已卸载的预留（超时兜底）
-        cn.ism.mekck.util.ChocolateCannonReservations.pruneExpired(level);
+        cn.ism.mekck.blockentity.ChocolateCannonReservations.pruneExpired(level);
 
         // 每发重新索敌：候选已由 IceTargetSearch 按当前半径/类型过滤；pick 会扣除当前全局预留选最优中心。
         java.util.List<LivingEntity> candidates = candidatesFor(level);
@@ -980,7 +980,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
             return;
         }
         // 发射成功：登记预留（精确目标位置 = 预测爆炸中心）+ 锁定标记（1 秒发光）
-        cn.ism.mekck.util.ChocolateCannonReservations.reserve(this, projectile,
+        cn.ism.mekck.blockentity.ChocolateCannonReservations.reserve(this, projectile,
                 target.position(), pendingDamage, pendingFlags);
         if (target.isAlive()) {
             target.addEffect(new net.minecraft.world.effect.MobEffectInstance(
@@ -1003,7 +1003,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
         AABB area = AABB.ofSize(center, range, range, range);
         for (LivingEntity e : level.getEntitiesOfClass(LivingEntity.class, area, LivingEntity::isAlive)) {
             if (!matchesTarget(e)) continue;
-            float reserved = cn.ism.mekck.util.ChocolateCannonReservations.reservedDamageOn(level, e); // 保守预留
+            float reserved = cn.ism.mekck.blockentity.ChocolateCannonReservations.reservedDamageOn(level, e); // 保守预留
             float rem = e.getHealth() - reserved;
             if (rem > 0.0F && Math.min(damage, rem) > 0.0F) return true;
         }
@@ -1169,7 +1169,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
         java.util.Map<UUID, Float> reserved = new HashMap<>();
         for (LivingEntity e : candidates) {
             if (e == null) continue;
-            float r = cn.ism.mekck.util.ChocolateCannonReservations.reservedDamageOn(level, e);
+            float r = cn.ism.mekck.blockentity.ChocolateCannonReservations.reservedDamageOn(level, e);
             if (r > 0.0F) reserved.put(e.getUUID(), r);
         }
         return reserved;

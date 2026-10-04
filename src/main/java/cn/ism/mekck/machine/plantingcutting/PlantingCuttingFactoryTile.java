@@ -1,8 +1,7 @@
 package cn.ism.mekck.machine.plantingcutting;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
-import cn.ism.mekck.block.PlantingCuttingFactoryBlock;
-import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
+import cn.ism.mekck.machine.IFactoryTierProvider;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.machine.MekCkFactoryType;
 import cn.ism.mekck.machine.MekCkMachineTile;
@@ -81,7 +80,7 @@ public class PlantingCuttingFactoryTile extends MekCkMachineTile implements IMek
 
     @Override
     protected CuttingMachineFactoryTier tierFromBlock() {
-        if (blockProvider != null && blockProvider.getBlock() instanceof PlantingCuttingFactoryBlock block) {
+        if (blockProvider != null && blockProvider.getBlock() instanceof IFactoryTierProvider block) {
             return block.getTier();
         }
         return null;
@@ -301,18 +300,20 @@ public class PlantingCuttingFactoryTile extends MekCkMachineTile implements IMek
      * 生长方块格状态（GUI 提示用）。
      *
      * <p>与 {@code PlantingCuttingStationBlockEntity} 共用同一套常量
-     * （{@code GROWTH_OK} / {@code GROWTH_MISSING} / {@code GROWTH_TOO_LOW}）。
+     * （{@link PlantingCuttingStatus#GROWTH_OK} / {@link PlantingCuttingStatus#GROWTH_MISSING} /
+     * {@link PlantingCuttingStatus#GROWTH_TOO_LOW}）。定义已上移到 machine 侧，
+     * 使 {@code machine} 不再反向依赖 {@code blockentity}（见 {@link PlantingCuttingStatus} 的类注释）。
      */
     public int getGrowthStatus(PlantingCuttingRecipe recipe) {
         if (recipe == null || !recipe.requiresGrowthSoil()) {
-            return PlantingCuttingStationBlockEntity.GROWTH_OK;
+            return PlantingCuttingStatus.GROWTH_OK;
         }
         if (growthSlot == null || growthSlot.getStack().isEmpty()) {
-            return PlantingCuttingStationBlockEntity.GROWTH_MISSING;
+            return PlantingCuttingStatus.GROWTH_MISSING;
         }
         return recipe.getGrowthSoils().test(growthSlot.getStack())
-                ? PlantingCuttingStationBlockEntity.GROWTH_OK
-                : PlantingCuttingStationBlockEntity.GROWTH_TOO_LOW;
+                ? PlantingCuttingStatus.GROWTH_OK
+                : PlantingCuttingStatus.GROWTH_TOO_LOW;
     }
 
     // ── 额外槽 ──────────────────────────────────────────────────────────

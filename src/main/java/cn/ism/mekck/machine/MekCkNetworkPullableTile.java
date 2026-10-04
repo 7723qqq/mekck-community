@@ -1,7 +1,7 @@
 package cn.ism.mekck.machine;
 
-import cn.ism.mekck.util.AE2InputSpec;
-import cn.ism.mekck.util.RecipeInputMatcher;
+import cn.ism.mekck.ae2.AE2InputSpec;
+import cn.ism.mekck.recipe.RecipeInputMatcher;
 import mekanism.api.inventory.IInventorySlot;
 import mekanism.common.tile.prefab.TileEntityConfigurableMachine;
 import net.minecraft.resources.ResourceLocation;

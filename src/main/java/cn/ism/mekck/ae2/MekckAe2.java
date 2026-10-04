@@ -30,7 +30,6 @@ import cn.ism.mekck.machine.MekCkFactoryType;
 import cn.ism.mekck.machine.MekCkMachineTile;
 import cn.ism.mekck.machine.ports.IMekCkPorted;
 import cn.ism.mekck.machine.skewering.SkeweringFactoryExecutor;
-import cn.ism.mekck.compat.KaleidoscopeCompat;
 import cn.ism.mekck.compat.KaleidoscopeGrillingCompat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -493,7 +492,7 @@ public final class MekckAe2 {
         if (grid == null) return false;
         MEStorage storage = grid.getStorageService().getInventory();
         if (storage == null) return false;
-        List<cn.ism.mekck.util.AE2InputSpec> specs = pullable.getNetworkPullInputs();
+        List<cn.ism.mekck.ae2.AE2InputSpec> specs = pullable.getNetworkPullInputs();
         if (specs.isEmpty()) return false;
 
         IActionSource src = IActionSource.ofMachine(host);
@@ -558,7 +557,7 @@ public final class MekckAe2 {
         if (!(be instanceof INetworkPullable pullable)) return "该方块不支持 ME 网络拉料";
         if (!pullable.supportsAutoPull()) return "该机器不支持持续自动补料";
         String itemId = null;
-        for (cn.ism.mekck.util.AE2InputSpec spec : pullable.getNetworkPullInputs()) {
+        for (cn.ism.mekck.ae2.AE2InputSpec spec : pullable.getNetworkPullInputs()) {
             for (net.minecraft.world.item.ItemStack s : spec.ingredient.getItems()) {
                 if (!s.isEmpty()) {
                     itemId = registryId(s);
@@ -1049,6 +1048,7 @@ public final class MekckAe2 {
     private static Set<String> expectedAutoProducts(BlockEntity be, List<String> selected) {
         Set<String> out = new HashSet<>();
         Level level = be.getLevel();
+        if (level == null) return out; // BE 尚未挂到世界（例如刚放置未加载），无配方可枚举
         MekCkFactoryType family = portedFamily(be);
         if (family == MekCkFactoryType.GRINDING) {
             for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, "kaleidoscope_cookery", "millstone")) {
@@ -1919,8 +1919,8 @@ public final class MekckAe2 {
         }
 
         private int[] getOutputSlots() {
-            if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) {
-                return new int[]{sm.OUTPUT_SLOT};
+            if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity) {
+                return new int[]{cn.ism.mekck.blockentity.SimpleMachineBlockEntity.OUTPUT_SLOT};
             }
             if (owner instanceof cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile) {
                 // 输出槽下标 = 1。顺序由 tile 侧 getInitialInventory 的 addSlot 次序决定：
@@ -1930,10 +1930,10 @@ public final class MekckAe2 {
             if (owner instanceof cn.ism.mekck.blockentity.SkeweringMachineBlockEntity) {
                 return new int[]{cn.ism.mekck.blockentity.SkeweringMachineBlockEntity.OUTPUT_SLOT};
             }
-            if (owner instanceof cn.ism.mekck.blockentity.GrillBlockEntity g) {
+            if (owner instanceof cn.ism.mekck.blockentity.GrillBlockEntity) {
                 return new int[]{cn.ism.mekck.blockentity.GrillBlockEntity.OUTPUT_SLOT};
             }
-            if (owner instanceof cn.ism.mekck.blockentity.SmartCookingPotBlockEntity pot) {
+            if (owner instanceof cn.ism.mekck.blockentity.SmartCookingPotBlockEntity) {
                 return new int[]{cn.ism.mekck.blockentity.SmartCookingPotBlockEntity.OUTPUT_SLOT};
             }
             // 电力研磨机分支同上（输出槽由 portWindow() 提供）。
@@ -1994,7 +1994,9 @@ public final class MekckAe2 {
             // 阶段 3 Task 5：删掉穿串工厂那条 getStorageSlotStart() + getStorageSlots()——
             // 新 tile 的 81 格存储没有 ItemStackHandler 下标，insertIntoMachine 对端口声明型
             // 机器走 insertIntoPortWindow（按 MekPortWindow 的输入段插），压根不问这两个值。
-            if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm) return sm.INPUT_COUNT;
+            if (owner instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity) {
+                return cn.ism.mekck.blockentity.SimpleMachineBlockEntity.INPUT_COUNT;
+            }
             if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity) {
                 return cn.ism.mekck.blockentity.CentralKitchenBlockEntity.OUTPUT_START;
             }
@@ -2190,6 +2192,7 @@ public final class MekckAe2 {
 
     private static List<PatternEntry> buildCookingPatterns(MekCkMachineTile ownerTile, Map<AEKey, Long> avail) {
         Level level = ownerTile.getLevel();
+        if (level == null) return new ArrayList<>();
         List<PatternEntry> out = new ArrayList<>();
         // 阶段 3 Task 7：配方表改读新执行器的 availableRecipes(level, tier)——
         // 四个来源（FD / farm_and_charm / 终焉仅奇点档 / 森罗）与两级去重逐字同款。
@@ -2553,22 +2556,24 @@ public final class MekckAe2 {
     /** SimpleMachine 食物机器：按 kind 枚举全部候选配方 → 终端可制作列表。 */
     private static List<PatternEntry> buildSimpleMachinePatterns(cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm, Map<AEKey, Long> avail) {
         List<PatternEntry> out = new ArrayList<>();
+        Level level = sm.getLevel();
+        if (level == null) return out;
         List<Recipe<?>> recipes = sm.allRecipesOfKind();
         for (Recipe<?> recipe : recipes) {
             try {
-                List<cn.ism.mekck.util.AE2InputSpec> specs = sm.recipeInputSpecs(recipe);
+                List<cn.ism.mekck.ae2.AE2InputSpec> specs = sm.recipeInputSpecs(recipe);
                 if (specs.isEmpty()) continue;
                 // 转成 InputSpec 并解析网络库存
                 List<InputSpec> ispecs = new ArrayList<>();
-                for (cn.ism.mekck.util.AE2InputSpec s : specs) {
+                for (cn.ism.mekck.ae2.AE2InputSpec s : specs) {
                     ispecs.add(new InputSpec(s.ingredient, s.count));
                 }
                 GenericStack[] inputs = resolveInputs(ispecs, avail);
                 if (inputs == null || inputs.length == 0) continue;
-                ItemStack result = recipe.getResultItem(sm.getLevel().registryAccess());
+                ItemStack result = recipe.getResultItem(level.registryAccess());
                 if (result.isEmpty()) continue;
                 GenericStack[] outputs = new GenericStack[]{new GenericStack(AEItemKey.of(result), result.getCount())};
-                IPatternDetails details = encode(inputs, outputs, sm.getLevel());
+                IPatternDetails details = encode(inputs, outputs, level);
                 if (details != null) {
                     out.add(new PatternEntry(details, recipe.getId(), outputs));
                 }

@@ -143,7 +143,7 @@ public class TestIceFactoryToggle {
      */
     @Test
     public void installerToleratesAnEmptyFamilyMap() throws IOException {
-        String installer = read(Path.of("src/main/java/cn/ism/mekck/util/TierInstallerHandler.java"));
+        String installer = read(Path.of("src/main/java/cn/ism/mekck/block/TierInstallerHandler.java"));
 
         Set<String> missing = new TreeSet<>();
         // 两处查表：basicOf(...) 与 nextBlockOf(...)

@@ -5,12 +5,13 @@ import cn.ism.mekck.SideMode;
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.block.PlantingCuttingStationBlock;
 import cn.ism.mekck.config.MekckConfig;
+import cn.ism.mekck.machine.plantingcutting.PlantingCuttingStatus;
 import cn.ism.mekck.menu.PlantingCuttingStationMenu;
 import cn.ism.mekck.recipe.PlantingCuttingRecipe;
 import cn.ism.mekck.util.AutoIO;
 import cn.ism.mekck.util.LagMonitor;
 import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.RecipeInputMatcher;
+import cn.ism.mekck.recipe.RecipeInputMatcher;
 import cn.ism.mekck.upgrade.UpgradeHelper;
 import mekanism.client.sound.SoundHandler;
 import mekanism.common.registries.MekanismSounds;
@@ -101,10 +102,17 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
     public static final int DATA_GROWTH_TIER = 11;
     public static final int DATA_SIZE = 12;
 
-    /** 生长方块格状态口径（同步给 GUI）。 */
-    public static final int GROWTH_OK = 0;
-    public static final int GROWTH_MISSING = 1;
-    public static final int GROWTH_TOO_LOW = 2;
+    /**
+     * 生长方块格状态口径（同步给 GUI）。
+     *
+     * <p>值取自 {@link PlantingCuttingStatus} —— 那是本常量与已迁的
+     * {@code machine/plantingcutting/PlantingCuttingFactoryTile} 共用的<b>单一定义源</b>。
+     * 本类保留这三个同义常量只是为了不改动既有调用点（GUI 等），
+     * 值不再各写一份，避免两处漂移。</p>
+     */
+    public static final int GROWTH_OK = PlantingCuttingStatus.GROWTH_OK;
+    public static final int GROWTH_MISSING = PlantingCuttingStatus.GROWTH_MISSING;
+    public static final int GROWTH_TOO_LOW = PlantingCuttingStatus.GROWTH_TOO_LOW;
 
     /** 神秘农业五级耕地名（BotanyPots 的 category 名与之一致；仅供 GUI 文案与档位换算）。 */
     public static final String[] GROWTH_TIER_NAMES = {"inferium", "prudentium", "tertium", "imperium", "supremium"};
@@ -787,9 +795,9 @@ public final class PlantingCuttingStationBlockEntity extends BlockEntity impleme
     @Override public boolean supportsAutoPull() { return true; } // ME 持续补料：按"每类型上限"（配置 auto_pull_stack_limit）批量补，受 LagMonitor 限流
 
     @Override
-    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+    public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         if (level == null) return List.of();
-        return cn.ism.mekck.util.NetworkPullHelper.currentOrUnion(level, items.getStackInSlot(0),
+        return cn.ism.mekck.ae2.NetworkPullHelper.currentOrUnion(level, items.getStackInSlot(0),
                 new net.minecraft.resources.ResourceLocation("mekck", "plantcut"));
     }
 

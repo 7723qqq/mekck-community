@@ -1,5 +1,6 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.ae2;
 
+import cn.ism.mekck.recipe.RecipeInputMatcher;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;

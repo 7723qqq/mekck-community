@@ -4,7 +4,7 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * JEI 展示用包装：单个物品（输入）→ 每单位可转化的有机物流体 mb 数。
- * 实际转换规则由 {@link cn.ism.mekck.util.BioreactorFuels} 计算。
+ * 实际转换规则由 {@link cn.ism.mekck.recipe.BioreactorFuels} 计算。
  */
 public class BioreactorJeiRecipe {
 

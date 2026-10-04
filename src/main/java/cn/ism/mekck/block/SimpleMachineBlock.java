@@ -132,7 +132,7 @@ public final class SimpleMachineBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading()
+        if (!state.is(newState.getBlock()) && !TierInstallerHandler.isUpgrading()
                 && level.getBlockEntity(pos) instanceof SimpleMachineBlockEntity machine) {
             ItemStack stack = new ItemStack(this);
             machine.saveToItem(stack);

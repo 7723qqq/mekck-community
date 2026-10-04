@@ -220,14 +220,14 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
 
     /** 网络拉料目标：当前清单所需材料（复制模式取样品清单，自定义模式取有序格）。 */
     @Override
-    public java.util.List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
-        java.util.List<cn.ism.mekck.util.AE2InputSpec> specs = new java.util.ArrayList<>();
+    public java.util.List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
+        java.util.List<cn.ism.mekck.ae2.AE2InputSpec> specs = new java.util.ArrayList<>();
         if (mode == MODE_SEQUENCED) return specs; // 序列组：物品走有序格、流体走管道，不做网络拉料
         List<ItemStack> layers = mode == MODE_COPY
                 ? decodeSample(items.getStackInSlot(SAMPLE_SLOT)) : orderedLayers();
         for (ItemStack layer : layers) {
             if (layer.isEmpty()) continue;
-            specs.add(new cn.ism.mekck.util.AE2InputSpec(
+            specs.add(new cn.ism.mekck.ae2.AE2InputSpec(
                     net.minecraft.world.item.crafting.Ingredient.of(layer), 1));
         }
         return specs;

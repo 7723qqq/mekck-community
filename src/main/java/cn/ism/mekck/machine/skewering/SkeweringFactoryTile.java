@@ -1,7 +1,7 @@
 package cn.ism.mekck.machine.skewering;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
-import cn.ism.mekck.block.SkeweringFactoryBlock;
+import cn.ism.mekck.machine.IFactoryTierProvider;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.machine.MekCkFactoryType;
 import cn.ism.mekck.machine.MekCkMachineTile;
@@ -103,7 +103,7 @@ public class SkeweringFactoryTile extends MekCkMachineTile implements IMekCkPort
 
     @Override
     protected CuttingMachineFactoryTier tierFromBlock() {
-        if (blockProvider != null && blockProvider.getBlock() instanceof SkeweringFactoryBlock block) {
+        if (blockProvider != null && blockProvider.getBlock() instanceof IFactoryTierProvider block) {
             return block.getTier();
         }
         return null;

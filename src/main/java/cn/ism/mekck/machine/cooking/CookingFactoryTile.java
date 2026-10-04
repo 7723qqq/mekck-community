@@ -1,7 +1,7 @@
 package cn.ism.mekck.machine.cooking;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
-import cn.ism.mekck.block.CookingFactoryBlock;
+import cn.ism.mekck.machine.IFactoryTierProvider;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.machine.MekCkFactoryType;
 import cn.ism.mekck.machine.MekCkMachineTile;
@@ -198,7 +198,7 @@ public class CookingFactoryTile extends MekCkMachineTile implements IMekCkPorted
 
     @Override
     protected CuttingMachineFactoryTier tierFromBlock() {
-        if (blockProvider != null && blockProvider.getBlock() instanceof CookingFactoryBlock block) {
+        if (blockProvider != null && blockProvider.getBlock() instanceof IFactoryTierProvider block) {
             return block.getTier();
         }
         return null;
