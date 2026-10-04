@@ -15,7 +15,7 @@ import static org.junit.Assert.assertTrue;
  * <h3>为什么只能钉源码</h3>
  * 这两处缺陷都不会在单测里以行为差异暴露：
  * <ul>
- *   <li>{@code PlantingRecipeGenerator#deleteDirectoryRecursively} 未关闭的
+ *   <li>{@code GeneratorFs#deleteDirectoryRecursively} 未关闭的
  *       {@code Files.walk} 流，只在「删目录后立刻重建/覆盖」时才咬人（Windows 上句柄被占）；</li>
  *   <li>{@code ClientWorldEvents} 的 {@code BB_DIAG} 常驻 INFO 是「日志量」问题，
  *       没有可断言的行为。</li>
@@ -26,7 +26,7 @@ import static org.junit.Assert.assertTrue;
 public class TestMinorDefectGuards {
 
     private static final Path GENERATOR =
-            Path.of("src/main/java/cn/ism/mekck/command/PlantingRecipeGenerator.java");
+            Path.of("src/main/java/cn/ism/mekck/command/planting/GeneratorFs.java");
     private static final Path CLIENT_EVENTS =
             Path.of("src/main/java/cn/ism/mekck/client/ClientWorldEvents.java");
 

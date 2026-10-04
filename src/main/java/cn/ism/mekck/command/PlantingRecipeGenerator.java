@@ -1,5 +1,9 @@
 package cn.ism.mekck.command;
 
+import cn.ism.mekck.command.planting.BotanyPotsCollector;
+import cn.ism.mekck.command.planting.GeneratorFs;
+import cn.ism.mekck.command.planting.LootRoller;
+import cn.ism.mekck.command.planting.RecipeJsonWriter;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -62,19 +66,41 @@ import org.slf4j.LoggerFactory;
 import vectorwing.farmersdelight.common.crafting.CuttingBoardRecipe;
 import vectorwing.farmersdelight.common.crafting.ingredient.ChanceResult;
 
+/**
+ * 种植配方的 <b>dev 命令入口</b>：服务器启动时清旧内容、生成 {@code mekmm:planting} /
+ * {@code immersiveengineering:cloche} / {@code mekck:plantcut} / {@code botanypots:crop}
+ * 四类配方 JSON，并把 BotanyPots 数据与战利品表求值结果汇总成我们的配方。
+ *
+ * <h3>为什么拆出四个伴生类，本类只留入口</h3>
+ * 拆分前这是一个约 1700 行的 God 命令，混着四件本可分开读的事：碰磁盘的杂务、
+ * 拼配方 JSON、反射读 BotanyPots、试跑战利品表。四个伴生类分别接管这四件事
+ * （{@link GeneratorFs} / {@link RecipeJsonWriter} / {@link BotanyPotsCollector} /
+ * {@link LootRoller}），本类退化为<b>编排者</b>与<b>跨类共享状态的唯一持有者</b>：
+ * <ul>
+ *   <li>可生长的种子/方块映射、调试产物列表、BotanyPots 土壤 categories 表 ——
+ *       都是生成期状态，多个伴生类要读写，按「伴生类不持状态」的约定集中放在这里，
+ *       由 {@link #generate} 通过参数传给伴生类；</li>
+ *   <li>可选依赖判据（{@link #isBotanyPotsInstalled} / {@link #isImmersiveEngineeringInstalled} /
+ *       {@link #isMekmmInstalled}）与它们的类型 ID 常量 —— 调用点横跨多个伴生类，
+ *       依约定留在入口类被回调；</li>
+ *   <li>{@link #generatePlantCutJson} 及其两个私有辅助 —— 三个写侧
+ *       （BotanyPots 转换、战利品表推产物、既有配方反扫）都要用它，
+ *       调用点不落在单一伴生类内，故同样留在入口类。</li>
+ * </ul>
+ * <p>本类是 {@code final} 且全静态；拆分只搬运方法，不改路径/文件名/JSON 形状/删除逻辑。</p>
+ */
 public final class PlantingRecipeGenerator {
    public static final Logger LOGGER = LoggerFactory.getLogger(PlantingRecipeGenerator.class);
-   private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+   public static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
-   /** BotanyPots 作物配方类型 ID 与生成时使用的默认生长时间（tick）。 */
-   private static final ResourceLocation BOTANY_CROP_TYPE_ID = new ResourceLocation("botanypots", "crop");
-   private static final int BOTANY_GROWTH_TICKS = 1200;
+   /** BotanyPots 作物配方类型 ID（生成期扫 botanypots:crop 用）。 */
+   public static final ResourceLocation BOTANY_CROP_TYPE_ID = new ResourceLocation("botanypots", "crop");
 
    /** BotanyPots 作物配方的一次掉落条目（运行时反射解析，无编译依赖）。 */
-   private record BotanyDrop(Item item, float chance, int minRolls, int maxRolls) { }
+   public record BotanyDrop(Item item, float chance, int minRolls, int maxRolls) { }
 
    /** BotanyPots 作物配方（种子输入 + 掉落条目列表 + 该种子要求的土壤 categories）。 */
-   private record BotanyCropData(Item seed, List<BotanyDrop> drops, java.util.Set<String> soilCategories) { }
+   public record BotanyCropData(Item seed, List<BotanyDrop> drops, java.util.Set<String> soilCategories) { }
 
    /** 种子 → 要求的土壤 categories（生成期扫 botanypots:crop 得到）。 */
    private static final Map<Item, java.util.Set<String>> seedSoilCategories = new LinkedHashMap<>();
@@ -85,18 +111,6 @@ public final class PlantingRecipeGenerator {
    /** 生长方块格只对神秘农业种子生效（用户 2026-09-17 决定：其余模组的种植配方无视该格）。 */
    private static final String REQUIRES_SOIL_NAMESPACE = "mysticalagriculture";
 
-   /**
-    * 从 JSON 内容中移除 # 开头的注释行（配置文件允许使用 # 中文说明注释）。
-    */
-   private static String stripJsonComments(String json) {
-      StringBuilder sb = new StringBuilder(json.length() + 16);
-      for (String line : json.split("\n", -1)) {
-         if (!line.trim().startsWith("#")) {
-            sb.append(line).append('\n');
-         }
-      }
-      return sb.toString();
-   }
    private static final List<ResourceLocation> debugGeneratedSeeds = new ArrayList<>();
    private static final List<ResourceLocation> debugFailedLootTable = new ArrayList<>();
    private static final List<ResourceLocation> debugNoProducts = new ArrayList<>();
@@ -128,7 +142,7 @@ public final class PlantingRecipeGenerator {
       for (Path owned : new Path[]{recipeDir, clocheRecipeDir, plantcutRecipeDir, botanyPotsRecipeDir}) {
          if (Files.exists(owned)) {
             try {
-               deleteDirectoryRecursively(owned);
+               GeneratorFs.deleteDirectoryRecursively(owned);
             } catch (IOException e) {
                LOGGER.error("Failed to delete stale generated recipes at {}; will overwrite in place", owned, e);
             }
@@ -167,7 +181,7 @@ public final class PlantingRecipeGenerator {
       } else {
          Set<Item> existingRecipeSeeds = collectExistingRecipeSeeds(server);
          LOGGER.info("Found {} seeds with existing recipes from other mods, will skip them.", existingRecipeSeeds.size());
-         Set<Item> blacklist = loadBlacklist(server);
+         Set<Item> blacklist = GeneratorFs.loadBlacklist(server);
          LOGGER.info("Loaded {} blacklisted seeds from config, will skip them.", blacklist.size());
          existingRecipeSeeds.addAll(blacklist);
 
@@ -201,17 +215,17 @@ public final class PlantingRecipeGenerator {
          // 目录本身已在上面 createDirectories 建好，这里只需在 IE 缺席时清空它。
          boolean ieInstalled = isImmersiveEngineeringInstalled();
          if (!ieInstalled) {
-            purgeDirectory(clocheRecipeDir, "plant_ie (Immersive Engineering not installed)");
+            GeneratorFs.purgeDirectory(clocheRecipeDir, "plant_ie (Immersive Engineering not installed)");
          }
          // 同理：mekmm 未装时 mekmm:planting 类型不存在，那批配方全是坏的 ⇒ 不生成并清旧文件。
          boolean mekmmInstalled = isMekmmInstalled();
          if (!mekmmInstalled) {
-            purgeDirectory(recipeDir, "planting (mekmm not installed)");
+            GeneratorFs.purgeDirectory(recipeDir, "planting (mekmm not installed)");
          }
-         Map<Item, BotanyCropData> botanyCrops = collectBotanyPotsCropRecipes(server);
+         Map<Item, BotanyCropData> botanyCrops = BotanyPotsCollector.collectBotanyPotsCropRecipes(server, seedSoilCategories);
          // 土壤 categories（生长方块格判定）：必须在写任何 plantcut 配方之前收集好
-         collectBotanyPotsSoilRecipes(server);
-         int existingCount = generatePlantCutFromExisting(plantcutRecipeDir, server);
+         BotanyPotsCollector.collectBotanyPotsSoilRecipes(server, soilCategoriesByItem);
+         int existingCount = RecipeJsonWriter.generatePlantCutFromExisting(plantcutRecipeDir, server);
          LOGGER.info("Generated {} mekck:plantcut recipes from existing mekmm:planting recipes.", existingCount);
          int count = 0;
          int skipped = 0;
@@ -226,13 +240,14 @@ public final class PlantingRecipeGenerator {
                   boolean generated = false;
                   if (botanyData != null) {
                      // 优先级 2：有 BotanyPots 配方 → 转换（输入=BP 输入，输出×2=我们的输出）
-                     generated = generateFromBotanyPots(entry.getKey(), botanyData, recipeDir, clocheRecipeDir,
-                             plantcutRecipeDir, server, ForgeRegistries.BLOCKS.getKey(entry.getValue()));
+                     generated = BotanyPotsCollector.generateFromBotanyPots(entry.getKey(), botanyData, recipeDir, clocheRecipeDir,
+                             plantcutRecipeDir, server, ForgeRegistries.BLOCKS.getKey(entry.getValue()), debugGeneratedSeeds);
                   }
                   if (!generated) {
                      // 优先级 3：无种植配方且无 BP 配方 → 依据战利品表生成（同时为 BotanyPots 生成植物盆配方）
-                     generated = generateRecipe(entry.getKey(), entry.getValue(), recipeDir, clocheRecipeDir,
-                             plantcutRecipeDir, botanyPotsRecipeDir, botanyPotsInstalled, server);
+                     generated = RecipeJsonWriter.generateRecipe(entry.getKey(), entry.getValue(), recipeDir, clocheRecipeDir,
+                             plantcutRecipeDir, botanyPotsRecipeDir, botanyPotsInstalled, server,
+                             debugGeneratedSeeds, debugFailedLootTable, debugNoProducts);
                   }
                   if (generated) {
                      count++;
@@ -251,8 +266,8 @@ public final class PlantingRecipeGenerator {
 
          for (Block blockx : nonCropGrowableBlocks) {
             try {
-               if (generateRecipeForNonCrop(blockx, recipeDir, clocheRecipeDir, plantcutRecipeDir, botanyPotsRecipeDir,
-                       botanyPotsInstalled, botanyCrops, server, processedSeeds)) {
+               if (RecipeJsonWriter.generateRecipeForNonCrop(blockx, recipeDir, clocheRecipeDir, plantcutRecipeDir, botanyPotsRecipeDir,
+                       botanyPotsInstalled, botanyCrops, server, processedSeeds, debugGeneratedSeeds, debugNoProducts)) {
                   count++;
                } else {
                   skipped++;
@@ -265,22 +280,6 @@ public final class PlantingRecipeGenerator {
 
          LOGGER.info("Generation complete: generated {} recipes, skipped {} recipes", count, skipped);
          return count > 0 || existingCount > 0;
-      }
-   }
-
-   private static void deleteDirectoryRecursively(Path dir) throws IOException {
-      if (Files.exists(dir)) {
-         // try-with-resources：Files.walk 返回的 Stream 持有打开的目录句柄，
-         // 未关闭时在 Windows 上会把整棵已删目录锁住，后续重建/覆盖静默失败。
-         try (Stream<Path> paths = Files.walk(dir)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
-               try {
-                  Files.deleteIfExists(path);
-               } catch (IOException var2) {
-                  LOGGER.error("Failed to delete: {}", path, var2);
-               }
-            });
-         }
       }
    }
 
@@ -322,115 +321,11 @@ public final class PlantingRecipeGenerator {
       }
    }
 
-   /**
-    * 把两个旧的独立 JSON 配置迁移进 mekck-common.toml，随后删除旧文件。
-    * <p>背景：2026-09-16 起配置合并为单文件 mekck-common.toml（此前是 1 个 TOML + 2 个 JSON）。
-    * 本方法保证老存档/老整合包的既有设置不丢失：先把 JSON 内容写进配置项，确认写入后再删文件；
-    * 任何一步失败都保留原文件并告警，绝不静默丢配置。</p>
-    * <p>两个调用点都会调它；文件删掉后即为空操作，因此只会真正迁移一次。</p>
-    */
-   private static void migrateLegacyPlantingConfigs(MinecraftServer server) {
-      Path configDir = server.getServerDirectory().toPath().resolve("config/mekck");
-      Path blacklistFile = configDir.resolve("planting_blacklist.json");
-      Path debugFile = configDir.resolve("planting_debug.json");
-      boolean migratedAny = false;
-
-      // ① 黑名单 -> [planting] blacklist
-      if (Files.exists(blacklistFile)) {
-         try {
-            JsonObject json = (JsonObject)GSON.fromJson(stripJsonComments(Files.readString(blacklistFile)), JsonObject.class);
-            JsonArray arr = json != null && json.has("blacklist") ? json.getAsJsonArray("blacklist") : null;
-            if (arr != null && arr.size() > 0) {
-               List<String> values = new ArrayList<>();
-               for (int i = 0; i < arr.size(); i++) {
-                  String s = arr.get(i).getAsString();
-                  if (s != null && !s.isEmpty()) {
-                     values.add(s);
-                  }
-               }
-               cn.ism.mekck.config.MekckConfig.setPlantingBlacklist(values);
-               migratedAny = true;
-               LOGGER.info("Migrated {} entries from planting_blacklist.json into mekck-common.toml [planting] blacklist", values.size());
-            }
-            Files.delete(blacklistFile);
-            LOGGER.info("Removed legacy config file {} (now in mekck-common.toml)", blacklistFile);
-         } catch (Exception e) {
-            LOGGER.warn("Could not migrate planting_blacklist.json; the file was KEPT as-is", e);
-         }
-      }
-
-      // ② 调试开关 -> [planting] print_planting_debug_to_chat
-      if (Files.exists(debugFile)) {
-         try {
-            JsonObject json = (JsonObject)GSON.fromJson(stripJsonComments(Files.readString(debugFile)), JsonObject.class);
-            if (json != null && json.has("enabled")) {
-               boolean enabled = json.get("enabled").getAsBoolean();
-               cn.ism.mekck.config.MekckConfig.setPlantingDebugToChat(enabled);
-               migratedAny = true;
-               LOGGER.info("Migrated print_planting_debug_to_chat={} from planting_debug.json", enabled);
-            }
-            Files.delete(debugFile);
-            LOGGER.info("Removed legacy config file {} (now in mekck-common.toml)", debugFile);
-         } catch (Exception e) {
-            LOGGER.warn("Could not migrate planting_debug.json; the file was KEPT as-is", e);
-         }
-      }
-
-      // 显式落盘：确保迁移结果写进 mekck-common.toml，玩家重启后仍生效
-      if (migratedAny) {
-         cn.ism.mekck.config.MekckConfig.save();
-      }
-   }
-
-   private static Set<Item> loadBlacklist(MinecraftServer server) {
-      Set<Item> blacklist = new HashSet<>();
-      // 2026-09-16：黑名单已并入 mekck-common.toml 的 [planting] blacklist，不再读写独立 JSON。
-      // 旧的 planting_blacklist.json 若仍存在，先迁移其内容进配置、再把文件删除。
-      migrateLegacyPlantingConfigs(server);
-      List<? extends String> configured = cn.ism.mekck.config.MekckConfig.getPlantingBlacklist();
-      if (configured == null || configured.isEmpty()) {
-         LOGGER.info("Planting blacklist is empty; no items will be excluded.");
-      }
-      if (configured != null) {
-         for (String itemId : configured) {
-            if (itemId == null || itemId.isEmpty()) {
-               continue;
-            }
-            try {
-               ResourceLocation id = new ResourceLocation(itemId);
-               Item item = (Item)ForgeRegistries.ITEMS.getValue(id);
-               if (item != null) {
-                  blacklist.add(item);
-               } else {
-                  LOGGER.warn("Blacklist contains unknown item: {}", itemId);
-               }
-            } catch (Exception e) {
-               LOGGER.warn("Blacklist contains invalid item ID: {}", itemId);
-            }
-         }
-      }
-      LOGGER.info("Loaded {} blacklisted plant items from mekck-common.toml", blacklist.size());
-      return blacklist;
-   }
-
-   private static Map<Item, Integer> filterOutSeedItems(Map<Item, Integer> items) {
-      Map<Item, Integer> result = new LinkedHashMap<>();
-
-      for (Entry<Item, Integer> entry : items.entrySet()) {
-         ResourceLocation id = ForgeRegistries.ITEMS.getKey(entry.getKey());
-         if (id != null && !id.getPath().toLowerCase().contains("seed")) {
-            result.put(entry.getKey(), entry.getValue());
-         }
-      }
-
-      return result;
-   }
-
    private static boolean isDebugEnabled(MinecraftServer server) {
       // 2026-09-16：原为「TOML 开关 + 独立 planting_debug.json 开关」两道门，
       // 且两者默认值互相矛盾（TOML 默认 true、JSON 默认 false ⇒ 实际等于关）。
       // 现已合并为 mekck-common.toml 里唯一的一项 [planting] print_planting_debug_to_chat。
-      migrateLegacyPlantingConfigs(server);
+      GeneratorFs.migrateLegacyPlantingConfigs(server);
       return cn.ism.mekck.config.MekckConfig.getPlantingDebugToChat();
    }
 
@@ -521,221 +416,15 @@ public final class PlantingRecipeGenerator {
       }
    }
 
-   private static boolean generateRecipe(Item seed, Block cropBlock, Path recipeDir, Path clocheRecipeDir, Path plantcutRecipeDir,
-         Path botanyPotsRecipeDir, boolean botanyPotsInstalled, MinecraftServer server) throws IOException {
-      ResourceLocation seedId = ForgeRegistries.ITEMS.getKey(seed);
-      if (seedId == null) {
-         return false;
-      } else {
-         Map<Item, Integer> allItems = determineAllOutputItems(cropBlock, seed, server);
-         if (allItems.isEmpty()) {
-            LOGGER.warn("Could not determine output items from loot table for seed: {}, skipping.", seedId);
-            debugFailedLootTable.add(seedId);
-            return false;
-         } else {
-            Map<Item, Integer> filteredItems = filterOutSeedItems(allItems);
-            if (filteredItems.isEmpty()) {
-               LOGGER.warn("All items from loot table for seed {} were seeds, no products remain. Skipping.", seedId);
-               debugNoProducts.add(seedId);
-               return false;
-            } else {
-               Item mainOutputItem = null;
-               int mainOutputCount = 0;
-
-               for (Entry<Item, Integer> entry : filteredItems.entrySet()) {
-                  if (!entry.getKey().equals(seed)) {
-                     mainOutputItem = entry.getKey();
-                     mainOutputCount = entry.getValue();
-                     break;
-                  }
-               }
-
-               if (mainOutputItem == null) {
-                  Entry<Item, Integer> first = filteredItems.entrySet().iterator().next();
-                  mainOutputItem = first.getKey();
-                  mainOutputCount = first.getValue();
-               }
-
-               ResourceLocation mainOutputId = ForgeRegistries.ITEMS.getKey(mainOutputItem);
-               if (mainOutputId == null) {
-                  return false;
-               } else {
-                  int recipeOutputCount = Math.max(1, mainOutputCount * 2);
-                  JsonObject jsonMekmm = new JsonObject();
-                  jsonMekmm.addProperty("type", "mekmm:planting");
-                  JsonObject itemInput = new JsonObject();
-                  JsonObject ingredient = new JsonObject();
-                  ingredient.addProperty("item", seedId.toString());
-                  itemInput.add("ingredient", ingredient);
-                  jsonMekmm.add("itemInput", itemInput);
-                  JsonObject gasInput = new JsonObject();
-                  gasInput.addProperty("amount", 1);
-                  gasInput.addProperty("gas", "mekmm:nutrient_solution");
-                  jsonMekmm.add("gasInput", gasInput);
-                  JsonObject mainOutputJson = new JsonObject();
-                  mainOutputJson.addProperty("count", recipeOutputCount);
-                  mainOutputJson.addProperty("item", mainOutputId.toString());
-                  jsonMekmm.add("mainOutput", mainOutputJson);
-                  boolean hasSecondaryOutput = !seed.equals(mainOutputItem) && !seedId.getPath().toLowerCase().contains("seed");
-                  if (hasSecondaryOutput) {
-                     JsonObject secondaryOutput = new JsonObject();
-                     secondaryOutput.addProperty("count", 1);
-                     secondaryOutput.addProperty("item", seedId.toString());
-                     jsonMekmm.add("secondaryOutput", secondaryOutput);
-                     jsonMekmm.addProperty("secondaryChance", 0.8);
-                  }
-
-                  // mekmm 未装 ⇒ mekmm:planting 类型不存在，跳过写入（plantcut 等其余配方不受影响）
-                  if (isMekmmInstalled()) {
-                     Path pathMekmm = recipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-                     Files.writeString(pathMekmm, GSON.toJson(jsonMekmm));
-                  }
-                  JsonObject jsonCloche = new JsonObject();
-                  jsonCloche.addProperty("type", "immersiveengineering:cloche");
-                  JsonObject inputCloche = new JsonObject();
-                  inputCloche.addProperty("item", seedId.toString());
-                  jsonCloche.add("input", inputCloche);
-                  JsonObject render = new JsonObject();
-                  render.addProperty("type", "crop");
-                  ResourceLocation cropId = ForgeRegistries.BLOCKS.getKey(cropBlock);
-                  if (cropId != null) {
-                     render.addProperty("block", cropId.toString());
-                  } else {
-                     render.addProperty("block", "minecraft:potatoes");
-                  }
-
-                  jsonCloche.add("render", render);
-                  JsonArray results = new JsonArray();
-                  JsonObject mainResult = new JsonObject();
-                  mainResult.addProperty("count", recipeOutputCount);
-                  mainResult.addProperty("item", mainOutputId.toString());
-                  results.add(mainResult);
-                  if (hasSecondaryOutput) {
-                     JsonObject seedResult = new JsonObject();
-                     seedResult.addProperty("item", seedId.toString());
-                     results.add(seedResult);
-                  }
-
-                  jsonCloche.add("results", results);
-                  JsonObject soil = new JsonObject();
-                  soil.addProperty("item", "minecraft:dirt");
-                  jsonCloche.add("soil", soil);
-                  jsonCloche.addProperty("time", 800);
-                  // IE 未装 ⇒ cloche 配方无法解析，跳过写入（mekmm/plantcut 配方不受影响）
-                  if (isImmersiveEngineeringInstalled()) {
-                     Path pathCloche = clocheRecipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-                     Files.writeString(pathCloche, GSON.toJson(jsonCloche));
-                  }
-                  generatePlantCutJson(plantcutRecipeDir, seedId, mainOutputId, recipeOutputCount, hasSecondaryOutput, seedId, 0.8F, server);
-                  // 依据战利品表为 BotanyPots 生成植物盆 crop 配方（任务 3）
-                  if (botanyPotsInstalled) {
-                     writeBotanyPotsCropJson(botanyPotsRecipeDir, seedId, ForgeRegistries.BLOCKS.getKey(cropBlock),
-                             mainOutputId, recipeOutputCount, hasSecondaryOutput, seedId, 0.8F);
-                  }
-                  LOGGER.debug("Generated both planting recipes: {} -> {} x{}", new Object[]{seedId, mainOutputId, recipeOutputCount});
-                  debugGeneratedSeeds.add(seedId);
-                  return true;
-               }
-            }
-         }
-      }
-   }
-
-   private static boolean generateRecipeForNonCrop(
-      Block block, Path recipeDir, Path clocheRecipeDir, Path plantcutRecipeDir, Path botanyPotsRecipeDir,
-      boolean botanyPotsInstalled, Map<Item, BotanyCropData> botanyCrops, MinecraftServer server, Set<Item> processedSeeds
-   ) throws IOException {
-      // 优先级 2（非 CropBlock 可生长方块）：方块物品本身命中有 BotanyPots 作物配方 → 转换
-      Item blockItem = block.asItem();
-      BotanyCropData botanyData = botanyCrops.get(blockItem);
-      if (botanyData != null && !processedSeeds.contains(blockItem)) {
-         if (generateFromBotanyPots(blockItem, botanyData, recipeDir, clocheRecipeDir, plantcutRecipeDir, server,
-                 ForgeRegistries.BLOCKS.getKey(block))) {
-            processedSeeds.add(blockItem);
-            return true;
-         }
-      }
-      Map<Item, Integer> allItems = determineAllOutputItems(block, null, server);
-      if (allItems.isEmpty()) {
-         LOGGER.debug("No output items from loot table for non-crop block: {}, skipping.", ForgeRegistries.BLOCKS.getKey(block));
-         return false;
-      } else {
-         Map<Item, Integer> filteredItems = filterOutSeedItems(allItems);
-         if (filteredItems.isEmpty()) {
-            ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(block);
-            LOGGER.warn("All items from loot table for non-crop block {} were seeds, no products remain. Skipping.", blockId);
-            debugNoProducts.add(blockId);
-            return false;
-         } else {
-            Entry<Item, Integer> firstEntry = filteredItems.entrySet().iterator().next();
-            Item seed = firstEntry.getKey();
-            int seedCount = firstEntry.getValue();
-            ResourceLocation seedId = ForgeRegistries.ITEMS.getKey(seed);
-            if (seedId == null) {
-               return false;
-            } else if (processedSeeds.contains(seed)) {
-               LOGGER.debug("Seed {} already processed from CropBlock, skipping non-CropBlock duplicate.", seedId);
-               return false;
-            } else {
-               processedSeeds.add(seed);
-               int recipeOutputCount = Math.max(1, seedCount * 2);
-               JsonObject jsonMekmm = new JsonObject();
-               jsonMekmm.addProperty("type", "mekmm:planting");
-               JsonObject itemInput = new JsonObject();
-               JsonObject ingredient = new JsonObject();
-               ingredient.addProperty("item", seedId.toString());
-               itemInput.add("ingredient", ingredient);
-               jsonMekmm.add("itemInput", itemInput);
-               JsonObject gasInput = new JsonObject();
-               gasInput.addProperty("amount", 1);
-               gasInput.addProperty("gas", "mekmm:nutrient_solution");
-               jsonMekmm.add("gasInput", gasInput);
-               JsonObject mainOutputJson = new JsonObject();
-               mainOutputJson.addProperty("count", recipeOutputCount);
-               mainOutputJson.addProperty("item", seedId.toString());
-               jsonMekmm.add("mainOutput", mainOutputJson);
-               // mekmm 未装 ⇒ mekmm:planting 类型不存在，跳过写入（plantcut 等其余配方不受影响）
-               if (isMekmmInstalled()) {
-                  Path pathMekmm = recipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-                  Files.writeString(pathMekmm, GSON.toJson(jsonMekmm));
-               }
-               ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(block);
-               JsonObject jsonCloche = new JsonObject();
-               jsonCloche.addProperty("type", "immersiveengineering:cloche");
-               JsonObject inputCloche = new JsonObject();
-               inputCloche.addProperty("item", seedId.toString());
-               jsonCloche.add("input", inputCloche);
-               JsonObject render = new JsonObject();
-               render.addProperty("type", "crop");
-               render.addProperty("block", blockId != null ? blockId.toString() : "minecraft:potatoes");
-               jsonCloche.add("render", render);
-               JsonArray results = new JsonArray();
-               JsonObject mainResult = new JsonObject();
-               mainResult.addProperty("count", recipeOutputCount);
-               mainResult.addProperty("item", seedId.toString());
-               results.add(mainResult);
-               jsonCloche.add("results", results);
-               JsonObject soil = new JsonObject();
-               soil.addProperty("item", "minecraft:dirt");
-               jsonCloche.add("soil", soil);
-               jsonCloche.addProperty("time", 800);
-               // IE 未装 ⇒ cloche 配方无法解析，跳过写入（mekmm/plantcut 配方不受影响）
-               if (isImmersiveEngineeringInstalled()) {
-                  Path pathCloche = clocheRecipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-                  Files.writeString(pathCloche, GSON.toJson(jsonCloche));
-               }
-               generatePlantCutJson(plantcutRecipeDir, seedId, seedId, recipeOutputCount, false, null, 0.0F, server);
-               if (botanyPotsInstalled) {
-                  writeBotanyPotsCropJson(botanyPotsRecipeDir, seedId, blockId, seedId, recipeOutputCount, false, null, 0.0F);
-               }
-               LOGGER.info("Generated non-crop planting recipes: block={}, seed={} x{}", new Object[]{blockId, seedId, recipeOutputCount});
-               return true;
-            }
-         }
-      }
-   }
-
-   private static void generatePlantCutJson(
+   /**
+    * 写出 {@code mekck:plantcut} 配方 JSON。
+    *
+    * <h3>为什么留在入口类而非 {@link RecipeJsonWriter}</h3>
+    * 它的三个调用点横跨两个伴生类：{@link RecipeJsonWriter}（战利品表推产物、既有配方反扫）
+    * 与 {@link BotanyPotsCollector}（BP 转换）。按「辅助方法仅当全部调用点都在同一伴生类内才搬」
+    * 的约定，它保留在这里，由两个伴生类回调。
+    */
+   public static void generatePlantCutJson(
       Path plantcutRecipeDir,
       ResourceLocation seedId,
       ResourceLocation mainOutputId,
@@ -876,79 +565,7 @@ public final class PlantingRecipeGenerator {
       }
    }
 
-   /**
-    * 读取一条 BotanyPots 作物配方的土壤 categories（{@code BasicCrop.getSoilCategories()}）。
-    * 反射读取，任何失败都按「无要求」处理（不让生成流程挂掉）。
-    */
-   private static java.util.Set<String> readBotanyCropSoilCategories(Recipe<?> recipe) {
-      try {
-         if (cn.ism.mekck.util.Reflect.call(recipe, "getSoilCategories") instanceof java.util.Set<?> raw && !raw.isEmpty()) {
-            java.util.Set<String> parsed = new java.util.LinkedHashSet<>();
-            for (Object category : raw) {
-               if (category != null) {
-                  parsed.add(category.toString());
-               }
-            }
-            return parsed;
-         }
-      } catch (Exception ex) {
-         LOGGER.debug("Failed to read BotanyPots crop soil categories: {}", ex.toString());
-      }
-      return java.util.Set.of();
-   }
-
-   /**
-    * 收集全部 BotanyPots 土壤配方（type=botanypots:soil）→ 「土壤物品 → categories」。
-    * <p>生长方块格的判定依据就是这里：<b>种子的 categories ⊆ 土壤的 categories</b>
-    * （高级土壤会把低级的 category 全部累加进来，所以等价于「土壤等级 ≥ 种子等级」）。</p>
-    * <p>与作物侧同一套路：纯反射，不引入 BotanyPots 编译依赖；未安装时保持空表。</p>
-    */
-   private static void collectBotanyPotsSoilRecipes(MinecraftServer server) {
-      soilCategoriesByItem.clear();
-      RecipeType<?> soilType = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("botanypots", "soil"));
-      if (soilType == null) {
-         LOGGER.info("botanypots:soil 配方类型不存在（未安装 BotanyPots），跳过土壤扫描。");
-         return;
-      }
-      try {
-         @SuppressWarnings({"unchecked", "rawtypes"})
-         java.util.Collection<Recipe<?>> recipes = (java.util.Collection) (java.util.Collection) server.getRecipeManager().getAllRecipesFor((RecipeType) soilType);
-         for (Recipe<?> recipe : recipes) {
-            String className = recipe.getClass().getName();
-            if (!className.contains("botanypots") || !className.endsWith("BasicSoil")) {
-               continue;
-            }
-            try {
-               Object categoriesRaw = cn.ism.mekck.util.Reflect.call(recipe, "getCategories");
-               if (!(categoriesRaw instanceof java.util.Set<?> raw) || raw.isEmpty()) {
-                  continue;
-               }
-               java.util.Set<String> categories = new java.util.LinkedHashSet<>();
-               for (Object category : raw) {
-                  if (category != null) {
-                     categories.add(category.toString());
-                  }
-               }
-               Object ingredientRaw = cn.ism.mekck.util.Reflect.call(recipe, "getIngredient");
-               if (!(ingredientRaw instanceof Ingredient soilIngredient)) {
-                  continue;
-               }
-               for (ItemStack stack : soilIngredient.getItems()) {
-                  if (!stack.isEmpty()) {
-                     soilCategoriesByItem.putIfAbsent(stack.getItem(), categories);
-                  }
-               }
-            } catch (Exception ex) {
-               LOGGER.debug("Failed to parse BotanyPots soil recipe {}: {}", recipe.getId(), ex.toString());
-            }
-         }
-         LOGGER.info("Collected {} BotanyPots soil mappings (生长方块格判定用).", soilCategoriesByItem.size());
-      } catch (Exception ex) {
-         LOGGER.error("Error scanning BotanyPots soil recipes", ex);
-      }
-   }
-
-   private static boolean isBotanyPotsInstalled() {
+   public static boolean isBotanyPotsInstalled() {
       return cn.ism.mekck.util.RecipeCache.type(BOTANY_CROP_TYPE_ID) != null;
    }
 
@@ -968,7 +585,7 @@ public final class PlantingRecipeGenerator {
     * 不用 {@code ModList.isLoaded} 是刻意的：即使装了 IE，只要它的 cloche 类型没注册成功，
     * 生成出来的仍是坏配方，所以以「类型真的可用」为准。
     */
-   private static boolean isImmersiveEngineeringInstalled() {
+   public static boolean isImmersiveEngineeringInstalled() {
       return cn.ism.mekck.util.RecipeCache.type(IE_CLOCHE_TYPE_ID) != null;
    }
 
@@ -992,675 +609,7 @@ public final class PlantingRecipeGenerator {
     * <p>判据与 {@link #isBotanyPotsInstalled()} / {@link #isImmersiveEngineeringInstalled()} 同源：
     * 以「配方类型真的已注册」为准，而不是 {@code ModList.isLoaded}。</p>
     */
-   private static boolean isMekmmInstalled() {
+   public static boolean isMekmmInstalled() {
       return cn.ism.mekck.util.RecipeCache.type(MEKMM_PLANTING_TYPE_ID) != null;
-   }
-
-   /**
-    * 清空一个由本生成器独占的配方目录（不存在即空操作，失败只记日志不中断生成）。
-    *
-    * <p>用途：可选依赖卸载后，上一轮写进存档 datapack 的配方文件仍然留在那里，
-    * 而它们引用的 recipe type 已经不存在 ⇒ 每次启动都继续刷解析错误。
-    * 仅对 {@link #generate} 顶部那 4 个「只由本方法创建并写入」的目录调用。</p>
-    */
-   private static void purgeDirectory(Path dir, String label) {
-      if (!Files.exists(dir)) {
-         return;
-      }
-      try {
-         deleteDirectoryRecursively(dir);
-         LOGGER.info("Purged stale generated recipes: {}", label);
-      } catch (IOException e) {
-         LOGGER.error("Failed to purge stale generated recipes at {}; will overwrite in place", dir, e);
-      }
-   }
-
-   /**
-    * 收集全部 BotanyPots 作物配方（type=botanypots:crop），按种子物品建立映射。
-    * 通过反射读取 BasicCrop.getSeed()/getResults() 与 HarvestEntry 的 getChance/getItem/getMinRolls/getMaxRolls，
-    * 不引入 BotanyPots 编译依赖（未安装时返回空表）。
-    */
-   private static Map<Item, BotanyCropData> collectBotanyPotsCropRecipes(MinecraftServer server) {
-      Map<Item, BotanyCropData> map = new HashMap<>();
-      if (!isBotanyPotsInstalled()) {
-         LOGGER.info("botanypots:crop 配方类型不存在（未安装 BotanyPots），跳过植物盆栽配方扫描。");
-         return map;
-      }
-      try {
-         RecipeType<?> cropType = cn.ism.mekck.util.RecipeCache.type(BOTANY_CROP_TYPE_ID);
-         @SuppressWarnings({"unchecked", "rawtypes"})
-         java.util.Collection<Recipe<?>> recipes = (java.util.Collection) (java.util.Collection) server.getRecipeManager().getAllRecipesFor((RecipeType) cropType);
-         for (Recipe<?> recipe : recipes) {
-            String className = recipe.getClass().getName();
-            if (!className.contains("botanypots") || !className.endsWith("BasicCrop")) {
-               continue;
-            }
-            try {
-               Method getSeed = recipe.getClass().getMethod("getSeed");
-               Method getResults = recipe.getClass().getMethod("getResults");
-               if (!(getSeed.invoke(recipe) instanceof Ingredient seedIngredient)) {
-                  continue;
-               }
-               // 该种子要求的土壤 categories（读不到 = 无要求）
-               java.util.Set<String> soilCategories = readBotanyCropSoilCategories(recipe);
-               if (!soilCategories.isEmpty()) {
-                  for (ItemStack seedStack : seedIngredient.getItems()) {
-                     if (!seedStack.isEmpty()) {
-                        seedSoilCategories.putIfAbsent(seedStack.getItem(), soilCategories);
-                     }
-                  }
-               }
-               if (!(getResults.invoke(recipe) instanceof List<?> resultList) || resultList.isEmpty()) {
-                  continue;
-               }
-               List<BotanyDrop> drops = new ArrayList<>();
-               for (Object result : resultList) {
-                  if (result == null) {
-                     continue;
-                  }
-                  try {
-                     float chance = ((Number) cn.ism.mekck.util.Reflect.call(result, "getChance")).floatValue();
-                     int minRolls = ((Number) cn.ism.mekck.util.Reflect.call(result, "getMinRolls")).intValue();
-                     int maxRolls = ((Number) cn.ism.mekck.util.Reflect.call(result, "getMaxRolls")).intValue();
-                     if (cn.ism.mekck.util.Reflect.call(result, "getItem") instanceof ItemStack stack && !stack.isEmpty()) {
-                        drops.add(new BotanyDrop(stack.getItem(), chance, minRolls, maxRolls));
-                     }
-                  } catch (Exception ex) {
-                     LOGGER.debug("Failed to parse BotanyPots drop entry: {}", ex.toString());
-                  }
-               }
-               if (drops.isEmpty()) {
-                  continue;
-               }
-               for (ItemStack stack : seedIngredient.getItems()) {
-                  if (!stack.isEmpty()) {
-                     map.putIfAbsent(stack.getItem(), new BotanyCropData(stack.getItem(), drops, soilCategories));
-                  }
-               }
-            } catch (Exception ex) {
-               LOGGER.debug("Failed to parse BotanyPots crop recipe {}: {}", recipe.getId(), ex.toString());
-            }
-         }
-         LOGGER.info("Collected {} BotanyPots crop seed mappings (BotanyPots 配方转换源).", map.size());
-      } catch (Exception ex) {
-         LOGGER.error("Error scanning BotanyPots crop recipes", ex);
-      }
-      return map;
-   }
-
-   /**
-    * 由 BotanyPots 作物配方转换生成我们的种植配方（mekmm:planting + immersiveengineering:cloche + mekck:plantcut）。
-    * 转换规则：BP 种子输入 → 我们的种子输入（催化剂）；BP 掉落输出数量 ×2 → 我们的输出数量。
-    * 主输出 = 首个非种子掉落（兜底第一个），副输出 = 种子掉落（无则第二个掉落），副输出概率沿用 BP 掉落概率。
-    */
-   private static boolean generateFromBotanyPots(
-      Item seed, BotanyCropData data, Path recipeDir, Path clocheRecipeDir, Path plantcutRecipeDir,
-      MinecraftServer server, ResourceLocation displayBlock
-   ) throws IOException {
-      ResourceLocation seedId = ForgeRegistries.ITEMS.getKey(seed);
-      if (seedId == null || data == null || data.drops().isEmpty()) {
-         return false;
-      }
-      BotanyDrop mainDrop = null;
-      for (BotanyDrop drop : data.drops()) {
-         if (!drop.item().equals(seed)) {
-            mainDrop = drop;
-            break;
-         }
-      }
-      if (mainDrop == null) {
-         mainDrop = data.drops().get(0);
-      }
-      ResourceLocation mainId = ForgeRegistries.ITEMS.getKey(mainDrop.item());
-      if (mainId == null) {
-         return false;
-      }
-      int mainCount = Math.max(1, mainDrop.maxRolls()) * 2;
-      BotanyDrop secondaryDrop = null;
-      for (BotanyDrop drop : data.drops()) {
-         if (drop.item().equals(seed)) {
-            secondaryDrop = drop;
-            break;
-         }
-      }
-      if (secondaryDrop == null && data.drops().size() >= 2) {
-         secondaryDrop = data.drops().get(1);
-      }
-      boolean hasSecondary = secondaryDrop != null && !secondaryDrop.item().equals(mainDrop.item());
-      ResourceLocation secondaryId = hasSecondary ? ForgeRegistries.ITEMS.getKey(secondaryDrop.item()) : null;
-      float secondaryChance = hasSecondary ? Math.max(0.05F, Math.min(1.0F, secondaryDrop.chance())) : 0.0F;
-
-      JsonObject jsonMekmm = new JsonObject();
-      jsonMekmm.addProperty("type", "mekmm:planting");
-      JsonObject itemInput = new JsonObject();
-      JsonObject ingredient = new JsonObject();
-      ingredient.addProperty("item", seedId.toString());
-      itemInput.add("ingredient", ingredient);
-      jsonMekmm.add("itemInput", itemInput);
-      JsonObject gasInput = new JsonObject();
-      gasInput.addProperty("amount", 1);
-      gasInput.addProperty("gas", "mekmm:nutrient_solution");
-      jsonMekmm.add("gasInput", gasInput);
-      JsonObject mainOutputJson = new JsonObject();
-      mainOutputJson.addProperty("count", mainCount);
-      mainOutputJson.addProperty("item", mainId.toString());
-      jsonMekmm.add("mainOutput", mainOutputJson);
-      if (hasSecondary && secondaryId != null) {
-         JsonObject secondaryOutput = new JsonObject();
-         secondaryOutput.addProperty("count", Math.max(1, secondaryDrop.maxRolls()) * 2);
-         secondaryOutput.addProperty("item", secondaryId.toString());
-         jsonMekmm.add("secondaryOutput", secondaryOutput);
-         jsonMekmm.addProperty("secondaryChance", secondaryChance);
-      }
-      // mekmm 未装 ⇒ mekmm:planting 类型不存在，跳过写入（plantcut 等其余配方不受影响）
-      if (isMekmmInstalled()) {
-         Path pathMekmm = recipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-         Files.writeString(pathMekmm, GSON.toJson(jsonMekmm));
-      }
-
-      JsonObject jsonCloche = new JsonObject();
-      jsonCloche.addProperty("type", "immersiveengineering:cloche");
-      JsonObject inputCloche = new JsonObject();
-      inputCloche.addProperty("item", seedId.toString());
-      jsonCloche.add("input", inputCloche);
-      JsonObject render = new JsonObject();
-      render.addProperty("type", "crop");
-      render.addProperty("block", displayBlock != null ? displayBlock.toString() : "minecraft:potatoes");
-      jsonCloche.add("render", render);
-      JsonArray results = new JsonArray();
-      JsonObject mainResult = new JsonObject();
-      mainResult.addProperty("count", mainCount);
-      mainResult.addProperty("item", mainId.toString());
-      results.add(mainResult);
-      if (hasSecondary && secondaryId != null) {
-         JsonObject seedResult = new JsonObject();
-         seedResult.addProperty("item", secondaryId.toString());
-         results.add(seedResult);
-      }
-      jsonCloche.add("results", results);
-      JsonObject soil = new JsonObject();
-      soil.addProperty("item", "minecraft:dirt");
-      jsonCloche.add("soil", soil);
-      jsonCloche.addProperty("time", 800);
-      // IE 未装 ⇒ cloche 配方无法解析，跳过写入（mekmm/plantcut 配方不受影响）
-      if (isImmersiveEngineeringInstalled()) {
-         Path pathCloche = clocheRecipeDir.resolve(seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json");
-         Files.writeString(pathCloche, GSON.toJson(jsonCloche));
-      }
-
-      generatePlantCutJson(plantcutRecipeDir, seedId, mainId, mainCount, hasSecondary, secondaryId, secondaryChance, server);
-      LOGGER.info("Generated planting recipes from BotanyPots: {} -> {} x{}", new Object[]{seedId, mainId, mainCount});
-      debugGeneratedSeeds.add(seedId);
-      return true;
-   }
-
-   /**
-    * 依据战利品表为 BotanyPots 生成植物盆 crop 配方（type=botanypots:crop）。
-    * 主掉落：chance 1.0、minRolls 1、maxRolls = 我们配方的主输出数量；副掉落（种子）沿用对应概率。
-    */
-   private static void writeBotanyPotsCropJson(
-      Path botanyPotsRecipeDir, ResourceLocation seedId, ResourceLocation displayBlockId,
-      ResourceLocation mainOutputId, int mainOutputCount, boolean hasSecondary, ResourceLocation secondaryId, float secondaryChance
-   ) throws IOException {
-      JsonObject json = new JsonObject();
-      json.addProperty("type", "botanypots:crop");
-      JsonObject seed = new JsonObject();
-      seed.addProperty("item", seedId.toString());
-      json.add("seed", seed);
-      JsonArray categories = new JsonArray();
-      categories.add("dirt");
-      categories.add("farmland");
-      json.add("categories", categories);
-      json.addProperty("growthTicks", BOTANY_GROWTH_TICKS);
-      JsonObject display = new JsonObject();
-      display.addProperty("type", "botanypots:aging");
-      display.addProperty("block", displayBlockId != null ? displayBlockId.toString() : "minecraft:wheat");
-      json.add("display", display);
-      JsonArray drops = new JsonArray();
-      JsonObject mainDrop = new JsonObject();
-      mainDrop.addProperty("chance", 1.0);
-      JsonObject mainOutput = new JsonObject();
-      mainOutput.addProperty("item", mainOutputId.toString());
-      mainDrop.add("output", mainOutput);
-      mainDrop.addProperty("minRolls", 1);
-      mainDrop.addProperty("maxRolls", Math.max(1, mainOutputCount));
-      drops.add(mainDrop);
-      if (hasSecondary && secondaryId != null) {
-         JsonObject secondaryDrop = new JsonObject();
-         secondaryDrop.addProperty("chance", Math.max(0.05F, Math.min(1.0F, secondaryChance)));
-         JsonObject secondaryOutput = new JsonObject();
-         secondaryOutput.addProperty("item", secondaryId.toString());
-         secondaryDrop.add("output", secondaryOutput);
-         secondaryDrop.addProperty("minRolls", 1);
-         secondaryDrop.addProperty("maxRolls", 1);
-         drops.add(secondaryDrop);
-      }
-      json.add("drops", drops);
-      String fileName = seedId.getNamespace() + "_" + seedId.getPath().replace('/', '_') + ".json";
-      Files.writeString(botanyPotsRecipeDir.resolve(fileName), GSON.toJson(json));
-      LOGGER.debug("Generated BotanyPots crop recipe: {}", fileName);
-   }
-
-   private static int generatePlantCutFromExisting(Path plantcutRecipeDir, MinecraftServer server) {
-      int count = 0;
-
-      try {
-         RecipeType<?> plantingType = (RecipeType<?>)cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("mekmm", "planting"));
-         if (plantingType == null) {
-            LOGGER.info("mekmm:planting recipe type not found, skipping existing recipe scan.");
-            return 0;
-         }
-
-         Class<?> plantingRecipeClass;
-         try {
-            plantingRecipeClass = Class.forName("com.jerry.mekmm.api.recipes.PlantingRecipe", false, PlantingRecipeGenerator.class.getClassLoader());
-         } catch (ClassNotFoundException var27) {
-            LOGGER.warn("PlantingRecipe class not found, cannot scan existing recipes.");
-            return 0;
-         }
-
-         Method getItemInputMethod = plantingRecipeClass.getMethod("getItemInput");
-         Method getMainOutputDefMethod = plantingRecipeClass.getMethod("getMainOutputDefinition");
-         Method getSecondaryOutputDefMethod = plantingRecipeClass.getMethod("getSecondaryOutputDefinition");
-         Method getSecondaryChanceMethod = plantingRecipeClass.getMethod("getSecondaryChance");
-
-         @SuppressWarnings({"unchecked", "rawtypes"})
-         java.util.Collection<Recipe<?>> recipes = (java.util.Collection)(java.util.Collection)server.getRecipeManager().getAllRecipesFor((RecipeType)plantingType);
-         for (Recipe<?> recipe : recipes) {
-            if (plantingRecipeClass.isInstance(recipe)) {
-               try {
-                  Object itemInput = getItemInputMethod.invoke(recipe);
-                  if (itemInput != null) {
-                     Method getRepsMethod = itemInput.getClass().getMethod("getRepresentations");
-                     List<ItemStack> reps = (List<ItemStack>)getRepsMethod.invoke(itemInput);
-                     if (!reps.isEmpty()) {
-                        ResourceLocation seedId = ForgeRegistries.ITEMS.getKey(reps.get(0).getItem());
-                        if (seedId != null) {
-                           List<ItemStack> mainOutputs = (List<ItemStack>)getMainOutputDefMethod.invoke(recipe);
-                           if (!mainOutputs.isEmpty()) {
-                              ItemStack mainOutput = mainOutputs.get(0);
-                              ResourceLocation mainOutputId = ForgeRegistries.ITEMS.getKey(mainOutput.getItem());
-                              if (mainOutputId != null) {
-                                 int mainOutputCount = mainOutput.getCount();
-                                 List<ItemStack> secondaryOutputs = (List<ItemStack>)getSecondaryOutputDefMethod.invoke(recipe);
-                                 boolean hasSecondary = !secondaryOutputs.isEmpty();
-                                 ResourceLocation secondaryId = hasSecondary ? ForgeRegistries.ITEMS.getKey(secondaryOutputs.get(0).getItem()) : null;
-                                 float secondaryChance = 0.0F;
-                                 if (hasSecondary && getSecondaryChanceMethod.invoke(recipe) instanceof Number n) {
-                                    secondaryChance = n.floatValue();
-                                 }
-
-                                 generatePlantCutJson(
-                                    plantcutRecipeDir, seedId, mainOutputId, mainOutputCount, hasSecondary, secondaryId, secondaryChance, server
-                                 );
-                                 count++;
-                              }
-                           }
-                        }
-                     }
-                  }
-               } catch (Exception var26) {
-                  LOGGER.debug("Failed to extract recipe details from existing mekmm:planting recipe: {}", recipe.getId(), var26);
-               }
-            }
-         }
-      } catch (Exception var28) {
-         LOGGER.error("Error scanning existing mekmm:planting recipes", var28);
-      }
-
-      return count;
-   }
-
-   private static Map<Item, Integer> determineAllOutputItems(Block block, Item seed, MinecraftServer server) {
-      try {
-         ResourceLocation lootTableId = block.getLootTable();
-         if (lootTableId == null) {
-            LOGGER.warn("Block {} has null loot table id, trying getDrops() fallback...", ForgeRegistries.BLOCKS.getKey(block));
-            return evaluateBlockDrops(block, server);
-         } else {
-            LootTable lootTable = server.getLootData().getLootTable(lootTableId);
-            if (lootTable == LootTable.EMPTY) {
-               LOGGER.warn("Block {}: loot table {} is empty, trying getDrops() fallback...", ForgeRegistries.BLOCKS.getKey(block), lootTableId);
-               return evaluateBlockDrops(block, server);
-            } else {
-               ServerLevel level = server.overworld();
-               if (level == null) {
-                  LOGGER.warn("Overworld not available when processing {}", ForgeRegistries.BLOCKS.getKey(block));
-                  return Map.of();
-               } else {
-                  int maxAge = 0;
-
-                  for (Property<?> prop : block.getStateDefinition().getProperties()) {
-                     if (prop.getName().equals("age") && prop instanceof IntegerProperty ageProp) {
-                        maxAge = ageProp.getPossibleValues().stream().max(Integer::compareTo).orElse(0);
-                        break;
-                     }
-                  }
-
-                  LOGGER.debug("Block {} has maxAge={}", ForgeRegistries.BLOCKS.getKey(block), maxAge);
-                  Map<Item, Integer> bestItems = null;
-                  int bestAge = -1;
-                  int bestCount = 0;
-
-                  for (int age = 0; age <= maxAge; age++) {
-                     Map<Item, Integer> itemsAtAge = evaluateLootTableAtAge(lootTable, block, age, level);
-                     LOGGER.debug(
-                        "Block {} age={}: {} items: {}",
-                        new Object[]{
-                           ForgeRegistries.BLOCKS.getKey(block),
-                           age,
-                           itemsAtAge.size(),
-                           itemsAtAge.entrySet().stream().map(ex -> ForgeRegistries.ITEMS.getKey((Item)ex.getKey()) + "x" + ex.getValue()).toList()
-                        }
-                     );
-                     if (itemsAtAge.size() > bestCount) {
-                        bestCount = itemsAtAge.size();
-                        bestAge = age;
-                        bestItems = itemsAtAge;
-                     }
-                  }
-
-                  if (bestItems != null && !bestItems.isEmpty()) {
-                     LOGGER.info(
-                        "Block {}: best age={} with {} items: {}",
-                        new Object[]{
-                           ForgeRegistries.BLOCKS.getKey(block),
-                           bestAge,
-                           bestCount,
-                           bestItems.entrySet().stream().map(ex -> ForgeRegistries.ITEMS.getKey((Item)ex.getKey()) + "x" + ex.getValue()).toList()
-                        }
-                     );
-                     return bestItems;
-                  } else {
-                     LOGGER.warn(
-                        "Block {}: getRandomItems returned empty for all ages, trying direct loot table parsing...", ForgeRegistries.BLOCKS.getKey(block)
-                     );
-                     Map<Item, Integer> fallback = parseLootTableDirectly(lootTable, block, server);
-                     if (!fallback.isEmpty()) {
-                        LOGGER.info(
-                           "Block {}: fallback parsing found {} items: {}",
-                           new Object[]{
-                              ForgeRegistries.BLOCKS.getKey(block),
-                              fallback.size(),
-                              fallback.entrySet().stream().map(ex -> ForgeRegistries.ITEMS.getKey((Item)ex.getKey()) + "x" + ex.getValue()).toList()
-                           }
-                        );
-                        return fallback;
-                     } else {
-                        LOGGER.warn("Block {}: no items extracted from any growth stage (0-{})", ForgeRegistries.BLOCKS.getKey(block), maxAge);
-                        return Map.of();
-                     }
-                  }
-               }
-            }
-         }
-      } catch (Exception var12) {
-         LOGGER.error("Exception while analyzing loot table for block {}", ForgeRegistries.BLOCKS.getKey(block), var12);
-         return Map.of();
-      }
-   }
-
-   private static Map<Item, Integer> evaluateBlockDrops(Block block, MinecraftServer server) {
-      ServerLevel level = server.overworld();
-      if (level == null) {
-         return Map.of();
-      } else {
-         int maxAge = 0;
-
-         for (Property<?> prop : block.getStateDefinition().getProperties()) {
-            if (prop.getName().equals("age") && prop instanceof IntegerProperty ageProp) {
-               maxAge = ageProp.getPossibleValues().stream().max(Integer::compareTo).orElse(0);
-               break;
-            }
-         }
-
-         LOGGER.debug("Block {}: evaluating getDrops() for ages 0-{}", ForgeRegistries.BLOCKS.getKey(block), maxAge);
-         Map<Item, Integer> bestItems = null;
-         int bestAge = -1;
-         int bestCount = 0;
-
-         for (int age = 0; age <= maxAge; age++) {
-            BlockState state = block.defaultBlockState();
-
-            for (Property<?> propx : state.getProperties()) {
-               if (propx.getName().equals("age") && propx instanceof IntegerProperty ageProp) {
-                  state = (BlockState)state.setValue(ageProp, age);
-                  break;
-               }
-            }
-
-            Builder builder = new Builder(level);
-            builder.withParameter(LootContextParams.BLOCK_STATE, state);
-            builder.withParameter(LootContextParams.ORIGIN, Vec3.ZERO);
-            builder.withParameter(LootContextParams.TOOL, ItemStack.EMPTY);
-
-            try {
-               List<ItemStack> drops = block.getDrops(state, builder);
-               Map<Item, Integer> itemsAtAge = new HashMap<>();
-
-               for (ItemStack stack : drops) {
-                  if (!stack.isEmpty()) {
-                     itemsAtAge.merge(stack.getItem(), stack.getCount(), Math::max);
-                  }
-               }
-
-               LOGGER.debug(
-                  "Block {} age={}: getDrops returned {} items: {}",
-                  new Object[]{
-                     ForgeRegistries.BLOCKS.getKey(block),
-                     age,
-                     itemsAtAge.size(),
-                     itemsAtAge.entrySet().stream().map(ex -> ForgeRegistries.ITEMS.getKey((Item)ex.getKey()) + "x" + ex.getValue()).toList()
-                  }
-               );
-               if (itemsAtAge.size() > bestCount) {
-                  bestCount = itemsAtAge.size();
-                  bestAge = age;
-                  bestItems = itemsAtAge;
-               }
-            } catch (Exception var14) {
-               LOGGER.debug("getDrops age={} failed for block {}: {}", new Object[]{age, ForgeRegistries.BLOCKS.getKey(block), var14.getMessage()});
-            }
-         }
-
-         if (bestItems != null && !bestItems.isEmpty()) {
-            LOGGER.info(
-               "Block {}: getDrops fallback best age={} with {} items: {}",
-               new Object[]{
-                  ForgeRegistries.BLOCKS.getKey(block),
-                  bestAge,
-                  bestCount,
-                  bestItems.entrySet().stream().map(ex -> ForgeRegistries.ITEMS.getKey((Item)ex.getKey()) + "x" + ex.getValue()).toList()
-               }
-            );
-            return bestItems;
-         } else {
-            LOGGER.warn("Block {}: getDrops() returned empty for all ages (0-{})", ForgeRegistries.BLOCKS.getKey(block), maxAge);
-            return Map.of();
-         }
-      }
-   }
-
-   private static Map<Item, Integer> parseLootTableDirectly(LootTable lootTable, Block block, MinecraftServer server) {
-      Map<Item, Integer> result = new HashMap<>();
-
-      try {
-         Field poolsField = LootTable.class.getDeclaredField("pools");
-         poolsField.setAccessible(true);
-         List<LootPool> pools = (List<LootPool>)poolsField.get(lootTable);
-         if (pools == null) {
-            return result;
-         }
-
-         for (LootPool pool : pools) {
-            Field entriesField = LootPool.class.getDeclaredField("entries");
-            entriesField.setAccessible(true);
-            List<LootPoolEntryContainer> entries = (List<LootPoolEntryContainer>)entriesField.get(pool);
-            if (entries != null) {
-               for (LootPoolEntryContainer entry : entries) {
-                  extractItemFromEntry(entry, result, pool);
-               }
-            }
-         }
-      } catch (Exception var12) {
-         LOGGER.debug("Fallback loot table parsing failed for block {}: {}", ForgeRegistries.BLOCKS.getKey(block), var12.getMessage());
-      }
-
-      return result;
-   }
-
-   private static void extractItemFromEntry(LootPoolEntryContainer entry, Map<Item, Integer> result, LootPool pool) {
-      if (entry.getClass().getName().contains("LootItem")) {
-         try {
-            Field itemField = entry.getClass().getDeclaredField("item");
-            itemField.setAccessible(true);
-            if (itemField.get(entry) instanceof Item item) {
-               int count = getPoolEntryCount(entry, pool);
-               result.merge(item, count, Math::max);
-            }
-         } catch (Exception var9) {
-            LOGGER.debug("Failed to extract item from LootItem entry: {}", var9.getMessage());
-         }
-      }
-
-      try {
-         Field childrenField = entry.getClass().getDeclaredField("children");
-         childrenField.setAccessible(true);
-         Object childrenObj = childrenField.get(entry);
-         if (childrenObj instanceof List) {
-            for (Object child : (List)childrenObj) {
-               if (child instanceof LootPoolEntryContainer childEntry) {
-                  extractItemFromEntry(childEntry, result, pool);
-               }
-            }
-         }
-      } catch (NoSuchFieldException var10) {
-      } catch (Exception var11) {
-         LOGGER.debug("Failed to extract children from entry: {}", var11.getMessage());
-      }
-   }
-
-   private static int getPoolEntryCount(LootPoolEntryContainer entry, LootPool pool) {
-      try {
-         Field functionsField = LootPoolEntryContainer.class.getDeclaredField("functions");
-         functionsField.setAccessible(true);
-         if (functionsField.get(entry) instanceof LootItemFunction[] functions) {
-            for (LootItemFunction function : functions) {
-               if (function.getClass().getName().contains("SetItemCountFunction")) {
-                  Field valueField = function.getClass().getDeclaredField("value");
-                  valueField.setAccessible(true);
-                  if (valueField.get(function) instanceof NumberProvider provider) {
-                     int min = 0;
-                     int max = 0;
-                     if (provider.getClass().getName().contains("ConstantValue")) {
-                        Field constantField = provider.getClass().getDeclaredField("value");
-                        constantField.setAccessible(true);
-                        float val = constantField.getFloat(provider);
-                        min = max = Math.round(val);
-                     }
-
-                     try {
-                        Field minField = provider.getClass().getDeclaredField("min");
-                        minField.setAccessible(true);
-                        Field maxField = provider.getClass().getDeclaredField("max");
-                        maxField.setAccessible(true);
-                        if (minField.get(provider) instanceof NumberProvider minProv) {
-                           min = extractConstantValue(minProv);
-                        }
-
-                        if (maxField.get(provider) instanceof NumberProvider maxProv) {
-                           max = extractConstantValue(maxProv);
-                        }
-                     } catch (NoSuchFieldException var19) {
-                     }
-
-                     return Math.max(1, (max + min + 1) / 2);
-                  }
-               }
-            }
-         }
-      } catch (Exception var20) {
-         LOGGER.debug("Failed to get count from functions: {}", var20.getMessage());
-      }
-
-      try {
-         Field rollsField = LootPool.class.getDeclaredField("rolls");
-         rollsField.setAccessible(true);
-         if (rollsField.get(pool) instanceof NumberProvider provider) {
-            int val = extractConstantValue(provider);
-            if (val > 0) {
-               return val;
-            }
-         }
-      } catch (Exception var18) {
-         LOGGER.debug("Failed to get pool rolls: {}", var18.getMessage());
-      }
-
-      return 1;
-   }
-
-   private static int extractConstantValue(NumberProvider provider) {
-      try {
-         if (provider.getClass().getName().contains("ConstantValue")) {
-            Field constantField = provider.getClass().getDeclaredField("value");
-            constantField.setAccessible(true);
-            return Math.round(constantField.getFloat(provider));
-         }
-
-         try {
-            Field minField = provider.getClass().getDeclaredField("min");
-            minField.setAccessible(true);
-            Field maxField = provider.getClass().getDeclaredField("max");
-            maxField.setAccessible(true);
-            Object minObj = minField.get(provider);
-            Object maxObj = maxField.get(provider);
-            if (minObj instanceof Float minF && maxObj instanceof Float maxF) {
-               return Math.max(1, Math.round((minF + maxF) / 2.0F));
-            }
-
-            if (minObj instanceof Number minN && maxObj instanceof Number maxN) {
-               return Math.max(1, Math.round((minN.floatValue() + maxN.floatValue()) / 2.0F));
-            }
-         } catch (NoSuchFieldException var7) {
-         }
-      } catch (Exception var8) {
-         LOGGER.debug("Failed to extract constant value: {}", var8.getMessage());
-      }
-
-      return 1;
-   }
-
-   private static Map<Item, Integer> evaluateLootTableAtAge(LootTable lootTable, Block block, int age, ServerLevel level) {
-      Map<Item, Integer> result = new HashMap<>();
-      BlockState state = block.defaultBlockState();
-
-      for (Property<?> prop : state.getProperties()) {
-         if (prop.getName().equals("age") && prop instanceof IntegerProperty ageProp) {
-            state = (BlockState)state.setValue(ageProp, age);
-            break;
-         }
-      }
-
-      Builder builder = new Builder(level);
-      builder.withParameter(LootContextParams.BLOCK_STATE, state);
-      builder.withParameter(LootContextParams.ORIGIN, Vec3.ZERO);
-      builder.withParameter(LootContextParams.TOOL, ItemStack.EMPTY);
-      LootParams params = builder.create(LootContextParamSets.BLOCK);
-
-      for (int i = 0; i < 100; i++) {
-         try {
-            for (ItemStack stack : lootTable.getRandomItems(params)) {
-               if (!stack.isEmpty()) {
-                  Item item = stack.getItem();
-                  int count = stack.getCount();
-                  result.merge(item, count, Math::max);
-               }
-            }
-         } catch (Exception var14) {
-            LOGGER.debug("getRandomItems age={} attempt {} failed: {}", new Object[]{age, i + 1, var14.getMessage()});
-         }
-      }
-
-      return result;
    }
 }
