@@ -96,11 +96,16 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
     }
 
     /**
-     * 第 0 路此刻能不能开工：有订单、有配方、批量算得出来且大于 0。
+     * 第 0 路此刻能不能开工：有订单、有配方、批量算得出来且大于 0、<b>产物与返还物都装得下</b>。
      *
      * <p>{@code index} 在本家族无意义（{@link #processCount} 恒为 1）。本方法每 tick
      * 被调一次，<b>不得改动机器状态</b>；{@link #owner} 的绑定与配方缓存是执行器自有状态，
      * 可以在这里刷新。</p>
+     *
+     * <p>容量判定是补上的：缺了它，产物槽满时本方法仍返回 true，{@code workCycle}
+     * 照常扣电、进度条照走，而 {@link #run} 在落槽前直接 {@code return} ——
+     * 玩家看不到产出、看不到告警，电却一直在掉。判据与 {@link #run} 共用
+     * {@link #canFitBatch}，两处不会漂移。</p>
      */
     @Override
     public boolean canProcess(MekCkMachineTile tile, int index) {
@@ -119,7 +124,11 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
             // 订单剩余量是硬上限：不能做出「比订单多」的东西。
             batch = Math.min(batch, order.remainingOrUnlimited(batch));
         }
-        return batch > 0;
+        if (batch <= 0) {
+            return false;
+        }
+        return canFitBatch(owner.getOutputSlots(), recipe.getResultItem(level.registryAccess()), batch,
+                returnPayload(recipe, owner.getInputSlots(), batch));
     }
 
     /**
@@ -338,10 +347,10 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
      * （旧实现第 900-909 行就是先 {@code consumeIngredients} 再读 {@code getStackInSlot(0)}）。
      * 顺序反了的话，签子被扣空时返还槽就拿不到东西。</p>
      *
-     * <p><b>返还槽复制输入槽 0 整叠是旧实现的行为，本轮原样保留</b>——
-     * 见 {@link SkeweringFactoryTile} 类注释里「返还槽」那条已知坑。
-     * 改成「只返还本次消耗掉的签子」是更正确的语义，但那是行为变更，
-     * 不该混在一次体系迁移里悄悄发生。</p>
+     * <p><b>返还受 {@link #returnPayload} 的 toolCount &gt; 0 闸门约束</b>：自有配方
+     * 序列化器写死 {@code ingredientCount = 0}（签子不消耗），无条件返还等于每批把
+     * batch 个签子复制进返还槽（物品复制）。闸门与机器侧
+     * {@code SkeweringMachineBlockEntity.completeRecipe} 同款。</p>
      *
      * <p>与旧实现的一处<b>刻意</b>不同：旧 {@code insertIntoSlot} 在槽里是别的物品时
      * 直接丢弃、在槽空时无视容量直接塞满。这里走共用的
@@ -358,32 +367,18 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
         if (result.isEmpty()) {
             return;
         }
-        int resultCount = CountMath.mulClamp(Integer.MAX_VALUE, result.getCount(), batch);
-        if (resultCount <= 0) {
-            return;
-        }
-        ItemStack produced = result.copy();
-        produced.setCount(resultCount);
-
         // 返还槽的容量要在扣料<b>之前</b>判，否则会出现「料已扣、返不下」的白工。
         // 判定用扣料前的槽 0 栈：扣料只可能让它更空，所以这是保守（偏严）的估计。
-        ItemStack slot0 = inputs.get(0).getStack();
-        boolean willReturn = !slot0.isEmpty();
-        if (willReturn) {
-            ItemStack preview = slot0.copy();
-            preview.setCount(CountMath.mulClamp(CountMath.MAX_COUNT, 1, batch));
-            if (!MekCkBatchPacking.canFitAll(outputs.subList(0, 1), List.of(produced), 1)
-                    || !MekCkBatchPacking.canFitAll(outputs.subList(1, 2), List.of(preview), 1)) {
-                return;
-            }
-        } else if (!MekCkBatchPacking.canFitAll(outputs.subList(0, 1), List.of(produced), 1)) {
+        ItemStack returnPreview = returnPayload(recipe, inputs, batch);
+        if (!canFitBatch(outputs, result, batch, returnPreview)) {
             return;
         }
+        ItemStack produced = batchProduct(result, batch);
 
         consume(scan, recipe, batch);
 
         MekCkBatchPacking.insertOutput(outputs.subList(0, 1), produced);
-        ItemStack returned = returnPayload(inputs.get(0), batch);
+        ItemStack returned = returnPayload(recipe, inputs, batch);
         if (!returned.isEmpty()) {
             MekCkBatchPacking.insertOutput(outputs.subList(1, 2), returned);
         }
@@ -392,17 +387,82 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
     }
 
     /**
+     * 本批产物预览栈 —— {@link #canFitBatch} 与 {@link #run} 共用的唯一算法。
+     *
+     * <p>不可产出（配方无产物 / 数量溢出）时返回 {@link ItemStack#EMPTY}：
+     * {@link MekCkBatchPacking#canFitAll} 对空栈是<b>跳过</b>（返回 true），
+     * 所以「空产物」必须在这里拦掉，不能指望容量判定。</p>
+     */
+    private static ItemStack batchProduct(ItemStack result, int batch) {
+        if (result == null || result.isEmpty() || batch <= 0) {
+            return ItemStack.EMPTY;
+        }
+        int resultCount = CountMath.mulClamp(Integer.MAX_VALUE, result.getCount(), batch);
+        if (resultCount <= 0) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack produced = result.copy();
+        produced.setCount(resultCount);
+        return produced;
+    }
+
+    /**
+     * 本批「产物 + 返还物」装不装得下 —— {@link #canProcess} 与 {@link #run} 共用的唯一判据。
+     *
+     * <p>产物只落 {@code outputs[0]}、返还物只落 {@code outputs[1]}（见 {@link #run}），
+     * 所以两段容量判定分开做，不能把整个 outputs 交给 {@code canFitAll} ——
+     * 那会让「产物槽满、返还槽空」被判成装得下，而 run 只往产物槽落，
+     * 剩余部分被静默丢弃。</p>
+     *
+     * <p>抽成 {@code static} 纯函数是为了能在裸 JVM 里断言（真 tile 造不出来，
+     * 同 {@code TestCookingFactoryEnergyDrain}）。</p>
+     *
+     * @param returnPreview 本批要返还的栈（{@link #returnPayload} 的结果）；
+     *                      空 = 本批不返还，返还槽不参与判定
+     */
+    public static boolean canFitBatch(List<IInventorySlot> outputs, ItemStack result, int batch,
+                                      ItemStack returnPreview) {
+        if (outputs == null || outputs.size() < 2) {
+            return false;
+        }
+        ItemStack produced = batchProduct(result, batch);
+        if (produced.isEmpty()) {
+            return false;
+        }
+        if (!MekCkBatchPacking.canFitAll(outputs.subList(0, 1), List.of(produced), 1)) {
+            return false;
+        }
+        if (returnPreview == null || returnPreview.isEmpty()) {
+            return true;
+        }
+        return MekCkBatchPacking.canFitAll(outputs.subList(1, 2), List.of(returnPreview), 1);
+    }
+
+    /**
      * 返还槽的负载：输入槽 0 当前那一叠，数量是<b>批量本身</b>。
      *
-     * <p>逐字对齐旧 {@code completeRecipe}：
+     * <p><b>唯一的返还闸门</b>：只有真被消耗过的签子才返还 ——
+     * {@code toolCountOf(recipe) > 0} 且签子配料非空，与机器侧
+     * {@code SkeweringMachineBlockEntity.completeRecipe} 同款。自有配方序列化器写死
+     * {@code ingredientCount = 0}（签子不消耗），无条件返还等于每批把 batch 个签子
+     * 复制进返还槽（物品复制）。</p>
+     *
+     * <p>数量逐字对齐旧 {@code completeRecipe}：
      * {@code returnStack.setCount(CountMath.mulClamp(MAX_COUNT, 1, multiplier))}。
      * 注意那个 {@code mulClamp} 的三个实参是 {@code cap=MAX_COUNT, a=1, b=multiplier}，
      * 所以它是「1 × multiplier」=<b>倍率</b>，<b>不是</b>「整叠数量 × 倍率」——
      * 第一次读到这里时很容易把 {@code a} 认成槽 0 的数量。
      * 槽 0 被扣空则无物可返，调用方跳过返还。</p>
      */
-    private ItemStack returnPayload(IInventorySlot inputSlot0, int batch) {
-        ItemStack stack = inputSlot0.getStack();
+    private ItemStack returnPayload(Recipe<?> recipe, List<IInventorySlot> inputs, int batch) {
+        if (inputs == null || inputs.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        boolean consumedTool = toolCountOf(recipe) > 0 && !toolOf(recipe).isEmpty();
+        if (!consumedTool) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack stack = inputs.get(0).getStack();
         if (stack.isEmpty() || batch <= 0) {
             return ItemStack.EMPTY;
         }
