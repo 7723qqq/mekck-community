@@ -331,6 +331,9 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     /** 配方适配器族（见 {@link SimpleMachineRecipes}）。 */
     final SimpleMachineRecipes recipes;
 
+    /** AE2 持续补料输入规格（见 {@link SimpleMachineNetworkPull}）。初始化见构造器。 */
+    final SimpleMachineNetworkPull networkPull;
+
     /** 陈酿机是否正处于酒馆批次陈化中（只有这种状态下要接管进度柱）。 */
     private boolean tavernBatchDrivesBar() {
         return kind == MachineKind.WINERY && tavernBatch.isBrewing();
@@ -426,6 +429,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         // 物品主动 IO：抽取范围为有效输入槽（含扩展槽），弹出范围为产物槽
         this.fluids = new SimpleMachineFluids(this);
         this.recipes = new SimpleMachineRecipes(this);
+        this.networkPull = new SimpleMachineNetworkPull(this);
         this.itemAutoIO = new cn.ism.mekck.util.AutoIO(this,
                 new int[][]{{0, INPUT_COUNT}, {EXT_INPUT_START, EXT_INPUT_COUNT}},
                 new int[][]{{OUTPUT_SLOT, 1}});
@@ -875,81 +879,31 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     }
 
     @Override
-    public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
+    public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         if (level == null) return List.of();
         return switch (kind) {
-            case AVERAGE_SLICER -> simpleSingleInput("farmersdelight", "cutting",
+            case AVERAGE_SLICER -> networkPull.simpleSingleInput("farmersdelight", "cutting",
                     r -> cuttingResults(r).stream().anyMatch(s -> {
                         net.minecraft.resources.ResourceLocation rid = ForgeRegistries.ITEMS.getKey(s.getItem());
                         return rid != null && rid.getPath().contains("_slice");
                     }));
-            case CURD_MAKER -> curdPullInputs();
-            case DEHYDRATOR -> simpleSingleInput("youkaishomecoming", "drying_rack", r -> true);
-            case STEAMER -> simpleSingleInput("youkaishomecoming", "steaming", r -> true);
-            case JUICER -> juicerPullInputs();
-            case RICE_BALL_MAKER -> ricePullInputs();
-            case SUSHI_MAKER -> sushiPullInputs();
-            case WINERY -> wineryPullInputs();
-            case BAKERY_OVEN -> multiIngredient("bakery", "baking_station", r -> true);
-            case STOVE -> multiIngredient("farm_and_charm", "stove", r -> true);
-            case FERMENTER -> fermenterPullInputs();
-            case COCKTAIL_SHAKER -> multiIngredient("kaleidoscope_tavern", "shaker", r -> true);
-            case BLENDER -> multiIngredient("bakeries", "blender", r -> true);
-            case TEA_BREWER -> teaPullInputs();
+            case CURD_MAKER -> networkPull.curdPullInputs();
+            case DEHYDRATOR -> networkPull.simpleSingleInput("youkaishomecoming", "drying_rack", r -> true);
+            case STEAMER -> networkPull.simpleSingleInput("youkaishomecoming", "steaming", r -> true);
+            case JUICER -> networkPull.juicerPullInputs();
+            case RICE_BALL_MAKER -> networkPull.ricePullInputs();
+            case SUSHI_MAKER -> networkPull.sushiPullInputs();
+            case WINERY -> networkPull.wineryPullInputs();
+            case BAKERY_OVEN -> networkPull.multiIngredient("bakery", "baking_station", r -> true);
+            case STOVE -> networkPull.multiIngredient("farm_and_charm", "stove", r -> true);
+            case FERMENTER -> networkPull.fermenterPullInputs();
+            case COCKTAIL_SHAKER -> networkPull.multiIngredient("kaleidoscope_tavern", "shaker", r -> true);
+            case BLENDER -> networkPull.multiIngredient("bakeries", "blender", r -> true);
+            case TEA_BREWER -> networkPull.teaPullInputs();
             case SMART_EXTRACTOR -> java.util.List.of();
             case BEVERAGE_BLENDER -> java.util.List.of();
             case PACKAGING_STATION -> java.util.List.of();
         };
-    }
-
-    /** 简单单输入：槽 0 已放料则取该配方第一个成分；空槽则取所有可处理配方的并集（一次拉任一）。 */
-    private List<cn.ism.mekck.util.AE2InputSpec> simpleSingleInput(String ns, String path, java.util.function.Predicate<Recipe<?>> filter) {
-        RecipeType<?> rt = recipeTypeOf(new ResourceLocation(ns, path));
-        if (rt == null) return List.of();
-        List<Recipe<?>> recipes = cn.ism.mekck.util.RecipeCache.all(level, rt);
-        ItemStack slot0 = items.getStackInSlot(0);
-        if (!slot0.isEmpty()) {
-            for (Recipe<?> r : recipes) {
-                if (!filter.test(r)) continue;
-                List<Ingredient> ings = r.getIngredients();
-                if (!ings.isEmpty() && !ings.get(0).isEmpty() && ings.get(0).test(slot0)) {
-                    return List.of(new cn.ism.mekck.util.AE2InputSpec(ings.get(0)));
-                }
-            }
-            return List.of();
-        }
-        // 空槽：并集成分（可拉任一可处理材料）
-        Ingredient union = Ingredient.EMPTY;
-        List<Ingredient> all = new ArrayList<>();
-        for (Recipe<?> r : recipes) {
-            if (!filter.test(r)) continue;
-            List<Ingredient> ings = r.getIngredients();
-            if (!ings.isEmpty() && !ings.get(0).isEmpty()) {
-                all.add(ings.get(0));
-            }
-        }
-        if (all.isEmpty()) return List.of();
-        return List.of(new cn.ism.mekck.util.AE2InputSpec(Ingredient.merge(all)));
-    }
-
-    private List<cn.ism.mekck.util.AE2InputSpec> multiIngredient(String ns, String path, java.util.function.Predicate<Recipe<?>> filter) {
-        RecipeType<?> rt = recipeTypeOf(new ResourceLocation(ns, path));
-        if (rt == null) return List.of();
-        List<Recipe<?>> recipes = cn.ism.mekck.util.RecipeCache.all(level, rt);
-        ItemStack slot0 = items.getStackInSlot(0);
-        if (slot0.isEmpty()) return List.of();
-        for (Recipe<?> r : recipes) {
-            if (!filter.test(r)) continue;
-            List<Ingredient> ings = r.getIngredients();
-            if (!ings.isEmpty() && !ings.get(0).isEmpty() && ings.get(0).test(slot0)) {
-                List<cn.ism.mekck.util.AE2InputSpec> specs = new ArrayList<>();
-                for (Ingredient ing : ings) {
-                    if (!ing.isEmpty()) specs.add(new cn.ism.mekck.util.AE2InputSpec(ing));
-                }
-                return specs;
-            }
-        }
-        return List.of();
     }
 
     /**
@@ -958,185 +912,11 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
      * {@link cn.ism.mekck.compat.TavernBarrelCompat#typeById}）⇒ 按 id 查恒为 null，那整条配方路径会静默
      * 当成「未安装」。该兜底现已内置在 {@link cn.ism.mekck.util.RecipeCache#type} 里，本方法只是保留一个
      * 可读的调用点写法（行为与直接调 RecipeCache 完全一致）。
+     * <p>包级可见：{@code allRecipesOfKind()} 与本类外的 {@link SimpleMachineNetworkPull} 都要用。</p>
      */
-    private RecipeType<?> recipeTypeOf(ResourceLocation id) {
+    RecipeType<?> recipeTypeOf(ResourceLocation id) {
         RecipeType<?> tavern = cn.ism.mekck.compat.TavernBarrelCompat.typeById(id);
         return tavern != null ? tavern : cn.ism.mekck.util.RecipeCache.type(id);
-    }
-
-    private List<cn.ism.mekck.util.AE2InputSpec> curdPullInputs() {
-        ItemStack slot0 = items.getStackInSlot(0);
-        if (!slot0.isEmpty()) {
-            // 槽 0 已有料（含 F9 的 oreo_dough / tapioca_flour）：按其物品类型续料，天然覆盖 compacting 补料。
-            return List.of(new cn.ism.mekck.util.AE2InputSpec(Ingredient.of(slot0.getItem())));
-        }
-        // 空槽：并集候选（凝乳块 + F9 createcafe compacting 输入），ME 可拉任一以起批。
-        java.util.List<Ingredient> candidates = new java.util.ArrayList<>();
-        candidates.add(Ingredient.of(ForgeRegistries.ITEMS.getValue(new ResourceLocation("trailandtales_delight", "curd_block"))));
-        candidates.add(Ingredient.of(ForgeRegistries.ITEMS.getValue(new ResourceLocation("trailandtales_delight", "cherry_curd_block"))));
-        collectCompactingInputs(candidates);
-        return List.of(new cn.ism.mekck.util.AE2InputSpec(Ingredient.merge(candidates)));
-    }
-    
-    /** F9：收集 {@code createcafe:} 的 {@code create:compacting} 配方输入（空槽时并入 ME 拉料候选）。 */
-    private void collectCompactingInputs(java.util.List<Ingredient> out) {
-        if (level == null) return;
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("create", "compacting"));
-        if (rt == null) return;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, rt)) {
-            try {
-                ResourceLocation rid = r.getId();
-                if (rid == null || !"createcafe".equals(rid.getNamespace())) continue;
-                for (Ingredient ing : r.getIngredients()) {
-                    if (!ing.isEmpty()) out.add(ing);
-                }
-            } catch (Throwable ignored) {
-            }
-        }
-    }
-
-    private List<cn.ism.mekck.util.AE2InputSpec> juicerPullInputs() {
-        ItemStack slot0 = items.getStackInSlot(0);
-        if (!slot0.isEmpty()) {
-            List<cn.ism.mekck.util.AE2InputSpec> specs = new ArrayList<>();
-            specs.add(new cn.ism.mekck.util.AE2InputSpec(Ingredient.of(slot0.getItem())));
-            // 简报 §六③：酒瓶是载具、不在 ingredients 里 → 通用规格列不出来，
-            // 不补这一条的话 AE2 自动补料永远缺瓶子、批次空转（槽 0 已占，瓶子自然进下一个空槽）。
-            if (findVineryBottleSlot(1) < 0 && juicerHasBottleRequiringRecipe()) {
-                Ingredient bottle = itemIng("vinery", "wine_bottle");
-                if (bottle != null) specs.add(new cn.ism.mekck.util.AE2InputSpec(bottle));
-            }
-            return specs;
-        }
-        // 空槽：苹果 / 苹果浆 都可
-        return List.of(new cn.ism.mekck.util.AE2InputSpec(Ingredient.merge(java.util.List.of(
-                Ingredient.of(net.minecraft.world.item.Items.APPLE),
-                Ingredient.of(ForgeRegistries.ITEMS.getValue(new ResourceLocation("vinery", "apple_mash")))))));
-    }
-
-    private List<cn.ism.mekck.util.AE2InputSpec> ricePullInputs() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("farmersdelight", "cooking"));
-        if (rt == null) return List.of();
-        List<Recipe<?>> recipes = cn.ism.mekck.util.RecipeCache.all(level, rt);
-        ItemStack slot0 = items.getStackInSlot(0);
-        for (Recipe<?> r : recipes) {
-            net.minecraft.resources.ResourceLocation rid = ForgeRegistries.ITEMS.getKey(r.getResultItem(level.registryAccess()).getItem());
-            if (rid == null) continue;
-            boolean isRice = "farmersdelight:cooked_rice".equals(rid.toString()) || rid.getPath().contains("rice_ball");
-            if (!isRice) continue;
-            List<Ingredient> ings = r.getIngredients();
-            if (ings.isEmpty() || ings.get(0).isEmpty()) continue;
-            if (slot0.isEmpty()) {
-                // 返回第一个可做米饭配方的全部材料（做米饭 = 大米）
-                List<cn.ism.mekck.util.AE2InputSpec> specs = new ArrayList<>();
-                for (Ingredient ing : ings) specs.add(new cn.ism.mekck.util.AE2InputSpec(ing));
-                return specs;
-            }
-            if (ings.get(0).test(slot0)) {
-                List<cn.ism.mekck.util.AE2InputSpec> specs = new ArrayList<>();
-                for (Ingredient ing : ings) specs.add(new cn.ism.mekck.util.AE2InputSpec(ing));
-                return specs;
-            }
-        }
-        return List.of();
-    }
-
-    private List<cn.ism.mekck.util.AE2InputSpec> sushiPullInputs() {
-        ItemStack slot0 = items.getStackInSlot(0);
-        if (slot0.isEmpty()) {
-            // 空槽：熟米饭（底材）
-            return List.of(new cn.ism.mekck.util.AE2InputSpec(riceIngredient()));
-        }
-        // 已放底材/米饭：返回该配方全部部件
-        String[] types = {"cuisine_ordered", "cuisine_mixed", "cuisine_fixed"};
-        for (String t : types) {
-            RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("youkaishomecoming", t));
-            if (rt == null) continue;
-            for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, rt)) {
-                try {
-                    net.minecraft.resources.ResourceLocation base = (ResourceLocation) cn.ism.mekck.util.Reflect.call(r, "base");
-                    if (base == null) continue;
-                    net.minecraft.resources.ResourceLocation slot0Id = ForgeRegistries.ITEMS.getKey(slot0.getItem());
-                    boolean baseDirect = slot0Id != null && slot0Id.equals(base);
-                    boolean riceBase = !baseDirect && (slot0Id != null && "farmersdelight:cooked_rice".equals(slot0Id.toString()));
-                    if (!baseDirect && !riceBase) continue;
-                    @SuppressWarnings("unchecked")
-                    List<Ingredient> parts = (List<Ingredient>) cn.ism.mekck.util.Reflect.call(r, "getCustomIngredients");
-                    List<cn.ism.mekck.util.AE2InputSpec> specs = new ArrayList<>();
-                    if (!baseDirect) specs.add(new cn.ism.mekck.util.AE2InputSpec(riceIngredient()));
-                    if (parts != null) {
-                        for (Ingredient ing : parts) {
-                            if (!ing.isEmpty()) specs.add(new cn.ism.mekck.util.AE2InputSpec(ing));
-                        }
-                    }
-                    return specs;
-                } catch (Exception ignored) {
-                }
-            }
-        }
-        return List.of();
-    }
-
-    private List<cn.ism.mekck.util.AE2InputSpec> wineryPullInputs() {
-        // WINERY Tavern 模式：批次活跃时禁止 AE2 拉料混入输入区
-        if (!tavernBatch.isIdle()) return List.of();
-        ItemStack slot0 = items.getStackInSlot(0);
-        if (slot0.isEmpty()) {
-            // 空槽：拉任意果汁瓶（红/白葡萄汁等）
-            List<Ingredient> juices = new ArrayList<>();
-            for (String id : new String[]{"red_grapejuice", "white_grapejuice", "red_jungle_grapejuice",
-                    "red_savanna_grapejuice", "red_taiga_grapejuice", "white_jungle_grapejuice",
-                    "white_savanna_grapejuice", "white_taiga_grapejuice", "apple_juice"}) {
-                net.minecraft.world.item.Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation("vinery", id));
-                if (item != null && item != net.minecraft.world.item.Items.AIR) {
-                    juices.add(Ingredient.of(item));
-                }
-            }
-            if (juices.isEmpty()) return List.of();
-            return List.of(new cn.ism.mekck.util.AE2InputSpec(Ingredient.merge(juices)));
-        }
-        // 已放果汁：取该果汁对应配方的配料
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("vinery", "wine_fermentation"));
-        if (rt == null) return List.of();
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, rt)) {
-            try {
-                String type = cn.ism.mekck.util.VineryJuice.recipeJuiceType(r);
-                if (type == null) continue;
-                String juiceId = cn.ism.mekck.util.VineryJuice.itemIdForType(type);
-                net.minecraft.world.item.Item juiceItem = ForgeRegistries.ITEMS.getValue(new ResourceLocation(juiceId));
-                if (juiceItem != null && juiceItem != net.minecraft.world.item.Items.AIR && slot0.getItem() == juiceItem) {
-                    List<Ingredient> ings = r.getIngredients();
-                    List<cn.ism.mekck.util.AE2InputSpec> specs = new ArrayList<>();
-                    for (Ingredient ing : ings) {
-                        if (!ing.isEmpty()) specs.add(new cn.ism.mekck.util.AE2InputSpec(ing));
-                    }
-                    return specs;
-                }
-            } catch (Exception ignored) {
-            }
-        }
-        return List.of();
-    }
-
-    private List<cn.ism.mekck.util.AE2InputSpec> fermenterPullInputs() {
-        // 发酵机：返回原料 + 输入流体提示（流体拉取暂不支持，仅物品）
-        ItemStack slot0 = items.getStackInSlot(0);
-        if (slot0.isEmpty()) return List.of();
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("youkaishomecoming", "simple_fermentation"));
-        if (rt == null) return List.of();
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, rt)) {
-            try {
-                @SuppressWarnings("unchecked")
-                List<Ingredient> ings = (List<Ingredient>) r.getClass().getField("ingredients").get(r);
-                if (ings == null || ings.isEmpty() || ings.get(0).isEmpty()) continue;
-                if (!ings.get(0).test(slot0)) continue;
-                List<cn.ism.mekck.util.AE2InputSpec> specs = new ArrayList<>();
-                for (Ingredient ing : ings) specs.add(new cn.ism.mekck.util.AE2InputSpec(ing));
-                return specs;
-            } catch (Exception ignored) {
-            }
-        }
-        return List.of();
     }
 
     public ContainerData getData() {
@@ -1477,12 +1257,12 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     private MatchedRecipe findOrderedRecipe(net.minecraft.resources.ResourceLocation id) {
         for (net.minecraft.world.item.crafting.Recipe<?> r : allRecipesOfKind()) {
             if (!r.getId().equals(id)) continue;
-            List<cn.ism.mekck.util.AE2InputSpec> specs = recipeInputSpecs(r);
+            List<cn.ism.mekck.ae2.AE2InputSpec> specs = recipeInputSpecs(r);
             if (specs.isEmpty()) continue;
             List<Integer> slots = new ArrayList<>();
             boolean[] used = new boolean[INPUT_COUNT];
             boolean ok = true;
-            for (cn.ism.mekck.util.AE2InputSpec spec : specs) {
+            for (cn.ism.mekck.ae2.AE2InputSpec spec : specs) {
                 boolean found = false;
                 for (int s = 0; s < INPUT_COUNT; s++) {
                     if (used[s]) continue;
@@ -1589,7 +1369,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         java.util.Set<ResourceLocation> seen = new java.util.HashSet<>();
         for (Recipe<?> r : allRecipesOfKind()) {
             try {
-                List<cn.ism.mekck.util.AE2InputSpec> specs = recipeInputSpecs(r);
+                List<cn.ism.mekck.ae2.AE2InputSpec> specs = recipeInputSpecs(r);
                 if (specs.isEmpty()) continue;
                 if (r.getResultItem(level.registryAccess()).isEmpty()) continue;
                 if (!canMatchFromInputs(specs)) continue;
@@ -1601,9 +1381,9 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     }
 
     /** 配方需求是否全都能被输入槽 0..INPUT_COUNT-1 满足（每个槽只用一次，与 findOrderedRecipe 一致）。 */
-    private boolean canMatchFromInputs(List<cn.ism.mekck.util.AE2InputSpec> specs) {
+    private boolean canMatchFromInputs(List<cn.ism.mekck.ae2.AE2InputSpec> specs) {
         boolean[] used = new boolean[INPUT_COUNT];
-        for (cn.ism.mekck.util.AE2InputSpec spec : specs) {
+        for (cn.ism.mekck.ae2.AE2InputSpec spec : specs) {
             boolean found = false;
             for (int s = 0; s < INPUT_COUNT; s++) {
                 if (used[s]) continue;
@@ -1627,10 +1407,10 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     public int getMaxConsumableCountForOrder(Recipe<?> recipe) {
         if (recipe == null) return 0;
         try {
-            List<cn.ism.mekck.util.AE2InputSpec> specs = recipeInputSpecs(recipe);
+            List<cn.ism.mekck.ae2.AE2InputSpec> specs = recipeInputSpecs(recipe);
             if (specs.isEmpty()) return 0;
             int max = Integer.MAX_VALUE;
-            for (cn.ism.mekck.util.AE2InputSpec spec : specs) {
+            for (cn.ism.mekck.ae2.AE2InputSpec spec : specs) {
                 int need = Math.max(1, spec.count);
                 long have = 0L;
                 for (int s = 0; s < INPUT_COUNT; s++) {
@@ -1646,19 +1426,19 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         }
     }
 
-    public List<cn.ism.mekck.util.AE2InputSpec> recipeInputSpecs(Recipe<?> r) {
-        List<cn.ism.mekck.util.AE2InputSpec> specs = new ArrayList<>();
+    public List<cn.ism.mekck.ae2.AE2InputSpec> recipeInputSpecs(Recipe<?> r) {
+        List<cn.ism.mekck.ae2.AE2InputSpec> specs = new ArrayList<>();
         switch (kind) {
             case AVERAGE_SLICER, DEHYDRATOR, STEAMER, BAKERY_OVEN, STOVE, TEA_BREWER, BEVERAGE_BLENDER, PACKAGING_STATION -> {
                 for (Ingredient ing : r.getIngredients()) {
-                    if (!ing.isEmpty()) specs.add(new cn.ism.mekck.util.AE2InputSpec(ing));
+                    if (!ing.isEmpty()) specs.add(new cn.ism.mekck.ae2.AE2InputSpec(ing));
                 }
             }
             case RICE_BALL_MAKER -> {
                 net.minecraft.resources.ResourceLocation rid = ForgeRegistries.ITEMS.getKey(r.getResultItem(level.registryAccess()).getItem());
                 if (rid != null && ("farmersdelight:cooked_rice".equals(rid.toString()) || rid.getPath().contains("rice_ball"))) {
                     for (Ingredient ing : r.getIngredients()) {
-                        if (!ing.isEmpty()) specs.add(new cn.ism.mekck.util.AE2InputSpec(ing));
+                        if (!ing.isEmpty()) specs.add(new cn.ism.mekck.ae2.AE2InputSpec(ing));
                     }
                 }
             }
@@ -1666,7 +1446,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
                 if (ForgeRegistries.RECIPE_TYPES.getKey(r.getType()) != null
                         && "vinery:apple_mashing".equals(ForgeRegistries.RECIPE_TYPES.getKey(r.getType()).toString())
                         && !r.getIngredients().isEmpty()) {
-                    specs.add(new cn.ism.mekck.util.AE2InputSpec(r.getIngredients().get(0)));
+                    specs.add(new cn.ism.mekck.ae2.AE2InputSpec(r.getIngredients().get(0)));
                 }
             }
             default -> {
@@ -2421,8 +2201,11 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         return id != null && "vinery".equals(id.getNamespace()) && "wine_bottle".equals(id.getPath());
     }
 
-    /** 本机配方表里是否存在「要求空酒瓶」的 {@code vinery:apple_fermenting} 配方（决定要不要给榨汁机放行酒瓶）。 */
-    private boolean juicerHasBottleRequiringRecipe() {
+    /**
+     * 本机配方表里是否存在「要求空酒瓶」的 {@code vinery:apple_fermenting} 配方（决定要不要给榨汁机放行酒瓶）。
+     * <p>包级可见：{@code acceptsInput} 与本类外的 {@link SimpleMachineNetworkPull} 都要用。</p>
+     */
+    boolean juicerHasBottleRequiringRecipe() {
         if (level == null) return false;
         RecipeType<?> fermT = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("vinery", "apple_fermenting"));
         if (fermT == null) return false;
@@ -2469,35 +2252,6 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
             for (int i = EXT_INPUT_START; i < EXT_INPUT_START + EXT_INPUT_COUNT; i++) list.add(i);
         }
         return list;
-    }
-
-    /** 茶艺机的网络拉料目标：当前输入能合成的茶配方材料。 */
-    private List<cn.ism.mekck.util.AE2InputSpec> teaPullInputs() {
-        int filled = 0;
-        ItemStack sample = ItemStack.EMPTY;
-        for (int s : activeInputSlots()) {
-            ItemStack st = items.getStackInSlot(s);
-            if (!st.isEmpty()) { filled++; sample = st; }
-        }
-        if (filled == 0) return List.of();
-        for (Recipe<?> r : allRecipesOfKind()) {
-            if (!isSimplyTeaResult(r)) continue;
-            try {
-                List<Ingredient> ings = r.getIngredients();
-                boolean hit = false;
-                for (Ingredient ing : ings) {
-                    if (ing != null && !ing.isEmpty() && ing.test(sample)) { hit = true; break; }
-                }
-                if (!hit) continue;
-                List<cn.ism.mekck.util.AE2InputSpec> specs = new ArrayList<>();
-                for (Ingredient ing : ings) {
-                    if (ing != null && !ing.isEmpty()) specs.add(new cn.ism.mekck.util.AE2InputSpec(ing));
-                }
-                return specs;
-            } catch (Throwable ignored) {
-            }
-        }
-        return List.of();
     }
 
     /**
