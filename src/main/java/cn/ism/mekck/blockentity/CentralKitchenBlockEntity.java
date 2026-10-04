@@ -101,6 +101,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     private static volatile String noteMissingFluid;
     private static volatile String noteWaitingThread;
     private static volatile String noteNoPower;
+    private static volatile String noteBufferFull;
 
     private static String noteWaitingIntermediate() {
         String v = noteWaitingIntermediate;
@@ -138,8 +139,14 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         return v;
     }
 
-    /** 暂存区满导致本步无法完成时的提示（暂无对应语言键，直接给中文文案）。 */
-    private static final String NOTE_BUFFER_FULL = "订单暂存区已满";
+    private static String noteBufferFull() {
+        String v = noteBufferFull;
+        if (v == null) {
+            v = Component.translatable("gui.mekck.kitchen.note.buffer_full").getString();
+            noteBufferFull = v;
+        }
+        return v;
+    }
 
     /** 订单列表（每订单独立暂存区，不跨订单共享中间产物）。 */
     private final java.util.List<cn.ism.mekck.kitchen.KitchenOrder> orders = new java.util.ArrayList<>();
@@ -692,7 +699,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
             // 装不下就暂停本步：不扣料、不产出、不推进，等暂存区有空间再继续。
             if (order.stepProgress() + 1 >= order.stepTotalTime() && !bufferCanHoldStepOutputs(order, step)) {
                 order.setState(cn.ism.mekck.kitchen.KitchenOrder.State.PAUSED);
-                order.setNote(NOTE_BUFFER_FULL);
+                order.setNote(noteBufferFull());
                 continue;
             }
 

@@ -59,6 +59,10 @@ public class TestCentralKitchenGuards {
                 load.contains("pendingOrdersTag"));
         assertFalse("load 不得直接重建订单（此时 getLevel() 为 null，重建必然失败 ⇒ 全部订单被丢弃）",
                 load.contains("getRecipeManager"));
+        // restoreOrders 现在是可调用方法，「把它移回 load」是最现实的重构回归路径：
+        // 只查 getRecipeManager 抓不到它（load 里调 restoreOrders 时不再出现配方管理器调用）。
+        assertFalse("load 不得调用 restoreOrders（重建必须留在 onLoad，否则每次区块重载都会丢弃全部订单）",
+                load.contains("restoreOrders("));
         String onLoad = body("public void onLoad()");
         assertTrue("onLoad 必须重建订单（此时 level 已就绪）", onLoad.contains("restoreOrders("));
     }
@@ -161,6 +165,25 @@ public class TestCentralKitchenGuards {
         String resolve = TestSourceText.methodBody(TestSourceText.read(AUTO_IO), "private IItemHandler resolve(");
         assertFalse("找不到 AutoIO.resolve", resolve.isEmpty());
         assertTrue("AutoIO 的邻居解析同样必须先判 hasChunkAt", resolve.contains("hasChunkAt"));
+    }
+
+    /**
+     * 暂存区满的提示必须走语言键（与文件内其它 note 同款），不得硬编码中文。
+     *
+     * <p>硬编码中文在非中文客户端会原样显示中文；本文件在
+     * {@code TestNoHardcodedUiText.KNOWN_MIGRATION_DEBT} 里（存量债），
+     * 全域扫描对它开洞，所以这条回归只能由本护栏钉住。</p>
+     */
+    @Test
+    public void bufferFullNoteGoesThroughALanguageKey() throws IOException {
+        String tick = body("private void tickOrders(");
+        assertTrue("tickOrders 必须用 noteBufferFull() 取提示（不得内联字面量）",
+                tick.contains("noteBufferFull()"));
+        String note = body("private static String noteBufferFull()");
+        assertTrue("noteBufferFull 必须走 Component.translatable(\"gui.mekck.kitchen.note.buffer_full\")"
+                        + "（不得硬编码中文，非中文客户端会看到中文）",
+                note.contains("Component.translatable(\"gui.mekck.kitchen.note.buffer_full\")"));
+        assertFalse("noteBufferFull 不得内联中文文案", note.contains("订单暂存区已满"));
     }
 
     /**

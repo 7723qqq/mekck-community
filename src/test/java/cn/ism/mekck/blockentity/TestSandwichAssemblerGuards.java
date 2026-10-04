@@ -5,6 +5,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -90,17 +91,32 @@ public class TestSandwichAssemblerGuards {
     }
 
     /**
-     * 输出槽放不下的产物余量必须走掉落兜底。
+     * 输出槽放不下的产物余量必须走掉落兜底 —— <b>三条分支逐条都要</b>。
      *
      * <p>旧 {@code insertOutput} 在输出槽被换成异类物品、或同类但余量不足时直接丢弃
-     * 局部 stack，无日志无掉落。</p>
+     * 局部 stack，无日志无掉落。{@code insertOutput} 有三条溢出分支（空槽余量 /
+     * 同类余量 / 异类整堆），只接住一条另一条仍会静默丢弃 —— 所以这里数调用点，
+     * 不用 presence-only 断言（同 {@code tickOrdersConsumesInsertIntoBufferLeftover}
+     * 的严格度）。</p>
      */
     @Test
     public void outputOverflowFallsBackToDrops() throws IOException {
         String insert = body("private void insertOutput(");
-        assertTrue("insertOutput 的余量必须走掉落兜底，不得静默丢弃",
-                insert.contains("dropOutputOverflow"));
+        int drops = count(insert, "dropOutputOverflow(");
+        assertEquals("insertOutput 的三条溢出分支（空槽余量 / 同类余量 / 异类整堆）"
+                        + "都必须走掉落兜底，实际只有 " + drops + " 处",
+                3, drops);
         String drop = body("private void dropOutputOverflow(");
         assertTrue("掉落兜底必须用 BigStackDrops（大堆叠感知）", drop.contains("BigStackDrops"));
+    }
+
+    private static int count(String haystack, String needle) {
+        int n = 0;
+        int i = 0;
+        while ((i = haystack.indexOf(needle, i)) >= 0) {
+            n++;
+            i += needle.length();
+        }
+        return n;
     }
 }
