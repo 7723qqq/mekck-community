@@ -593,7 +593,16 @@ return RecipeInputMatcher.matchesBioreactorFuel(level, stack);
         if (tag.contains("Items")) {
             items.deserializeNBT(tag.getCompound("Items"));
         }
-        energy.receiveEnergy(tag.getInt("Energy"), false);
+        // 单次 receiveEnergy 受 maxReceive（1,000 FE）夹断，读档必须循环灌满，
+        // 否则每次区块重载最多只恢复 1,000 FE（容量 100,000）。
+        int remaining = tag.getInt("Energy");
+        while (remaining > 0) {
+            int received = energy.receiveEnergy(remaining, false);
+            if (received == 0) {
+                break;
+            }
+            remaining -= received;
+        }
         if (tag.contains("FluidTank")) {
             fluidTank.readFromNBT(tag.getCompound("FluidTank"));
         }

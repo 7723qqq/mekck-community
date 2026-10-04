@@ -411,8 +411,14 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
         ItemStack outStack = out.copy();
         outStack.setCount(batches);
         if (!canInsertOutput(outStack)) return false;
+        // 按层出现次数汇总需求：同物品占多层时每层各要 batches 份，
+        // 逐层单独比较会漏算（2 层面包只查 1 份 ⇒ 扣不满也照产）。
         for (ItemStack layer : layers) {
-            if (countMaterial(layer) < batches) return false;
+            int occurrences = 0;
+            for (ItemStack other : layers) {
+                if (ItemStack.isSameItemSameTags(other, layer)) occurrences++;
+            }
+            if (countMaterial(layer) < (long) occurrences * batches) return false;
         }
         return true;
     }
@@ -456,6 +462,11 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
 
     /** 产物与容器写入；自定义模式下递减剩余目标数量。 */
     private void produce(List<ItemStack> layers) {
+        // 完成时重新校验：加工期间玩家可能取走材料或换掉输出槽物品。
+        // 不校验就照常扣料/产出 ⇒ 只扣到 4 个却产出 64 个（物品复制）。
+        if (!canProduce(layers)) {
+            return;
+        }
         int batches = batchSize(layers);
         consumeMaterials(layers, batches);
         ItemStack out = buildSandwich(layers);
@@ -488,8 +499,23 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
             ItemStack copy = result.copy();
             copy.setCount(Math.min(max, result.getCount()));
             items.setStackInSlot(OUTPUT_SLOT, copy);
+            dropOutputOverflow(result, result.getCount() - copy.getCount());
         } else if (ItemStack.isSameItemSameTags(existing, result)) {
-            existing.grow(Math.min(result.getCount(), max - existing.getCount()));
+            int moved = Math.min(result.getCount(), max - existing.getCount());
+            existing.grow(moved);
+            dropOutputOverflow(result, result.getCount() - moved);
+        } else {
+            // 输出槽被换成异类物品：产物不能静默消失，掉落到世界兜底
+            dropOutputOverflow(result, result.getCount());
+        }
+    }
+
+    /** 输出槽放不下的产物余量：掉落到世界（宁可掉在地上也不吞）。 */
+    private void dropOutputOverflow(ItemStack result, int overflow) {
+        if (overflow <= 0) return;
+        if (level != null && !level.isClientSide) {
+            cn.ism.mekck.util.BigStackDrops.dropAbove(level, worldPosition, result.copyWithCount(overflow));
+            setChanged();
         }
     }
 
@@ -738,9 +764,25 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
     public void load(CompoundTag tag) {
         super.load(tag);
         if (tag.contains("Items")) items.deserializeNBT(tag.getCompound("Items"));
-        if (tag.contains("Energy")) energy.receiveEnergy(tag.getInt("Energy"), false);
+        if (tag.contains("Energy")) {
+            // 单次 receiveEnergy 受 maxReceive（5,000 FE）夹断，读档必须循环灌满，
+            // 否则每次区块重载最多只恢复 5,000 FE（容量 100,000）。
+            int remaining = tag.getInt("Energy");
+            while (remaining > 0) {
+                int received = energy.receiveEnergy(remaining, false);
+                if (received == 0) {
+                    break;
+                }
+                remaining -= received;
+            }
+        }
         if (tag.contains("SequencedFluid")) sequencedTank.readFromNBT(tag.getCompound("SequencedFluid"));
-        if (tag.contains("Mode")) mode = tag.getInt("Mode");
+        if (tag.contains("Mode")) {
+            // 与 setMode 同口径夹紧：越界值会让 tick 走 orderedLayers() 分支而 batchSize
+            // 按非自定义处理，行为漂移。
+            int loaded = tag.getInt("Mode");
+            mode = (loaded >= MODE_COPY && loaded <= MODE_SEQUENCED) ? loaded : MODE_COPY;
+        }
         if (tag.contains("TargetCount")) targetCount = Math.max(0, tag.getInt("TargetCount"));
         if (tag.contains("Progress")) progress = tag.getInt("Progress");
         if (tag.contains("MeOrderEnabled")) meOrderEnabled = tag.getBoolean("MeOrderEnabled");
