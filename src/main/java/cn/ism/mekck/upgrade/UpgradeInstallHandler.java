@@ -2,7 +2,6 @@ package cn.ism.mekck.upgrade;
 
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
-import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
@@ -123,8 +122,8 @@ public final class UpgradeInstallHandler {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof PlantingCuttingStationBlockEntity m) {
             added = m.addUpgradesFromHand(held);
-        } else if (be instanceof ElectricGrindingMachineBlockEntity m) {
-            added = m.addUpgradesFromHand(held);
+        // 电力研磨机分支在阶段 3 样板迁移中删除：新 tile 的升级走 Mek 的
+        // TileComponentUpgrade（与切菜/烧烤/各工厂家族同一条路），不再经本分发器。
         } else if (be instanceof SmartCookingPotBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof SkeweringMachineBlockEntity m) {

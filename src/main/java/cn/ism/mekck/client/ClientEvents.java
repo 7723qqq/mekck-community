@@ -37,7 +37,7 @@ import static cn.ism.mekck.registry.MekCkStandaloneMachines.COOKING_POT_MENU;
 import static cn.ism.mekck.registry.MekCkEntities.FERRERO_ENTITY;
 import static cn.ism.mekck.registry.MekCkFactories.GRILL_CONTAINER;
 import static cn.ism.mekck.registry.MekCkFactories.GRILL_FACTORY_CONTAINER;
-import static cn.ism.mekck.registry.MekCkFactories.GRINDING_MACHINE_MENU;
+import static cn.ism.mekck.registry.MekCkFactories.GRINDING_MACHINE_CONTAINER;
 import static cn.ism.mekck.registry.MekCkEntities.ICE_CUBE_ENTITY;
 import static cn.ism.mekck.registry.MekCkFactories.ICE_FACTORY_MENU;
 import static cn.ism.mekck.registry.MekCkStandaloneMachines.ICE_MAKER_MENU;
@@ -72,7 +72,7 @@ public final class ClientEvents {
             // 因此绝不能再单独用 MENUS 注册一次同名项 —— 见 MekCkFactories 里那段警告）。
             MenuScreens.register(MACHINE_CONTAINER.get(), UniversalCuttingMachineScreen::new);
             MenuScreens.register(FACTORY_MENU.get(), CuttingMachineFactoryScreen::new);
-            MenuScreens.register(GRINDING_MACHINE_MENU.get(), ElectricGrindingMachineScreen::new);
+            MenuScreens.register(GRINDING_MACHINE_CONTAINER.get(), ElectricGrindingMachineScreen::new);
             MenuScreens.register(GRINDING_FACTORY_MENU.get(), GrindingFactoryScreen::new);
             MenuScreens.register(COOKING_POT_MENU.get(), SmartCookingPotScreen::new);
             MenuScreens.register(COOKING_FACTORY_CONTAINER.get(), CookingFactoryScreen::new);

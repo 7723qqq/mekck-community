@@ -1647,8 +1647,8 @@ public final class MekckAe2 {
                 entries = buildGrillingPatterns(level, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.SmartCookingPotBlockEntity) {
                 entries = buildCookingPotPatterns(level, avail);
-            } else if (owner instanceof cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity) {
-                entries = buildGrindingPatterns(level, avail);
+            // 电力研磨机分支在阶段 3 样板迁移中删除：新 GrindingMachineTile 走
+            // MekCkMachineTile 端口声明那条路（同切菜/烧烤/各工厂家族）。
             } else if (owner instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity) {
                 entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "nut_roasting"), avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity) {
@@ -1883,8 +1883,7 @@ public final class MekckAe2 {
                 g.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.SmartCookingPotBlockEntity pot) {
                 pot.setOrder(entry.recipeId, 1);
-            } else if (owner instanceof cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity grind) {
-                grind.setOrder(entry.recipeId, 1);
+            // 电力研磨机分支同上删除（订单走 tile 的 setOrder，经端口声明路径调用）。
             } else if (owner instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity roaster) {
                 roaster.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity ice) {
@@ -1910,7 +1909,7 @@ public final class MekckAe2 {
             if (owner instanceof cn.ism.mekck.blockentity.SkeweringMachineBlockEntity sk) return sk.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.GrillBlockEntity g) return g.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.SmartCookingPotBlockEntity pot) return pot.getItems();
-            if (owner instanceof cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity grind) return grind.getItems();
+            // 电力研磨机迁到 Mek 原生 tile：没有 ItemStackHandler，槽位由 portWindow() 提供。
             if (owner instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity roaster) return roaster.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity ice) return ice.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity cannon) return cannon.getItems();
@@ -1937,9 +1936,7 @@ public final class MekckAe2 {
             if (owner instanceof cn.ism.mekck.blockentity.SmartCookingPotBlockEntity pot) {
                 return new int[]{cn.ism.mekck.blockentity.SmartCookingPotBlockEntity.OUTPUT_SLOT};
             }
-            if (owner instanceof cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity) {
-                return new int[]{cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity.OUTPUT_SLOT};
-            }
+            // 电力研磨机分支同上（输出槽由 portWindow() 提供）。
             if (owner instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity) {
                 return new int[]{cn.ism.mekck.blockentity.NutRoasterBlockEntity.OUTPUT_SLOT};
             }

@@ -12,7 +12,6 @@ import cn.ism.mekck.block.PlantingCuttingFactoryBlock;
 import cn.ism.mekck.block.PlantingCuttingStationBlock;
 import cn.ism.mekck.block.SkeweringFactoryBlock;
 import cn.ism.mekck.block.UniversalCuttingMachineBlock;
-import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
 import cn.ism.mekck.blockentity.GrillBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
@@ -129,19 +128,66 @@ public final class MekCkFactories {
     //   与本文件既有的 COOKING_FACTORY_CONTAINER / GRILL_CONTAINER 用法一致。见 ClientEvents。
 
     // Electric Grinding Machine (basic machine, processes kaleidoscope_cookery millstone recipes)
+    //
+    // ⚠️ 迁移到 Mek 原生注册三件套（阶段 3 样板）：ContainerTypeDeferredRegister /
+    //   TileEntityTypeDeferredRegister / BlockDeferredRegister 建好之后**必须成组 register(bus)**，
+    //   漏一个就是运行期「注册表里没有这个 id」。
+    //
+    // 注册名一个字没改（仍是 mekck:electric_grinding_machine），旧存档的方块不会丢。
 
-    public static final RegistryObject<Block> GRINDING_MACHINE_BLOCK = BLOCKS.register("electric_grinding_machine", ElectricGrindingMachineBlock::new);
+    public static final mekanism.common.registration.impl.ContainerTypeDeferredRegister GRINDING_MACHINE_CONTAINERS_REG =
+            new mekanism.common.registration.impl.ContainerTypeDeferredRegister(MOD_ID);
 
-    public static final RegistryObject<Item> GRINDING_MACHINE_ITEM = ITEMS.register("electric_grinding_machine",
-            () -> new MekCkBlockItem(GRINDING_MACHINE_BLOCK.get(), new Item.Properties(),
-                    1, ElectricGrindingMachineBlockEntity.ENERGY_PER_TICK, ElectricGrindingMachineBlockEntity.ENERGY_CAPACITY));
+    public static final mekanism.common.registration.impl.BlockDeferredRegister GRINDING_MACHINE_BLOCKS_REG =
+            new mekanism.common.registration.impl.BlockDeferredRegister(MOD_ID);
 
-    public static final RegistryObject<BlockEntityType<ElectricGrindingMachineBlockEntity>> GRINDING_MACHINE_BLOCK_ENTITY = BLOCK_ENTITIES.register(
-            "electric_grinding_machine",
-            () -> BlockEntityType.Builder.of(ElectricGrindingMachineBlockEntity::new, GRINDING_MACHINE_BLOCK.get()).build(null));
+    public static final mekanism.common.registration.impl.ItemDeferredRegister GRINDING_MACHINE_ITEMS_REG =
+            new mekanism.common.registration.impl.ItemDeferredRegister(MOD_ID);
 
-    public static final RegistryObject<MenuType<ElectricGrindingMachineMenu>> GRINDING_MACHINE_MENU = MENUS.register(
-            "electric_grinding_machine", () -> IForgeMenuType.create(ElectricGrindingMachineMenu::new));
+    public static final mekanism.common.registration.impl.TileEntityTypeDeferredRegister GRINDING_MACHINE_TILES_REG =
+            new mekanism.common.registration.impl.TileEntityTypeDeferredRegister(MOD_ID);
+
+    public static final mekanism.common.registration.impl.BlockRegistryObject<
+            ElectricGrindingMachineBlock, MekCkBlockItem> GRINDING_MACHINE_HANDLE;
+
+    public static final mekanism.common.registration.impl.TileEntityTypeRegistryObject<
+            cn.ism.mekck.machine.grinding.GrindingMachineTile> GRINDING_MACHINE_TILE;
+
+    public static final mekanism.common.registration.impl.ContainerTypeRegistryObject<
+            ElectricGrindingMachineMenu> GRINDING_MACHINE_CONTAINER;
+
+    static {
+        mekanism.common.registration.impl.ContainerTypeRegistryObject<ElectricGrindingMachineMenu> container =
+                GRINDING_MACHINE_CONTAINERS_REG.register(
+                        "electric_grinding_machine",
+                        cn.ism.mekck.machine.grinding.GrindingMachineTile.class,
+                        ElectricGrindingMachineMenu::new);
+
+        java.util.concurrent.atomic.AtomicReference<mekanism.common.registration.impl.TileEntityTypeRegistryObject<
+                cn.ism.mekck.machine.grinding.GrindingMachineTile>> tileRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.grinding.GrindingMachineTile> blockType =
+                ElectricGrindingMachineBlock.blockTypeFor(() -> container, tileRef::get);
+
+        GRINDING_MACHINE_HANDLE = GRINDING_MACHINE_BLOCKS_REG.register("electric_grinding_machine",
+                () -> new ElectricGrindingMachineBlock(blockType,
+                        p -> p.strength(3.5F).sound(net.minecraft.world.level.block.SoundType.METAL)
+                                .requiresCorrectToolForDrops()),
+                block -> new MekCkBlockItem(block, new Item.Properties(),
+                        1,
+                        cn.ism.mekck.machine.grinding.GrindingMachineTile.ENERGY_PER_TICK,
+                        (int) cn.ism.mekck.machine.grinding.GrindingMachineTile.ENERGY_CAPACITY));
+
+        // 两个 ticker 都必须显式给：getTicker(boolean) 只是原样返回存进去的那个、没有任何兜底。
+        // 必须传 Mek 自己的 TileEntityMekanism.tickServer/tickClient —— 它们才会调 onUpdateServer。
+        GRINDING_MACHINE_TILE = GRINDING_MACHINE_TILES_REG.register(GRINDING_MACHINE_HANDLE,
+                (pos, state) -> new cn.ism.mekck.machine.grinding.GrindingMachineTile(GRINDING_MACHINE_HANDLE, pos, state),
+                (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickClient(level, pos, state, tile),
+                (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickServer(level, pos, state, tile));
+
+        GRINDING_MACHINE_CONTAINER = container;
+        tileRef.set(GRINDING_MACHINE_TILE);
+    }
 
     // Planting & Cutting Station
 
@@ -906,7 +952,7 @@ public final class MekCkFactories {
         for (RegistryObject<Item> factoryItem : FACTORY_ITEMS.values()) {
             event.accept(factoryItem.get());
         }
-        event.accept(GRINDING_MACHINE_ITEM.get());
+        event.accept(GRINDING_MACHINE_HANDLE.getItemStack());
         for (RegistryObject<Item> factoryItem : GRINDING_FACTORY_ITEMS.values()) {
             event.accept(factoryItem.get());
         }

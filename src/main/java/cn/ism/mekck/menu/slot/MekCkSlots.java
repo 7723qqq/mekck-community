@@ -69,4 +69,52 @@ public final class MekCkSlots {
             MekCkSlotTable.validate("WineCellar", ALL);
         }
     }
+
+    // ==================== 电力研磨机（Electric Grinding Machine） ====================
+
+    /**
+     * 电力研磨机：输入 + 输出 + 能源槽。
+     *
+     * <h3>坐标口径：逐字对齐 Mek 的基础电力机器（{@code TileEntityElectricMachine}）</h3>
+     * 本机在 MekCK 里的定位就是「一台基础电力机器」（处理 <i>一样进、一样出</i> 的配方），
+     * 所以槽位位置<b>不该沿用旧自研屏的坐标</b>，而应与 Mek 的粉碎机 / 富集仓完全一致。
+     * 三个值都是从 {@code TileEntityElectricMachine.getInitialInventory} 与
+     * {@code TileEntityMekanism} 建能源槽处读出来的：
+     * <pre>
+     *   输入槽   (64, 17)    InputInventorySlot.at(...)  ← TileEntityElectricMachine 偏移 25/27
+     *   输出槽   (116, 35)   OutputInventorySlot.at(...) ← 偏移 54/56
+     *   能源槽   (64, 53)    EnergyInventorySlot         ← 与 Mek 基础机器同款
+     * </pre>
+     *
+     * <p><b>迁移前的 (38,41) / (56,41) / (7,13) 是旧自研屏的坐标，已废弃</b>：
+     * 那是自研体系自己定的紧凑摆法，与 Mek 的机器不一致 —— 沿用它会得到
+     * 「外观是 Mek 的底板、槽位却挤在左上角」的四不像。</p>
+     *
+     * <p><b>顺序是存档契约</b>：输入 0 → 输出 1 → 能源槽 2。与
+     * {@code GrindingMachineTile.INPUT_SLOT / OUTPUT_SLOT} 一致。</p>
+     */
+    public static final class GrindingMachine {
+
+        /** 输入槽（槽下标 0）。坐标同 Mek 基础电力机器。 */
+        public static final SlotDef INPUT =
+                SlotDef.of("input", SlotKind.INPUT, 64, 17);
+
+        /** 输出槽（槽下标 1）。坐标同 Mek 基础电力机器。 */
+        public static final SlotDef OUTPUT =
+                SlotDef.of("output", SlotKind.OUTPUT, 116, 35);
+
+        /** 能源槽（槽下标 2）。坐标同 Mek 基础电力机器。 */
+        public static final SlotDef POWER =
+                SlotDef.withOverlay("power", SlotKind.POWER, 64, 53, "POWER");
+
+        /** 全部槽位，顺序 = 槽下标顺序 = 输入 → 输出 → 能源。 */
+        public static final List<SlotDef> ALL = List.of(INPUT, OUTPUT, POWER);
+
+        static {
+            MekCkSlotTable.validate("GrindingMachine", ALL);
+        }
+
+        private GrindingMachine() {
+        }
+    }
 }

@@ -141,7 +141,9 @@ public class TestNoHardcodedUiText {
             // —— 玩家可见，但属其它任务的域/文件（本轮文件集只含 MekCkBlockItem）——
             "cn/ism/mekck/item/BioreactorBlockItem.java",                // 与 MekCkBlockItem 同型「是/否」，同理可迁
             "cn/ism/mekck/block/ChocolateCannonBlock.java",
-            "cn/ism/mekck/block/ElectricGrindingMachineBlock.java",
+            //    电力研磨机方块已在阶段 3 样板迁移中移出本清单：迁到 Mek 的 BlockTile 后
+            //      它不再覆写 use()（右键开界面交给 AttributeGui），那两条硬编码中文
+            //      「已安装升级 / 无法安装升级」随之消失。护栏的陈旧条目自检正是为此存在。
             "cn/ism/mekck/block/IceFactoryBlock.java",
             "cn/ism/mekck/block/IceMakerBlock.java",
             "cn/ism/mekck/block/NutRoasterBlock.java",

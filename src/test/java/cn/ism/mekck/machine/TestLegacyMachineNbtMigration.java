@@ -768,4 +768,63 @@ public class TestLegacyMachineNbtMigration {
         assertTrue("installLegacyUpgrades 必须排在 super.load 之后，否则会被 upgrades.clear() 抹掉",
                 install > superLoad);
     }
+
+    /**
+     * <b>凡是调用旧存档迁移器的 tile，都必须写出原生格式的版本标记。</b>
+     *
+     * <h3>缺陷形态（本测试诞生于一次真实踩坑）</h3>
+     * {@link MekCkLegacyMachineNbt#isLegacy} 的判据是「存档里<b>没有</b>
+     * {@code MekCkNative} 键」。于是一台 tile 只要「读侧会迁移」而「写侧不落这个键」，
+     * 它的存档就<b>永远是旧格式</b> —— 每次区块加载都白跑一遍迁移器，
+     * 并可能反复刷出「记录的槽位数与实际不符」的 WARN。
+     *
+     * <p>迁移器本身是幂等的（旧键与原生键名不重叠），所以这<b>不损坏数据</b>，
+     * 也就没有任何功能性症状能把它暴露出来 —— 属于只靠人眼很难发现的类别。
+     * 阶段 3 电力研磨机样板迁移时实测踩到：{@code GrindingMachineTile} 的
+     * {@code load} 调了 {@code migrate(...)}，{@code saveAdditional} 却漏写这个键。</p>
+     *
+     * <p>判据读源文本：扫出所有调用 {@code MekCkLegacyMachineNbt.migrate(} 的文件，
+     * 每一个都必须在同文件里写出 {@code TAG_NATIVE_VERSION}。</p>
+     */
+    /**
+     * 「往存档里落原生版本标记」的调用形态。
+     *
+     * <p>接受两种写法：引用常量（{@code putInt(TAG_NATIVE_VERSION, …)}）或直接写字面量
+     * （{@code putInt("MekCkNative", …)}）。<b>不接受「只是声明了常量」或「注释里提过」</b>
+     * —— 那两种都在变异测试里放过真实缺陷。</p>
+     */
+    private static final java.util.regex.Pattern WRITES_NATIVE_MARK = java.util.regex.Pattern.compile(
+            "put\\w*\\(\\s*(?:TAG_NATIVE_VERSION|\"MekCkNative\")\\s*,");
+
+    @Test
+    public void everyTileThatMigratesLegacySavesMustAlsoWriteTheNativeMark() throws IOException {
+        List<String> offenders = new ArrayList<>();
+        int scanned = 0;
+        Path root = Path.of("src/main/java/cn/ism/mekck");
+        try (var files = Files.walk(root)) {
+            for (Path file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+                // ⚠️ 必须剥掉注释再判：本断言第一版直接用 Files.readString，
+                // 于是「javadoc 里解释了 TAG_NATIVE_VERSION 是什么」被当成了「代码写了它」——
+                // 变异测试（把 tag.putInt(TAG_NATIVE_VERSION, …) 整行删掉）实测**照旧全绿**。
+                // 这正是本仓反复记录的那条教训：豁免/命中判据不能用全文子串匹配。
+                String src = cn.ism.mekck.TestSourceText.read(file.toString());
+                if (!src.contains("MekCkLegacyMachineNbt.migrate(")) {
+                    continue;
+                }
+                scanned++;
+                // ⚠️ 判据必须是「**写出**这个标记」，不能是「出现过这个名字」：
+                // 本断言第二版用 src.contains("TAG_NATIVE_VERSION")，而**常量声明那一行**
+                // 就含这个名字 —— 把 putInt(...) 整行删掉，它照旧全绿。变异测试第二次抓到。
+                // 所以这里要求出现「往 tag 里落这个键」的调用形态。
+                boolean writesMark = WRITES_NATIVE_MARK.matcher(src).find();
+                if (!writesMark) {
+                    offenders.add(file.toString());
+                }
+            }
+        }
+        assertTrue("一台调用迁移器的 tile 都没扫到，判据已失效（扫描面变了？）", scanned >= 2);
+        assertEquals("这些文件读了旧存档（调 MekCkLegacyMachineNbt.migrate）却从不写原生版本标记"
+                        + " —— 它们会被 isLegacy 永远判成旧格式，每次读档都白跑一趟迁移：\n  ",
+                List.of(), offenders);
+    }
 }

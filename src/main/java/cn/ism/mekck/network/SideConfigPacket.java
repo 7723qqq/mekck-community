@@ -2,7 +2,6 @@ package cn.ism.mekck.network;
 
 import cn.ism.mekck.SideMode;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
-import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
 import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
 import cn.ism.mekck.blockentity.SimpleMachineBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
@@ -116,8 +115,9 @@ public final class SideConfigPacket {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof ChocolateCannonBlockEntity machine) {
                 machine.setSideMode(dir, mode);
-            } else if (be instanceof ElectricGrindingMachineBlockEntity machine) {
-                machine.setSideMode(dir, mode);
+            // 电力研磨机分支在阶段 3 样板迁移中删除：新的 GrindingMachineTile 是
+            // TileEntityConfigurableMachine，物品侧配由 Mek 自己的 configComponent 持有、
+            // 由 Mek 自己的侧配界面写入，本包对它永远不生效（同 GrillBlockEntity / CuttingFactoryTile）。
             } else if (be instanceof NutRoasterBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             }

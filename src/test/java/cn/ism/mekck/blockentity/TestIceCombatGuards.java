@@ -229,15 +229,18 @@ public class TestIceCombatGuards {
      */
     @Test
     public void grindingNetworkPullUnionMatchesItsOwnRecipeTypes() throws IOException {
-        String src = be("ElectricGrindingMachineBlockEntity");
-        String body = body(src, "public List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {",
-                "ElectricGrindingMachineBlockEntity");
-        assertFalse("电力研磨机的 AE2 拉料并集不得再取 farmersdelight:cutting（切菜板）："
+        // 阶段 3 样板迁移后本机不再是旧 BE，而是 Mek 原生 tile；
+        // 判据的落点随之从「BE 的 getNetworkPullInputs」改为「tile 的四类配方类型表」——
+        // 断言的东西没变：拉料并集必须覆盖本机真正处理的四类配方，且不得取切菜板。
+        String src = TestSourceText.read(
+                "src/main/java/cn/ism/mekck/machine/grinding/GrindingMachineTile.java");
+        String body = body(src, "private static final String[] RECIPE_TYPE_IDS = {", "GrindingMachineTile");
+        assertFalse("电力研磨机的配方类型表不得取 farmersdelight:cutting（切菜板）："
                         + "本机 isItemValid 只收四类研磨配方，切菜配料会被拒收并掉在地上",
                 body.contains("farmersdelight"));
         for (String typeId : new String[]{"kaleidoscope_cookery:millstone", "bakeries:flour_sieve",
                 "farm_and_charm:mincer", "mekck:grinding"}) {
-            assertTrue("拉料并集缺少本机实际处理的配方类型 " + typeId, body.contains(typeId));
+            assertTrue("配方类型表缺少本机实际处理的配方类型 " + typeId, body.contains(typeId));
         }
     }
 

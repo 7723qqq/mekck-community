@@ -119,7 +119,10 @@ public class TestNoClientSymbolsInCommonCode {
             //      删掉、音效改由方块的 AttributeSound 接管（同电力烧烤架那条）。
             //      本测试的「豁免必须仍然真的在豁免」反向断言正是为此存在 ——
             //      文件删了而清单留着，它会立刻报陈旧（第四轮实测确实报了）。
-            "src/main/java/cn/ism/mekck/blockentity/ElectricGrindingMachineBlockEntity.java",
+            //    电力研磨机已从本清单移除（阶段 3 样板迁移）：迁到 TileEntityConfigurableMachine 后
+            //      clientTick 整个删掉、音效与红石由 Mek 基类接管（同切菜机 / 电力烧烤架那两条）。
+            //      本测试的「豁免必须仍然真的在豁免」反向断言正是为此存在 ——
+            //      文件删了而清单留着，它会立刻报陈旧。
 
             // ③ 根包注册类 import 了 7 个 client 类的 Screen / Renderer，但**只**在嵌套的
             //    @Mod.EventBusSubscriber(Dist.CLIENT) 类（ClientWorldEvents / ClientEvents）里用。

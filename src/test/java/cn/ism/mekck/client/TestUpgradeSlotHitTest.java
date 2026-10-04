@@ -35,15 +35,22 @@ import static org.junit.Assert.assertEquals;
  */
 public class TestUpgradeSlotHitTest {
 
-    /** 本轮修复的 7 个菜单（IceFactoryMenu 按任务书推迟）。 */
+    /**
+     * 仍带自研 {@code UpgradeSlot} 的菜单（IceFactoryMenu 按任务书推迟）。
+     *
+     * <p><b>ElectricGrindingMachineMenu 已于阶段 3 样板迁移中移出本清单</b>：
+     * 它随整机迁到 Mek 的 {@code MekanismTileContainer}，升级槽不再由它自己实现
+     * （私有静态内部类 {@code UpgradeSlot} 整个删除），而是由 Mek 的
+     * {@code TileComponentUpgrade} 承担 —— 「栏位跟随位置供给器」这条断言对它已无对象。
+     * 本测试的类注释说明了这条清单会随迁移收缩，本行就是第一次收缩。</p>
+     */
     private static final List<String> MENUS = List.of(
             "cn.ism.mekck.menu.SimpleMachineMenu",
             "cn.ism.mekck.menu.SkeweringMachineMenu",
             "cn.ism.mekck.menu.SmartCookingPotMenu",
             "cn.ism.mekck.menu.IceMakerMenu",
             "cn.ism.mekck.menu.NutRoasterMenu",
-            "cn.ism.mekck.menu.ChocolateCannonMenu",
-            "cn.ism.mekck.menu.ElectricGrindingMachineMenu");
+            "cn.ism.mekck.menu.ChocolateCannonMenu");
 
     /**
      * 裸 JVM 里启用 {@link net.minecraft.world.item.ItemStack} / 注册表。

@@ -20,7 +20,6 @@ import cn.ism.mekck.blockentity.BioreactorBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
 import cn.ism.mekck.blockentity.SmartCookingPotBlockEntity;
-import cn.ism.mekck.blockentity.ElectricGrindingMachineBlockEntity;
 import cn.ism.mekck.block.IceMakerBlock;
 import cn.ism.mekck.block.IceFactoryBlock;
 import cn.ism.mekck.block.WineCellarBlock;
@@ -212,6 +211,11 @@ public final class UniversalCuttingMachine {
         MekCkStandaloneMachines.WINE_CELLAR_ITEMS_REG.register(bus);
         MekCkStandaloneMachines.WINE_CELLAR_TILES_REG.register(bus);
         MekCkStandaloneMachines.WINE_CELLAR_CONTAINERS_REG.register(bus);
+        // 电力研磨机（2026-10-05 迁到 Mek 体系，阶段 3 样板）：同上，三件套必须成组出现。
+        MekCkFactories.GRINDING_MACHINE_BLOCKS_REG.register(bus);
+        MekCkFactories.GRINDING_MACHINE_ITEMS_REG.register(bus);
+        MekCkFactories.GRINDING_MACHINE_TILES_REG.register(bus);
+        MekCkFactories.GRINDING_MACHINE_CONTAINERS_REG.register(bus);
         bus.addListener(this::addCreativeTabContents);
         bus.addListener(this::onCommonSetup);
         // 配置文件生成到 config/mekck/mekck-common.toml（与 planting 等配置文件同目录）

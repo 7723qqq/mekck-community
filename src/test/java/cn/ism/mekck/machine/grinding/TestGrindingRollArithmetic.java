@@ -287,4 +287,44 @@ public class TestGrindingRollArithmetic {
             }
         };
     }
+
+    // ── 产出路径：必须走「带概率」的那一支 ────────────────────────────────
+
+    /**
+     * <b>两台研磨机器都不许用 {@code getResultItem()} 当产出。</b>
+     *
+     * <h3>缺陷形态（本轮实机前自查发现）</h3>
+     * 石磨配方的产出是 {@code List<MillstoneOutput>}，<b>每一项各带一个 chance</b>，
+     * 而不是单一固定产物。用 {@code recipe.getResultItem()} 取产物有两个后果：
+     * <ul>
+     *   <li>容量判定按「一个有产物的配方」算，而实际上石磨配方在该 API 下
+     *       返回 <b>空栈</b> ⇒ 机器认为「无产物」⇒ <b>永远不开工</b>；</li>
+     *   <li>即便侥幸开工，概率产出也被压成固定 1 个 ⇒ 石磨的随机性整个丢失。</li>
+     * </ul>
+     * 迁移第一版的 {@code GrindingMachineTile} 就是这么写的，靠人眼发现而非护栏。
+     *
+     * <p>判据：两台机器都必须调 {@link GrindingRecipes#rollOutputs} 与
+     * {@link GrindingRecipes#canFitWorstCase}，且源码里不得出现
+     * {@code getResultItem(} 取产物。</p>
+     */
+    @Test
+    public void grindingMachinesNeverTakeASingleFixedResult() throws java.io.IOException {
+        String[] files = {
+                "src/main/java/cn/ism/mekck/machine/grinding/GrindingMachineTile.java",
+                "src/main/java/cn/ism/mekck/machine/grinding/GrindingFactoryExecutor.java",
+        };
+        int scanned = 0;
+        for (String path : files) {
+            String src = cn.ism.mekck.TestSourceText.read(path);
+            scanned++;
+            assertFalse(path + "：不得用 getResultItem() 当产出 —— 石磨产出带概率、"
+                            + "那个 API 对它返回空栈，机器会判成「无产物」而永远不开工",
+                    src.contains("getResultItem("));
+            assertTrue(path + "：产出必须经 GrindingRecipes.rollOutputs（带概率掷骰）",
+                    src.contains("GrindingRecipes.rollOutputs"));
+            assertTrue(path + "：容量判定必须走 GrindingRecipes.canFitWorstCase（最坏情况预留）",
+                    src.contains("canFitWorstCase"));
+        }
+        assertTrue("一台研磨机器都没扫到，判据已失效", scanned >= 2);
+    }
 }

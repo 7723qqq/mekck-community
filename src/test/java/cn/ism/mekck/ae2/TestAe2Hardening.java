@@ -238,4 +238,83 @@ public class TestAe2Hardening {
         assertTrue("组装机分支必须显式返回 false（空闲即不忙；有任务由 job != null 覆盖）",
                 branch.contains("return false;"));
     }
+
+    // ── 能力清单不许静默缩水 ──────────────────────────────────────────────
+
+    /**
+     * <b>凡是名字里带「研磨/烧烤/切菜/…」的已迁单机 tile，都必须仍然满足 AE2 的能力面。</b>
+     *
+     * <h3>缺陷形态（本轮实测踩到）</h3>
+     * 电力研磨机迁到 Mek 原生 tile 时，新 tile <b>只 implements {@code MenuProvider}</b>，
+     * 把旧 BE 的 {@code INetworkPullable} 整份漏掉了 ⇒ AE2 的「网络拉料」「自动补料」
+     * 「面板下单」<b>全部静默消失</b>：编译通过、732 个测试全绿，
+     * 因为没有任何护栏守「这台机器的能力清单」。
+     *
+     * <p>对比参照：烧烤架（同为已迁单机）保留了 {@code INetworkPullable}；
+     * 6 个工厂家族与它们的 tile 走 {@code IMekCkPorted}。
+     * 两条路都通 AE2，但<b>不能两条都不走</b>。</p>
+     *
+     * <p>判据：扫 {@code machine/} 与 {@code blockentity/} 下所有 tile 类，
+     * 取「已迁到 Mek 原生基类」的那些（继承 {@code MekCkMachineTile} /
+     * {@code MekCkNetworkPullableTile} / {@code TileEntityConfigurableMachine}），
+     * 每一个都必须通过自身或基类实现 {@code INetworkPullable} 或 {@code IMekCkPorted}。</p>
+     */
+    @Test
+    public void migratedTilesKeepTheirAe2Capability() throws IOException {
+        java.nio.file.Path root = java.nio.file.Path.of("src/main/java/cn/ism/mekck");
+        List<String> offenders = new ArrayList<>();
+        int scanned = 0;
+        try (var files = java.nio.file.Files.walk(root)) {
+            for (java.nio.file.Path file : files
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .toList()) {
+                String path = file.toString().replace('\\', '/');
+                // 只看机器 tile：machine/ 下的 *Tile，以及 blockentity/ 下已迁到 Mek 基类的
+                if (!(path.contains("/machine/") && path.endsWith("Tile.java"))) {
+                    continue;
+                }
+                String src = cn.ism.mekck.TestSourceText.read(file.toString());
+                String decl = src.substring(0, Math.min(src.length(), 4000));
+                if (!decl.contains("extends MekCkMachineTile")
+                        && !decl.contains("extends MekCkNetworkPullableTile")) {
+                    continue;
+                }
+                scanned++;
+                // 自身或基类链上有这两个之一即可（MekCkMachineTile / MekCkNetworkPullableTile
+                // 都实现了 INetworkPullable，所以继承它们即满足）。
+                boolean ok = decl.contains("INetworkPullable")
+                        || decl.contains("IMekCkPorted")
+                        || decl.contains("extends MekCkMachineTile")
+                        || decl.contains("extends MekCkNetworkPullableTile");
+                if (!ok) {
+                    offenders.add(file.getFileName().toString());
+                }
+            }
+        }
+        assertTrue("一个已迁 tile 都没扫到，判据已失效（扫描面变了？）", scanned >= 7);
+        assertEquals("这些已迁 tile 既不走 IMekCkPorted 也不走 INetworkPullable "
+                        + "—— 它们的 AE2 能力（网络拉料/自动补料/面板下单）已经静默消失：\n  "
+                        + String.join("\n  ", offenders),
+                List.of(), offenders);
+    }
+
+    /**
+     * 单机 tile 的基类必须真的把 {@code INetworkPullable} 声明出来 ——
+     * 这是上一条断言「继承即满足」的依据，把它钉住，防止有人把基类的 implements 删掉
+     * 而上一条判据仍因「名字出现过」而恒绿。
+     */
+    @Test
+    public void networkPullableBaseActuallyDeclaresTheInterface() throws IOException {
+        String src = TestSourceText.read(
+                "src/main/java/cn/ism/mekck/machine/MekCkNetworkPullableTile.java");
+        assertTrue("MekCkNetworkPullableTile 必须 implements INetworkPullable —— "
+                        + "上一条判据把「继承它」当作满足能力的依据，删了这个 implements 就变成假绿",
+                src.contains("implements cn.ism.mekck.ae2.INetworkPullable"));
+        // 五个方法一个都不能少
+        for (String m : new String[]{"getNetworkPullable", "getInputSlotRange",
+                "getNetworkPullItems", "supportsAutoPull", "getNetworkPullInputs"}) {
+            assertTrue("MekCkNetworkPullableTile 缺少 " + m + "（INetworkPullable 的契约）",
+                    src.contains(m));
+        }
+    }
 }

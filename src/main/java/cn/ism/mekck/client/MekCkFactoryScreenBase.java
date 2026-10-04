@@ -60,7 +60,7 @@ import java.util.function.IntToDoubleFunction;
  * 归零一 tick，所以即便在连续生产，进度条也会每批次闪一下。</p>
  */
 public abstract class MekCkFactoryScreenBase<TILE extends MekCkMachineTile,
-        MENU extends MekanismTileContainer<TILE>> extends GuiConfigurableTile<TILE, MENU> {
+        MENU extends MekanismTileContainer<TILE>> extends MekCkContainerScreenBase<TILE, MENU> {
 
     /** 能源条相对面板右边缘的偏移 —— 上游 {@code GuiFactory} 的 {@code imageWidth - 12}。 */
     private static final int ENERGY_BAR_RIGHT_INSET = 12;
@@ -86,14 +86,6 @@ public abstract class MekCkFactoryScreenBase<TILE extends MekCkMachineTile,
      * <p>子类若还要画自己的读数（温度、订单进度等），覆写本方法并<b>先调
      * {@code super.drawForegroundText(...)}</b>，否则这两行会消失。</p>
      */
-    @Override
-    protected void drawForegroundText(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        renderTitleText(guiGraphics);
-        drawString(guiGraphics, playerInventoryTitle,
-                MekCkFactoryLayout.inventoryXOffset(imageWidth), inventoryLabelY, titleTextColor());
-        super.drawForegroundText(guiGraphics, mouseX, mouseY);
-    }
-
     /**
      * 「自动补料 / 网络拉料」两枚 tab —— {@code MekCkMachineTile} 补实现
      * {@code INetworkPullable} 后，工厂家族拿回 AE2 拉料能力（docs/2026-09-30-功能实现口径.md
@@ -104,11 +96,7 @@ public abstract class MekCkFactoryScreenBase<TILE extends MekCkMachineTile,
      * {@code isVisible()} 为假、什么都不挂。</p>
      */
     protected void addNetworkPullTabs() {
-        if (NetworkPullButton.isVisible()) {
-            for (var tab : NetworkPullButton.register(this, tile.getBlockPos())) {
-                addRenderableWidget(tab);
-            }
-        }
+        addNetworkPullTabs(tile.getBlockPos());
     }
 
     /**
@@ -124,12 +112,9 @@ public abstract class MekCkFactoryScreenBase<TILE extends MekCkMachineTile,
      * 与任何槽位都不重叠。</p>
      */
     protected void addEnergyBar() {
-        addRenderableWidget(new GuiVerticalPowerBar(this, tile.getEnergyContainer(),
-                imageWidth - ENERGY_BAR_RIGHT_INSET, ENERGY_BAR_Y))
-                // 能量告警 —— 上游 GuiFactory 同样把 NOT_ENOUGH_ENERGY 挂在这条竖条上
-                // （.warning(WarningType.NOT_ENOUGH_ENERGY, tile.getWarningCheck(...))）。
-                // 供给器读的是服务端算好、随容器同步下来的布尔位，客户端不做任何配方查找。
-                .warning(WarningType.NOT_ENOUGH_ENERGY, tile::isNotEnoughEnergy);
+        // 能量告警 —— 上游 GuiFactory 同样把 NOT_ENOUGH_ENERGY 挂在这条竖条上。
+        // 供给器读的是服务端算好、随容器同步下来的布尔位，客户端不做任何配方查找。
+        addEnergyBar(tile.getEnergyContainer(), tile::isNotEnoughEnergy);
     }
 
     /**

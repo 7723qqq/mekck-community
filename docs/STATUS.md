@@ -1,9 +1,16 @@
 # mekck 当前状态汇总
 
-- 最后更新：2026-10-01（**整理轮**：仓库卫生 + 结构整理，注册中枢 2265 行拆成 `registry/` 10 类）
-- 审查基线：HEAD `e0f99fa` 之后的工作区（第五轮的两项修复见 §〇）
-- 验收口径：`./gradlew build`（**联网**；理由见第五节第 6 条）→ 见 §〇
-  本轮验收用 `./gradlew --offline test`：**62 套件 / 457 用例 / 0 失败**
+- 最后更新：**2026-10-05**（**迁移轮**：阶段 3 单机迁移启动，电力研磨机作为样板迁完）
+- 审查基线：HEAD `4155d5f`（merge `feat/fix-network-order-quantity-clamp`）之后的工作区
+- 验收口径：`./gradlew --offline test` + `./gradlew build`
+  **本轮实测：99 套件 / 729 用例 / 0 失败 / 0 错误 / 0 跳过**
+
+> ⚠️ **本文件此前的基数已严重过时，本轮逐项实测更正**（详见 §〇）：
+> - 记「62 套件 / 457 用例」——**实测 99 / 729**；
+> - 记「14 台待迁」——**实际 13 台**（陈化窖早已迁完）；
+> - 记「`MekCkMachineTile` 未实现 `INetworkPullable`」——**早已实现**（`MekCkMachineTile:123`）；
+> - 记「本机 dev 环境起不来 ⇒ 无法实机验证」——那说的是 `runClient`；
+>   另有一套**可启动的独立客户端安装**（见 §五.9），实机验证是可行的。
 
 本文是**单一入口**：当前状态、未修项、环境注意事项都在这里。
 全部文档清单见 [`README.md`](README.md)；第三轮及更早的轮次叙事见 §一、§七。
@@ -14,6 +21,262 @@
 > `SimpleMachineMenu.getEnergy()` 也仍是裸的 `data.get(DATA_ENERGY)`。
 > 那一版甚至把错误结论写进了本文件，让下一个 agent 照着它跳过了一个真缺陷。
 > **判据：写「已修」时必须同时给出提交号与代码位置，否则一律按未修对待。**
+>
+> **本轮又踩了同一个坑的另一种形态**：不是「写了假结论」，而是**照抄过时的基数**
+> 就开工。动手前逐项实测（套件数、待迁台数、缺口状态、环境可用性）至少省下了一圈返工。
+> **教训：文档里的数字与「缺口清单」，动手前必须回仓库核实。**
+
+---
+
+## 〇、本轮（2026-10-05）—— 阶段 3 单机迁移：电力研磨机样板
+
+**结论：样板迁完，编译 + 729 用例 0 失败 + `./gradlew build` 成功。
+实机验证（放置 / GUI / 投料 / 加工 / 升级卡 / 拆放 / 重启）由用户自行完成 —— 本记录不含实机结论。**
+
+### 一、开工前实测更正的四条基数（见文首引述）
+
+| 项 | 文档记的 | 实测 |
+|---|---|---|
+| 测试规模 | 62 套件 / 457 用例 | **99 套件 / 729 用例** |
+| 待迁单机 | 14 台（含陈化窖） | **13 台**（陈化窖 `WineCellarBlockEntity` 早已是 `TileEntityConfigurableMachine`） |
+| `INetworkPullable` 缺口 | 未实现 | **已实现**（`MekCkMachineTile:123`），口径 §2.4 已过时 |
+| 实机验证可行性 | 「dev 环境起不来」 | 那指 `runClient`；另有可启动的独立客户端见 §五.9 |
+
+### 二、仓库卫生：813 个 CRLF 假变更
+
+工作区 813 个文件显示为已修改，`git diff --stat` 呈现 **80831 增 / 80831 删** ——
+逐字节核对确认**没有任何真实内容改动**，全部是行尾符 CRLF↔LF
+（`git diff --ignore-cr-at-eol` 返回空）。已 `git checkout -- .` 还原，工作区恢复干净。
+
+> **判据**：看到「增删行数完全相等」的大规模 diff，先怀疑行尾符，别急着审代码。
+
+### 三、样板迁移：电力研磨机（`mekck:electric_grinding_machine`）
+
+| 文件 | 动作 |
+|---|---|
+| `machine/grinding/GrindingMachineTile.java` | **新建**：`extends TileEntityConfigurableMachine` |
+| `block/ElectricGrindingMachineBlock.java` | **重写**：`extends BlockTile`，144 → 约 100 行（朝向/ticker/掉落/GUI 全交 Mek） |
+| `menu/ElectricGrindingMachineMenu.java` | **重写**：333 → 约 100 行，`extends MekanismTileContainer`，**删掉 5 个手写 `IVirtualSlot` 嵌套类** |
+| `client/ElectricGrindingMachineScreen.java` | **重写**：`GuiConfigurableTile`，删掉自摆的侧配/升级/红石 tab 与两套自绘窗口 |
+| `registry/MekCkFactories.java` | 注册换 Mek 三件套；`UniversalCuttingMachine` 里补 `register(bus)` |
+| `menu/slot/MekCkSlots.java` | 新增 `GrindingMachine` 槽位表（坐标的唯一出处） |
+| `data/mekck/loot_tables/blocks/electric_grinding_machine.json` | **新增**（见下） |
+| `blockentity/ElectricGrindingMachineBlockEntity.java` | **删除**（1048 行） |
+| `ae2/MekckAe2.java` | 删掉 4 处本机的 `instanceof` 分支 |
+| `network/SideConfigPacket` / `upgrade/UpgradeInstallHandler` | 各删一条分支（侧配与升级已交 Mek） |
+
+**配方语义逐字未改**：石磨 → 筛粉 → 绞碎 → mekck 磨粉的查找顺序、按 id 反查的类型白名单、
+输入匹配只看 `ingredients[0]`、订单数量下界与取消清零。
+
+> ⚠️ **上面这句在写下时是错的，后来才修好**（如实留在这里当判据）：
+> 迁移第一版的 `grindingOutputs()` 用的是 `recipe.getResultItem()`（单一定值产物），
+> 而**石磨配方的产出是 `List<MillstoneOutput>`、每项各带一个 `chance`** ——
+> `getResultItem` 对它返回空栈 ⇒ 机器会判成「无产物」**永不开工**，概率性也整个丢失。
+> 靠人眼在写完之后才发现，不是护栏抓的。现已改为共用
+> `GrindingRecipes.rollOutputs` / `canFitWorstCase`，并补了护栏
+> `TestGrindingRollArithmetic#grindingMachinesNeverTakeASingleFixedResult`（变异测试已验证会响）。
+
+### 三之二、研磨逻辑去重：单机与工厂共用一份（`GrindingRecipes`）
+
+上一版的问题不只是「手写」，还有**同一套语义写了两份**：单机研磨机与研磨工厂
+各自实现了一遍配方查找、概率掷骰、订单推进。新增 `machine/grinding/GrindingRecipes.java`
+把它们收成一份，两边都只留委托：
+
+| | 改前 | 改后 |
+|---|---|---|
+| `GrindingFactoryExecutor` | 598 行（含全部实现） | **462 行**（全部改为 `GrindingRecipes.xxx` 调用） |
+| `GrindingMachineTile` | 各自实现一份 | 调 `GrindingRecipes` |
+| `GrindingRecipes` | — | **337 行**（唯一实现） |
+
+>`TestGrindingRollArithmetic` 的 33 条断言直接调 `GrindingFactoryExecutor.clampChance` 等
+>包级静态方法，所以那些位置**保留同名转发**而不是直接删 —— 让「实现只有一份」
+>与「测试面不变」同时成立。
+
+#### ⚠️ 去重时发现的一处既有分歧（**未修，如实记录**）
+
+| | 支持几类配方 |
+|---|---|
+| `GrindingMachineTile`（单机） | **4 类**：石磨 / 筛粉 / 绞碎 / mekck 磨粉 |
+| `GrindingFactoryExecutor`（工厂） | **1 类**：只有石磨 |
+
+指南 `mekckguide/machines/grinding.md` 把「研磨工厂」描述为「电力研磨机的多线程版本」，
+按此应当同样支持四类。**这不是本轮引入的**（工厂执行器迁到 Mek 体系时就只接了石磨），
+但本轮去重时暴露了出来。**没有顺手改**：改它等于给 12 级工厂加行为，
+是独立决策，需要先确认是「漏接」还是「有意为之」。
+
+### 四、迁移实际要动的东西（原以为只有「换基类」）
+
+动手前低估了范围。**每台机器都要过这 10 项**，已写进口径 §12.4：
+
+1. 新建 tile（**无档位单机不能用 `MekCkMachineTile`** —— 那是工厂家族基类，`createExecutor()` 抽象）；
+2. 方块换 `BlockTile` + `BlockTypeTile`：`withGui` / `withEnergyConfig` / `withSupportedUpgrades` /
+   `AttributeStateFacing` / `ACTIVE` / `REDSTONE` / `SECURITY` / `INVENTORY`，**一个都不能少**；
+3. 注册换 Mek 三件套，**成组 `register(bus)`**（漏一行 = 运行期「注册表里没有这个 id」，且编译通过）；
+4. **补战利品表** —— 见下，这是本轮抓到的最重要一条；
+5. 菜单换 `MekanismTileContainer`，删手写槽与 `ContainerData`（⇒ `WideDataSlot` 拆位那套作废）；
+6. 屏幕换 `GuiConfigurableTile`，**删掉自摆的侧配/升级/红石 tab**（否则两套 tab 叠在一起）；
+7. 屏幕补 `drawForegroundText`（不覆写 ⇒ 机器名与 Inventory 标签一个都不画）；
+8. 删 `MekckAe2` 里本机的 `instanceof` 分支；
+9. 槽下标会变（新槽序是**新的存档契约**）；
+10. 同步护栏登记表（见 §五）。
+
+#### ⚠️ 4.1 战利品表：不补就是破坏后什么都不掉
+
+`BlockTile` 的掉落**走战利品表**，而旧机器是 `onRemove` 里 `saveToItem` + `Containers.dropItemStack`。
+迁过去不补表 ⇒ **拆掉机器一件东西都不掉**（含方块本体）。
+护栏 `TestFactoryLootTableSustainData` 当场抓住，已按陈化窖的表为模板补
+`electric_grinding_machine.json`，逐键复制 `componentUpgrade` / `componentConfig` /
+`EnergyContainers` / `Items` / `Progress` / 订单三键 / `MeOrderEnabled` / `CustomName`。
+
+#### ⚠️ 4.2 原生版本标记：不写就是每次读档白跑一遍迁移器
+
+`MekCkLegacyMachineNbt.isLegacy` 的判据是「存档里**没有** `MekCkNative` 键」。
+tile 的 `load` 调了迁移器、而 `saveAdditional` 漏写这个键 ⇒ 它的存档**永远是旧格式**，
+每次区块加载都重跑迁移器。迁移器幂等，所以**不损坏数据、没有任何功能性症状**
+—— 只靠人眼极难发现（本轮实测踩到，已修：`GrindingMachineTile:379` 起）。
+
+### 五、护栏处置：改红 17 条，分三类，**没有一条靠放宽判据通过**
+
+| 类别 | 处置 | 实例 |
+|---|---|---|
+| **真缺陷（我引入的）** | 改代码 | 战利品表缺失（`TestFactoryLootTableSustainData`）；屏幕不画标签（`TestGuiInventoryLabels`）；原生版本标记漏写（新增护栏捕获） |
+| **判据对象随迁移消失** | 改判据落点，断言的东西不变 | `getMachineFacing()` 随朝向交 Mek 而消失；`UpgradeSlot` 随升级交组件而消失 |
+| **登记表/阈值随迁移收缩** | 同步收缩 + 注释写明「N → N-1」与原因 | `MENUS` 表、`POWER_SLOT_TARGET_*`、`KNOWN_VIOLATIONS`、`KNOWN_MIGRATION_DEBT`、`checked >= 8→7`、`seen >= 10→9` |
+
+### 六、⚠️ 本轮新增护栏的**变异测试记录**（第三次撞上同一个坑）
+
+新增 `everyTileThatMigratesLegacySavesMustAlsoWriteTheNativeMark`（钉 §4.2 那条不变量）。
+**它自身连错两版，都是变异测试抓出来的**：
+
+| 轮次 | 判据写法 | 注入变异后 | 问题 |
+|---|---|---|---|
+| 1 | `Files.readString(...).contains("TAG_NATIVE_VERSION")` | ❌ **绿（漏网）** | 匹配到了 **javadoc 里的解释文字**。**注释被当成了代码** |
+| 2 | 改用 `TestSourceText.read`（剥注释）但仍 `contains("TAG_NATIVE_VERSION")` | ❌ **绿（漏网）** | 匹配到了**常量声明那一行** —— 「声明了」不等于「写出了」 |
+| 3 | 正则 `put\w*\(\s*(TAG_NATIVE_VERSION\|"MekCkNative")\s*,` | ✅ **红** | 正确：要求「往 tag 里落这个键」的调用形态 |
+
+⇒ **「字段名出现过」不等于「这件事做了」。** 这是本仓第三次记录同类教训
+（前两次见 §六的 `clientBranchIsGatedBySideAlone` 与 `TestGuiInventoryLabels` 的
+「豁免判据不能用全文子串匹配」）。**新加任何源码形态护栏，一律先跑变异测试；
+且必须先在干净树上确认绿、再注入缺陷确认红。**
+
+### 六之一、GUI 手绘的**结构性根因**已定位并切断
+
+> 用户连续指出「你每次都说改，实际上每次还是手绘」。**这句话是对的**，而且我一直没找到根因
+> —— 因为我每次只改**那一个屏的表皮**（坐标、尺寸、`dynamicSlots`），从没碰过结构。
+
+#### 全仓 21 个屏的诊断
+
+| 组 | 数量 | 情况 |
+|---|---|---|
+| A：走 Mek 原生 | 9 | 6 个工厂屏 + 烧烤架 + 切菜机 + 研磨机 |
+| B：手绘 | **12** | 全部是待迁单机；手绘成分为 `GuiVirtualSlot` × 11 屏、自研侧配窗 × 9 屏、自研升级窗 × 8 屏 |
+
+#### 根因：复用的入口被类型参数挡住了
+
+本仓早有一套屏幕基类 `MekCkFactoryScreenBase`，里面已实现 `drawForegroundText`（机器名 +
+「Inventory」标签）、竖直能源条、进度条 —— **但它的类型参数绑死在 `MekCkMachineTile`（带档位的工厂基类）上**：
+
+```java
+public abstract class MekCkFactoryScreenBase<TILE extends MekCkMachineTile, ...>
+```
+
+13 台单机是无档位的（`TileEntityConfigurableMachine`），**继承不了** ⇒ 每个单机屏只好把
+那几件事各自重写。**实测有 15 个屏各写了一份 `drawForegroundText`。**
+
+> ⇒ **这不是「没人愿意复用」，是复用的入口不可达。** 只看单台机器永远看不出这一点。
+
+#### 本轮的处理：抽出 `MekCkContainerScreenBase`
+
+新增 `client/MekCkContainerScreenBase.java`，类型参数只要求 Mek 的根 tile：
+
+```java
+public abstract class MekCkContainerScreenBase<
+        TILE extends TileEntityMekanism & ISideConfiguration,
+        MENU extends MekanismTileContainer<TILE>> extends GuiConfigurableTile<TILE, MENU>
+```
+
+收进基类的：`drawForegroundText`（两行字）、`addEnergyBar(...)`、`addNetworkPullTabs(pos)`、
+构造器里的 `dynamicSlots = true`、`jeiLoaded()` 守卫。
+`MekCkFactoryScreenBase` 改为继承它（工厂屏一行未改，行为不变）。
+
+**首个受益者**：`ElectricGrindingMachineScreen` 370 → **142 行**，删掉了自己那份
+`drawForegroundText` 与能源条实现。
+
+**新增护栏**：`screensExtendingTheSharedBaseDoNotReimplementIt`
+——继承共享基类的屏不许再重写基类已有的东西（变异测试已验证会响）。
+同时把 `TestGuiInventoryLabels` 的两条判据从「看本文件有没有覆写」改为
+**认继承**（否则「正确的复用」会被误判成「漏画」）。
+
+### 六之一之二、⚠️ 我漏建的一个模块：AE2 能力（用户一句「你确定都建立了且绑定了？」查出）
+
+用户问「你确定需要的模块都建立了且绑定了？」—— **答案是不确定，而且实测查出一处真缺口。**
+
+#### 缺口：研磨机迁移时把 AE2 能力整份丢了
+
+| | 实现的能力 |
+|---|---|
+| 旧 `ElectricGrindingMachineBlockEntity` | `MenuProvider` + **`INetworkPullable`** |
+| 烧烤架（已迁，同为单机） | `MenuProvider` + **`INetworkPullable`** |
+| **迁移第一版的 `GrindingMachineTile`** | **只有 `MenuProvider`** ⇒ AE2 的「网络拉料 / 自动补料 / 面板下单」**全部静默消失** |
+
+**编译通过、当时 732 个测试全绿** —— 因为**没有任何护栏守「这台机器的能力清单」**。
+
+#### 根因与修法（与 GUI 那次同构）
+
+`INetworkPullable` 的通用实现在 `MekCkMachineTile`（工厂基类）里，所以 6 个工厂家族白得。
+**单机没有对应基类** ⇒ 每台都得自己写一份，于是漏了。
+
+⇒ 新增 `machine/MekCkNetworkPullableTile.java`（单机 tile 基类，提供 `INetworkPullable`
+的通用实现，子类只答两个问题：处理哪几类配方、哪些槽参与拉料）。
+`GrindingMachineTile` 改为继承它，**AE2 能力已恢复**（5 个消费点均能认出）。
+
+#### 新增护栏
+
+`TestAe2Hardening#migratedTilesKeepTheirAe2Capability` —— 扫 `machine/**/*Tile.java`，
+凡继承 `MekCkMachineTile` / `MekCkNetworkPullableTile` 的，必须仍然满足
+`INetworkPullable` 或 `IMekCkPorted`；外加一条钉子：`MekCkNetworkPullableTile`
+必须真的 declare `implements INetworkPullable`（防止上一条因「名字出现过」而恒绿）。
+
+> **变异测试结果（如实记）**：把 `GrindingMachineTile` 退回无能力的基类时，
+> **是编译器先拦下的**（子类 `@Override networkPullSlots()` 找不到超类型方法），
+> 源码形态护栏根本没轮到出场。这反而更好 —— 说明这套「基类 + 抽象方法」的设计
+> 让**漏能力变成编译错误**，而不是靠护栏事后发现。
+
+#### 教训
+
+**「改完了」不等于「链路通了」。** 迁移一台机器 = tile 能力面 + 注册三件套 + 客户端绑定
++ 创造栏 + 槽位表 + 语言键 + **AE2 能力面** + 存档迁移 + 战利品表 …… 每一项都要**逐一实测**，
+不能因为「编译过了、测试绿了」就认为做完。本轮两次结构性问题（GUI 手绘、AE2 能力）
+都不是测试发现的，是**用户追问**发现的。
+
+### 六之二、⚠️ 本轮我自己犯的一条方法论错误（记下来防重蹈）
+
+**「本机没装那个模组」≠「那个功能不存在 / 是死代码」。**
+
+本轮中途我一度判断：研磨机支持的石磨/筛粉/绞碎三类外部配方「在测试环境里 3/4 是死代码」，
+并据此提议把它们砍掉。**这个判断是错的，而且错得离谱**：
+
+| 模组 | 本仓 Java 引用文件数 | lang | 指南页 |
+|---|---|---|---|
+| 森罗物语厨房（kaleidoscope_cookery） | 14 | 2 | 2 |
+| 烘焙坊（bakeries） | 7 | 2 | 2 |
+| 沉浸农艺（farm_and_charm） | 10 | 2 | 1 |
+
+有三套完整集成、专门的 `KaleidoscopeCompat` 反射桥接（含概率产出的读法）、
+指南页明确写着的玩家功能。**只是本机 `mods/` 里没装那三个 jar 而已。**
+
+⇒ 两条判据：
+1. **判「死代码」要查全仓引用（java + lang + 指南 + 数据），不能只看 `data/recipes/` 目录**；
+2. **「我在本机验证不了」只能得出「未验证」，绝不能得出「可以删」**。
+   把前者包装成后者、再作为一个「选项」摆出来请用户拍板 —— 那实质是**未经许可的减配**。
+
+### 七、本轮刻意没做的事
+
+- **12 台剩余单机** —— 用户指定「先做 1 台样板确认形态」，未铺开。
+- **实机验证** —— 用户明确表示自行完成。
+- **旧存档迁移的创造性升级卡** —— 旧研磨机的创造卡在第 4 槽，而迁移器
+  （4 个家族共用的 `migrateSlots`）只认前 2 张升级卡，第 3 张起记 WARN 丢弃。
+  这是**迁移器既有行为**，不是我引入的；本机受它影响，如实记在这里，未改。
 
 ---
 
@@ -570,6 +833,31 @@ residual failures   : 0
    `TestNoHardcodedUiText.java` 里一处 `codeText` 写成字段、实际是方法的错误
    ——`compileTestJava` 一秒就红。**单文件 javac 的解析检查只保证没有语法错误，
    不保证名字解析正确**；真结论只能来自 Gradle。
+
+9. **✅ 实机验证是可行的（2026-10-05 更正）**：此前多次记「本机 dev 环境起不来 ⇒
+   无法实机验证」，那说的是 `runClient`（ForgeGradle 的 dev 环境，受 Farmer's Delight
+   自身 mixin 注入失败影响）。但另有一套**独立的生产客户端安装**可用：
+
+   ```
+   D:\mc\新建文件夹\versions\1.20.1-Forge_47.4.23\
+   ```
+
+   内含 `mods/mekck-1.0.0.jar` + Mekanism / Farmer's Delight / AE2 等依赖，
+   且留有历史备份 `mekck-1.0.0.jar.bak-*`。仓库根的 `.launch-verify.py`
+   就是启动它并等 `logs/latest.log` 落地的脚本。
+   **验证流程**：`./gradlew build` → 把 `build/libs/mekck-1.0.0.jar` 覆盖过去
+   （先备份）→ 启动 → 看日志。
+
+   > 本轮未执行实机验证（用户明确表示自行完成），上面只记录**环境存在且可用**
+   > ——2026-10-03 的 `latest.log` 有完整的进游戏与正常退出序列。
+
+10. **WSL 下跑 Gradle 的两个坑（本轮实测）**：
+    - 本仓的 `gradlew` 用 `-x`（POSIX 可执行位）找 java，而 WSL 下 `java.exe`
+      没有该位 ⇒ 必须用包装脚本或直接调发行版：`gradle-8.8/bin/gradle.bat`；
+    - Gradle 输出走 GBK，bash 里是乱码 ⇒ `... | iconv -f GBK -t UTF-8`。
+    - JDK 在 `C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot`
+      （**不在** `Program Files\Java` 下）；`GRADLE_USER_HOME` 在
+      `C:\Users\Administrator\.gradle`。
 
 ---
 

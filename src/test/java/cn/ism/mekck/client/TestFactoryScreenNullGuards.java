@@ -46,9 +46,11 @@ public class TestFactoryScreenNullGuards {
 
     @Test
     public void electricGrindingScreenGuardsEveryGetMachine() throws IOException {
+        // 阶段 3 样板迁移后本屏不再是「手摆 tab + 自绘侧配/升级窗口」那一套：
+        // getMachineFacing() 整个消失 —— 朝向由方块的 AttributeStateFacing 接管，
+        // 屏幕不必再自己读方块状态。仅存的机器依赖是 ME 下单面板的数据源。
         assertGuarded(GRINDING_SCREEN,
-                "private NetworkOrderPanel.LocalSource localOrderSource()",
-                "private Direction getMachineFacing()");
+                "private NetworkOrderPanel.LocalSource localOrderSource()");
     }
 
     @Test
@@ -60,7 +62,9 @@ public class TestFactoryScreenNullGuards {
     /** 朝向兜底必须走提取出来的 machine，而不是经 menu.getBlockPos() 间接读（空菜单会读到 ZERO）。 */
     @Test
     public void facingHelpersUseTheExtractedMachine() throws IOException {
-        for (String path : new String[]{GRINDING_SCREEN, PLANTING_SCREEN}) {
+        // 研磨机屏在阶段 3 样板迁移后不再有 getMachineFacing()（见上一条注释），
+        // 本断言只覆盖仍保留该辅助方法的屏。
+        for (String path : new String[]{PLANTING_SCREEN}) {
             String body = TestSourceText.methodBody(TestSourceText.read(path),
                     "private Direction getMachineFacing()");
             assertFalse(path + "：找不到 getMachineFacing()（判据失配，需同步更新本护栏）", body.isEmpty());

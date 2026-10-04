@@ -371,7 +371,7 @@ public class JEIPlugin implements IModPlugin {
         registration.addRecipeCategories(new GrindingRecipeCategory(
                 helper,
                 GRINDING_TYPE,
-                new ItemStack(MekCkFactories.GRINDING_MACHINE_ITEM.get())
+                MekCkFactories.GRINDING_MACHINE_HANDLE.getItemStack()
         ));
         registration.addRecipeCategories(new ExtractingRecipeCategory(
                 helper,
@@ -693,7 +693,7 @@ public class JEIPlugin implements IModPlugin {
 
         // §F19：研磨机/萃取机作为各自新分类的催化剂
         registration.addRecipeCatalyst(
-                new ItemStack(MekCkFactories.GRINDING_MACHINE_BLOCK.get()),
+                new ItemStack(MekCkFactories.GRINDING_MACHINE_HANDLE.getBlock()),
                 GRINDING_TYPE
         );
         registration.addRecipeCatalyst(
@@ -750,7 +750,7 @@ public class JEIPlugin implements IModPlugin {
 
             // 电力研磨机 + 研磨工厂 → 石磨配方分类
             registration.addRecipeCatalyst(
-                    new ItemStack(MekCkFactories.GRINDING_MACHINE_BLOCK.get()),
+                    new ItemStack(MekCkFactories.GRINDING_MACHINE_HANDLE.getBlock()),
                     KC_MILLSTONE);
             for (var entry : MekCkFactories.GRINDING_FACTORY_BLOCKS.entrySet()) {
                 registration.addRecipeCatalyst(new ItemStack(entry.getValue().get()), KC_MILLSTONE);
@@ -816,7 +816,7 @@ public class JEIPlugin implements IModPlugin {
                     new ItemStack(MekCkLegacyMachines.STOVE_BLOCK.get()), FAC_STOVE);
             // 电力研磨机 → 绞碎（mincer）配方分类
             registration.addRecipeCatalyst(
-                    new ItemStack(MekCkFactories.GRINDING_MACHINE_BLOCK.get()), FAC_MINCER);
+                    new ItemStack(MekCkFactories.GRINDING_MACHINE_HANDLE.getBlock()), FAC_MINCER);
         }
         // 盛节精酿：发酵机 → 酿造（brewing）配方分类
         if (ModList.get().isLoaded("brewery")) {
@@ -848,7 +848,7 @@ public class JEIPlugin implements IModPlugin {
             registration.addRecipeCatalyst(
                     new ItemStack(MekCkLegacyMachines.BLENDER_BLOCK.get()), BAKERIES_BLENDER);
             registration.addRecipeCatalyst(
-                    new ItemStack(MekCkFactories.GRINDING_MACHINE_BLOCK.get()), BAKERIES_FLOUR_SIEVE);
+                    new ItemStack(MekCkFactories.GRINDING_MACHINE_HANDLE.getBlock()), BAKERIES_FLOUR_SIEVE);
         }
         // 简单的茶：智能茶艺机 → 原版合成分类（它的配方都是 crafting_shapeless）
         if (ModList.get().isLoaded("simplytea")) {

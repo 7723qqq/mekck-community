@@ -47,9 +47,9 @@ import static org.junit.Assert.assertTrue;
  * </pre>
  * 于是「1 个红石 shift-click 一次」变成 2 个，可无限放大。历史缺陷（本轮修复）：
  * {@code GrillMenu} 用 {@code MACHINE_SLOT_COUNT(=4)} 当能源槽下标（能源槽自己就是菜单下标 4）；
- * {@code UniversalCuttingMachineMenu} / {@code ElectricGrindingMachineMenu} /
+ * {@code UniversalCuttingMachineMenu} /
  * {@code SkeweringMachineMenu} / {@code SmartCookingPotMenu} 拿 <b>handler 常量</b>
- * {@code SLOT_POWER}（=5 / 5 / 89 / 92）当<b>菜单下标</b>，于是区间落在玩家背包第 0 格。
+ * {@code SLOT_POWER}（=5 / 89 / 92）当<b>菜单下标</b>，于是区间落在玩家背包第 0 格。
  *
  * <p><b>{@code GrillMenu} 已不在 {@link #MENUS} 表里</b>：烧烤架迁到 Mek 原生
  * {@code TileEntityConfigurableMachine} 体系后，{@code GrillMenu} 不再手写
@@ -262,8 +262,10 @@ public class TestMenuQuickMoveSlotRanges {
      * 其余菜单的 {@code MainInput} 类常量目标（如 {@code INPUT_SLOT = 0}）由 A1 的数值检查覆盖——
      * 输入槽在所有菜单里都排在第一位，字符串形态的禁令在这里会误伤正确代码。</p>
      */
+    // ElectricGrindingMachineMenu 已于阶段 3 样板迁移中移出：它改用 Mek 的
+    // MekanismTileContainer，不再手写 quickMoveStack，能源槽下标由 Mek 自己管，
+    // 「handler 常量当菜单下标」这一缺陷形态在本文件里已不存在。
     private static final Set<String> POWER_SLOT_TARGET_MUST_BE_CAPTURED_FIELD = set(
-            "ElectricGrindingMachineMenu.java",
             "SimpleMachineMenu.java",
             "SkeweringMachineMenu.java",
             "SmartCookingPotMenu.java");
@@ -348,8 +350,6 @@ public class TestMenuQuickMoveSlotRanges {
                     map("target", "int target = ChocolateCannonBlockEntity.FERRERO_SLOT_BASE + tier.ordinal();"),
                     "输入/副输入/输出 + 速度/能量/创造 + 费列罗5 + 流体2 + 能源 = 3+3+5+2+1；"
                             + "target = FERRERO_SLOT_BASE(6) + 档位序号，上界由 ferreroTargetStaysInsideBoundary 数值验证"),
-            new Menu("ElectricGrindingMachineMenu.java", 5, set("powerSlotIndex"), map(),
-                    "输入/输出/速度/能量/能源"),
             new Menu("IceFactoryMenu.java", -1, set("powerSlotIndex", "creativeSlotIndex"),
                     map("speedIdx", "int speedIdx = processes * 2;",
                             "energyIdx", "int energyIdx = speedIdx + 1;",
@@ -386,6 +386,12 @@ public class TestMenuQuickMoveSlotRanges {
                     true));
 
     // ── 已不在表里的菜单（从「自研 AbstractContainerMenu」迁到 Mek 容器）──────────
+    //
+    // ElectricGrindingMachineMenu：阶段 3 样板迁移后**不再手写 quickMoveStack**
+    // （整机迁到 Mek 的 MekanismTileContainer，槽由 MekanismContainer.addSlots() 建，
+    // shift-click 路由由 Mek 默认实现承担），A0–A4 的输入全部不存在，故整条移出本表。
+    // 本类的 everyMenuWithQuickMoveStackIsRegistered 会用「实际有 quickMoveStack 的文件集」
+    // 与表做全等比较，漏删或多留都会当场变红 —— 本条就是被它逼出来的。
     //
     // GrillMenu：迁到 Mek 原生 TileEntityConfigurableMachine 体系后不再手写 quickMoveStack
     // （由 MekanismContainer 接管），本类的四条断言对它已无对象。缺陷记录保留在类注释里，

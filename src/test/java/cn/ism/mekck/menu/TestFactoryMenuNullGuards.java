@@ -34,50 +34,31 @@ public class TestFactoryMenuNullGuards {
     private static final String PLANTING =
             "src/main/java/cn/ism/mekck/menu/PlantingCuttingStationMenu.java";
 
-    // ================== 电力研磨机 ==================
+    // ================== 电力研磨机（阶段 3 样板迁移后） ==================
+    //
+    // 本机已迁到 Mek 的 MekanismTileContainer：**不再手写客户端构造器、不再建兜底 handler**，
+    // 因为这两件事都是自研容器的产物 ——
+    //   · 客户端构造器：Mek 的容器类型只留 `(int, Inventory, TILE)` 一个构造器，
+    //     BE 缺失时由 Mek 自己的解析路径兜底；
+    //   · 兜底 ItemStackHandler：槽位现在直接建在 tile 上（getInitialInventory），
+    //     菜单不持有任何 handler，也就没有「handler 为空」这一态。
+    //
+    // 所以旧的两条断言（客户端构造器判空 / 主构造器建兜底 handler）在这里**已不适用**，
+    // 换成一条钉住「迁移后确实是 Mek 容器」的形态断言：一旦有人把它改回手写菜单，
+    // 本条立刻变红。原两条断言的意图（BE 为 null 不许崩）由 Mek 容器自身保证。
 
     @Test
-    public void electricGrindingClientConstructorNullChecksTheBlockEntity() throws IOException {
+    public void electricGrindingMenuIsAMekContainerNotAHandWrittenOne() throws IOException {
         String src = TestSourceText.read(GRINDING);
-        String ctor = TestSourceText.methodBody(src,
-                "public ElectricGrindingMachineMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer)");
-        assertFalse(GRINDING + "：客户端构造器没找到，判据可能失配", ctor.isEmpty());
-        assertTrue(GRINDING + "：客户端构造器必须对 getBlockEntity 的结果判空"
-                        + "（instanceof 同时挡掉类型不符）：旧写法直接强转，BE 为 null 时"
-                        + "主构造器读 machine.getItems() 崩客户端",
-                ctor.contains("instanceof ElectricGrindingMachineBlockEntity machine ? machine : null"));
-        assertFalse(GRINDING + "：客户端构造器不得再直接强转 getBlockEntity 的结果",
-                ctor.contains("(ElectricGrindingMachineBlockEntity)"));
-    }
-
-    @Test
-    public void electricGrindingMainConstructorBuildsSlotsFromFallbackHandler() throws IOException {
-        String src = TestSourceText.read(GRINDING);
-        String ctor = TestSourceText.methodBody(src,
-                "public ElectricGrindingMachineMenu(int containerId, Inventory inventory,"
-                        + " ElectricGrindingMachineBlockEntity machine, ContainerData data)");
-        assertFalse(GRINDING + "：主构造器没找到，判据可能失配", ctor.isEmpty());
-        assertTrue(GRINDING + "：主构造器必须给空菜单一个等长的兜底 handler（槽位数量契约不能变）",
-                ctor.contains("new ItemStackHandler(ElectricGrindingMachineBlockEntity.TOTAL_SLOTS)"));
-        assertTrue(GRINDING + "：兜底 handler 必须由 machine == null 分支选出",
-                ctor.contains("machine == null"));
-        for (String slot : new String[]{"InputSlot", "OutputSlot", "UpgradeSlot", "PowerSlot"}) {
-            assertTrue(GRINDING + "：槽 " + slot + " 必须绑定兜底 handler（items），"
-                            + "否则空菜单建槽时仍会解引用 machine",
-                    ctor.contains("new " + slot + "(items,"));
-        }
-        assertTrue(GRINDING + "：能源槽下标必须对空菜单兜底（handler 常量与 getPowerSlot() 同值）",
-                ctor.contains("machine == null ? ElectricGrindingMachineBlockEntity.SLOT_POWER"
-                        + " : machine.getPowerSlot()"));
-    }
-
-    @Test
-    public void electricGrindingReadPathsAreNullSafe() throws IOException {
-        String src = TestSourceText.read(GRINDING);
-        assertGuarded(src, GRINDING, "public boolean stillValid(Player player)", "machine == null");
-        assertGuarded(src, GRINDING, "public int getSpeedUpgradeCount()", "machine == null");
-        assertGuarded(src, GRINDING, "public int getEnergyUpgradeCount()", "machine == null");
-        assertGuarded(src, GRINDING, "public BlockPos getBlockPos()", "BlockPos.ZERO");
+        assertTrue(GRINDING + "：迁移后必须继承 Mek 的 MekanismTileContainer —— "
+                        + "回到 AbstractContainerMenu 就意味着一整套自研槽位/同步要重写",
+                src.contains("extends MekanismTileContainer<GrindingMachineTile>"));
+        assertFalse(GRINDING + "：迁移后不得再手写槽类（IVirtualSlot 的 8 个方法那套），"
+                        + "槽位应由 MekanismTileContainer.addSlots() 从 tile 自动装配",
+                src.contains("implements IVirtualSlot"));
+        assertFalse(GRINDING + "：迁移后不得再用 ContainerData 读数 —— "
+                        + "走 tile 的 addContainerTrackers 同步通道",
+                src.contains("ContainerData"));
     }
 
     // ================== 种植切配工厂 ==================
@@ -136,10 +117,8 @@ public class TestFactoryMenuNullGuards {
     @Test
     public void criteriaStillMatchSomething() throws IOException {
         String grinding = TestSourceText.read(GRINDING);
-        assertTrue(GRINDING + "：判据失效，已找不到 machine == null",
-                grinding.contains("machine == null"));
-        assertTrue(GRINDING + "：判据失效，已找不到 instanceof 判空",
-                grinding.contains("instanceof ElectricGrindingMachineBlockEntity"));
+        assertTrue(GRINDING + "：判据失效，已找不到 Mek 容器继承",
+                grinding.contains("MekanismTileContainer"));
 
         String planting = TestSourceText.read(PLANTING);
         assertTrue(PLANTING + "：判据失效，已找不到 machine == null",

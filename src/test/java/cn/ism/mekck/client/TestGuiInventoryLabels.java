@@ -60,7 +60,11 @@ public class TestGuiInventoryLabels {
     /** 标签一行文字的高度（MC 默认字体 9px）。 */
     private static final int LABEL_HEIGHT = 9;
     /** 判据要认的屏基类：它们已经代为画好了这两行字。 */
-    private static final List<String> BASES_THAT_DRAW = List.of("MekCkFactoryScreenBase");
+    // 会把这两行字画出来的屏基类。加了 MekCkContainerScreenBase 之后：
+    // 研磨机屏不再自己覆写 drawForegroundText，而是继承它 —— 判据必须认继承，
+    // 否则「正确的复用」会被判成「漏画」。
+    private static final List<String> BASES_THAT_DRAW =
+            List.of("MekCkContainerScreenBase", "MekCkFactoryScreenBase");
     /** 判据要认的屏基类：{@code GuiMekanism} 家族自己会画（逐个覆写也接受）。 */
     private static final String GUI_MEKANISM = "GuiMekanism";
 
@@ -353,5 +357,94 @@ public class TestGuiInventoryLabels {
         assertTrue("一个 inventoryLabelY 都没扫到，判据失效了", withLabel >= 10);
         assertTrue("一个 drawForegroundText 覆写都没扫到，判据失效了", withOverride >= 10);
         assertTrue("菜单类型解析失效了（一个都没认出来）", withMenu >= 15);
+    }
+
+    // ── 5. 槽位 widget：继承 Mek 容器屏的必须开 dynamicSlots ──────────────
+
+    /**
+     * <b>继承 Mek 容器屏基类的屏幕必须设 {@code dynamicSlots = true}。</b>
+     *
+     * <h3>缺陷形态（本轮实机踩到）</h3>
+     * {@code GuiMekanism.addSlots()} 只在 {@code dynamicSlots} 为真时遍历
+     * {@code menu.slots} 为每个槽建 widget。不设 ⇒ <b>机器槽一个都不显示</b>
+     * （输入/输出/能源全空），而<b>背景贴图照常画出来</b> —— 玩家看到的是一个
+     * 有背景、有标题、但里面空无一物的面板。
+     *
+     * <p>它的隐蔽之处在于：<b>编译通过、全部测试绿</b>。槽位 widget 的创建是纯运行期行为，
+     * 而本仓的护栏全是静态断言 —— 所以在补本条之前，没有任何东西守这件事。</p>
+     *
+     * <p>判据：凡是 {@code extends GuiConfigurableTile} / {@code GuiMekanismTile}
+     * （这两个基类的 addGuiElements 依赖 dynamicSlots 建槽）的屏，源码里必须出现
+     * {@code dynamicSlots = true}。</p>
+     */
+    @Test
+    public void mekContainerScreensEnableDynamicSlots() throws IOException {
+        List<String> offenders = new ArrayList<>();
+        int scanned = 0;
+        for (Path file : screens()) {
+            // ⚠️ 必须用 TestSourceText.read（剥注释），**不能**用本文件的 read(Path)
+            // —— 后者不剥注释，于是「javadoc 里解释了 dynamicSlots = true 是什么」
+            // 会被当成「代码真的设了它」。本断言第一版实测漏网（变异测试：把
+            // `dynamicSlots = true;` 那行删掉，它照旧全绿）。
+            // 这是本仓第四次撞上同一形态：**判据不能用全文子串匹配**。
+            String source = TestSourceText.read(file.toString());
+            // 认三种基类：Mek 的两个容器屏基类，以及本仓的 MekCkContainerScreenBase
+            //（它继承 GuiConfigurableTile 并在构造器里设 dynamicSlots，子类不必再写）。
+            if (!source.contains("extends GuiConfigurableTile")
+                    && !source.contains("extends GuiMekanismTile")
+                    && !source.contains("extends MekCkContainerScreenBase")) {
+                continue;
+            }
+            scanned++;
+            // 继承 MekCkContainerScreenBase 的屏由基类构造器设 dynamicSlots，不必自己写。
+            if (!source.contains("dynamicSlots = true")
+                    && !source.contains("extends MekCkContainerScreenBase")) {
+                offenders.add(file.getFileName().toString());
+            }
+        }
+        // 阈值 = 本仓实际继承这两个基类的屏数（不是全部屏：多数屏直接 extends GuiMekanism，
+        // 自己手建槽 widget，不受 dynamicSlots 影响）。新增此类屏时这个数要跟着涨。
+        assertTrue("一个继承 Mek 容器屏的屏都没扫到，判据已失效（扫描面变了？）", scanned >= 3);
+        assertEquals("这些屏继承 Mek 的容器屏基类却没开 dynamicSlots —— "
+                        + "槽位 widget 一个都不会建，玩家看到的是空面板：\n  ",
+                List.of(), offenders);
+    }
+
+    // ── 6. 不许重复实现共享基类已有的东西 ──────────────────────────────
+
+    /**
+     * <b>继承 {@code MekCkContainerScreenBase} 的屏，不得再自己实现基类已有的部分。</b>
+     *
+     * <h3>缺陷形态（本仓的结构性问题）</h3>
+     * 此前那套基类绑死在 {@code MekCkMachineTile}（工厂）上，13 台无档位单机继承不了，
+     * 于是每个单机屏只好把「机器名/背包标签」「竖直能源条」各自重写一遍
+     * —— 实测有 15 个屏各写了一份 {@code drawForegroundText}。
+     *
+     * <p>本类把通用部分上移到 {@code MekCkContainerScreenBase} 之后，
+     * 「继承它又自己再写一遍」就是纯重复，且会让两处实现再次漂移。
+     * 本条守的就是这件事：<b>复用的入口开了，就不许再绕过去。</b></p>
+     */
+    @Test
+    public void screensExtendingTheSharedBaseDoNotReimplementIt() throws IOException {
+        List<String> offenders = new ArrayList<>();
+        int scanned = 0;
+        for (Path file : screens()) {
+            String source = read(file);
+            if (!source.contains("extends MekCkContainerScreenBase")) {
+                continue;
+            }
+            scanned++;
+            String name = file.getFileName().toString();
+            if (source.contains("protected void drawForegroundText")) {
+                offenders.add(name + "：基类已提供 drawForegroundText（机器名 + 背包标签），"
+                        + "不要重写；若确需追加读数，覆写并先调 super");
+            }
+            // 刻意**不**在这里查 addSlots()：javadoc 里解释「槽位由 addSlots 自动装配」
+            // 是很正常的事，全文字符串匹配会把注释当代码 —— 本仓在这上面栽过四次。
+            // 槽位是否真的自动装配，由 mekContainerScreensEnableDynamicSlots 那条守。
+        }
+        assertTrue("一个继承共享基类的屏都没扫到，判据已失效（扫描面变了？）", scanned >= 1);
+        assertEquals("这些屏继承了 MekCkContainerScreenBase 却又把基类已有的东西重写了一遍：\n  ",
+                List.of(), offenders);
     }
 }

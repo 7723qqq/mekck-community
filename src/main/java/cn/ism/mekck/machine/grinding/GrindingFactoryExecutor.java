@@ -2,7 +2,6 @@ package cn.ism.mekck.machine.grinding;
 
 import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.config.MekckConfig;
-import cn.ism.mekck.machine.MekCkBatchPacking;
 import cn.ism.mekck.machine.MekCkMachineTile;
 import cn.ism.mekck.machine.MekCkOrderState;
 import cn.ism.mekck.machine.MekCkRecipeExecutor;
@@ -14,21 +13,17 @@ import cn.ism.mekck.util.RecipeCache;
 import mekanism.api.Upgrade;
 import mekanism.api.inventory.IInventorySlot;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
 import net.minecraft.util.RandomSource;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * 研磨工厂的执行器 —— 石磨配方匹配、随机产出掷骰、订单推进、并行数。
@@ -305,12 +300,8 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
      * 而不是凭空消失的物品。</p>
      */
     private boolean canFitWorstCase(Recipe<?> recipe, int multiplier) {
-        List<KaleidoscopeCompat.MillstoneOutput> outputs = KaleidoscopeCompat.getMillstoneOutputs(recipe);
-        List<ItemStack> worst = new ArrayList<>(outputs.size());
-        for (KaleidoscopeCompat.MillstoneOutput out : outputs) {
-            worst.add(out.stack());
-        }
-        return MekCkBatchPacking.canFitAll(tile.getOutputSlots(), worst, multiplier);
+        // 与单机研磨机共用同一份最坏情况判定（见 GrindingRecipes）。
+        return GrindingRecipes.canFitWorstCase(tile.getOutputSlots(), recipe, multiplier);
     }
 
     private void completeRecipe(List<IInventorySlot> inputs, List<IInventorySlot> outputs,
@@ -344,11 +335,9 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
             remaining.setCount(input.getCount() - consumeCount);
             inputSlotRef.setStack(remaining);
         }
-        if (consumeCount <= MAX_ROLL_PER_SLOT) {
-            rollIndividually(outputs, rolls, consumeCount);
-        } else {
-            rollByExpectation(outputs, rolls, consumeCount);
-        }
+        // 掷骰与订单推进都走共享实现（单机与工厂同一份）。
+        RandomSource random = tile == null || tile.getLevel() == null ? null : tile.getLevel().random;
+        GrindingRecipes.rollOutputs(outputs, recipe, consumeCount, random);
         if (order.isActive() && order.advance(1)) {
             // 推进与「是否已满」都由 MekCkOrderState 一处判定。
             // 修复前这里是 `orderCompleted++; if (advanceOrder(...))`：
@@ -359,86 +348,22 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
         }
     }
 
-    /**
-     * 逐件掷骰：每个消耗的输入、每一项产出各掷一次，与原版石磨行为一致。
-     *
-     * <p>chance <b>不</b>先夹到 [0,1]——{@code nextFloat() ∈ [0,1)} 对 chance ≥ 1 恒真、
-     * 对 chance ≤ 0 恒假，夹与不夹结果完全相同，保留原样是省掉一次证明。</p>
-     */
-    private void rollIndividually(List<IInventorySlot> outputs,
-                                  List<KaleidoscopeCompat.MillstoneOutput> rolls, int consumeCount) {
-        RandomSource random = tile == null || tile.getLevel() == null ? null : tile.getLevel().random;
-        for (int i = 0; i < consumeCount; i++) {
-            for (KaleidoscopeCompat.MillstoneOutput out : rolls) {
-                if (random != null && random.nextFloat() < out.chance()) {
-                    MekCkBatchPacking.insertOutput(outputs, out.stack().copy());
-                }
-            }
-        }
-    }
+    // ── 掷骰算术：实现已收进 GrindingRecipes，这里保留同名委托 ──────────────
+    //
+    // 与单机研磨机共用同一份实现（GrindingRecipes）。之所以在**这里**留一层转发
+    // 而不是直接删掉：这些是包级可见的静态纯函数，TestGrindingRollArithmetic 的
+    // 33 条断言直接调它们做数值验证。转发让「实现只有一份」与「测试面不变」同时成立。
 
-    /**
-     * 期望值近似：并行大到不能逐件掷时，按「期望产量 + 一次百万分之一的补 1」出。
-     *
-     * <p>概率被拆成「确定的整数部分」与「按小数位掷一次的 0/1」，
-     * 于是近似的误差只剩 ±1 个物品，且无偏——直接取整会系统性少产
-     * （期望 4.7 永远给 4），在几百万件的量级上那是几万件凭空消失。</p>
-     */
-    private void rollByExpectation(List<IInventorySlot> outputs,
-                                   List<KaleidoscopeCompat.MillstoneOutput> rolls, int consumeCount) {
-        RandomSource random = tile == null || tile.getLevel() == null ? null : tile.getLevel().random;
-        for (KaleidoscopeCompat.MillstoneOutput out : rolls) {
-            float chance = clampChance(out.chance());
-            int perItem = out.stack().getCount();
-            long floor = expectedFloor(perItem, consumeCount, chance);
-            int total = (int) Math.min(floor + expectedBonus(perItem, consumeCount, chance, random),
-                    Integer.MAX_VALUE);
-            if (total <= 0) {
-                continue;
-            }
-            ItemStack stack = out.stack().copy();
-            stack.setCount(total);
-            MekCkBatchPacking.insertOutput(outputs, stack);
-        }
-    }
-
-    /** chance 夹到 [0,1]。与逐件掷骰那一支的「不夹」结果一致（理由见 {@link #rollIndividually}）。 */
     static float clampChance(float chance) {
-        return Math.max(0.0F, Math.min(1.0F, chance));
+        return GrindingRecipes.clampChance(chance);
     }
 
-    /**
-     * 期望产量的整数部分。
-     *
-     * <p>三个操作数全部先转 {@code double}：{@code perItem × consumeCount} 以 int 相乘
-     * 会先溢出（奇点档几百万件 × 单件 64），溢出后的负数再乘 chance 会得到一个
-     * 看似合理、实则完全错误的产量。</p>
-     */
     static long expectedFloor(int perItem, int consumeCount, float chance) {
-        return (long) Math.floor((double) perItem * (double) consumeCount * (double) chance);
+        return GrindingRecipes.expectedFloor(perItem, consumeCount, chance);
     }
 
-    /**
-     * 期望产量的小数部分折成的「百万分之一」整数，与
-     * {@code random.nextInt(1_000_000) < 结果} 配对使用即为无偏的 0/1 补正。
-     *
-     * <p>抽出来是因为它是这段算术里唯一可能出错的一格：{@code Math.round}
-     * 作用在 {@code long} 上会返回 {@code long}，而 {@code nextInt} 的上界是 int，
-     * 两边类型对不上就会静默截断。无参版本（不掷骰）只为让测试能断言它本身。</p>
-     */
     static int expectedFractionMillion(int perItem, int consumeCount, float chance) {
-        double raw = (double) perItem * (double) consumeCount * (double) chance;
-        long floor = (long) Math.floor(raw);
-        return (int) Math.round((raw - (double) floor) * FRACTION_SCALE);
-    }
-
-    /** 有随机源时掷那 1/1_000_000；没有随机源（理论上不可能）时不补。 */
-    private static long expectedBonus(int perItem, int consumeCount, float chance, RandomSource random) {
-        int fraction = expectedFractionMillion(perItem, consumeCount, chance);
-        if (random == null) {
-            return 0L;
-        }
-        return random.nextInt(FRACTION_SCALE) < fraction ? 1L : 0L;
+        return GrindingRecipes.expectedFractionMillion(perItem, consumeCount, chance);
     }
 
     // ── 本机下单的配方清单（供「本机下单」面板 / 未来 AE2 层消费）──────
@@ -450,21 +375,8 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
      * 返回空表——与旧实现同口径，不抛异常、不打日志（未安装是常态，不是故障）。</p>
      */
     public List<Recipe<?>> getAvailableRecipes(Level level) {
-        if (level == null) {
-            return List.of();
-        }
-        RecipeType<?> type = RecipeCache.type("kaleidoscope_cookery", "millstone");
-        if (type == null) {
-            return List.of();
-        }
-        List<Recipe<?>> all = RecipeCache.all(level, type);
-        List<Recipe<?>> out = new ArrayList<>(all.size());
-        for (Recipe<?> recipe : all) {
-            if (matchesAnyInput(recipe, inputStacks())) {
-                out.add(recipe);
-            }
-        }
-        return dedupeById(out);
+        // 与单机研磨机共用同一份配方清单实现。
+        return GrindingRecipes.availableRecipes(level, inputStacks());
     }
 
     /**
@@ -486,16 +398,13 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
         return out;
     }
 
+    // ── 以下三个静态纯函数的实现已收进 GrindingRecipes ──────────────────
+    // 保留同名委托：TestGrindingRollArithmetic 直接调它们做数值验证，
+    // 转发让「实现只有一份」与「测试面不变」同时成立。
+
     /** 按配方 id 去重，保留首次出现的顺序。 */
     static List<Recipe<?>> dedupeById(List<Recipe<?>> recipes) {
-        Set<ResourceLocation> seen = new HashSet<>();
-        List<Recipe<?>> out = new ArrayList<>(recipes.size());
-        for (Recipe<?> recipe : recipes) {
-            if (seen.add(recipe.getId())) {
-                out.add(recipe);
-            }
-        }
-        return out;
+        return GrindingRecipes.dedupeById(recipes);
     }
 
     /**
@@ -507,68 +416,18 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
      * ② 任何异常都吞成 0，因为这是 GUI 上随手点的一下，不该把面板炸开。</p>
      */
     public int getMaxConsumableCountForOrder(Recipe<?> recipe) {
-        if (recipe == null) {
-            return 0;
-        }
-        try {
-            return maxConsumableCount(recipe.getIngredients(), inputStacks());
-        } catch (Throwable ignored) {
-            return 0;
-        }
+        // 与单机研磨机共用同一份实现。
+        return GrindingRecipes.maxConsumableCount(recipe, inputStacks());
     }
 
-    /** {@link #getMaxConsumableCountForOrder} 的纯函数内核（{@code matchesAnyInput} 为真时才调）。 */
+    /** {@link #getMaxConsumableCountForOrder} 的纯函数内核（实现见 GrindingRecipes）。 */
     static int maxConsumableCount(List<Ingredient> ingredients, List<ItemStack> inputs) {
-        int max = Integer.MAX_VALUE;
-        for (Ingredient ing : ingredients) {
-            if (ing == null || ing.isEmpty()) {
-                continue;
-            }
-            int have = 0;
-            for (ItemStack stack : inputs) {
-                if (stack != null && !stack.isEmpty() && ing.test(stack)) {
-                    have += stack.getCount();
-                }
-            }
-            max = Math.min(max, have);
-            if (max <= 0) {
-                return 0;
-            }
-        }
-        return max == Integer.MAX_VALUE ? 0 : max;
+        return GrindingRecipes.maxConsumableCount(ingredients, inputs);
     }
 
-    /**
-     * 任一输入槽里的材料是否满足该配方。
-     *
-     * <p>石磨配方按<b>首个</b> ingredient 判定（{@code findMillstoneRecipe} 走的是
-     * {@code SimpleContainer(stack)} + {@code getRecipeFor}，容器只有 1 格），
-     * 但这里遍历全部 ingredient：它只用来筛「面板上列出哪些配方」，
-     * 宁可多列一张（点下去也只是 Max 算不准），也不要漏列玩家投得进去的料。</p>
-     */
+    /** 任一输入槽里的材料是否满足该配方（实现见 GrindingRecipes）。 */
     static boolean matchesAnyInput(Recipe<?> recipe, List<ItemStack> inputs) {
-        if (recipe == null) {
-            return false;
-        }
-        try {
-            List<Ingredient> ingredients = recipe.getIngredients();
-            if (ingredients == null || ingredients.isEmpty()) {
-                return false;
-            }
-            for (ItemStack stack : inputs) {
-                if (stack == null || stack.isEmpty()) {
-                    continue;
-                }
-                for (Ingredient ing : ingredients) {
-                    if (ing != null && !ing.isEmpty() && ing.test(stack)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        } catch (Throwable ignored) {
-            return false;
-        }
+        return GrindingRecipes.matchesAnyInput(recipe, inputs);
     }
 
     // ── 并行数 ──────────────────────────────────────────────────────────

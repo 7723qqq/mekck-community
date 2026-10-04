@@ -209,7 +209,12 @@ public class TestWideDataSlot {
                         + (produced ? "" : "（高位没产出）"));
             }
         }
-        assertTrue("一个同步能量的 BE 都没扫到，判据失效了", seen >= 10);
+        // 阈值跟着「仍在旧 BE 形态上的机器数」走：每台迁到 Mek 原生体系就少一台
+        // （能量改走 Mek 的能量容器通道，不再经 ContainerData 拆位）。
+        // 电力研磨机于阶段 3 样板迁移中离开本扫描：10 → 9。
+        // **这不是放宽判据**：下面那条 missing 断言对扫到的每一台逐条生效，
+        // 「塞进 16 位通道却不拆高位」这条规则一个字没改。
+        assertTrue("一个同步能量的 BE 都没扫到，判据失效了", seen >= 9);
         assertEquals("这些 BE 把能量塞进了 16 位通道却没拆高位 —— 客户端拿到的仍是被截断的负数：\n",
                 Set.of(), missing);
     }
@@ -257,11 +262,13 @@ public class TestWideDataSlot {
      */
     @Test
     public void noFourBitMenuReadsSideConfigFromASingleSlot() throws IOException {
+        // ElectricGrindingMachineMenu 已于阶段 3 样板迁移中移出：
+        // 它随整机迁到 Mek 的 MekanismTileContainer，不再有 getEncodedSideConfig()（侧配由
+        // Mek 的 configComponent 承担），因此它不再进本扫描 —— 白名单留着会变成「陈旧豁免」。
         Set<String> allowedSingleRead = Set.of(
                 "SmartCookingPotMenu.java",         // 2-bit 家族
                 "SkeweringMachineMenu.java",        // 2-bit 家族
-                "PlantingCuttingStationMenu.java",  // 2-bit 家族
-                "ElectricGrindingMachineMenu.java"); // 2-bit 家族
+                "PlantingCuttingStationMenu.java"); // 2-bit 家族
         Set<String> offenders = new TreeSet<>();
         int seen = 0;
         for (Path file : javaFiles(MENU_DIR)) {
