@@ -52,13 +52,23 @@ public final class KitchenOrderPacket {
             // 对已安装系列的**全部** recipeTypes 逐条取 getResultItem 并新建 HashMap
             // （RecipeCache 只缓存了配方列表，getResultItem 每次都真调）。
             // 而 mode==0 的预览不消耗任何材料 ⇒ 客户端可以纯刷打满主线程。
-            // 同指纹（同样的配方 + 同样的数量 + 同样的模式）在冷却期内直接放行，
-            // 因为重复请求的结果必然相同、不同请求才拒。详见 PacketGuard#expensiveRequest。
-            long fingerprint = (long) mode * 31L * 1_000_003L
-                    + recipeId.hashCode() * 31L
-                    + Math.max(1, count);
-            if (!PacketGuard.expensiveRequest(player, fingerprint)) {
+            // 三态闸门：冷却期内的同指纹重复回上次结果（不重算），不同请求静默忽略。
+            // 指纹必须含机器坐标：节流槽按玩家存，不含坐标会把两台机器的同参数请求
+            // 误判为重复（回错结果 / 吞掉真实下单）。详见 PacketGuard#expensiveRequestState。
+            long fingerprint = PacketGuard.fingerprint(pos.asLong(), mode, recipeId.hashCode(),
+                    Math.max(1, count));
+            PacketGuard.ExpensiveRequest gate = PacketGuard.expensiveRequestState(player, fingerprint);
+            if (gate == PacketGuard.ExpensiveRequest.DENY) {
                 return;
+            }
+            if (gate == PacketGuard.ExpensiveRequest.ALLOW_CACHED) {
+                Object cached = PacketGuard.cachedResult(player, fingerprint);
+                if (cached instanceof String text) {
+                    cn.ism.mekck.network.ModMessages.sendToPlayer(
+                            new KitchenOrderResultPacket(mode, text), player);
+                    return;
+                }
+                // 缓存缺失只可能出现在「上次计算抛异常」的路径：退回真实计算，保证请求必有响应。
             }
             String result;
             if (mode == 0) {
@@ -69,6 +79,7 @@ public final class KitchenOrderPacket {
                         Math.max(1, count));
                 result = err == null ? "§a下单成功：" + recipeId + " ×" + Math.max(1, count) : "§c" + err;
             }
+            PacketGuard.rememberResult(player, fingerprint, result);
             cn.ism.mekck.network.ModMessages.sendToPlayer(
                     new KitchenOrderResultPacket(mode, result), player);
         });

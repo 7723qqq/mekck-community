@@ -76,13 +76,16 @@ public class OrderRecipePacket {
                 int quantity = packet.recipeId == null ? packet.quantity : Math.max(1, packet.quantity);
                 if (!setOrderReflectively(be, packet.recipeId, quantity)
                         && be instanceof CentralKitchenBlockEntity kitchen && packet.recipeId != null) {
-                    // 与 KitchenOrderPacket 同一道节流：placeOrder 每次都走
+                    // 与 KitchenOrderPacket 同一道三态节流：placeOrder 每次都走
                     // solve → buildReverseIndex（对已安装系列的全部 recipeTypes 逐条
                     // 取 getResultItem 并新建 HashMap）。这里虽然会真的建订单因而
                     // 受材料约束，但**恶意客户端可以把同一订单反复下单**，
                     // 每次都是一次全模组配方扫描。
-                    if (!PacketGuard.expensiveRequest(player,
-                            packet.recipeId.hashCode() * 31L + Math.max(1, quantity))) {
+                    // 本包没有回包：ALLOW_CACHED（冷却期内的重复）直接跳过即可。
+                    long fingerprint = PacketGuard.fingerprint(packet.pos.asLong(),
+                            packet.recipeId.hashCode(), Math.max(1, quantity));
+                    if (PacketGuard.expensiveRequestState(player, fingerprint)
+                            != PacketGuard.ExpensiveRequest.ALLOW_COMPUTE) {
                         return;
                     }
                     kitchen.placeOrder(player.level(), packet.recipeId, Math.max(1, quantity));

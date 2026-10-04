@@ -48,6 +48,14 @@ public class NetworkPullPacket {
             if (be == null) return;
             if (!(be instanceof cn.ism.mekck.ae2.INetworkPullable)) return;
             if (packet.action == ACTION_PULL) {
+                // 节流：pullNetworkInputs 每包做一次全网扫描（单遍扫全网 + 逐需求项
+                // Ingredient.test），客户端可无限刷 ⇒ 与 KitchenOrderPacket 同款三态闸。
+                // 本包没有回包：DENY 与 ALLOW_CACHED 都不重算。
+                long fingerprint = PacketGuard.fingerprint(packet.pos.asLong(), ACTION_PULL);
+                if (PacketGuard.expensiveRequestState(player, fingerprint)
+                        != PacketGuard.ExpensiveRequest.ALLOW_COMPUTE) {
+                    return;
+                }
                 AE2Compat.pullNetworkInputs(be);
             } else if (packet.action == ACTION_TOGGLE_AUTO) {
                 if (packet.itemId.isEmpty()) {
@@ -56,11 +64,20 @@ public class NetworkPullPacket {
                     if (msg instanceof String s && !s.isEmpty()) {
                         player.displayClientMessage(net.minecraft.network.chat.Component.literal(s), true);
                     }
-                } else {
+                } else if (isRegisteredItem(packet.itemId)) {
+                    // itemId 是客户端可控字符串（readUtf 最长 32767 字符）：不校验就进
+                    // AE2 侧的勾选清单，恶意客户端可把列表撑到任意大。只接受已注册物品的
+                    // 合法注册名（AE2 侧的清单上限由并行任务 M27 处理）。
                     AE2Compat.toggleAutoItemGeneric(be, packet.itemId);
                 }
             }
         });
         context.get().setPacketHandled(true);
+    }
+
+    /** itemId 必须是已注册物品的合法注册名。 */
+    private static boolean isRegisteredItem(String itemId) {
+        net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.tryParse(itemId);
+        return id != null && net.minecraftforge.registries.ForgeRegistries.ITEMS.containsKey(id);
     }
 }

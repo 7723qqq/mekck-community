@@ -82,11 +82,22 @@ public final class KitchenFilter {
     /** 添加一种过滤材料（按物品去重，最多 {@link #MAX_ITEMS} 种）。返回是否添加成功。 */
     public boolean add(ItemStack stack) {
         if (stack == null || stack.isEmpty() || items.size() >= MAX_ITEMS) return false;
-        for (ItemStack existing : items) {
-            if (ItemStack.isSameItemSameTags(existing, stack)) return false;
-        }
         ItemStack copy = stack.copy();
         copy.setCount(1);
+        // 剥掉 NBT：过滤匹配走 Ingredient.test —— vanilla 的 Ingredient 只比较物品
+        // （ItemStack.is(Item)），NBT 不参与；而包解码的 readItem 允许 2MB 的 NBT，
+        // 原样保留会让单个厨房的存档/同步被放大到 ~18MB（9 项 × 2MB）。
+        //
+        // 已知例外（接受）：Forge 的 PartialNBTIngredient / StrictNBTIngredient 会比对
+        // share tag —— 对这类配方，剥掉 NBT 后白名单项永远匹配不上、黑名单项永远拦不住。
+        // 已核本模组厨房系列配方与 Farmer's Delight 的 534 条配方均无 NBT 材料
+        // （本模组唯一一条 NBT 配方是 mekanism:combining，不属于任何厨房系列）；
+        // 可选联动模组（森罗/东方等）不在仓库与 Gradle 缓存里，未核。
+        // 取舍：过滤材料只按物品类型生效，优先于保留 2MB 级 NBT 的放大面。
+        copy.setTag(null);
+        for (ItemStack existing : items) {
+            if (ItemStack.isSameItemSameTags(existing, copy)) return false;
+        }
         items.add(copy);
         return true;
     }

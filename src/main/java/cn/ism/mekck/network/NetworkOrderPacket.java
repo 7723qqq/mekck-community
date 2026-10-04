@@ -52,6 +52,15 @@ public class NetworkOrderPacket {
             if (packet.quantity <= 0 || packet.recipeId.isEmpty()) return;
             net.minecraft.world.level.block.entity.BlockEntity machine = PacketGuard.target(player, packet.pos);
             if (machine == null) return;
+            // 节流：pullNetworkIngredients 每包做一次全网扫描（extractAll 单遍扫全网 +
+            // 逐需求项 Ingredient.test），客户端可无限刷 ⇒ 与 KitchenOrderPacket 同款三态闸。
+            // 本包没有回包：DENY 与 ALLOW_CACHED 都不重算。
+            long fingerprint = PacketGuard.fingerprint(packet.pos.asLong(), packet.recipeId.hashCode(),
+                    packet.quantity, packet.seasoningId.hashCode());
+            if (PacketGuard.expensiveRequestState(player, fingerprint)
+                    != PacketGuard.ExpensiveRequest.ALLOW_COMPUTE) {
+                return;
+            }
             // 抽料 → 插机器 → 建 AE 任务 → 下单，全部按机器类型在 MekckAe2 内部**通用分派**：
             // 烹饪工厂 / 穿串工厂走各自专用分支，其余机器（烧烤工厂 / 智能厨锅 / 智能穿串机 /
             // 中央厨房 / 联动机器…）走通用分支（终端样板同源）。
