@@ -115,9 +115,33 @@ public class TestLegacyMachineBase {
         assertTrue("基类不见了存档键 RedstonePowered",
                 base.contains("putBoolean(\"RedstonePowered\""));
         // 能量读档必须走 receiveEnergy 循环（Forge 的 EnergyStorage 没有公开 setter，只能这么灌；
-        // 且单次 receiveEnergy 受 maxReceive 夹断，大容器灌不满）
-        assertTrue("基类 load 必须用 receiveEnergy 循环灌能量",
-                base.contains("receiveEnergy"));
+        // 且单次 receiveEnergy 受 maxReceive 夹断，大容器灌不满）。
+        // 只断言 contains("receiveEnergy") 抓不住「单次灌入」的回归 —— 必须钉住 load 里的循环形态。
+        String loadBody = methodBody(base, "public void load(CompoundTag tag) {");
+        assertTrue("基类 load 必须用 receiveEnergy 循环灌能量（单次受 maxReceive 夹断，大容器灌不满）",
+                loadBody.contains("while") && loadBody.contains("receiveEnergy"));
+    }
+
+    /** 取方法体（含签名到配对右花括号），用于把断言限定在 load 内部而不是整个文件。 */
+    private static String methodBody(String src, String signature) {
+        int i = src.indexOf(signature);
+        if (i < 0) {
+            return "";
+        }
+        int depth = 0;
+        int start = src.indexOf('{', i);
+        for (int j = start; j < src.length(); j++) {
+            char c = src.charAt(j);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    return src.substring(i, j + 1);
+                }
+            }
+        }
+        return src.substring(i);
     }
 
     /**

@@ -1829,26 +1829,83 @@ public final class SimpleMachineRecipes {
 
     // ── 通用匹配：把每个 Ingredient 分配给不同输入槽（0..INPUT_COUNT-1）──
 
+    /**
+     * 把 {@code required} 里每个非空 Ingredient 分配给一个互不相同的输入槽，
+     * 返回按 required 顺序排列的槽下标（空 Ingredient 跳过、不占槽）；无解返回 null。
+     *
+     * <p>分配走 {@link #assignIngredients} 的回溯，而不是「按顺序各拿第一个空槽」的贪心：
+     * 配料重叠时贪心会假阴性 —— 例：槽 [胡萝卜, 土豆]、配料 [{胡萝卜,土豆}, {胡萝卜}]，
+     * 贪心把第一个配料放进槽 0，第二个配料只剩槽 0 可选 ⇒ 判无解，而真解是
+     * 第一个配料→槽 1、第二个→槽 0。14 个调用点全部受益于这次修正。</p>
+     */
     List<Integer> matchIngredients(List<Ingredient> required) {
         if (required == null || required.isEmpty()) return null;
-        boolean[] used = new boolean[be.INPUT_COUNT];
-        List<Integer> slots = new ArrayList<>(required.size());
+        List<ItemStack> slotStacks = new ArrayList<>(be.INPUT_COUNT);
+        for (int s = 0; s < be.INPUT_COUNT; s++) {
+            slotStacks.add(be.items.getStackInSlot(s));
+        }
+        return assignIngredients(slotStacks, required);
+    }
+
+    /**
+     * 纯函数：在给定的槽位快照上做「配料 → 槽」的回溯分配，返回按 required 顺序排列的
+     * 槽下标（空 Ingredient 跳过、不占槽）；无解返回 null。
+     *
+     * <p>逐字对齐 {@code CookingFactoryExecutor.findAssignment}：先按「候选最少的配料先分」
+     * 排序（否则重叠严重时最坏退化成阶乘），再回溯；每个槽只能被一个配料占用。</p>
+     *
+     * <p>public 是为了让 {@code TestMatchIngredientsBacktracking}（在 machine 包）能直接驱动
+     * 这个纯函数 —— {@code SimpleMachineRecipes} 的实例需要一台真机器，单测里构造不出来。</p>
+     */
+    public static List<Integer> assignIngredients(List<ItemStack> slotStacks, List<Ingredient> required) {
+        if (required == null || required.isEmpty()) return null;
+        List<List<Integer>> matches = new ArrayList<>(required.size());
         for (Ingredient ing : required) {
             if (ing == null || ing.isEmpty()) continue;
-            boolean ok = false;
-            for (int s = 0; s < be.INPUT_COUNT; s++) {
-                if (used[s]) continue;
-                ItemStack st = be.items.getStackInSlot(s);
-                if (!st.isEmpty() && ing.test(st)) {
-                    used[s] = true;
-                    slots.add(s);
-                    ok = true;
-                    break;
+            List<Integer> matching = new ArrayList<>();
+            for (int s = 0; s < slotStacks.size(); s++) {
+                ItemStack st = slotStacks.get(s);
+                if (st != null && !st.isEmpty() && ing.test(st)) {
+                    matching.add(s);
                 }
             }
-            if (!ok) return null;
+            if (matching.isEmpty()) return null;
+            matches.add(matching);
         }
-        return slots.isEmpty() ? null : slots;
+        if (matches.isEmpty()) return null;
+        List<Integer> order = new ArrayList<>(matches.size());
+        for (int i = 0; i < matches.size(); i++) {
+            order.add(i);
+        }
+        order.sort(java.util.Comparator.comparingInt(i -> matches.get(i).size()));
+        int[] assignment = new int[matches.size()];
+        boolean[] used = new boolean[slotStacks.size()];
+        if (!backtrackAssignment(matches, order, 0, used, assignment)) return null;
+        List<Integer> slots = new ArrayList<>(assignment.length);
+        for (int slot : assignment) {
+            slots.add(slot);
+        }
+        return slots;
+    }
+
+    private static boolean backtrackAssignment(List<List<Integer>> matches, List<Integer> order, int depth,
+                                               boolean[] used, int[] result) {
+        if (depth >= order.size()) {
+            return true;
+        }
+        int ingredientIndex = order.get(depth);
+        for (int slot : matches.get(ingredientIndex)) {
+            if (used[slot]) {
+                continue;
+            }
+            used[slot] = true;
+            result[ingredientIndex] = slot;
+            if (backtrackAssignment(matches, order, depth + 1, used, result)) {
+                return true;
+            }
+            used[slot] = false;
+        }
+        return false;
     }
 
     boolean validateInputsFor(MatchedRecipe recipe) {
