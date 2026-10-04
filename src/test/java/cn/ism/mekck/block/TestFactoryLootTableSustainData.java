@@ -621,6 +621,9 @@ public class TestFactoryLootTableSustainData {
         assertFalse("MekCkBlockItem 里找不到 hasSustainedItems", body.isEmpty());
         assertTrue("hasSustainedItems 没有识别新格式 mekData —— 新掉落物 tooltip「存有物品」会显示「否」",
                 body.contains("\"mekData\""));
+        // 光有 "mekData" 字符串不够（留一个死变量也能过）：必须真的在 mekData 里查 Items。
+        assertTrue("hasSustainedItems 没有在 mekData 里检查 Items",
+                body.contains("mekData.contains(\"Items\""));
         assertTrue("hasSustainedItems 没有读 \"Items\" 键", body.contains("\"Items\""));
     }
 }
