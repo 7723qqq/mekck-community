@@ -223,6 +223,7 @@
   "gui.mekck.juice.white_warped": "诡异白葡萄汁",
   "gui.mekck.juice_slot": "果汁格（一格两用）：放 vinery 瓶装果汁会并入液位池，空酒瓶则退回空瓶槽（下次陈酿直接续用）；放流体桶会每 tick 抽一只进内部储罐（要求罐内为空或同种流体），抽空后的空桶进返还格。可放的桶：森罗酒馆的葡萄汁/金葡萄汁/冰葡萄汁/绿葡萄汁/发光浆果/甜浆果桶，以及水桶、岩浆桶。罐被异种流体占住时，按清空按钮可连罐一起排空",
   "gui.mekck.juice_tooltip": "果汁：%s %s/%s（潜行右键机器可清空）",
+  "gui.mekck.kitchen.note.buffer_full": "订单暂存区已满",
   "gui.mekck.kitchen.note.missing_fluid": "缺少流体（水/奶）",
   "gui.mekck.kitchen.note.module_removed": "模块已移除：%s",
   "gui.mekck.kitchen.note.no_power": "电力不足",

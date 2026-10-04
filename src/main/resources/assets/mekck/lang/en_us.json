@@ -223,6 +223,7 @@
   "gui.mekck.juice.white_warped": "Warped White Grape Juice",
   "gui.mekck.juice_slot": "Juice slot (dual purpose): vinery juice bottles merge into the juice level pool and the empty wine bottle goes back to the bottle slot (ready for the next brew); fluid buckets are drawn one per tick into the internal tank (which must be empty or hold the same fluid), and the emptied bucket goes to the return slot. Usable buckets: kaleidoscope_tavern grape / gold grape / ice grape / green grape / glow berry / sweet berry juice buckets, plus water and lava buckets. If the tank is stuck holding a foreign fluid, the dump button now also drains it.",
   "gui.mekck.juice_tooltip": "Juice: %s %s/%s (sneak-right-click the machine to clear)",
+  "gui.mekck.kitchen.note.buffer_full": "Order buffer full",
   "gui.mekck.kitchen.note.missing_fluid": "Missing fluid (water/milk)",
   "gui.mekck.kitchen.note.module_removed": "Module removed: %s",
   "gui.mekck.kitchen.note.no_power": "Not enough power",

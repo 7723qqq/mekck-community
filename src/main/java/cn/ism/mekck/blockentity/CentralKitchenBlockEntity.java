@@ -101,6 +101,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     private static volatile String noteMissingFluid;
     private static volatile String noteWaitingThread;
     private static volatile String noteNoPower;
+    private static volatile String noteBufferFull;
 
     private static String noteWaitingIntermediate() {
         String v = noteWaitingIntermediate;
@@ -138,9 +139,28 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         return v;
     }
 
+    private static String noteBufferFull() {
+        String v = noteBufferFull;
+        if (v == null) {
+            v = Component.translatable("gui.mekck.kitchen.note.buffer_full").getString();
+            noteBufferFull = v;
+        }
+        return v;
+    }
+
     /** 订单列表（每订单独立暂存区，不跨订单共享中间产物）。 */
     private final java.util.List<cn.ism.mekck.kitchen.KitchenOrder> orders = new java.util.ArrayList<>();
     private int nextOrderId = 1;
+
+    /**
+     * 读档暂存的订单 NBT。
+     *
+     * <p>Forge 在 {@code setLevel} 之前调 {@code load}，读档阶段 {@code getLevel()} 为 null，
+     * 而订单步骤重建需要配方管理器 —— 所以 load 只暂存 NBT，等 {@code onLoad}（level 已就绪）
+     * 再重建。原实现直接在 load 里取 {@code getLevel()}，于是每次读档都因 level 为 null
+     * 而把全部订单当「重建失败」丢弃。</p>
+     */
+    private net.minecraft.nbt.ListTag pendingOrdersTag;
 
     /** 每系列的「自动加工」开关（方案 C，默认关闭）。 */
     private final java.util.Map<cn.ism.mekck.kitchen.KitchenFamily, Boolean> autoMode =
@@ -518,6 +538,65 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     }
 
     /**
+     * 本步完成前的预检：扣掉本步输入后，暂存区能否装下本步全部产物。
+     *
+     * <p>用副本模拟，不改动真实暂存区。装不下时调用方暂停本步（不推进、不扣料、不产出）——
+     * 否则产物会被 {@link #insertIntoBuffer} 丢弃，或改投存储区后下一步的
+     * {@code bufferHas} 永远为假，订单卡死。</p>
+     */
+    private boolean bufferCanHoldStepOutputs(cn.ism.mekck.kitchen.KitchenOrder order,
+                                             cn.ism.mekck.kitchen.KitchenCraftingPlan.Step step) {
+        var sim = new cn.ism.mekck.util.BigStackItemHandler(cn.ism.mekck.kitchen.KitchenOrder.BUFFER_SLOTS) {
+            @Override
+            public int getSlotLimit(int slot) {
+                return Integer.MAX_VALUE - 1;
+            }
+        };
+        sim.deserializeNBT(order.buffer.serializeNBT());
+        // 与 consumeFromBuffer 同口径：按物品类型扣除本步输入
+        for (var need : step.inputs) {
+            int remaining = need.getCount();
+            for (int i = 0; i < sim.getSlots() && remaining > 0; i++) {
+                var stack = sim.getStackInSlot(i);
+                if (stack.isEmpty() || stack.getItem() != need.getItem()) continue;
+                int take = Math.min(stack.getCount(), remaining);
+                stack.shrink(take);
+                remaining -= take;
+            }
+        }
+        // 与完成分支同口径：产物按批次数放大后试插
+        int mult = Math.max(1, step.batches);
+        var outputs = new java.util.ArrayList<net.minecraft.world.item.ItemStack>();
+        var produced = step.output.copy();
+        produced.setCount(cn.ism.mekck.util.CountMath.mulClamp(cn.ism.mekck.util.CountMath.MAX_COUNT,
+                produced.getCount(), mult));
+        outputs.add(produced);
+        for (var extra : step.extraOutputs) {
+            if (extra.isEmpty()) continue;
+            var extraCopy = extra.copy();
+            extraCopy.setCount(cn.ism.mekck.util.CountMath.mulClamp(cn.ism.mekck.util.CountMath.MAX_COUNT,
+                    extraCopy.getCount(), mult));
+            outputs.add(extraCopy);
+        }
+        return cn.ism.mekck.kitchen.KitchenRecipeMatcher.insertOutputs(sim, 0, sim.getSlots(), outputs, 1).isEmpty();
+    }
+
+    /**
+     * 暂存区放不下的产物余量：先回插存储区，仍放不下则掉落 + 告警。
+     *
+     * <p>完成前预检（{@link #bufferCanHoldStepOutputs}）已保证正常路径下余量为 0；
+     * 这里是守恒不变量（产物 = 进暂存区 + 回存储 + 掉落 + 缺口，缺口必须为 0）的兜底。</p>
+     */
+    private void spillBufferOverflow(net.minecraft.world.item.ItemStack produced, int leftover) {
+        if (leftover <= 0) return;
+        var spill = produced.copyWithCount(leftover);
+        var back = insertIntoStorage(spill);
+        if (!back.isEmpty()) {
+            dropReservedOverflow(back);
+        }
+    }
+
+    /**
      * 订单材料回插存储区后仍放不下的最后兜底：掉落到世界并告警。
      *
      * <p>为什么不变量要求这样做：这些材料在上一步已经被 {@code extractItem} 从存储区抽走，
@@ -538,7 +617,11 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         for (int i = 0; i < order.buffer.getSlots(); i++) {
             var stack = order.buffer.getStackInSlot(i);
             if (stack.isEmpty()) continue;
-            insertIntoStorage(stack.copy());
+            var back = insertIntoStorage(stack.copy());
+            if (!back.isEmpty()) {
+                // 存储区满：退回的物品不能静默消失，走掉落 + 告警兜底
+                dropReservedOverflow(back);
+            }
             order.buffer.setStackInSlot(i, net.minecraft.world.item.ItemStack.EMPTY);
         }
     }
@@ -601,7 +684,6 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                 order.setNote(noteWaitingThread());
                 continue;
             }
-            busyThreads.put(step.family, used + 1);
 
             // ===== 加工时间：批次数 × 单次耗时 ÷（线程数 × 并行数） =====
             if (order.stepTotalTime() <= 0) {
@@ -610,6 +692,19 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                 long total = Math.max(1, (work + throughput - 1) / throughput);
                 order.setStepTotalTime((int) Math.min(Integer.MAX_VALUE - 1, total));
             }
+
+            // ===== 完成前预检：本步产物必须装得下暂存区 =====
+            // 装不下时若照常完成，产物会被 insertIntoBuffer 丢弃（或改投存储区后下一步
+            // 永远等不到），订单也会卡死在下一步。这里在推进前先模拟一次「扣输入 + 插产物」，
+            // 装不下就暂停本步：不扣料、不产出、不推进，等暂存区有空间再继续。
+            if (order.stepProgress() + 1 >= order.stepTotalTime() && !bufferCanHoldStepOutputs(order, step)) {
+                order.setState(cn.ism.mekck.kitchen.KitchenOrder.State.PAUSED);
+                order.setNote(noteBufferFull());
+                continue;
+            }
+
+            // 线程占用放在预检之后：被暂存区挡住的订单不该占着系列线程名额
+            busyThreads.put(step.family, used + 1);
 
             // ===== 耗电：每 tick 按系列能耗扣电，电量不足则暂停 =====
             int need = energyPerTickFor(step.family);
@@ -638,13 +733,13 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
             int mult = Math.max(1, step.batches);
             var produced = step.output.copy();
             produced.setCount(cn.ism.mekck.util.CountMath.mulClamp(cn.ism.mekck.util.CountMath.MAX_COUNT, produced.getCount(), mult));
-            insertIntoBuffer(order, produced);
+            spillBufferOverflow(produced, insertIntoBuffer(order, produced));
             // 副产物（多产物配方）：一并写入暂存区，避免丢失
             for (var extra : step.extraOutputs) {
                 if (extra.isEmpty()) continue;
                 var extraCopy = extra.copy();
                 extraCopy.setCount(cn.ism.mekck.util.CountMath.mulClamp(cn.ism.mekck.util.CountMath.MAX_COUNT, extraCopy.getCount(), mult));
-                insertIntoBuffer(order, extraCopy);
+                spillBufferOverflow(extraCopy, insertIntoBuffer(order, extraCopy));
             }
             order.advanceStep();
             setChanged();
@@ -843,7 +938,11 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
                 } else {
                     items.setStackInSlot(pair[0], stack);
                 }
-                insertIntoStorage(give);
+                var back = insertIntoStorage(give);
+                if (!back.isEmpty()) {
+                    // 存储区满：退款不能静默消失，走掉落 + 告警兜底
+                    dropReservedOverflow(back);
+                }
                 refunded++;
             }
         }
@@ -1158,6 +1257,12 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     private net.minecraftforge.fluids.capability.IFluidHandler fluidHandlerAt(Level level, BlockPos adjPos,
                                                                             Direction dir, long now) {
         int d = dir.ordinal();
+        // 未加载区块：getBlockState 会触发区块加载/生成，先判 hasChunkAt（与 Bioreactor.emitEnergy 同口径）
+        if (!level.hasChunkAt(adjPos)) {
+            fluidAdjBE[d] = null;
+            fluidAdjHandler[d] = null;
+            return null;
+        }
         if (!level.getBlockState(adjPos).hasBlockEntity()) {
             fluidAdjBE[d] = null;
             fluidAdjHandler[d] = null;
@@ -1481,7 +1586,16 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
             moduleVersion++; // 反序列化可能不触发 onContentsChanged：直接让模块列表缓存失效
         }
         if (tag.contains("Energy")) {
-            energy.receiveEnergy(tag.getInt("Energy"), false);
+            // 单次 receiveEnergy 受 maxReceive（200,000 FE）夹断，读档必须循环灌满，
+            // 否则每次区块重载最多只恢复 200,000 FE（容量 5,000,000）。
+            int remaining = tag.getInt("Energy");
+            while (remaining > 0) {
+                int received = energy.receiveEnergy(remaining, false);
+                if (received == 0) {
+                    break;
+                }
+                remaining -= received;
+            }
         }
         if (tag.contains("MeOrderEnabled")) meOrderEnabled = tag.getBoolean("MeOrderEnabled");
         if (tag.contains("Filters", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
@@ -1506,50 +1620,12 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         if (tag.contains("GasSideConfig", net.minecraft.nbt.Tag.TAG_BYTE_ARRAY)) {
             decodeSide(gasSideConfig, tag.getByteArray("GasSideConfig"));
         }
-        // 订单恢复
+        // 订单恢复：load 阶段 level 尚不可用（Forge 先 load 后 setLevel），
+        // 重建步骤需要配方管理器，故只暂存 NBT，等 onLoad 再重建。
         orders.clear();
-        if (tag.contains("Orders", net.minecraft.nbt.Tag.TAG_LIST)) {
-            var level = getLevel();
-            net.minecraft.nbt.ListTag orderList = tag.getList("Orders", net.minecraft.nbt.Tag.TAG_COMPOUND);
-            for (int i = 0; i < orderList.size(); i++) {
-                var ot = orderList.getCompound(i);
-                java.util.List<cn.ism.mekck.kitchen.KitchenCraftingPlan.Step> steps = new java.util.ArrayList<>();
-                if (level != null) {
-                    var stepList = ot.getList("Steps", net.minecraft.nbt.Tag.TAG_COMPOUND);
-                    for (int j = 0; j < stepList.size(); j++) {
-                        var st = stepList.getCompound(j);
-                        var rid = net.minecraft.resources.ResourceLocation.tryParse(st.getString("Recipe"));
-                        if (rid == null) continue;
-                        // 配方管理器找不到时，回退到烟火的虚拟配方（它不注册原版配方类型）
-                        net.minecraft.world.item.crafting.Recipe<?> recipe =
-                                level.getRecipeManager().byKey(rid).orElse(null);
-                        if (recipe == null) {
-                            recipe = cn.ism.mekck.compat.KaleidoscopeGrillingCompat.findVirtualById(rid);
-                        }
-                        if (recipe == null) continue;
-                        var step = cn.ism.mekck.kitchen.KitchenCraftingPlan.rebuildStep(level, rid,
-                                st.getInt("Batches"), recipe);
-                        if (step != null) steps.add(step);
-                    }
-                }
-                if (steps.isEmpty()) continue;
-                var order = new cn.ism.mekck.kitchen.KitchenOrder(ot.getInt("Id"), steps);
-                if (ot.contains("Buffer")) order.buffer.deserializeNBT(ot.getCompound("Buffer"));
-                while (order.stepIndex() < ot.getInt("StepIndex") && order.stepIndex() < steps.size()) {
-                    order.advanceStep();
-                }
-                if (ot.contains("StepProgress")) {
-                    order.restoreProgress(ot.getInt("StepProgress"), ot.getInt("StepTotal"));
-                }
-                order.setState(cn.ism.mekck.kitchen.KitchenOrder.State.RUNNING);
-                // 读档同样受上限约束：老存档可能是在没有上限时写下的，
-                // 超出的部分直接丢弃（正在加工的产物已在 buffer 里，随订单一起丢会失真，
-                // 但这个量级的存档本身就是异常；宁可截断也不要带着无界列表继续跑）。
-                if (orders.size() < MAX_ORDERS) {
-                    orders.add(order);
-                }
-            }
-        }
+        pendingOrdersTag = tag.contains("Orders", net.minecraft.nbt.Tag.TAG_LIST)
+                ? tag.getList("Orders", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                : null;
         if (tag.contains("NextOrderId")) nextOrderId = Math.max(nextOrderId, tag.getInt("NextOrderId"));
         if (tag.contains("Threads", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
             var threadTag = tag.getCompound("Threads");
@@ -1638,6 +1714,98 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         if (tag.contains("ColdSide", net.minecraft.nbt.Tag.TAG_COMPOUND)) coldComponent.load(tag.getCompound("ColdSide"));
     }
 
+    /**
+     * 读档后的订单重建（此时 level 已就绪，见 {@link #pendingOrdersTag}）。
+     *
+     * <p>Forge 在 {@code setLevel} 之前调 {@code load}，而 {@code onLoad} 在方块实体
+     * 进入世界后、首次 tick 前调用（{@code LevelChunk#registerAllBlockEntitiesAfterLevelLoad}
+     * → {@code Level#addFreshBlockEntities} → {@code Level#tickBlockEntities}）。</p>
+     */
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        var pending = pendingOrdersTag;
+        if (pending != null) {
+            pendingOrdersTag = null;
+            restoreOrders(pending);
+        }
+    }
+
+    /**
+     * 重建订单列表。
+     *
+     * <p>steps 重建失败的订单（配方被删/改名）不能再跑，但它的暂存区里还留着已预留的
+     * 叶子材料与在制品 —— 丢弃前必须回插存储区/掉落，不得静默销毁。</p>
+     */
+    private void restoreOrders(net.minecraft.nbt.ListTag orderList) {
+        var level = getLevel();
+        if (level == null) {
+            return;
+        }
+        for (int i = 0; i < orderList.size(); i++) {
+            var ot = orderList.getCompound(i);
+            java.util.List<cn.ism.mekck.kitchen.KitchenCraftingPlan.Step> steps = new java.util.ArrayList<>();
+            var stepList = ot.getList("Steps", net.minecraft.nbt.Tag.TAG_COMPOUND);
+            for (int j = 0; j < stepList.size(); j++) {
+                var st = stepList.getCompound(j);
+                var rid = net.minecraft.resources.ResourceLocation.tryParse(st.getString("Recipe"));
+                if (rid == null) continue;
+                // 配方管理器找不到时，回退到烟火的虚拟配方（它不注册原版配方类型）
+                net.minecraft.world.item.crafting.Recipe<?> recipe =
+                        level.getRecipeManager().byKey(rid).orElse(null);
+                if (recipe == null) {
+                    recipe = cn.ism.mekck.compat.KaleidoscopeGrillingCompat.findVirtualById(rid);
+                }
+                if (recipe == null) continue;
+                var step = cn.ism.mekck.kitchen.KitchenCraftingPlan.rebuildStep(level, rid,
+                        st.getInt("Batches"), recipe);
+                if (step != null) steps.add(step);
+            }
+            if (steps.isEmpty()) {
+                refundDiscardedOrderBuffer(ot);
+                continue;
+            }
+            var order = new cn.ism.mekck.kitchen.KitchenOrder(ot.getInt("Id"), steps);
+            if (ot.contains("Buffer")) order.buffer.deserializeNBT(ot.getCompound("Buffer"));
+            while (order.stepIndex() < ot.getInt("StepIndex") && order.stepIndex() < steps.size()) {
+                order.advanceStep();
+            }
+            if (ot.contains("StepProgress")) {
+                order.restoreProgress(ot.getInt("StepProgress"), ot.getInt("StepTotal"));
+            }
+            order.setState(cn.ism.mekck.kitchen.KitchenOrder.State.RUNNING);
+            // 读档同样受上限约束：老存档可能是在没有上限时写下的，超出的部分不能
+            // 带着 buffer 一起丢（正在加工的产物与预留材料都在里面）。
+            if (orders.size() < MAX_ORDERS) {
+                orders.add(order);
+            } else {
+                refundDiscardedOrderBuffer(ot);
+            }
+        }
+    }
+
+    /** 读档丢弃订单前，把它的暂存区内容退回存储区（放不下则掉落 + 告警），不得静默销毁。 */
+    private void refundDiscardedOrderBuffer(net.minecraft.nbt.CompoundTag orderTag) {
+        if (!orderTag.contains("Buffer")) {
+            return;
+        }
+        var buffer = new cn.ism.mekck.util.BigStackItemHandler(cn.ism.mekck.kitchen.KitchenOrder.BUFFER_SLOTS) {
+            @Override
+            public int getSlotLimit(int slot) {
+                return Integer.MAX_VALUE - 1;
+            }
+        };
+        buffer.deserializeNBT(orderTag.getCompound("Buffer"));
+        for (int i = 0; i < buffer.getSlots(); i++) {
+            var stack = buffer.getStackInSlot(i);
+            if (stack.isEmpty()) continue;
+            var back = insertIntoStorage(stack.copy());
+            if (!back.isEmpty()) {
+                dropReservedOverflow(back);
+            }
+        }
+    }
+
     // ================== 能力 ==================
 
     @Override
@@ -1649,14 +1817,9 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
             return energyCapability.cast();
         }
         if (capability == ForgeCapabilities.FLUID_HANDLER) {
-            // 流体侧配：抽取面只接受注入、弹出面只允许抽取
-            if (side != null) {
-                var mode = fluidSideConfig[side.ordinal()];
-                if (mode == cn.ism.mekck.SideMode.PULL_INPUT
-                        || mode == cn.ism.mekck.SideMode.PUSH_OUTPUT) {
-                    return fluidCapability.cast();
-                }
-            }
+            // 流体能力对所有面开放：侧配只驱动自动 IO 的搬运方向，不限制外部访问。
+            // （原先这里按 fluidSideConfig 分了两支，但两支返回同一个对象 —— 死分支；
+            //  注释还声称「抽取面只接受注入、弹出面只允许抽取」，与实现相反。）
             return fluidCapability.cast();
         }
         if (capability == mekanism.common.capabilities.Capabilities.GAS_HANDLER) {

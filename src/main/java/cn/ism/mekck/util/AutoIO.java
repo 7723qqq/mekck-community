@@ -156,6 +156,12 @@ public final class AutoIO {
      */
     private IItemHandler resolve(Level level, BlockPos adjPos, Direction dir, long now) {
         int d = dir.ordinal();
+        // 未加载区块：getBlockState 会触发区块加载/生成（每 tick 最多 6 次），先判 hasChunkAt
+        if (!level.hasChunkAt(adjPos)) {
+            adjBE[d] = null;
+            adjHandler[d] = null;
+            return null;
+        }
         if (!level.getBlockState(adjPos).hasBlockEntity()) {
             adjBE[d] = null;
             adjHandler[d] = null;
