@@ -40,7 +40,7 @@ public class TestTabElementGuard {
     private static final Path SIMPLE_MACHINE_SCREEN =
             Path.of("src/main/java/cn/ism/mekck/client/SimpleMachineScreen.java");
 
-    /** STANDARD 流体条尺寸（javap 实测：GaugeOverlay.STANDARD 16×58 + GaugeInfo 边框 2）。 */
+    /** STANDARD 流体条尺寸（javap 实测：GaugeOverlay.STANDARD 16×58，GuiGauge 构造器再加字面量 2）。 */
     private static final int GAUGE_W = 18;
     private static final int GAUGE_H = 60;
     /** MC 默认字体一行高。 */

@@ -21,8 +21,9 @@ import static org.junit.Assert.assertEquals;
  * <h3>缺陷形态</h3>
  * 7 个菜单的 {@code UpgradeSlot.updatePosition} 曾把供给器<b>求值成快照</b>
  * （{@code actualX = xSupplier.getAsInt()}）。Mek 的 {@code GuiVirtualSlot.updateVirtualSlot}
- * 传的是 {@code () -> this.getX()/getY()}（javap 实测），{@code GuiWindow.onDrag → move(dx,dy)}
- * 会递归移动子 widget ⇒ 拖拽升级窗口后物品画到新位置，而 {@code GuiMekanism.isMouseOverSlot}
+ * 传的是 {@code () -> this.relativeX + 1 / this.relativeY + 1}（javap 实测；relativeX/relativeY
+ * 是 GuiElement 的 GUI 相对字段，{@code GuiWindow.onDrag → move(dx,dy)} 会同步更新它并递归移动
+ * 子 widget）⇒ 拖拽升级窗口后物品画到新位置，而 {@code GuiMekanism.isMouseOverSlot}
  * 对 {@code IVirtualSlot} 走 {@code getActualX/Y}（javap 实测）⇒ 命中框留在拖拽前的位置。
  * Mek 自家 {@code VirtualInventoryContainerSlot} 存的是供给器（javap 实测），本仓照抄。
  *
