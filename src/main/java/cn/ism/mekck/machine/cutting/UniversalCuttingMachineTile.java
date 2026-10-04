@@ -199,9 +199,15 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
      * <p><b>为什么不能直接 {@code addUpgrades(SPEED, 1)}</b>：{@code addUpgrades(Upgrade, int)}
      * 的签名里没有 ItemStack —— 它既不校验类型也不消耗物品。旧分支对任意 upgradeLike 物品
      * 都装速度卡，C1 补上 shrink 后变成「错物品被吃掉换速度卡」（能量/创造/冷萃/费列罗皆然）。
-     * 组件的升级槽自带类型闸门（{@code UpgradeInventorySlot.input} 的 validator 只收
-     * {@code getSupportedUpgrade()} 集合内的 {@code IUpgradeItem}），把物品交给它，
-     * 类型判定与安装都回到 Mek 的正常路径。</p>
+     * 组件的升级槽自带类型闸门（{@code UpgradeInventorySlot.input} 的 canInsert 谓词 =
+     * {@code instanceof IUpgradeItem && supported.contains(getUpgradeType(stack))}），
+     * 把物品交给它，类型判定与安装都回到 Mek 的正常路径。</p>
+     *
+     * <p><b>槽的三道判据（javap 实测 {@code BasicInventorySlot} 6 参构造参数序 =
+     * (canExtract, canInsert, validator, …)）</b>：canExtract = manualOnly（自动化抽不走卡）；
+     * canInsert = 类型谓词（<b>不看 automation</b>）；validator = {@code instanceof IUpgradeItem}。
+     * 所以插入用 {@code AutomationType.MANUAL} 不是「否则装不进去」（INTERNAL 同样能插），
+     * 而是与 GUI 路径一致（{@code InventoryContainerSlot.insertItem} 实测就是 MANUAL）。</p>
      *
      * <p><b>返回语义</b>：实际从手持移入槽位的数量。类型不匹配 / 已装到上限 / 槽满 /
      * 组件缺席都是 0 —— 调用方（{@code UpgradeInstallHandler}）据此决定是否 shrink 手持物品：

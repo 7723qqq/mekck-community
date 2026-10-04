@@ -29,14 +29,16 @@ import static org.junit.Assert.assertTrue;
  *
  * <h3>修法与护栏口径</h3>
  * 分支改为把手持物品交给 {@code UniversalCuttingMachineTile.addUpgradesFromHand}，
- * 由它路由进组件的升级输入槽（{@code UpgradeInventorySlot.input}，validator 只收
+ * 由它路由进组件的升级输入槽（{@code UpgradeInventorySlot.input}，canInsert 谓词只收
  * {@code getSupportedUpgrade()} 集合内的 {@code IUpgradeItem}），走 20 tick 正常安装路径。
  * 本测试钉三件事：
  * <ol>
  *   <li><b>源码形态</b>：分支不得出现 {@code addUpgrades(}，必须把 held 交给类型感知入口；
  *       入口必须先取类型（{@code getUpgradeType(held)}）再插入槽位，且不得绕过槽位直接改计数。</li>
- *   <li><b>自动化类型</b>：源码必须用 {@code AutomationType.MANUAL}（槽的 canInsert = manualOnly，
- *       用 INTERNAL/EXTERNAL 会静默装不进去）。</li>
+ *   <li><b>自动化类型</b>：源码必须用 {@code AutomationType.MANUAL} —— 与 GUI 路径一致
+ *       （{@code InventoryContainerSlot.insertItem} 字节码实测就是 MANUAL）。
+ *       <b>这不是功能必需</b>：槽的 canInsert 是类型谓词、完全不看 automation（INTERNAL 同样能插），
+ *       manualOnly 落在 canExtract 上（自动化抽不走卡）。</li>
  *   <li><b>槽位契约（真行为）</b>：拿真的 {@code UpgradeInventorySlot} 跑一遍 ——
  *       非升级物品被拒收（返回 0 = 调用方不消耗）。</li>
  * </ol>
@@ -46,7 +48,7 @@ import static org.junit.Assert.assertTrue;
  * （{@code MekanismItems} 走 {@code DeferredRegister}，注册事件不触发），而自造
  * {@code Item} 子类会在 {@code Item} 构造器里撞上
  * {@code IllegalStateException: Registry is already frozen}（Forge 在 bootstrap 时冻结注册表，
- * 实测）。所以「validator 只认 supported 集合」这条由源码断言
+ * 实测）。所以「canInsert 只认 supported 集合」这条由源码断言
  * （{@code supports(} + {@code getUpgradeType(held)}）与 Mek 的字节码证据共同兜底，
  * 真行为只覆盖「非升级物品」这一档。
  *
@@ -105,11 +107,12 @@ public class TestCuttingMachineUpgradeTypeGate {
         assertTrue("必须先取类型：IUpgradeItem.getUpgradeType(held)", typeAt >= 0);
         assertTrue("必须路由进组件的升级输入槽（20 tick 正常安装路径）：getUpgradeSlot()",
                 method.contains("getUpgradeSlot()"));
-        assertTrue("必须走槽位插入（类型校验由槽自己的 validator 兜底）", insertAt >= 0);
+        assertTrue("必须走槽位插入（类型校验由槽自己的 canInsert 谓词兜底）", insertAt >= 0);
         assertTrue("取类型必须在插入之前（先判类型、再安装）", typeAt < insertAt);
         assertTrue("类型必须在 supported 集合内（类型闸门）", method.contains("supports("));
-        assertTrue("槽的 canInsert = manualOnly，必须用 AutomationType.MANUAL，"
-                        + "否则插入恒失败（静默装不进去）",
+        assertTrue("插入必须用 AutomationType.MANUAL —— 与 GUI 路径一致"
+                        + "（InventoryContainerSlot.insertItem 字节码实测就是 MANUAL）；"
+                        + "注意这不是功能必需：槽的 canInsert 是类型谓词、不看 automation",
                 method.contains("AutomationType.MANUAL"));
         assertFalse("不得绕过槽位直接改组件计数", method.contains("addUpgrades("));
     }
@@ -118,7 +121,7 @@ public class TestCuttingMachineUpgradeTypeGate {
 
     /**
      * 复刻 tile 的插入调用（同一 Action/AutomationType），返回移入数量。
-     * 槽位对象是真的 —— 这条断言把「路由进升级槽 = 有 validator 的槽」从源码读数
+     * 槽位对象是真的 —— 这条断言把「路由进升级槽 = 有类型校验的槽」从源码读数
      * 升级成可执行证据：换成不校验的槽（如 {@code alwaysTrueBi}），本断言会红。
      */
     private static int insertInto(UpgradeInventorySlot slot, ItemStack held, AutomationType automation) {
