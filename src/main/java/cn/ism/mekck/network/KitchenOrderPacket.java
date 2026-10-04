@@ -48,6 +48,10 @@ public final class KitchenOrderPacket {
             var level = player.level();
             var be = PacketGuard.target(player, pos);
             if (!(be instanceof CentralKitchenBlockEntity kitchen)) return;
+            // 客户端可控的 count 必须夹上限：placeOrder / previewOrder 会把它交给
+            // KitchenCraftingPlan.solve（need 随份数增长，int 乘法会溢出），且机器订单份数
+            // 无上限会让订单永不完成。上限与中央厨房 GUI 的 9999 同源（见 NetworkOrderPacket）。
+            int qty = NetworkOrderPacket.clampQuantity(count);
             // 节流：previewOrder / placeOrder 每次都走 solve → buildReverseIndex，
             // 对已安装系列的**全部** recipeTypes 逐条取 getResultItem 并新建 HashMap
             // （RecipeCache 只缓存了配方列表，getResultItem 每次都真调）。
@@ -55,8 +59,7 @@ public final class KitchenOrderPacket {
             // 三态闸门：冷却期内的同指纹重复回上次结果（不重算），不同请求静默忽略。
             // 指纹必须含机器坐标：节流槽按玩家存，不含坐标会把两台机器的同参数请求
             // 误判为重复（回错结果 / 吞掉真实下单）。详见 PacketGuard#expensiveRequestState。
-            long fingerprint = PacketGuard.fingerprint(pos.asLong(), mode, recipeId.hashCode(),
-                    Math.max(1, count));
+            long fingerprint = PacketGuard.fingerprint(pos.asLong(), mode, recipeId.hashCode(), qty);
             PacketGuard.ExpensiveRequest gate = PacketGuard.expensiveRequestState(player, fingerprint);
             if (gate == PacketGuard.ExpensiveRequest.DENY) {
                 return;
@@ -73,11 +76,11 @@ public final class KitchenOrderPacket {
             String result;
             if (mode == 0) {
                 result = kitchen.previewOrder(level, net.minecraft.resources.ResourceLocation.tryParse(recipeId),
-                        Math.max(1, count));
+                        qty);
             } else {
                 String err = kitchen.placeOrder(level, net.minecraft.resources.ResourceLocation.tryParse(recipeId),
-                        Math.max(1, count));
-                result = err == null ? "§a下单成功：" + recipeId + " ×" + Math.max(1, count) : "§c" + err;
+                        qty);
+                result = err == null ? "§a下单成功：" + recipeId + " ×" + qty : "§c" + err;
             }
             PacketGuard.rememberResult(player, fingerprint, result);
             cn.ism.mekck.network.ModMessages.sendToPlayer(
