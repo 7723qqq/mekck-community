@@ -1,5 +1,6 @@
 package cn.ism.mekck.client;
 
+import cn.ism.mekck.UniversalCuttingMachine;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
@@ -9,6 +10,10 @@ import net.minecraft.core.Direction;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 import org.joml.Matrix4f;
 
 /**
@@ -20,7 +25,11 @@ import org.joml.Matrix4f;
  *   <li>模型无 quad（如无 ModelData 的 Mekanism 系机器）时由调用方回退到包围盒 {@link #renderBox}；</li>
  *   <li>顶点必须以 {@code .endVertex()} 结束，否则不会被写入缓冲（历史不可见根因）。</li>
  * </ul>
+ *
+ * <p>订阅登出事件只为清掉 {@code berPreview*} 静态缓存（见 {@link #onLogout}）——
+ * 缓存里的临时 BE 强引用 ClientLevel，不清理会跨存档残留。</p>
  */
+@Mod.EventBusSubscriber(modid = UniversalCuttingMachine.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class MekCkOutlineRenderer {
 
     /** 包围盒线框粗细（倍数，由配置 box_line_width 设置；1.0 = 基础细带）。 */
@@ -133,10 +142,28 @@ public final class MekCkOutlineRenderer {
             berPreviewBe = null;
             return null;
         }
+        // 新建的 BE 没有 world 上下文（BlockEntity 构造器只写 type/worldPosition/blockState，
+        // 构造链里不调 setLevel）：不补 level，缓存未命中后的第一帧 BER 会因 getLevel() == null
+        // 直接 return（BioreactorRenderer 开头即判空）⇒ 叠加层缺一帧。
+        be.setLevel(level);
         berPreviewState = state;
         berPreviewPos = pos.immutable();
         berPreviewBe = be;
         return be;
+    }
+
+    /**
+     * 登出 / 换世界：清掉预览 BE 缓存。
+     *
+     * <p>缓存是静态字段，而 BE 的 level 字段强引用 ClientLevel（含已加载区块）——
+     * 不清理会一直强引用旧世界，直到玩家再次进世界并手持 BER 预览方块才换键。
+     * 与 {@code BuffLinkRenderer.onLogout} 清 {@code BuffLinkIndex} 同一先例。</p>
+     */
+    @SubscribeEvent
+    public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        berPreviewState = null;
+        berPreviewPos = null;
+        berPreviewBe = null;
     }
 
     private static final org.slf4j.Logger PREVIEW_LOGGER = org.slf4j.LoggerFactory.getLogger("mekck-preview");

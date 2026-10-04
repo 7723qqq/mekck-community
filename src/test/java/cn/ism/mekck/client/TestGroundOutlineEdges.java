@@ -147,6 +147,49 @@ public class TestGroundOutlineEdges {
         assertTrue("缓存字段不见了", code.contains("berPreviewBe"));
     }
 
+    /**
+     * 缓存未命中后的<b>第一帧</b> BE 也必须带 level（复审 p2-1）。
+     *
+     * <p>{@code BlockEntity} 构造器只写 type/worldPosition/blockState，构造链里不调
+     * {@code setLevel} ⇒ {@code newBlockEntity} 出来的 BE 第一帧 {@code getLevel() == null}；
+     * 而 {@code BioreactorRenderer.render} 开头就是 {@code if (level == null) return;}
+     * ⇒ 玩家准星每移到一个新方块，该方块的第一帧 BER 叠加层不画（相对旧实现的行为回退）。
+     * 复用分支的 setLevel 管不到这条路径，所以断言必须落在 {@code newBlockEntity} 之后。</p>
+     */
+    @Test
+    public void berPreviewCreationPathSetsLevel() throws IOException {
+        String code = TestSourceText.read(OUTLINE_RENDERER);
+        String body = TestSourceText.methodBody(code,
+                "private static net.minecraft.world.level.block.entity.BlockEntity previewBlockEntity(");
+        assertFalse("没扫到 previewBlockEntity 方法体，判据失效（方法被改名？）", body.isEmpty());
+        int create = body.indexOf("newBlockEntity");
+        assertTrue("没扫到 newBlockEntity，判据失效", create >= 0);
+        assertTrue("创建分支必须补 setLevel(level)：新建的 BE 没有 world 上下文，"
+                        + "缓存未命中后的第一帧 BER 会因 getLevel() == null 直接 return",
+                body.indexOf("setLevel(level)", create) >= 0);
+    }
+
+    /**
+     * 登出时必须清掉预览 BE 缓存（复审 p2-2）。
+     *
+     * <p>缓存是静态字段，BE 的 level 字段强引用 ClientLevel（含已加载区块）——
+     * 不清理会跨存档残留，直到玩家再次进世界并手持 BER 预览方块才换键。
+     * 与 {@code BuffLinkRenderer.onLogout} 清 {@code BuffLinkIndex} 同一先例。</p>
+     */
+    @Test
+    public void berPreviewCacheIsClearedOnLogout() throws IOException {
+        String code = TestSourceText.read(OUTLINE_RENDERER);
+        assertTrue("MekCkOutlineRenderer 必须订阅事件（否则 onLogout 不会被调用）",
+                code.contains("@Mod.EventBusSubscriber"));
+        assertTrue("必须处理 ClientPlayerNetworkEvent.LoggingOut",
+                code.contains("ClientPlayerNetworkEvent.LoggingOut"));
+        String body = TestSourceText.methodBody(code, "public static void onLogout(");
+        assertFalse("没扫到 onLogout 方法体，判据失效（方法被改名？）", body.isEmpty());
+        assertTrue("onLogout 必须清掉缓存的 BE", body.contains("berPreviewBe = null"));
+        assertTrue("onLogout 必须清掉缓存键（state/pos）",
+                body.contains("berPreviewState = null") && body.contains("berPreviewPos = null"));
+    }
+
     // ── 工具 ─────────────────────────────────────────────────────────────
 
     /** 地面格集合（y=0，按 x,z 对给出）。 */
