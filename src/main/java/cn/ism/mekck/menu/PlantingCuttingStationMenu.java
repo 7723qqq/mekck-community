@@ -33,9 +33,18 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
     private final UpgradeSlot energyUpgradeSlot;
     private final UpgradeSlot gasUpgradeSlot;
 
+    /**
+     * 客户端构造器：方块在 OpenScreen 到达前被破坏/替换、或区块被卸载时，
+     * {@code getBlockEntity} 返回 null。旧写法直接强转后交给主构造器，
+     * 主构造器随即读 {@code machine.getItems()} ⇒ NPE 崩客户端。
+     * 这里显式判空（{@code instanceof} 同时挡掉类型不符），null 时构造「空菜单」：
+     * 槽位数量与坐标照旧（客户端/服务端的槽位契约不能变），所有读取走
+     * {@code machine == null} 的兜底分支。
+     */
     public PlantingCuttingStationMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
-                (PlantingCuttingStationBlockEntity) inventory.player.level().getBlockEntity(buffer.readBlockPos()),
+                inventory.player.level().getBlockEntity(buffer.readBlockPos())
+                        instanceof PlantingCuttingStationBlockEntity machine ? machine : null,
                 new SimpleContainerData(PlantingCuttingStationBlockEntity.DATA_SIZE));
     }
 
@@ -43,28 +52,35 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
         super(MekCkFactories.PLANTING_CUTTING_STATION_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
+        // 空菜单（客户端 BE 缺失）用等长的空 handler 兜底：槽位数量与坐标必须照旧，
+        // 否则客户端与服务端的槽位契约不一致；读取路径全部走 machine == null 分支。
+        ItemStackHandler items = machine == null
+                ? new ItemStackHandler(PlantingCuttingStationBlockEntity.TOTAL_SLOTS)
+                : machine.getItems();
 
         // Input slot at (56, 17)
-        addSlot(new InputSlot(machine.getItems(), PlantingCuttingStationBlockEntity.INPUT_SLOT, 56, 17));
+        addSlot(new InputSlot(items, PlantingCuttingStationBlockEntity.INPUT_SLOT, 56, 17));
         // Nutrient slot at (56, 53)
-        addSlot(new NutrientSlot(machine.getItems(), PlantingCuttingStationBlockEntity.NUTRIENT_SLOT, 56, 53));
+        addSlot(new NutrientSlot(items, PlantingCuttingStationBlockEntity.NUTRIENT_SLOT, 56, 53));
         // Output slot at (116, 35)
-        addSlot(new OutputSlot(machine, PlantingCuttingStationBlockEntity.OUTPUT_SLOT, 116, 35));
+        addSlot(new OutputSlot(items, PlantingCuttingStationBlockEntity.OUTPUT_SLOT, 116, 35));
 
         // Upgrade slots: speed (8, 17), energy (8, 53), creative (152, 35), gas (152, 17)
-        this.speedUpgradeSlot = new UpgradeSlot(machine.getItems(), PlantingCuttingStationBlockEntity.SLOT_SPEED_UPGRADE, 8, 17, this);
+        this.speedUpgradeSlot = new UpgradeSlot(items, PlantingCuttingStationBlockEntity.SLOT_SPEED_UPGRADE, 8, 17, this);
         addSlot(this.speedUpgradeSlot);
-        this.energyUpgradeSlot = new UpgradeSlot(machine.getItems(), PlantingCuttingStationBlockEntity.SLOT_ENERGY_UPGRADE, 8, 53, this);
+        this.energyUpgradeSlot = new UpgradeSlot(items, PlantingCuttingStationBlockEntity.SLOT_ENERGY_UPGRADE, 8, 53, this);
         addSlot(this.energyUpgradeSlot);
-        addSlot(new UpgradeSlot(machine.getItems(), PlantingCuttingStationBlockEntity.SLOT_CREATIVE_UPGRADE, 152, 35, this));
-        this.gasUpgradeSlot = new UpgradeSlot(machine.getItems(), PlantingCuttingStationBlockEntity.SLOT_GAS_UPGRADE, 152, 17, this);
+        addSlot(new UpgradeSlot(items, PlantingCuttingStationBlockEntity.SLOT_CREATIVE_UPGRADE, 152, 35, this));
+        this.gasUpgradeSlot = new UpgradeSlot(items, PlantingCuttingStationBlockEntity.SLOT_GAS_UPGRADE, 152, 17, this);
         addSlot(this.gasUpgradeSlot);
 
         // Power slot (energy items: energy cube / tablet / redstone), next to the energy bar
-        addSlot(new PowerSlot(machine, machine.getPowerSlot(), 7, 13, this));
+        // 空菜单：能源槽下标取 handler 常量（与 getPowerSlot() 同值），槽位数量与坐标照旧。
+        int powerSlot = machine == null ? PlantingCuttingStationBlockEntity.SLOT_POWER : machine.getPowerSlot();
+        addSlot(new PowerSlot(items, powerSlot, 7, 13, this));
 
         // 生长方块格（种子与营养液之间）：所有配方共用 1 格；只有神秘农业种子受它约束
-        addSlot(new GrowthSlot(machine.getItems(), PlantingCuttingStationBlockEntity.GROWTH_SLOT, 56, 35));
+        addSlot(new GrowthSlot(items, PlantingCuttingStationBlockEntity.GROWTH_SLOT, 56, 35));
 
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < 9; column++) {
@@ -79,6 +95,10 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
 
     @Override
     public boolean stillValid(Player player) {
+        // 空菜单一律视为失效：服务端据此关闭窗口，客户端也不再接受交互。
+        if (machine == null) {
+            return false;
+        }
         Level level = player.level();
         return level.getBlockEntity(machine.getBlockPos()) == machine
                 && player.distanceToSqr(machine.getBlockPos().getX() + 0.5D, machine.getBlockPos().getY() + 0.5D,
@@ -87,6 +107,10 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
 
     @Override
     public ItemStack quickMoveStack(Player player, int index) {
+        // 空菜单：槽位读的是空 handler，但 getPowerSlot()/getLevel() 仍会解引用 machine。
+        if (machine == null) {
+            return ItemStack.EMPTY;
+        }
         Slot slot = slots.get(index);
         if (!slot.hasItem()) {
             return ItemStack.EMPTY;
@@ -218,15 +242,15 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
     }
 
     public int getSpeedUpgradeCount() {
-        return machine.getSpeedUpgradeCount();
+        return machine == null ? 0 : machine.getSpeedUpgradeCount();
     }
 
     public int getEnergyUpgradeCount() {
-        return machine.getEnergyUpgradeCount();
+        return machine == null ? 0 : machine.getEnergyUpgradeCount();
     }
 
     public boolean hasNutrient() {
-        return machine.hasNutrient();
+        return machine != null && machine.hasNutrient();
     }
 
     /** 生长方块格状态（0 = 无需/已满足，1 = 缺方块，2 = 等级不足）。 */
@@ -255,6 +279,9 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
     }
 
     public int getGasUpgradeCount() {
+        if (machine == null) {
+            return 0;
+        }
         int idx = PlantingCuttingStationBlockEntity.SLOT_GAS_UPGRADE;
         if (idx >= 0 && idx < machine.getItems().getSlots()
                 && !machine.getItems().getStackInSlot(idx).isEmpty()) {
@@ -285,13 +312,19 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
         return this.upgradePageActive;
     }
 
+    /** 机器实例（客户端也持有；空菜单为 null，屏幕侧据此兜底，同 ElectricGrindingMachineMenu）。 */
+    public PlantingCuttingStationBlockEntity getMachine() {
+        return machine;
+    }
+
     public BlockPos getBlockPos() {
-        return machine.getBlockPos();
+        // 空菜单没有真实坐标，返回 ZERO 而不是 NPE（同 GrillMenu 的 tile == null 写法）。
+        return machine == null ? BlockPos.ZERO : machine.getBlockPos();
     }
 
     private static final class PowerSlot extends SlotItemHandler implements IVirtualSlot {
-        private PowerSlot(PlantingCuttingStationBlockEntity machine, int slot, int x, int y, PlantingCuttingStationMenu menu) {
-            super(machine.getItems(), slot, x, y);
+        private PowerSlot(ItemStackHandler handler, int slot, int x, int y, PlantingCuttingStationMenu menu) {
+            super(handler, slot, x, y);
         }
 
         @Override
@@ -374,8 +407,8 @@ public final class PlantingCuttingStationMenu extends AbstractContainerMenu impl
     }
 
     private static final class OutputSlot extends SlotItemHandler implements IVirtualSlot {
-        private OutputSlot(PlantingCuttingStationBlockEntity machine, int slot, int x, int y) {
-            super(machine.getItems(), slot, x, y);
+        private OutputSlot(ItemStackHandler handler, int slot, int x, int y) {
+            super(handler, slot, x, y);
         }
 
         @Override
