@@ -17,7 +17,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * 网络包加固护栏（第七轮 M7-M2 / M7-M3 / M7-M4 / M7-m1 / M7-m5）。
+ * 网络包加固护栏（第七轮 M7-M2 / M7-M3 / M7-M4 / M7-m1 / M7-m5；M35 订单份数上限）。
  *
  * <h3>为什么需要它</h3>
  * 这一轮修的五条缺陷有一个共同点：<b>修好之后没有任何东西会拦住回归</b>。
@@ -35,6 +35,10 @@ import static org.junit.Assert.assertTrue;
  *       断言「player == null 直接 return」。</li>
  *   <li><b>M7-m5</b>：{@code KitchenFilterPacket} 接受任意 NBT 的 ItemStack 并落盘
  *       （单厨房最多 ~18MB）。行为断言「add 存进去的是剥掉 NBT 的精简版」。</li>
+ *   <li><b>M35</b>：三个下单包的 quantity 只夹下界（{@code NetworkOrderPacket} 连上界都没有），
+ *       客户端可控的份数可到 {@code Integer.MAX_VALUE} ⇒ 机器订单永不完成 / 中央厨房
+ *       {@code solve} 的 {@code need} int 溢出。断言「三个包都夹到 9999 且夹紧值真的进调用」
+ *       + 夹紧函数边界行为。</li>
  * </ul>
  *
  * <p>源码形态断言一律走 {@link TestSourceText#read}（剥注释）——
@@ -309,5 +313,112 @@ public class TestPacketHardening {
         CompoundTag saved = filter.save();
         assertTrue("单条过滤材料的存档体积必须被压到 KB 级（修复前是 MB 级）："
                 + saved.sizeInBytes(), saved.sizeInBytes() < 4096);
+    }
+
+    // ================== 四、订单份数上限（M35） ==================
+
+    /**
+     * 上限值必须钉住：三个下单包共用 {@link NetworkOrderPacket#MAX_ORDER_QUANTITY}，
+     * 取中央厨房 GUI（{@code KitchenOrderWindow} 的 +1/×2 按钮）同源的 9999。
+     * 改成 {@code Integer.MAX_VALUE} 等于没夹 —— 边界行为断言会红，这条钉住「同源」口径本身。
+     */
+    @Test
+    public void orderQuantityCapIsTheKitchenGuiValue() {
+        assertEquals(9999, NetworkOrderPacket.MAX_ORDER_QUANTITY);
+    }
+
+    /**
+     * 夹紧函数的边界行为：下界 1、上界含端点、超限按上限处理（不拒绝、不溢出）。
+     * 三个包共用这一个纯函数，直接断言它才能挡住「夹紧写成恒等 / 只夹下界」这类回归。
+     */
+    @Test
+    public void clampQuantityBoundsAreInclusiveAndSaturating() {
+        assertEquals("下界含端点", 1, NetworkOrderPacket.clampQuantity(1));
+        assertEquals("上界含端点", NetworkOrderPacket.MAX_ORDER_QUANTITY,
+                NetworkOrderPacket.clampQuantity(NetworkOrderPacket.MAX_ORDER_QUANTITY));
+        assertEquals("上界 +1 必须夹到上界（超限按上限处理，不拒绝）",
+                NetworkOrderPacket.MAX_ORDER_QUANTITY,
+                NetworkOrderPacket.clampQuantity(NetworkOrderPacket.MAX_ORDER_QUANTITY + 1));
+        assertEquals("Integer.MAX_VALUE 必须夹到上界",
+                NetworkOrderPacket.MAX_ORDER_QUANTITY,
+                NetworkOrderPacket.clampQuantity(Integer.MAX_VALUE));
+        assertEquals("0 必须夹到 1", 1, NetworkOrderPacket.clampQuantity(0));
+        assertEquals("负数必须夹到 1", 1, NetworkOrderPacket.clampQuantity(-1));
+        assertEquals("Integer.MIN_VALUE 必须夹到 1", 1,
+                NetworkOrderPacket.clampQuantity(Integer.MIN_VALUE));
+    }
+
+    /**
+     * ME 下单：夹紧必须发生在抽料之前，且抽料用的是夹紧后的值。
+     * 只断言「文件里出现过 clampQuantity」挡不住「夹了不用」——夹紧值必须真的进调用。
+     */
+    @Test
+    public void networkOrderPacketClampsQuantityBeforePull() throws IOException {
+        String src = TestSourceText.read(NETWORK + "NetworkOrderPacket.java");
+        assertTrue("ME 下单必须把客户端可控的 quantity 夹上限（机器侧 setOrder 只夹下界）",
+                src.contains("clampQuantity(packet.quantity)"));
+        assertTrue("抽料必须使用夹紧后的份数（夹了不用等于没夹）",
+                src.contains("pullNetworkIngredients(machine, packet.recipeId, quantity"));
+        assertTrue("quantity <= 0 必须继续拒绝（非法请求不得被夹成 1 份下单）",
+                src.contains("packet.quantity <= 0"));
+        assertClampPrecedes(src, "clampQuantity(packet.quantity)",
+                "AE2Compat.pullNetworkIngredients", "NetworkOrderPacket");
+    }
+
+    /**
+     * 中央厨房：count 必须夹上限后才进 solve / placeOrder。
+     * 旧形态 {@code Math.max(1, count)}（只夹下界）必须全部消失 ——
+     * 它正是 m3 报告里 need 可达 Integer.MAX_VALUE、int 乘法溢出的入口。
+     */
+    @Test
+    public void kitchenOrderPacketClampsCountBeforeSolve() throws IOException {
+        String src = TestSourceText.read(NETWORK + "KitchenOrderPacket.java");
+        assertTrue("中央厨房下单/预览必须把客户端可控的 count 夹上限",
+                src.contains("NetworkOrderPacket.clampQuantity(count)"));
+        assertFalse("不得再把未夹紧的 count 交给 solve / placeOrder（旧形态 Math.max(1, count) 必须消失）",
+                src.contains("Math.max(1, count)"));
+        assertMatches(src, "kitchen\\.previewOrder\\(level[^;]*?tryParse\\(recipeId\\)\\s*,\\s*qty\\)",
+                "previewOrder 必须使用夹紧后的份数");
+        assertMatches(src, "kitchen\\.placeOrder\\(level[^;]*?tryParse\\(recipeId\\)\\s*,\\s*qty\\)",
+                "placeOrder 必须使用夹紧后的份数");
+        assertClampPrecedes(src, "NetworkOrderPacket.clampQuantity(count)",
+                "kitchen.previewOrder", "KitchenOrderPacket");
+        assertClampPrecedes(src, "NetworkOrderPacket.clampQuantity(count)",
+                "kitchen.placeOrder", "KitchenOrderPacket");
+    }
+
+    /**
+     * 机器下单：非取消路径必须夹上限；取消路径（recipeId == null）必须原样透传 0。
+     * 把取消也夹成 1 会让「取消订单」变成「下 1 件」。
+     */
+    @Test
+    public void orderRecipePacketClampsQuantityButPassesCancelThrough() throws IOException {
+        String src = TestSourceText.read(NETWORK + "OrderRecipePacket.java");
+        assertTrue("机器下单必须把客户端可控的 quantity 夹上限",
+                src.contains("NetworkOrderPacket.clampQuantity(packet.quantity)"));
+        assertTrue("取消路径（recipeId == null）必须原样透传 quantity，不得夹紧",
+                src.contains("packet.recipeId == null ? packet.quantity"));
+        assertFalse("不得再把未夹紧的 quantity 交给 setOrder / placeOrder",
+                src.contains("Math.max(1, quantity)"));
+        assertClampPrecedes(src, "NetworkOrderPacket.clampQuantity(packet.quantity)",
+                "setOrderReflectively(be, packet.recipeId, quantity)", "OrderRecipePacket");
+        assertClampPrecedes(src, "NetworkOrderPacket.clampQuantity(packet.quantity)",
+                "kitchen.placeOrder", "OrderRecipePacket");
+    }
+
+    /** 夹紧必须排在昂贵调用之前：夹晚了昂贵调用已经拿到原始值。 */
+    private static void assertClampPrecedes(String src, String clampCall, String expensiveCall, String where) {
+        int clamp = src.indexOf(clampCall);
+        int call = src.indexOf(expensiveCall);
+        assertTrue(where + "：找不到夹紧调用 " + clampCall, clamp >= 0);
+        assertTrue(where + "：找不到昂贵调用 " + expensiveCall, call >= 0);
+        assertTrue(where + "：夹紧必须排在 " + expensiveCall + " 之前"
+                + "（否则昂贵调用拿到的是未夹紧的原始值）", clamp < call);
+    }
+
+    /** 正则版源码断言：允许换行/空白，钉住「调用点用的是夹紧后的变量」。 */
+    private static void assertMatches(String src, String regex, String message) {
+        assertTrue(message + "（正则：" + regex + "）",
+                java.util.regex.Pattern.compile(regex).matcher(src).find());
     }
 }
