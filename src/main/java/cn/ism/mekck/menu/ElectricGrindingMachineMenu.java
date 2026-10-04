@@ -47,9 +47,18 @@ public final class ElectricGrindingMachineMenu extends AbstractContainerMenu imp
      */
     private final int powerSlotIndex;
 
+    /**
+     * 客户端构造器：方块在 OpenScreen 到达前被破坏/替换、或区块被卸载时，
+     * {@code getBlockEntity} 返回 null。旧写法直接强转后交给主构造器，
+     * 主构造器随即读 {@code machine.getItems()} ⇒ NPE 崩客户端。
+     * 这里显式判空（{@code instanceof} 同时挡掉类型不符），null 时构造「空菜单」：
+     * 槽位数量与坐标照旧（客户端/服务端的槽位契约不能变），所有读取走
+     * {@code machine == null} 的兜底分支。
+     */
     public ElectricGrindingMachineMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
-                (ElectricGrindingMachineBlockEntity) inventory.player.level().getBlockEntity(buffer.readBlockPos()),
+                inventory.player.level().getBlockEntity(buffer.readBlockPos())
+                        instanceof ElectricGrindingMachineBlockEntity machine ? machine : null,
                 new SimpleContainerData(ElectricGrindingMachineBlockEntity.DATA_SIZE));
     }
 
@@ -57,21 +66,28 @@ public final class ElectricGrindingMachineMenu extends AbstractContainerMenu imp
         super(MekCkFactories.GRINDING_MACHINE_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
+        // 空菜单（客户端 BE 缺失）用等长的空 handler 兜底：槽位数量与坐标必须照旧，
+        // 否则客户端与服务端的槽位契约不一致；读取路径全部走 machine == null 分支。
+        ItemStackHandler items = machine == null
+                ? new ItemStackHandler(ElectricGrindingMachineBlockEntity.TOTAL_SLOTS)
+                : machine.getItems();
 
         // Input slot
-        addSlot(new InputSlot(machine.getItems(), ElectricGrindingMachineBlockEntity.INPUT_SLOT, 38, 41));
+        addSlot(new InputSlot(items, ElectricGrindingMachineBlockEntity.INPUT_SLOT, 38, 41));
         // Output slot (tightly packed, right next to input slot)
-        addSlot(new OutputSlot(machine, ElectricGrindingMachineBlockEntity.OUTPUT_SLOT, 56, 41));
+        addSlot(new OutputSlot(items, ElectricGrindingMachineBlockEntity.OUTPUT_SLOT, 56, 41));
 
         // Upgrade slots (at normal positions, visible only in upgrade page)
-        this.speedUpgradeSlot = new UpgradeSlot(machine.getItems(), ElectricGrindingMachineBlockEntity.SLOT_SPEED_UPGRADE, 40, 46, this);
+        this.speedUpgradeSlot = new UpgradeSlot(items, ElectricGrindingMachineBlockEntity.SLOT_SPEED_UPGRADE, 40, 46, this);
         addSlot(this.speedUpgradeSlot);
-        this.energyUpgradeSlot = new UpgradeSlot(machine.getItems(), ElectricGrindingMachineBlockEntity.SLOT_ENERGY_UPGRADE, 40, 72, this);
+        this.energyUpgradeSlot = new UpgradeSlot(items, ElectricGrindingMachineBlockEntity.SLOT_ENERGY_UPGRADE, 40, 72, this);
         addSlot(this.energyUpgradeSlot);
 
         // Power slot (energy items: energy cube / tablet / redstone), on the right near the energy bar
         this.powerSlotIndex = slots.size();
-        addSlot(new PowerSlot(machine, machine.getPowerSlot(), 7, 13, this));
+        // 空菜单：能源槽下标取 handler 常量（与 getPowerSlot() 同值），槽位数量与坐标照旧。
+        int powerSlot = machine == null ? ElectricGrindingMachineBlockEntity.SLOT_POWER : machine.getPowerSlot();
+        addSlot(new PowerSlot(items, powerSlot, 7, 13, this));
 
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < 9; column++) {
@@ -91,6 +107,10 @@ public final class ElectricGrindingMachineMenu extends AbstractContainerMenu imp
 
     @Override
     public boolean stillValid(Player player) {
+        // 空菜单一律视为失效：服务端据此关闭窗口，客户端也不再接受交互。
+        if (machine == null) {
+            return false;
+        }
         Level level = player.level();
         return level.getBlockEntity(machine.getBlockPos()) == machine
                 && player.distanceToSqr(machine.getBlockPos().getX() + 0.5D, machine.getBlockPos().getY() + 0.5D,
@@ -164,11 +184,11 @@ public final class ElectricGrindingMachineMenu extends AbstractContainerMenu imp
     }
 
     public int getSpeedUpgradeCount() {
-        return machine.getSpeedUpgradeCount();
+        return machine == null ? 0 : machine.getSpeedUpgradeCount();
     }
 
     public int getEnergyUpgradeCount() {
-        return machine.getEnergyUpgradeCount();
+        return machine == null ? 0 : machine.getEnergyUpgradeCount();
     }
 
     public void setUpgradePageActive(boolean active) {
@@ -190,7 +210,8 @@ public final class ElectricGrindingMachineMenu extends AbstractContainerMenu imp
     }
 
     public BlockPos getBlockPos() {
-        return machine.getBlockPos();
+        // 空菜单没有真实坐标，返回 ZERO 而不是 NPE（同 GrillMenu 的 tile == null 写法）。
+        return machine == null ? BlockPos.ZERO : machine.getBlockPos();
     }
 
     public int getRedstoneControl() {
@@ -198,8 +219,8 @@ public final class ElectricGrindingMachineMenu extends AbstractContainerMenu imp
     }
 
     private static final class PowerSlot extends SlotItemHandler implements IVirtualSlot {
-        private PowerSlot(ElectricGrindingMachineBlockEntity machine, int slot, int x, int y, ElectricGrindingMachineMenu menu) {
-            super(machine.getItems(), slot, x, y);
+        private PowerSlot(ItemStackHandler handler, int slot, int x, int y, ElectricGrindingMachineMenu menu) {
+            super(handler, slot, x, y);
         }
 
         @Override
@@ -242,8 +263,8 @@ public final class ElectricGrindingMachineMenu extends AbstractContainerMenu imp
     }
 
     private static final class OutputSlot extends SlotItemHandler implements IVirtualSlot {
-        private OutputSlot(ElectricGrindingMachineBlockEntity machine, int slot, int x, int y) {
-            super(machine.getItems(), slot, x, y);
+        private OutputSlot(ItemStackHandler handler, int slot, int x, int y) {
+            super(handler, slot, x, y);
         }
 
         @Override

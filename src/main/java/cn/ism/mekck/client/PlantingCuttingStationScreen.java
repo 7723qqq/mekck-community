@@ -367,8 +367,13 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
     }
 
     private Direction getMachineFacing() {
+        // 空菜单（BE 缺失）：没有方块状态可读，朝向按 NORTH 兜底（同 M30 的中央厨房屏幕）。
+        var machine = menu.getMachine();
+        if (machine == null) {
+            return Direction.NORTH;
+        }
         if (minecraft != null && minecraft.level != null) {
-            BlockState state = minecraft.level.getBlockState(menu.getBlockPos());
+            BlockState state = minecraft.level.getBlockState(machine.getBlockPos());
             if (state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
                 return state.getValue(BlockStateProperties.HORIZONTAL_FACING);
             }
