@@ -41,9 +41,12 @@ import static org.junit.Assert.fail;
  * <ul>
  *   <li><b>表不存在</b> → 方块破坏后什么都不掉（烹饪工厂 12 档曾整体缺失）；</li>
  *   <li><b>表存在但没有 copy_nbt</b> → 掉一个裸方块，库存/能量/升级卡全丢；</li>
- *   <li><b>target 不写 {@code mekData.} 前缀</b> → 放下时 {@code setPlacedBy} 读不到，同样全丢。</li>
+ *   <li><b>target 不写 {@code mekData.} 前缀</b> → 放下时 {@code setPlacedBy} 读不到，同样全丢；</li>
+ *   <li><b>表搬了但读侧没人读</b> → {@code setPlacedBy} 的槽位分支要求方块物品实现
+ *       {@code IItemSustainedInventory}（本模组没有），{@code Items} 必须由 tile 的
+ *       {@code readSustainedData} 自己读回；少了这一步库存仍然全丢（M28 复审 P1-1）。</li>
  * </ul>
- * <p>三者都是<b>静默</b>的：编译通过、进游戏不报错，只在玩家挖掉机器时才发作。</p>
+ * <p>四者都是<b>静默</b>的：编译通过、进游戏不报错，只在玩家挖掉机器时才发作。</p>
  *
  * <h3>覆盖范围</h3>
  * <p>工厂家族由 {@link #everyMigratedFactoryTierHasALootTable()} 等按档位 × 家族清单覆盖；
@@ -571,5 +574,53 @@ public class TestFactoryLootTableSustainData {
                 offenders.add(id + "：缺少 " + required + " 的搬运 op（writeSustainedData 写了它）");
             }
         }
+    }
+
+    // ── 读侧护栏：表搬过去的数据必须有人读回来 ────────────────────────────
+
+    /**
+     * 读侧护栏：切菜机 tile 的 {@code readSustainedData} 必须自己把 {@code Items} 读回来。
+     *
+     * <h3>为什么表侧护栏不够（M28 复审 P1-1 的形态）</h3>
+     * <p>{@code BlockMekanism.setPlacedBy} 的槽位恢复分支要求方块物品实现
+     * {@code IItemSustainedInventory}，而本模组的方块物品是 {@code MekCkBlockItem}，
+     * 没有实现该接口 ⇒ 该分支恒被跳过。战利品表把 {@code Items} 搬进
+     * {@code mekData.Items} 之后，必须由 tile 自己在 {@code readSustainedData} 里
+     * 调 {@code DataHandlerUtils.readContainers} 读回，否则「挖掉再放下」库存仍然全丢。
+     * 表侧护栏（{@link #everyMigratedMekBlockHasALootTableThatCopiesItsSustainData()}）
+     * 只查表、查不到读侧，这正是 P1-1 漏网的原因。</p>
+     *
+     * <h3>变异点</h3>
+     * <p>删掉 {@code readSustainedData} 里的 {@code Items} 读回 → 本测试红。</p>
+     */
+    @Test
+    public void cuttingMachineTileReadsItemsBackFromSustainedData() throws IOException {
+        String src = TestSourceText.read(
+                "src/main/java/cn/ism/mekck/machine/cutting/UniversalCuttingMachineTile.java");
+        String body = TestSourceText.methodBody(src, "void readSustainedData(");
+        assertFalse("UniversalCuttingMachineTile 里找不到 readSustainedData", body.isEmpty());
+        assertTrue("readSustainedData 没有调用 readContainers —— 战利品表的 Items op 是死键，"
+                + "挖掉再放下库存全丢", body.contains("readContainers"));
+        assertTrue("readSustainedData 没有读 \"Items\" 键", body.contains("\"Items\""));
+    }
+
+    /**
+     * 掉落物 tooltip 必须认新格式的 {@code mekData.Items}。
+     *
+     * <p>{@code MekCkBlockItem.hasSustainedItems} 原先只读旧格式
+     * {@code BlockEntityTag.Items.Items}；Mek 迁移后的战利品表把库存写进
+     * {@code mekData.Items}，只认旧格式会让新掉落物的「存有物品」显示「否」。</p>
+     *
+     * <h3>变异点</h3>
+     * <p>删掉 {@code mekData} 分支 → 本测试红。</p>
+     */
+    @Test
+    public void blockItemTooltipRecognizesMekDataItems() throws IOException {
+        String src = TestSourceText.read("src/main/java/cn/ism/mekck/item/MekCkBlockItem.java");
+        String body = TestSourceText.methodBody(src, "boolean hasSustainedItems(");
+        assertFalse("MekCkBlockItem 里找不到 hasSustainedItems", body.isEmpty());
+        assertTrue("hasSustainedItems 没有识别新格式 mekData —— 新掉落物 tooltip「存有物品」会显示「否」",
+                body.contains("\"mekData\""));
+        assertTrue("hasSustainedItems 没有读 \"Items\" 键", body.contains("\"Items\""));
     }
 }

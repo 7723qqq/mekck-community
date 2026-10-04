@@ -30,6 +30,7 @@ import mekanism.common.tile.interfaces.ISustainedData;
 import mekanism.common.tile.prefab.TileEntityConfigurableMachine;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
@@ -295,8 +296,31 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
         tag.putBoolean("PulseRunning", pulseRunning);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <h3>为什么槽位要在这里自己读（{@code Items}）</h3>
+     * {@code BlockMekanism.setPlacedBy} 恢复槽位有两条分支：{@code SubstanceType} 那条
+     * 只管能量/流体/气体等容器（枚举里没有 ITEM）；另一条要求方块物品实现
+     * {@code IItemSustainedInventory}（Mek 自己的 {@code ItemBlockMachine} 实现了），
+     * 而本模组的方块物品是 {@code MekCkBlockItem}，<b>没有</b>实现该接口 ⇒ 该分支恒被跳过。
+     * 因此战利品表 {@code copy_nbt} 搬进 {@code mekData.Items} 的库存必须由本方法自己读回，
+     * 否则「挖掉再放下」输入/输出槽仍然全丢（与 {@code GrillBlockEntity}、
+     * {@code WineCellarBlockEntity} 同款）。
+     *
+     * <p><b>先判有没有 {@code Items} 再动手</b>：配置卡粘贴时走
+     * {@code setConfigurationData → loadGeneralPersistentData → 本方法}，
+     * 那份载荷里不会有 {@code Items}；无条件读容器会把目标机器的库存按空表清掉。</p>
+     */
     @Override
     public void readSustainedData(CompoundTag tag) {
+        if (tag == null) {
+            return;
+        }
+        if (tag.contains("Items", Tag.TAG_LIST)) {
+            mekanism.api.DataHandlerUtils.readContainers(getInventorySlots(null),
+                    tag.getList("Items", Tag.TAG_LIST));
+        }
         progress = tag.getInt("Progress");
         orderRecipeId = tag.contains("OrderRecipeIdKey")
                 ? ResourceLocation.tryParse(tag.getString("OrderRecipeIdKey")) : null;
