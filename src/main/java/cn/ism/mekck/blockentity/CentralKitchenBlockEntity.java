@@ -177,8 +177,6 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     public static final int ENERGY_PER_THREAD = 20;
     /** 单个配方批次的基础加工时间（刻）；实际耗时按线程数 × 并行数折算。 */
     public static final int STEP_TIME_PER_CRAFT = 200;
-    /** 定向热交换系数（每 tick 传递的温差比例）。 */
-    private static final double HEAT_EXCHANGE_RATE = 0.05;
 
     // ================== 流体 / 气体 ==================
     /** 独立流体罐数量（水 / 奶 / 油 / 其它）。 */
@@ -201,9 +199,12 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     private final mekanism.api.chemical.gas.Gas nutrientGas;
 
     // ================== 侧面配置（物品 / 流体 / 气体） ==================
-    private final cn.ism.mekck.SideMode[] itemSideConfig = new cn.ism.mekck.SideMode[6];
-    private final cn.ism.mekck.SideMode[] fluidSideConfig = new cn.ism.mekck.SideMode[6];
-    private final cn.ism.mekck.SideMode[] gasSideConfig = new cn.ism.mekck.SideMode[6];
+    // 包级可见（原 private）：侧配读写搬到了同包的 {@link CentralKitchenSideConfig}，
+    // 三个数组仍是本机的存档字段（saveAdditional/load 编解码、getCapability/tickFluidIO 直读），
+    // 故数组不搬，仅放宽可见性供伴生类按下标读写。
+    final cn.ism.mekck.SideMode[] itemSideConfig = new cn.ism.mekck.SideMode[6];
+    final cn.ism.mekck.SideMode[] fluidSideConfig = new cn.ism.mekck.SideMode[6];
+    final cn.ism.mekck.SideMode[] gasSideConfig = new cn.ism.mekck.SideMode[6];
     /** 流体自动 IO 每次转移量（mb）。 */
     /**
      * 流体自动 IO 每面每 tick 的转移量（mB）。
@@ -224,6 +225,16 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     private final cn.ism.mekck.util.AutoGasIO gasAutoIO;
     /** 物品自动 IO（抽取至存储区 / 弹出产物）。 */
     private final cn.ism.mekck.util.AutoIO itemAutoIO;
+
+    // ── 拆分出的子系统（均不持有自己的状态，构造见 {@link #CentralKitchenBlockEntity}）──
+    /** 定向热交换（见 {@link CentralKitchenHeatTransfer}）。 */
+    private final CentralKitchenHeatTransfer heatTransfer;
+    /** 存储浏览器增量同步的触发端（见 {@link CentralKitchenStorageSync}）。 */
+    private final CentralKitchenStorageSync storageSync;
+    /** AE2 网络拉料规格（见 {@link CentralKitchenNetworkPull}）。 */
+    private final CentralKitchenNetworkPull networkPull;
+    /** 物品 / 流体 / 气体侧配读写（见 {@link CentralKitchenSideConfig}）。 */
+    private final CentralKitchenSideConfig sideConfig;
 
     private final net.minecraftforge.energy.EnergyStorage energy =
             new net.minecraftforge.energy.EnergyStorage(ENERGY_CAPACITY, MAX_RECEIVE, MAX_RECEIVE) {
@@ -306,6 +317,10 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         this.itemAutoIO = new cn.ism.mekck.util.AutoIO(this,
                 new int[][]{{STORAGE_START, STORAGE_SLOTS}},
                 new int[][]{{OUTPUT_START, OUTPUT_SLOTS}});
+        this.heatTransfer = new CentralKitchenHeatTransfer(this);
+        this.storageSync = new CentralKitchenStorageSync(this);
+        this.networkPull = new CentralKitchenNetworkPull(this);
+        this.sideConfig = new CentralKitchenSideConfig(this);
     }
 
     // ================== 温度 ==================
@@ -337,7 +352,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         kitchen.heatComponent.tick(level, pos);
         kitchen.coldComponent.tick(level, pos);
         // 定向热交换：正面冷端吸热、背面热端放热（与急冻制冰机一致）
-        kitchen.applyDirectedHeat(level, pos, state);
+        kitchen.heatTransfer.applyDirectedHeat(level, pos, state);
         // 侧面配置驱动的自动输入输出（物品 / 流体 / 气体）
         if (kitchen.itemAutoIO.run(level, pos, kitchen.itemSideConfig, kitchen.items)) kitchen.setChanged();
         if (kitchen.tickFluidIO(level, pos)) kitchen.setChanged();
@@ -349,26 +364,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         // 存储浏览器增量同步（修 I-N4）：存储区在开界面期间被 AutoIO / 订单 / AE2
         // 改动时，把新的一页推给正在看这个界面的玩家。
         // 版本号没变时 pushStorageSync 立即返回，节流再兜住 AutoIO 每 tick 改动的情形。
-        kitchen.syncOpenStorageBrowsers();
-    }
-
-    /**
-     * 给所有正开着本厨房界面的玩家补推一页存储浏览器快照。
-     *
-     * <p>不缓存玩家列表：中央厨房不是高频方块，遍历 {@code level.players()} 的成本
-     * 远低于维护一份「谁开着哪个界面」的注册表（后者要在菜单关闭时可靠注销，
-     * 漏注销就是给已关界面的人发包）。</p>
-     */
-    private void syncOpenStorageBrowsers() {
-        if (level == null || !(level instanceof net.minecraft.server.level.ServerLevel serverLevel)) {
-            return;
-        }
-        for (var player : serverLevel.players()) {
-            if (player.containerMenu instanceof cn.ism.mekck.menu.CentralKitchenMenu menu
-                    && menu.getMachine() == this) {
-                menu.tickStorageSync();
-            }
-        }
+        kitchen.storageSync.syncOpenStorageBrowsers();
     }
 
     // ================== 订单系统（阶段 4） ==================
@@ -1144,22 +1140,12 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     }
 
     /**
-     * 网络拉料目标：当前**订单任务链**所需的叶子材料。
+     * 网络拉料目标：当前**订单任务链**所需的叶子材料（实现见 {@link CentralKitchenNetworkPull}）。
      * 没有订单时返回空（中央厨房默认为下单驱动，不主动从网络补料）。
      */
     @Override
-    public java.util.List<cn.ism.mekck.util.AE2InputSpec> getNetworkPullInputs() {
-        java.util.List<cn.ism.mekck.util.AE2InputSpec> specs = new java.util.ArrayList<>();
-        for (var order : orders) {
-            var step = order.currentStep();
-            if (step == null) continue;
-            for (var in : step.inputs) {
-                if (in.isEmpty()) continue;
-                specs.add(new cn.ism.mekck.util.AE2InputSpec(
-                        net.minecraft.world.item.crafting.Ingredient.of(in), in.getCount()));
-            }
-        }
-        return specs;
+    public java.util.List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
+        return networkPull.networkPullInputs();
     }
 
     @Override
@@ -1207,9 +1193,7 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     }
 
     public void setItemSideMode(Direction dir, cn.ism.mekck.SideMode mode) {
-        if (dir == null) return;
-        itemSideConfig[dir.ordinal()] = mode;
-        setChanged();
+        sideConfig.setItemSideMode(dir, mode);
     }
 
     /** 流体自动输入输出：抽取面从相邻抽入、弹出面向相邻推送（每面每刻 1000 mb）。 */
@@ -1285,27 +1269,23 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
     }
 
     public cn.ism.mekck.SideMode getItemSideMode(Direction dir) {
-        return itemSideConfig[dir.ordinal()];
+        return sideConfig.getItemSideMode(dir);
     }
 
     public void setFluidSideMode(Direction dir, cn.ism.mekck.SideMode mode) {
-        if (dir == null) return;
-        fluidSideConfig[dir.ordinal()] = mode;
-        setChanged();
+        sideConfig.setFluidSideMode(dir, mode);
     }
 
     public cn.ism.mekck.SideMode getFluidSideMode(Direction dir) {
-        return fluidSideConfig[dir.ordinal()];
+        return sideConfig.getFluidSideMode(dir);
     }
 
     public void setGasSideMode(Direction dir, cn.ism.mekck.SideMode mode) {
-        if (dir == null) return;
-        gasSideConfig[dir.ordinal()] = mode;
-        setChanged();
+        sideConfig.setGasSideMode(dir, mode);
     }
 
     public cn.ism.mekck.SideMode getGasSideMode(Direction dir) {
-        return gasSideConfig[dir.ordinal()];
+        return sideConfig.getGasSideMode(dir);
     }
 
     public cn.ism.mekck.util.MultiFluidHandler getFluidTank() {
@@ -1360,38 +1340,6 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         int n = 0;
         for (var list : threads.values()) n += list.size();
         return n;
-    }
-
-    /**
-     * 定向热交换（与急冻制冰机一致）：**{@code FACING} 侧为冷端、其反向为热端**。
-     * 面配置面板把 {@code FACING} 侧标为「背面」——即**面板里「背面」= 冷端、「正面」= 热端**。
-     * 两个温度各自与环境温差成比例地向相邻热力设备传递：冷端低于环境时吸热、热端高于环境时放热。
-     * 其余四个面不参与热交换。
-     */
-    private void applyDirectedHeat(Level level, BlockPos pos, BlockState state) {
-        Direction facing = state.hasProperty(cn.ism.mekck.block.CentralKitchenBlock.FACING)
-                ? state.getValue(cn.ism.mekck.block.CentralKitchenBlock.FACING) : Direction.NORTH;
-        double ambient = mekanism.api.heat.HeatAPI.getAmbientTemp(level, pos);
-        // 冷端（正面）：温度低于环境时从相邻设备吸热（负值 = 邻居被吸热）
-        double coldDiff = coldComponent.getTemperature() - ambient;
-        transferToNeighbour(level, pos, facing, coldDiff * HEAT_EXCHANGE_RATE);
-        // 热端（背面）：温度高于环境时向相邻设备放热
-        double heatDiff = heatComponent.getTemperature() - ambient;
-        transferToNeighbour(level, pos, facing.getOpposite(), heatDiff * HEAT_EXCHANGE_RATE);
-    }
-
-    private void transferToNeighbour(Level level, BlockPos pos, Direction side, double heat) {
-        if (Math.abs(heat) < 1.0e-3) return;
-        BlockPos neighbour = pos.relative(side);
-        if (!level.hasChunkAt(neighbour)) return;
-        var be = level.getBlockEntity(neighbour);
-        if (be == null) return;
-        be.getCapability(mekanism.common.capabilities.Capabilities.HEAT_HANDLER, side.getOpposite())
-                .ifPresent(handler -> {
-                    double current = handler.getTotalTemperature();
-                    if (!Double.isFinite(current) || current < 0.0 || current > 1.0e9) return;
-                    handler.handleHeat(heat);
-                });
     }
 
     // ================== 机器模块能力 ==================

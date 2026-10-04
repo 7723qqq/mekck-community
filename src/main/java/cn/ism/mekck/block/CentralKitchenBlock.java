@@ -13,7 +13,6 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
@@ -99,7 +98,7 @@ public class CentralKitchenBlock extends BaseEntityBlock {
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock()) && !cn.ism.mekck.util.TierInstallerHandler.isUpgrading() && !level.isClientSide
+        if (!state.is(newState.getBlock()) && !TierInstallerHandler.isUpgrading() && !level.isClientSide
                 && level.getBlockEntity(pos) instanceof CentralKitchenBlockEntity kitchen) {
             // 内容物走大堆叠安全路径掉落（见 BigStackDrops），随后再把方块本体连
             // 能量/模块/侧配一起掉出：此时槽位已清空，不会与上面的实体重复。
