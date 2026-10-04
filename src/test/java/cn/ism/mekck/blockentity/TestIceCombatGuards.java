@@ -70,22 +70,29 @@ public class TestIceCombatGuards {
     // ================== 2. Skewering 签子返还 / Max 按钮 ==================
 
     /**
-     * tool 返还块必须带 {@code toolCount > 0} 守卫。
+     * tool 返还必须来自「本次实际扣掉的签子」记录，不得读输入槽 0。
      *
      * <p>自有 8 条配方的序列化器写死 {@code toolCount = 0}（签子不消耗），
-     * {@code consumeInput(tool, 0)} 不消耗任何东西；随后的返还块却无条件把 slot 0 的
+     * {@code consumeInput(tool, 0)} 不消耗任何东西；旧返还块却无条件把 slot 0 的
      * 物品复制 1 个进 RETURN_SLOT ⇒ <b>每批 +1 个签子</b>（数据驱动配方若 tool 是贵重物品
-     * 则复制贵重物品）。工厂执行器 {@code SkeweringFactoryExecutor} 只按 toolCount 消耗、
-     * 没有返还逻辑，本机应与它同口径。</p>
+     * 则复制贵重物品）。M13 加的 {@code toolCount > 0} 守卫只挡住了这一路：
+     * 扣料位置无关（输入槽 + 存储槽），toolCount&gt;0 且签子不在槽 0 时，
+     * 读槽 0 返还的是<b>另一种物品</b>（物品复制）。M29 起返还按扣料记录落槽
+     * （{@code consumeInput} 返回被扣的栈，合并走工厂执行器
+     * {@code SkeweringFactoryExecutor.returnPayload}，两边同口径）。</p>
      */
     @Test
     public void skeweringToolReturnOnlyWhenConsumed() throws IOException {
         String src = be("SkeweringMachineBlockEntity");
         String body = body(src, "private void completeRecipe(Level level, Recipe<?> recipe) {",
                 "SkeweringMachineBlockEntity");
-        assertTrue("tool 返还块必须带 toolCount > 0 守卫：自有配方 toolCount = 0（签子不消耗），"
-                        + "无条件返还等于每批复制 1 个签子",
-                body.contains("!tool.isEmpty() && toolCount > 0"));
+        assertTrue("tool 扣料必须记录被扣的栈（consumeInput 返回记录）",
+                body.contains("consumeInput(tool, toolCount)"));
+        assertTrue("tool 返还必须来自本次扣料记录（consumeInput 的返回值）："
+                        + "扣料位置无关，读槽 0 会在签子不在槽 0 时复制另一种物品",
+                body.contains("returnPayload(consumedTool)"));
+        assertFalse("tool 返还不得再读输入槽 0（旧错配形态）",
+                body.contains("getStackInSlot(INPUT_SLOT_START)"));
     }
 
     /**

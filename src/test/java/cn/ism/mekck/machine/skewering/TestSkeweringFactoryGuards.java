@@ -1,29 +1,38 @@
 package cn.ism.mekck.machine.skewering;
 
 import cn.ism.mekck.TestSourceText;
+import cn.ism.mekck.compat.KaleidoscopeGrillingCompat;
 import mekanism.api.inventory.IInventorySlot;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.Recipe;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.List;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * 穿串工厂执行器的两条护栏：<b>返还闸门</b>与<b>产物容量判定</b>。
+ * 穿串工厂执行器的三条护栏：<b>返还闸门</b>、<b>返还来源</b>与<b>产物容量判定</b>。
  *
- * <h3>它钉的是哪两个 bug</h3>
+ * <h3>它钉的是哪几个 bug</h3>
  * <ol>
  *   <li><b>返还槽无条件复制签子</b>。{@code run()} 原先无条件调 {@code returnPayload}：
  *       自有配方序列化器写死 {@code ingredientCount = 0}（签子不消耗），返还的却是
  *       「输入槽 0 的整叠 × 批量」⇒ 每批把 batch 个签子复制进返还槽（物品复制，
- *       与 M13 修的机器侧同型）。</li>
+ *       与 M13 修的机器侧同型）。M24 加了 {@code toolCount > 0} 闸门。</li>
+ *   <li><b>返还复制的是槽 0 的另一种物品</b>。闸门只挡住了 toolCount=0 那一路：
+ *       toolCount&gt;0 且签子不在槽 0 时（扣料位置无关，签子放存储区照样扣得动），
+ *       返还的仍是「槽 0 的整叠 × 批量」——主料被复制。M29 修复：返还按扣料记录落槽，
+ *       内容 = 本次实际消耗的签子（类型与数量）。</li>
  *   <li><b>canProcess 不判产物容量</b>。产物槽满时它仍返回 true，{@code workCycle}
  *       照常扣电、进度条照走，而 {@code run} 在落槽前直接 {@code return} ——
  *       玩家看不到产出、看不到告警，电却一直在掉（与 M18 修的烹饪侧同型）。</li>
@@ -32,12 +41,14 @@ import static org.junit.Assert.assertTrue;
  * <h3>为什么护栏分两半</h3>
  * 真 tile 在裸 JVM 里造不出来，{@code canProcess} 又需要 {@code Level} 与配方，所以：
  * <ul>
- *   <li><b>行为断言</b>打在 {@link SkeweringFactoryExecutor#canFitBatch} 上 ——
- *       它是 {@code canProcess} 与 {@code run} 共用的容量判据，全部输入就是
- *       「产物槽 + 单份产物 + 批量 + 返还预览」，用假槽位即可覆盖「满 / 差一点 / 装得下」；</li>
- *   <li><b>接线断言</b>读源码：{@code canProcess} 与 {@code run} 都必须调它，
- *       且返还的唯一产出点 {@code returnPayload} 必须带 {@code toolCountOf(recipe) > 0}
- *       闸门。少了这一半，把闸门或容量判定删掉时行为断言仍会全绿。</li>
+ *   <li><b>行为断言</b>打在 {@link SkeweringFactoryExecutor#canFitBatch} 与
+ *       {@link SkeweringFactoryExecutor#consumeOne} / {@link SkeweringFactoryExecutor#returnPayload}
+ *       上 —— 容量判据的全部输入就是「产物槽 + 单份产物 + 批量 + 返还预览」，
+ *       返还链路的全部输入就是「扫描槽 + 签子配料 + 数量」，用假槽位即可覆盖
+ *       「满 / 差一点 / 装得下」与「签子不在槽 0」的反例形态；</li>
+ *   <li><b>接线断言</b>读源码：{@code canProcess} 与 {@code run} 都必须调容量判据，
+ *       且返还的唯一产出点必须带 {@code toolCountOf(recipe) > 0} 闸门、必须来自扣料记录。
+ *       少了这一半，把闸门或容量判定删掉时行为断言仍会全绿。</li>
  * </ul>
  */
 public class TestSkeweringFactoryGuards {
@@ -193,26 +204,145 @@ public class TestSkeweringFactoryGuards {
         assertFalse("批量 <= 0", SkeweringFactoryExecutor.canFitBatch(outputs, beef(1), 0, ItemStack.EMPTY));
     }
 
+    // ── 行为：返还只落本次实际消耗的签子（M29 反例形态） ──────────────
+
+    /**
+     * 森罗虚拟配方同形的配方：执行器反射读 public 字段 {@code tool} / {@code ingredientCount}。
+     *
+     * <p>用真 {@link KaleidoscopeGrillingCompat.VirtualRecipe} 而不是测试自造类，
+     * 是因为「签子 = {@code Ingredient.of(STICK)}、toolCount = 1」正是 finding 里
+     * 那条可达路径的形状。</p>
+     */
+    private static Recipe<?> threadingRecipe(Ingredient tool, int toolCount) {
+        return new KaleidoscopeGrillingCompat.VirtualRecipe(
+                new ResourceLocation("mekck", "threading/test"),
+                tool, Ingredient.of(Items.COOKED_BEEF), toolCount, null, 0,
+                new ItemStack(Items.COOKED_BEEF));
+    }
+
+    /**
+     * 反例形态：主料在输入槽 0、签子在存储槽。
+     *
+     * <p>扣料位置无关（扫描集合 = 3 输入槽 + 81 存储槽），所以签子照样被扣；
+     * 返还必须是<b>被扣掉的签子</b>（类型与数量），而不是槽 0 里恰好放着的主料 ——
+     * 旧写法读槽 0 复制整叠，这条路径上复制的是主料（物品复制）。</p>
+     */
+    @Test
+    public void returnFollowsConsumedToolNotSlotZero() {
+        IInventorySlot slot0 = new TestSlot(beef(64), 64);
+        IInventorySlot storage = new TestSlot(new ItemStack(Items.STICK, 10), 64);
+        List<IInventorySlot> scan = List.of(slot0, storage);
+        Ingredient stick = Ingredient.of(Items.STICK);
+
+        // 预览（canProcess / run 的容量判据用）：批量 4 ⇒ 预览是 4 根签子
+        ItemStack preview = SkeweringFactoryExecutor.returnPreview(threadingRecipe(stick, 1), scan, 4);
+        assertTrue("预览必须是实际会被扣的签子，不是槽 0 的主料",
+                ItemStack.isSameItemSameTags(preview, new ItemStack(Items.STICK)));
+        assertEquals("预览数量 = 本批要扣的签子数（toolCount × batch）", 4, preview.getCount());
+
+        // 真扣料：记录 = 签子；返还 = 记录合并
+        List<ItemStack> consumed = SkeweringFactoryExecutor.consumeOne(scan, stick, 4, false);
+        ItemStack returned = SkeweringFactoryExecutor.returnPayload(consumed);
+        assertTrue("返还必须是本次实际扣掉的签子",
+                ItemStack.isSameItemSameTags(returned, new ItemStack(Items.STICK)));
+        assertEquals("返还数量必须等于实际扣掉的数量", 4, returned.getCount());
+        assertEquals("槽 0 的主料一个都不能少", 64, slot0.getStack().getCount());
+        assertEquals("存储槽的签子被扣掉 4 根", 6, storage.getStack().getCount());
+    }
+
+    /** 正常形态：签子在槽 0 ⇒ 返还仍是签子（修复不能把正常路径改坏）。 */
+    @Test
+    public void toolInSlotZeroStillReturnsTool() {
+        IInventorySlot slot0 = new TestSlot(new ItemStack(Items.STICK, 10), 64);
+        IInventorySlot slot1 = new TestSlot(beef(64), 64);
+        List<IInventorySlot> scan = List.of(slot0, slot1);
+        Ingredient stick = Ingredient.of(Items.STICK);
+
+        ItemStack preview = SkeweringFactoryExecutor.returnPreview(threadingRecipe(stick, 1), scan, 3);
+        assertTrue(ItemStack.isSameItemSameTags(preview, new ItemStack(Items.STICK)));
+        assertEquals(3, preview.getCount());
+
+        List<ItemStack> consumed = SkeweringFactoryExecutor.consumeOne(scan, stick, 3, false);
+        ItemStack returned = SkeweringFactoryExecutor.returnPayload(consumed);
+        assertTrue(ItemStack.isSameItemSameTags(returned, new ItemStack(Items.STICK)));
+        assertEquals(3, returned.getCount());
+        assertEquals("槽 0 的签子被扣掉 3 根", 7, slot0.getStack().getCount());
+        assertEquals("槽 1 的主料一个都不能少", 64, slot1.getStack().getCount());
+    }
+
+    /** 记录跨多槽（同物）⇒ 合并计数；返还数量 = 实际扣掉的总数。 */
+    @Test
+    public void consumedRecordMergesAcrossSlots() {
+        IInventorySlot first = new TestSlot(new ItemStack(Items.STICK, 2), 64);
+        IInventorySlot second = new TestSlot(new ItemStack(Items.STICK, 5), 64);
+        List<IInventorySlot> scan = List.of(first, second);
+
+        List<ItemStack> consumed = SkeweringFactoryExecutor.consumeOne(scan, Ingredient.of(Items.STICK), 6, false);
+        ItemStack returned = SkeweringFactoryExecutor.returnPayload(consumed);
+        assertTrue(ItemStack.isSameItemSameTags(returned, new ItemStack(Items.STICK)));
+        assertEquals("跨槽扣掉的 6 根必须合并成一个返还栈", 6, returned.getCount());
+        assertTrue("第一槽被扣空", first.getStack().isEmpty());
+        assertEquals("第二槽剩 1 根", 1, second.getStack().getCount());
+    }
+
+    /** 闸门行为：toolCount = 0（自有配方）或签子配料为空 ⇒ 预览为空，不返还。 */
+    @Test
+    public void unconsumedToolIsNotReturned() {
+        List<IInventorySlot> scan = List.of(new TestSlot(new ItemStack(Items.STICK, 10), 64));
+
+        ItemStack zeroCount = SkeweringFactoryExecutor.returnPreview(
+                threadingRecipe(Ingredient.of(Items.STICK), 0), scan, 4);
+        assertTrue("toolCount = 0 时不得返还（自有配方签子不消耗，无条件返还等于复制）",
+                zeroCount.isEmpty());
+
+        ItemStack emptyTool = SkeweringFactoryExecutor.returnPreview(
+                threadingRecipe(Ingredient.EMPTY, 1), scan, 4);
+        assertTrue("签子配料为空时不得返还", emptyTool.isEmpty());
+    }
+
     // ── 接线：返还闸门 + canProcess/run 共用同一容量判据 ────────────────
 
     /**
-     * 源码不变量：返还的唯一产出点 {@code returnPayload} 必须带
-     * {@code toolCountOf(recipe) > 0} 闸门（且签子配料非空），与机器侧同款。
+     * 源码不变量：返还的唯一闸门在 {@code returnPreview} ——
+     * {@code toolCountOf(recipe) > 0} 且签子配料非空，与机器侧同款。
      *
      * <p>自有配方写死 {@code ingredientCount = 0}：闸门一旦被删，每批把 batch 个签子
      * 复制进返还槽 —— 物品复制，且没有任何日志。</p>
      */
     @Test
-    public void returnPayloadIsGatedByToolCount() throws IOException {
+    public void returnPreviewIsGatedByToolCount() throws IOException {
         String src = TestSourceText.read(SKEWERING_EXECUTOR);
         String body = TestSourceText.methodBody(
-                src, "private ItemStack returnPayload(Recipe<?> recipe, List<IInventorySlot> inputs, int batch)");
-        assertFalse("找不到 returnPayload（改名了就同步更新本测试）", body.isEmpty());
+                src, "static ItemStack returnPreview(Recipe<?> recipe, List<IInventorySlot> scan, int batch)");
+        assertFalse("找不到 returnPreview（改名了就同步更新本测试）", body.isEmpty());
         assertTrue("返还必须受 toolCountOf(recipe) > 0 门控：自有配方 toolCount = 0（签子不消耗），"
                         + "无条件返还等于每批复制 batch 个签子",
                 body.contains("toolCountOf(recipe) > 0"));
         assertTrue("返还还必须要求签子配料非空（与机器侧 !tool.isEmpty() 同款）",
                 body.contains("!toolOf(recipe).isEmpty()"));
+        assertTrue("返还预览必须在扫描集合上预演扣料（consumeOne），不能读输入槽 0："
+                        + "扣料位置无关，签子不在槽 0 时读槽 0 会复制另一种物品",
+                body.contains("consumeOne("));
+        assertFalse("返还预览不得读输入槽 0（旧错配形态）", body.contains("inputs.get(0)"));
+    }
+
+    /**
+     * 源码不变量：{@code run} 的返还必须来自本次扣料记录，而不是任何槽的当前内容。
+     *
+     * <p>扣料位置无关（3 输入槽 + 81 存储槽），「读槽 0」与「读记录」在签子不在槽 0 时
+     * 给出完全不同的物品 —— 前者复制主料（物品复制），后者才是签子本身。</p>
+     */
+    @Test
+    public void runReturnsTheConsumedRecord() throws IOException {
+        String src = TestSourceText.read(SKEWERING_EXECUTOR);
+        String run = TestSourceText.methodBody(
+                src, "private void run(Level level, Recipe<?> recipe, int batch, List<IInventorySlot> scan)");
+        assertFalse("找不到 run", run.isEmpty());
+        assertTrue("run 必须把扣料记录交给 returnPayload（返还 = 实际消耗）",
+                run.contains("returnPayload(consumedTool)"));
+        assertTrue("run 必须用 consume 的记录（consume 返回被扣的签子栈）",
+                run.contains("consume(scan, recipe, batch)"));
+        assertFalse("run 的返还不得再读输入槽 0（旧错配形态）", run.contains("inputs.get(0)"));
     }
 
     /**
@@ -234,8 +364,8 @@ public class TestSkeweringFactoryGuards {
         assertTrue("canProcess 必须做容量判定，否则产物满时仍扣电且无告警",
                 canProcess.contains("canFitBatch("));
         assertTrue("canProcess 必须把返还物也纳入容量判定（与 run 同口径）",
-                canProcess.contains("returnPayload("));
+                canProcess.contains("returnPreview("));
         assertTrue("run 必须与 canProcess 共用同一容量判据", run.contains("canFitBatch("));
-        assertTrue("run 的返还必须走带闸门的 returnPayload", run.contains("returnPayload("));
+        assertTrue("run 的返还必须走带闸门的 returnPreview", run.contains("returnPreview("));
     }
 }

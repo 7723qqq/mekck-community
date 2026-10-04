@@ -128,7 +128,7 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
             return false;
         }
         return canFitBatch(owner.getOutputSlots(), recipe.getResultItem(level.registryAccess()), batch,
-                returnPayload(recipe, owner.getInputSlots(), batch));
+                returnPreview(recipe, scan, batch));
     }
 
     /**
@@ -343,14 +343,14 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
     /**
      * 扣料 → 落产物 → 落返还槽 → 推进订单。
      *
-     * <p>顺序与旧 {@code completeRecipe} 逐字对应：<b>先扣料，再从输入槽 0 取返还</b>
-     * （旧实现第 900-909 行就是先 {@code consumeIngredients} 再读 {@code getStackInSlot(0)}）。
-     * 顺序反了的话，签子被扣空时返还槽就拿不到东西。</p>
+     * <p><b>返还 = 本次实际扣掉的签子</b>：{@link #consume} 记录被扣的签子栈，
+     * {@link #returnPayload} 按记录落槽（类型与数量都来自记录）。扣料位置无关
+     * （3 输入槽 + 81 存储槽），所以签子放在存储区或槽 1/2 时，返还的仍是签子本身，
+     * 而不是输入槽 0 里恰好放着的另一种物品 —— 旧写法读槽 0 复制整叠，
+     * 在「主料在槽 0、签子在存储区」时复制主料（物品复制，M29 修复）。</p>
      *
-     * <p><b>返还受 {@link #returnPayload} 的 toolCount &gt; 0 闸门约束</b>：自有配方
-     * 序列化器写死 {@code ingredientCount = 0}（签子不消耗），无条件返还等于每批把
-     * batch 个签子复制进返还槽（物品复制）。闸门与机器侧
-     * {@code SkeweringMachineBlockEntity.completeRecipe} 同款。</p>
+     * <p>返还槽的容量在扣料<b>之前</b>判：{@link #returnPreview} 预演同一套走位，
+     * 否则会出现「料已扣、返不下」的白工。</p>
      *
      * <p>与旧实现的一处<b>刻意</b>不同：旧 {@code insertIntoSlot} 在槽里是别的物品时
      * 直接丢弃、在槽空时无视容量直接塞满。这里走共用的
@@ -368,17 +368,17 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
             return;
         }
         // 返还槽的容量要在扣料<b>之前</b>判，否则会出现「料已扣、返不下」的白工。
-        // 判定用扣料前的槽 0 栈：扣料只可能让它更空，所以这是保守（偏严）的估计。
-        ItemStack returnPreview = returnPayload(recipe, inputs, batch);
+        // 预览 = 本次将要扣掉的签子（在扫描集合上预演，不改动任何槽）。
+        ItemStack returnPreview = returnPreview(recipe, scan, batch);
         if (!canFitBatch(outputs, result, batch, returnPreview)) {
             return;
         }
         ItemStack produced = batchProduct(result, batch);
 
-        consume(scan, recipe, batch);
+        List<ItemStack> consumedTool = consume(scan, recipe, batch);
 
         MekCkBatchPacking.insertOutput(outputs.subList(0, 1), produced);
-        ItemStack returned = returnPayload(recipe, inputs, batch);
+        ItemStack returned = returnPayload(consumedTool);
         if (!returned.isEmpty()) {
             MekCkBatchPacking.insertOutput(outputs.subList(1, 2), returned);
         }
@@ -439,7 +439,7 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
     }
 
     /**
-     * 返还槽的负载：输入槽 0 当前那一叠，数量是<b>批量本身</b>。
+     * 本批返还预览 —— 在扫描集合上预演扣料，返回将要返还的栈（不改动任何槽）。
      *
      * <p><b>唯一的返还闸门</b>：只有真被消耗过的签子才返还 ——
      * {@code toolCountOf(recipe) > 0} 且签子配料非空，与机器侧
@@ -447,57 +447,97 @@ public final class SkeweringFactoryExecutor implements MekCkRecipeExecutor {
      * {@code ingredientCount = 0}（签子不消耗），无条件返还等于每批把 batch 个签子
      * 复制进返还槽（物品复制）。</p>
      *
-     * <p>数量逐字对齐旧 {@code completeRecipe}：
-     * {@code returnStack.setCount(CountMath.mulClamp(MAX_COUNT, 1, multiplier))}。
-     * 注意那个 {@code mulClamp} 的三个实参是 {@code cap=MAX_COUNT, a=1, b=multiplier}，
-     * 所以它是「1 × multiplier」=<b>倍率</b>，<b>不是</b>「整叠数量 × 倍率」——
-     * 第一次读到这里时很容易把 {@code a} 认成槽 0 的数量。
-     * 槽 0 被扣空则无物可返，调用方跳过返还。</p>
+     * <p>预览与 {@link #consume} 的真扣料共用 {@link #consumeOne} 的同一套走位
+     * （simulate 分支），所以 {@link #canFitBatch} 判的容量与 {@link #run} 真正
+     * 要落的返还物一致，不会出现「预演说装得下、落槽时却装不下」的漂移。</p>
      */
-    private ItemStack returnPayload(Recipe<?> recipe, List<IInventorySlot> inputs, int batch) {
-        if (inputs == null || inputs.isEmpty()) {
-            return ItemStack.EMPTY;
-        }
+    static ItemStack returnPreview(Recipe<?> recipe, List<IInventorySlot> scan, int batch) {
         boolean consumedTool = toolCountOf(recipe) > 0 && !toolOf(recipe).isEmpty();
         if (!consumedTool) {
             return ItemStack.EMPTY;
         }
-        ItemStack stack = inputs.get(0).getStack();
-        if (stack.isEmpty() || batch <= 0) {
-            return ItemStack.EMPTY;
+        int amount = CountMath.mulClamp(Integer.MAX_VALUE, toolCountOf(recipe), batch);
+        return returnPayload(consumeOne(scan, toolOf(recipe), amount, true));
+    }
+
+    /**
+     * 把「本次实际扣掉的签子」记录合并成一个返还栈 —— 返还的唯一产出点。
+     *
+     * <p>记录里的每一项都匹配同一份签子配料，同物合并计数（夹紧到
+     * {@link CountMath#MAX_COUNT}）。返还槽只有一格，所以记录里出现第二种物品时
+     * 只可能落第一种 —— 已知的签子配料（森罗虚拟配方 {@code Ingredient.of(STICK)}、
+     * BBQ Delight 的签子）都是单物品，这条分支不可达。</p>
+     *
+     * <p>{@code public} 是因为机器侧 {@code SkeweringMachineBlockEntity.completeRecipe}
+     * 也走这里：两边必须同口径，否则「返还 = 实际消耗」的语义会各自漂移。</p>
+     */
+    public static ItemStack returnPayload(List<ItemStack> consumedTool) {
+        ItemStack merged = ItemStack.EMPTY;
+        if (consumedTool == null) {
+            return merged;
         }
-        ItemStack copy = stack.copy();
-        copy.setCount(CountMath.mulClamp(CountMath.MAX_COUNT, 1, batch));
-        return copy;
+        for (ItemStack taken : consumedTool) {
+            if (taken == null || taken.isEmpty()) {
+                continue;
+            }
+            if (merged.isEmpty()) {
+                merged = taken.copy();
+            } else if (ItemStack.isSameItemSameTags(merged, taken)) {
+                merged.setCount(CountMath.addClamp(merged.getCount(), taken.getCount()));
+            }
+        }
+        return merged;
     }
 
-    /** 扣三种料。位置无关：按「输入 + 存储」逐槽扣，先输入槽后存储槽。 */
-    private void consume(List<IInventorySlot> scan, Recipe<?> recipe, int batch) {
-        consumeOne(scan, toolOf(recipe), CountMath.mulClamp(Integer.MAX_VALUE, toolCountOf(recipe), batch));
-        consumeOne(scan, mainOf(recipe), batch);
-        consumeOne(scan, sideOf(recipe), CountMath.mulClamp(Integer.MAX_VALUE, sideCountOf(recipe), batch));
+    /**
+     * 扣三种料，返回本次实际扣掉的签子栈（按扣料顺序）。
+     *
+     * <p>位置无关：按「输入 + 存储」逐槽扣，先输入槽后存储槽。签子先扣，
+     * 所以记录与 {@link #returnPreview} 的预演逐项一致。</p>
+     */
+    private List<ItemStack> consume(List<IInventorySlot> scan, Recipe<?> recipe, int batch) {
+        List<ItemStack> consumedTool = consumeOne(scan, toolOf(recipe),
+                CountMath.mulClamp(Integer.MAX_VALUE, toolCountOf(recipe), batch), false);
+        consumeOne(scan, mainOf(recipe), batch, false);
+        consumeOne(scan, sideOf(recipe),
+                CountMath.mulClamp(Integer.MAX_VALUE, sideCountOf(recipe), batch), false);
+        return consumedTool;
     }
 
-    private static void consumeOne(List<IInventorySlot> scan, Ingredient ingredient, int amount) {
-        if (ingredient == null || ingredient.isEmpty() || amount <= 0) {
-            return;
+    /**
+     * 按扫描顺序取走 {@code amount} 个匹配 {@code ingredient} 的物品，返回实际取走的栈
+     * （按取料顺序；同物跨多槽会有多项）。
+     *
+     * <p>{@code simulate = true} 时只预演、不改动任何槽 —— 返还预览与真扣料共用这一套
+     * 走位，两处不会漂移。</p>
+     */
+    static List<ItemStack> consumeOne(List<IInventorySlot> scan, Ingredient ingredient, int amount, boolean simulate) {
+        List<ItemStack> taken = new ArrayList<>();
+        if (scan == null || ingredient == null || ingredient.isEmpty() || amount <= 0) {
+            return taken;
         }
         int remaining = amount;
         for (IInventorySlot slot : scan) {
             if (remaining <= 0) {
-                return;
+                break;
             }
             ItemStack stack = slot.getStack();
             if (stack.isEmpty() || !ingredient.test(stack)) {
                 continue;
             }
             int take = Math.min(remaining, stack.getCount());
-            stack.shrink(take);
-            if (stack.isEmpty()) {
-                slot.setStack(ItemStack.EMPTY);
+            ItemStack record = stack.copy();
+            record.setCount(take);
+            taken.add(record);
+            if (!simulate) {
+                stack.shrink(take);
+                if (stack.isEmpty()) {
+                    slot.setStack(ItemStack.EMPTY);
+                }
             }
             remaining -= take;
         }
+        return taken;
     }
 
     /**

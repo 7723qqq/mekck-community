@@ -6,6 +6,7 @@ import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.block.SkeweringMachineBlock;
 import cn.ism.mekck.config.MekckConfig;
 import cn.ism.mekck.menu.SkeweringMachineMenu;
+import cn.ism.mekck.machine.skewering.SkeweringFactoryExecutor;
 import cn.ism.mekck.util.RecipeInputMatcher;
 import cn.ism.mekck.util.AutoIO;
 import cn.ism.mekck.util.LagMonitor;
@@ -536,9 +537,10 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
             int toolCount = getCountField(recipe, "ingredientCount");
             int sideCount = getCountField(recipe, "sideCount");
 
-            // Consume tool (slot 0)
+            // Consume tool (input slots first, then storage)
+            List<ItemStack> consumedTool = List.of();
             if (tool != null && !tool.isEmpty()) {
-                consumeInput(tool, toolCount);
+                consumedTool = consumeInput(tool, toolCount);
             }
 
             // Consume ingredient (slot 1)
@@ -557,45 +559,50 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
                 insertOutput(items, result.copy(), OUTPUT_SLOT);
             }
 
-            // Return the tool item (slot 0) goes to return slot
-            // 只有真被消耗过才返还：自有配方序列化器写死 toolCount = 0（签子不消耗），
-            // 无条件返还等于每批复制 1 个签子（工厂执行器 SkeweringFactoryExecutor 的返还同样受 toolCount > 0 门控）。
-            if (tool != null && !tool.isEmpty() && toolCount > 0) {
-                ItemStack toolStack = items.getStackInSlot(INPUT_SLOT_START); // slot 0
-                if (!toolStack.isEmpty()) {
-                    // The tool is consumed/returned - put one back in return slot
-                    // Actually, for skewering, the tool (like a skewer) is returned
-                    // We'll put the tool item back in the return slot
-                    ItemStack returnStack = toolStack.copy();
-                    returnStack.setCount(1);
-                    insertOutput(items, returnStack, RETURN_SLOT);
-                }
+            // Return the tool item: 只返还本次实际扣掉的签子（类型与数量）。
+            // 扣料位置无关（输入槽 + 存储槽），旧写法读槽 0 会在签子不在槽 0 时
+            // 把槽 0 的另一种物品复制进返还槽（物品复制，M29 修复）；
+            // 合并与工厂执行器共用 SkeweringFactoryExecutor.returnPayload，两边同口径。
+            ItemStack returnStack = SkeweringFactoryExecutor.returnPayload(consumedTool);
+            if (!returnStack.isEmpty()) {
+                insertOutput(items, returnStack, RETURN_SLOT);
             }
         } catch (Exception e) {
             // Fallback: skip
         }
     }
 
-    private void consumeInput(Ingredient ingredient, int count) {
+    /**
+     * 从输入槽与存储槽扣掉 count 个匹配 ingredient 的物品，返回实际扣掉的栈
+     * （按扣料顺序；同物跨多槽会有多项）。位置无关：先输入槽、后存储槽。
+     */
+    private List<ItemStack> consumeInput(Ingredient ingredient, int count) {
+        List<ItemStack> consumed = new ArrayList<>();
         int remaining = count;
         // Check input slots first
         for (int i = INPUT_SLOT_START; i <= INPUT_SLOT_END && remaining > 0; i++) {
-            ItemStack stack = items.getStackInSlot(i);
-            if (!stack.isEmpty() && ingredient.test(stack)) {
-                int toExtract = Math.min(remaining, stack.getCount());
-                items.extractItem(i, toExtract, false);
-                remaining -= toExtract;
-            }
+            remaining = extractMatching(i, ingredient, remaining, consumed);
         }
         // Then check storage slots
         for (int i = STORAGE_SLOT_START; i < STORAGE_SLOT_START + STORAGE_SLOT_COUNT && remaining > 0; i++) {
-            ItemStack stack = items.getStackInSlot(i);
-            if (!stack.isEmpty() && ingredient.test(stack)) {
-                int toExtract = Math.min(remaining, stack.getCount());
-                items.extractItem(i, toExtract, false);
-                remaining -= toExtract;
-            }
+            remaining = extractMatching(i, ingredient, remaining, consumed);
         }
+        return consumed;
+    }
+
+    /** 从单个槽扣掉至多 remaining 个匹配物品；返回还差多少，实际扣掉的栈记进 consumed。 */
+    private int extractMatching(int slot, Ingredient ingredient, int remaining, List<ItemStack> consumed) {
+        ItemStack stack = items.getStackInSlot(slot);
+        if (stack.isEmpty() || !ingredient.test(stack)) {
+            return remaining;
+        }
+        int toExtract = Math.min(remaining, stack.getCount());
+        ItemStack extracted = items.extractItem(slot, toExtract, false);
+        if (!extracted.isEmpty()) {
+            consumed.add(extracted);
+            remaining -= extracted.getCount();
+        }
+        return remaining;
     }
 
     private boolean canFitAll(Recipe<?> recipe) {
