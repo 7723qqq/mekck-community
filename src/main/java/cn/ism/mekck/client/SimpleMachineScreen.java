@@ -78,6 +78,11 @@ public final class SimpleMachineScreen extends GuiMekanism<SimpleMachineMenu> im
     private static final int WV_GAUGE_X = 10;
     private static final int WV_GAUGE_Y = 20;
     /**
+     * vinery 皮肤下「Inventory」标签的 x：流体条占 x 10..28（STANDARD 18 宽），
+     * 标签必须右移让开条的下缘，否则首字符与条重叠 6px（M4-9）。
+     */
+    private static final int VINERY_LABEL_X = 30;
+    /**
      * 简报 §九（2026-09-24）：陈酿机电源槽改到**右侧能量条左边、与果汁格平齐**。
      * 常量已上移到 {@link SimpleMachineMenu#WV_POWER_X}——菜单 addSlot 与这里的 GuiVirtualSlot 必须共用同一坐标，
      * 否则 {@code renderSlots} 会在菜单坐标处多画一个裸露的原版空槽框（用户 2026-09-25 报的「奇怪的格子」）。
@@ -359,7 +364,9 @@ public final class SimpleMachineScreen extends GuiMekanism<SimpleMachineMenu> im
     @Override
     protected void drawForegroundText(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         renderTitleText(guiGraphics);
-        drawString(guiGraphics, playerInventoryTitle, 20, inventoryLabelY, titleTextColor());
+        // vinery 皮肤下标签右移让开流体条（M4-9）；机甲风保持原 x=20。
+        drawString(guiGraphics, playerInventoryTitle,
+                menu.vineryLayout() ? VINERY_LABEL_X : 20, inventoryLabelY, titleTextColor());
         // 加热类机器：显示机身温度（摄氏度）
         if (menu.isHeatingMachine()) {
             guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.temperature", menu.getTemperature() / 100.0).getString(), 20, 78, 0xFFFF5555);

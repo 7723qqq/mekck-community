@@ -224,6 +224,11 @@ public class MekCkTabElement extends GuiInsetElement<Object> {
     // 代价是按钮位置与我们旧手绘值差 1px（父类给 +5/+4，我们旧值 +6/+5），可接受。
     @Override
     public boolean isMouseOver(double mouseX, double mouseY) {
+        // 与父类 GuiInsetElement.isMouseOver 同口径：置灰/隐藏的 tab 不参与命中
+        //（Mek 的 GuiWindowCreatorTab.disableTab() 会把 active 置 false，父类因此不会弹 tooltip）。
+        if (!active || !visible) {
+            return false;
+        }
         return mouseX >= getX() && mouseX < getX() + width
                 && mouseY >= getY() && mouseY < getY() + height;
     }
