@@ -503,8 +503,11 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
 
     /**
      * Gets count of items needed from a field (ingredientCount or sideCount).
+     *
+     * <p>无实例状态，{@code static} 是为了让 {@link #returnPreview} 也能读同一份口径
+     * （预览与真扣料必须读同一个数，否则两处会各自漂移）。</p>
      */
-    private int getCountField(Recipe<?> recipe, String fieldName) {
+    private static int getCountField(Recipe<?> recipe, String fieldName) {
         try {
             java.lang.reflect.Field field = cn.ism.mekck.util.Reflect.field(recipe.getClass(), fieldName);
             if (field == null) return 1;
@@ -581,23 +584,29 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
         int remaining = count;
         // Check input slots first
         for (int i = INPUT_SLOT_START; i <= INPUT_SLOT_END && remaining > 0; i++) {
-            remaining = extractMatching(i, ingredient, remaining, consumed);
+            remaining = extractMatching(items, i, ingredient, remaining, consumed, false);
         }
         // Then check storage slots
         for (int i = STORAGE_SLOT_START; i < STORAGE_SLOT_START + STORAGE_SLOT_COUNT && remaining > 0; i++) {
-            remaining = extractMatching(i, ingredient, remaining, consumed);
+            remaining = extractMatching(items, i, ingredient, remaining, consumed, false);
         }
         return consumed;
     }
 
-    /** 从单个槽扣掉至多 remaining 个匹配物品；返回还差多少，实际扣掉的栈记进 consumed。 */
-    private int extractMatching(int slot, Ingredient ingredient, int remaining, List<ItemStack> consumed) {
-        ItemStack stack = items.getStackInSlot(slot);
+    /**
+     * 从单个槽扣掉至多 remaining 个匹配物品；返回还差多少，实际扣掉的栈记进 consumed。
+     *
+     * <p>{@code simulate = true} 时只预演、不改动任何槽 —— 返还预览与真扣料共用这一套
+     * 走位，两处不会漂移（与工厂侧 {@code SkeweringFactoryExecutor.consumeOne} 同款）。</p>
+     */
+    private static int extractMatching(ItemStackHandler handler, int slot, Ingredient ingredient,
+                                       int remaining, List<ItemStack> consumed, boolean simulate) {
+        ItemStack stack = handler.getStackInSlot(slot);
         if (stack.isEmpty() || !ingredient.test(stack)) {
             return remaining;
         }
         int toExtract = Math.min(remaining, stack.getCount());
-        ItemStack extracted = items.extractItem(slot, toExtract, false);
+        ItemStack extracted = handler.extractItem(slot, toExtract, simulate);
         if (!extracted.isEmpty()) {
             consumed.add(extracted);
             remaining -= extracted.getCount();
@@ -605,8 +614,27 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
         return remaining;
     }
 
+    /**
+     * 开工前容量判定：产物槽与返还槽都要装得下。
+     *
+     * <p>返还槽原先不判：返还槽满（或槽里是别的物品）时机器照常开工，
+     * {@link #completeRecipe} 先扣签子、{@code insertOutput} 的剩余量被静默丢弃
+     * （每周期丢 toolCount 个签子）。返还量取 {@link #returnPreview} 的预演结果，
+     * 与 {@code completeRecipe} 真正要落的返还物同口径 —— 与工厂侧
+     * {@code SkeweringFactoryExecutor.canFitBatch} 的两段分开判同款。</p>
+     *
+     * <p>模拟副本必须回答与真槽相同的上限（{@code BigStackItemHandler} 默认 64，
+     * 而本机 OUTPUT_SLOT / RETURN_SLOT 是 {@code Integer.MAX_VALUE}）：否则预检比
+     * 真实落槽更严，返还槽堆到 64 个签子后预检永远失败、机器静默停摆
+     * （与 {@code SmartCookingPotBlockEntity.canFitAll} 同款）。</p>
+     */
     private boolean canFitAll(Recipe<?> recipe) {
-        ItemStackHandler simulated = new cn.ism.mekck.util.BigStackItemHandler(items.getSlots());
+        ItemStackHandler simulated = new cn.ism.mekck.util.BigStackItemHandler(items.getSlots()) {
+            @Override
+            public int getSlotLimit(int slot) {
+                return items.getSlotLimit(slot);
+            }
+        };
         for (int slot = 0; slot < items.getSlots(); slot++) {
             simulated.setStackInSlot(slot, items.getStackInSlot(slot).copy());
         }
@@ -618,7 +646,45 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
                 return false;
             }
         }
+
+        // Check return slot: 返还槽装不下就不开工（否则签子已扣、返还落不进 ⇒ 静默丢失）
+        ItemStack preview = returnPreview(recipe, items);
+        if (!preview.isEmpty() && !insertOutput(simulated, preview, RETURN_SLOT).isEmpty()) {
+            return false;
+        }
         return true;
+    }
+
+    /**
+     * 返还预览：预演一次签子扣料，返回本次会返还的栈 —— <b>不改动任何槽</b>。
+     *
+     * <p>与 {@link #completeRecipe} 的「返还 = 本次实际扣掉的签子」共用
+     * {@link #extractMatching} 的同一套走位（先输入槽、后存储槽），所以
+     * {@link #canFitAll} 判的容量与真正要落的返还物一致，不会出现
+     * 「预演说装得下、落槽时却装不下」的漂移（与工厂侧
+     * {@code SkeweringFactoryExecutor.returnPreview} 同口径）。</p>
+     *
+     * <p>闸门与 {@code completeRecipe} 相同：{@code toolCount <= 0}（自有配方签子不消耗）
+     * 或 tool 配料为空时不返还，返还槽不参与判定。</p>
+     */
+    static ItemStack returnPreview(Recipe<?> recipe, ItemStackHandler handler) {
+        Ingredient tool = getIngredientField(recipe, "tool");
+        if (tool == null || tool.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        int toolCount = getCountField(recipe, "ingredientCount");
+        if (toolCount <= 0) {
+            return ItemStack.EMPTY;
+        }
+        List<ItemStack> consumed = new ArrayList<>();
+        int remaining = toolCount;
+        for (int i = INPUT_SLOT_START; i <= INPUT_SLOT_END && remaining > 0; i++) {
+            remaining = extractMatching(handler, i, tool, remaining, consumed, true);
+        }
+        for (int i = STORAGE_SLOT_START; i < STORAGE_SLOT_START + STORAGE_SLOT_COUNT && remaining > 0; i++) {
+            remaining = extractMatching(handler, i, tool, remaining, consumed, true);
+        }
+        return SkeweringFactoryExecutor.returnPayload(consumed);
     }
 
     private static ItemStack insertOutput(ItemStackHandler handler, ItemStack stack, int slot) {
