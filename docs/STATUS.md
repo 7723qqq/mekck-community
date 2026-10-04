@@ -1,11 +1,12 @@
 # mekck 当前状态汇总
 
-- 最后更新：**2026-10-05**（**迁移轮**：阶段 3 单机迁移启动，电力研磨机作为样板迁完）
-- 审查基线：HEAD `4155d5f`（merge `feat/fix-network-order-quantity-clamp`）之后的工作区
+- 最后更新：**2026-10-05**（**模块化重构轮**：打断三处循环依赖 + `util` 归位 + 3 个巨型类拆分；提交 `1c345bd`…`f0119e1`，详见下方「本轮」§〇）
+- 审查基线：HEAD `f0119e1`（模块化重构 5 个里程碑提交）之后的工作区
 - 验收口径：`./gradlew --offline test` + `./gradlew build`
-  **本轮实测：99 套件 / 729 用例 / 0 失败 / 0 错误 / 0 跳过**
+  **本轮实测：100 套件 / 739 用例 / 0 失败 / 0 错误 / 0 跳过**
+  （较前一轮的 99/729 多出的是**接手前既有**的 `TestMigrationCompleteness` 改动；本重构自身未新增用例）
 
-> ⚠️ **本文件此前的基数已严重过时，本轮逐项实测更正**（详见 §〇）：
+> ⚠️ **前一轮（同日）的基数更正**（详见下方「前一轮」§〇）：
 > - 记「62 套件 / 457 用例」——**实测 99 / 729**；
 > - 记「14 台待迁」——**实际 13 台**（陈化窖早已迁完）；
 > - 记「`MekCkMachineTile` 未实现 `INetworkPullable`」——**早已实现**（`MekCkMachineTile:123`）；
@@ -28,7 +29,73 @@
 
 ---
 
-## 〇、本轮（2026-10-05）—— 阶段 3 单机迁移：电力研磨机样板
+## 〇、本轮（2026-10-05）—— 模块化重构：破环 + util 归位 + 3 个巨型类拆分
+
+**结论：编译 + 100 套件 / 739 用例 0 失败 + `./gradlew build` 成功（产物 `mekck-1.0.0.jar`）。
+本轮不含实机结论**；涉及运行期风险与存档契约的改动**刻意未做**（见 §三）。设计文档见 [`architecture/README.md`](architecture/README.md)。
+
+| 提交 | 内容 | 文件数 |
+|---|---|---|
+| `1c345bd` | `refactor(structure)`：打断三处循环依赖 + util 越界类归位 | 61 |
+| `0bf993a` | `refactor(blockentity)`：`SimpleMachineBlockEntity` 抽取 AE2 补料输入簇 | 2 |
+| `a52b511` | `refactor(command)`：`PlantingRecipeGenerator` 拆分为 4 个伴生类 | 6 |
+| `29c9ccc` | `refactor(blockentity)`：`CentralKitchenBlockEntity` 抽取 4 个伴生类 | 6 |
+| `f0119e1` | `docs(architecture)`：新增 `docs/architecture/` 模块架构文档集 | 20 |
+
+### 一、依赖结构：三处循环依赖全部打断（以 import 计数实测，非感觉）
+
+| 边 | 前 → 后 | 手段 |
+|---|---|---|
+| `util → block` | 14 → **0** | `TierInstallerHandler` 迁入 `block/`（13 条 block import 变同包消除） |
+| `machine → block` | 6 → **0** | 新增 `machine/IFactoryTierProvider`，6 个工厂方块实现、tile 的 `tierFromBlock()` 只认接口 |
+| `machine → blockentity` | 1 → **0** | 生长状态码上移为 `machine/plantingcutting/PlantingCuttingStatus` |
+
+`util` 越界依赖 **32 → 2**（仅剩 `→compat`：`ClientPacketBridge`→`GuideMECompat`、`RecipeCache`→`TavernBarrelCompat`）。
+另归位 11 个类：`TierInstallerHandler`→`block/`；`RecipeInputMatcher`/`BioreactorFuels`→`recipe/`；
+`FreezeEvents`/`FreezeAiReaper`/`ChocolateCannonLifecycle`/`ChocolateTagScanner`→`event/`；
+`ChocolateCannonReservations`→`blockentity/`；`ColdBrewHelper`→`item/`；`AE2InputSpec`/`NetworkPullHelper`→`ae2/`。
+
+> ⚠️ **两处与原计划不符的实测更正**（原计划见重构方案，已按实测改）：
+> ① 原计划「批次 1：删死代码 `ChocolateCannonLifecycle`/`ChocolateTagScanner`」**前提不成立** ——
+> 两者是 `@Mod.EventBusSubscriber` 事件订阅器；同批核验还发现 `FreezeEvents`（注解发现）、
+> `MaxLootRandom`（同包简单名调用）亦为假死 ⇒ **`util/` 内零死代码**。已改为**归位 `event/`**，不删。
+> ② `TierInstallerHandler` 目的地由 `upgrade/` 改为 `block/` —— 迁 `upgrade/` 会新增
+> `upgrade → block` 13 条，与既有 `block → upgrade` 11 条成环；迁 `block/` 则新增边为 0。
+
+### 二、巨型类拆分（**物理行数**；`Measure-Object -Line` 会少计约 240 行，勿用）
+
+| 类 | 前 → 后 | 新伴生类 |
+|---|---|---|
+| `blockentity/SimpleMachineBlockEntity` | 2824 → **2586** | `SimpleMachineNetworkPull`（295，无状态） |
+| `command/PlantingRecipeGenerator` | 1666 → **615** | `command/planting/{GeneratorFs,RecipeJsonWriter,BotanyPotsCollector,LootRoller}` |
+| `blockentity/CentralKitchenBlockEntity` | 1868 → **1816** | `CentralKitchen{HeatTransfer,StorageSync,NetworkPull,SideConfig}` |
+
+- 范式沿用既有 `SimpleMachineFluids`/`SimpleMachineRecipes`：**伴生类不持状态**，状态一律 `be.xxx()` 取。
+- **反射契约未动**：`setOrder`/`getOrderRecipeId`/`getOrderQuantity` 原样留在 BE 上（`MekckAe2` 按名反射取用）。
+- 护栏只改**判据落点**（`TestMinorDefectGuards` 读取路径、`TestFreezeAiRecovery` 随类迁包），**无一条断言被放宽或缩小扫描面**。
+
+### 三、刻意未做（附理由，非遗漏）
+
+| 项 | 理由 |
+|---|---|
+| `ae2/FactoryGridHost`（约 1001 行）升顶层 | 经审计**非纯移动**：需放宽约 20 个成员（含 10 个 `build*Patterns` 方法 + `mainNode`/`job` 反向耦合）、需静态导入维持「逐字不变」、且连带 2 条 AE2 护栏要重指。AE2 属本仓最高风险区且**当前无实机验证** |
+| `CentralKitchen` 订单生命周期簇 | 护栏对 `private` 签名硬断言，搬动只能靠放宽断言 ⇒ 按搬移规则留在 BE |
+| `machine/MekCkMachineTile` 拆分（批次 10） | 触 6 家族 ×12 档共享基类，计划本身要求实机验证 |
+| legacy→Mek 迁移（批次 8x） | 需用户实机验收 |
+| `util/io`、`stack`、`fluid` 子包 | 纯外观分组，约 99 处 import 改动、零破环收益 |
+
+### 四、方法论教训（本轮新增）
+
+- **判「能否纯移动」不能用声明级正则**：本轮先用正则统计「外层 private 成员被引用」，在 37 个成员里
+  只匹配到 8 个，据此误判 `FactoryGridHost`「耦合很小、可安全抽取」；实际漏掉了
+  **未限定名的方法调用**（10 个 `build*Patterns`）与**私有嵌套类型**。
+  **正确做法：让编译器参与** —— 先尝试移动，编译错误即真实耦合清单。
+- **行数度量**：`Measure-Object -Line` 会少计（本仓实测差约 240 行）；用
+  `[System.IO.File]::ReadAllLines($p).Length`。
+
+---
+
+## 〇、前一轮（2026-10-05）—— 阶段 3 单机迁移：电力研磨机样板
 
 **结论：样板迁完，编译 + 729 用例 0 失败 + `./gradlew build` 成功。
 实机验证（放置 / GUI / 投料 / 加工 / 升级卡 / 拆放 / 重启）由用户自行完成 —— 本记录不含实机结论。**
@@ -248,6 +315,37 @@ public abstract class MekCkContainerScreenBase<
 + 创造栏 + 槽位表 + 语言键 + **AE2 能力面** + 存档迁移 + 战利品表 …… 每一项都要**逐一实测**，
 不能因为「编译过了、测试绿了」就认为做完。本轮两次结构性问题（GUI 手绘、AE2 能力）
 都不是测试发现的，是**用户追问**发现的。
+
+### 六之一之三、把「迁移清单」变成可执行的自检
+
+上面两次漏项（GUI 手绘、AE2 能力）都有一个共同点：**编译通过 + 测试全绿**，
+靠人（我）记清单 —— 而记不住。所以本轮把它固化成
+`machine/TestMigrationCompleteness.java`，以「已迁机器登记表」为锚，逐项断言：
+
+| # | 项 | 漏了的症状 | 判据 |
+|---|---|---|---|
+| 1 | 三件套成组 `register(bus)` | 运行期「注册表里没有这个 id」，方块变空气 | **逐个**断言 BLOCKS/TILES/CONTAINERS，缺一即红 |
+| 2 | 客户端屏幕绑定 | 右键开界面崩 | `XXX_CONTAINER.get()` + `MenuScreens.register` |
+| 3 | 创造模式物品栏 | 玩家拿不到 | `XXX_HANDLE.getItemStack()` 或 `XXX_ITEM.get()` |
+| 4 | 方块名语言键 | 显示 raw key | en_us + zh_cn 两份都要有 |
+| 5 | 旧 `instanceof` 分支已删 | 后来者以为那条路还活着（口径 §2.4） | 三个派发点不得引用已删的旧 BE 类名 |
+
+（能力面 / 旧存档迁移 / 战利品表已有单独护栏，本类不重复。）
+
+**新增一条登记纪律**：`MIGRATED` 表**刻意写死**而不是自动扫描 ——
+它是「我认为已迁完了」的声明，**新迁一台必须来登记一次**，而登记这个动作本身
+会逼人把清单过一遍。自动扫描反而会让「漏配的那台」因扫不到而逃过所有断言。
+
+#### 变异测试记录（三条，全部如实记）
+
+| 变异 | 结果 |
+|---|---|
+| 删掉 `GRINDING_MACHINE_CONTAINERS_REG.register(bus)` | 第一版判据 `count >= 3` **照旧全绿**（剩下 3 个盖住了缺的那个）⇒ 改成逐个断言后才抓住 |
+| 把研磨机 tile 退回无能力的基类 | **编译器**先拦下（子类的 `@Override` 找不到超类型方法）—— 比护栏更硬 |
+| 判据里的创造栏只认 `HANDLE.getItemStack()` | 把 `GRILL_ITEM.get()` / `MACHINE_ITEM.get()` 两种历史写法误报成缺陷 ⇒ 放宽为两种都认 |
+
+> 三条里有两条是**护栏自己错了**，都是变异测试发现的。这已经是本仓第 N 次验证
+> 「新加源码形态护栏必须先跑变异测试」。
 
 ### 六之二、⚠️ 本轮我自己犯的一条方法论错误（记下来防重蹈）
 
