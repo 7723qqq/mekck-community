@@ -4,6 +4,7 @@ import cn.ism.mekck.network.ModMessages;
 import cn.ism.mekck.network.NetworkMissingRequestPacket;
 import cn.ism.mekck.network.NetworkRecipeRequestPacket;
 import cn.ism.mekck.compat.AE2Compat;
+import com.mojang.blaze3d.vertex.PoseStack;
 import mekanism.client.gui.GuiUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -282,6 +283,24 @@ public final class NetworkOrderPanel {
     //  布局
     // ==================================================================
 
+    /**
+     * 命中判定（纯函数）—— 三个 GuiWindow 的命中侧共用。
+     *
+     * <p>鼠标坐标是<b>绝对</b>屏幕坐标（javap 实测 {@code GuiMekanism.mouseClicked} 把
+     * mouseX/mouseY 原样下发给 {@code GuiWindow.mouseClickedNested}），而面板/按钮矩形是
+     * <b>GUI 相对</b>坐标（{@code renderForeground} 的 pose 已在 GUI 原点，绘制用的就是相对坐标）。
+     * 两者必须先换算再比较，否则命中整体偏移 (leftPos, topPos) —— 表现为
+     * 「看得见的位置点不动、偏移 (leftPos, topPos) 的位置反而响应」。</p>
+     *
+     * <p>区间取半开 [x, x+w)：与面板内部 {@code isHovered} 同口径。</p>
+     */
+    public static boolean hitsRelativeRect(double mouseX, double mouseY, int guiLeft, int guiTop,
+                                           int relX, int relY, int w, int h) {
+        double gx = mouseX - guiLeft;
+        double gy = mouseY - guiTop;
+        return gx >= relX && gx < relX + w && gy >= relY && gy < relY + h;
+    }
+
     private int gridCols(int panelW) {
         int usable = panelW - 12 - 24 - 4;
         return Math.max(1, usable / ME_CELL);
@@ -315,9 +334,16 @@ public final class NetworkOrderPanel {
     //  渲染
     // ==================================================================
 
-    /** 渲染完整 ME 面板（仅在 {@link #isMe()} 为真时调用）。 */
+    /**
+     * 渲染完整 ME 面板（仅在 {@link #isMe()} 为真时调用）。
+     *
+     * <p><b>坐标口径</b>：{@code panelX/panelY} 与 {@code mouseX/mouseY} 都必须是
+     * <b>GUI 相对</b>坐标（调用方在窗口边界把绝对鼠标换算好再传进来）—— 绘制与命中同源。
+     * {@code guiLeft/guiTop} 只用于 tooltip：它按绝对屏幕坐标定位，需要临时撤销
+     * renderForeground 的 (leftPos, topPos) 平移。</p>
+     */
     public void render(GuiGraphics guiGraphics, Font font, int panelX, int panelY, int panelW, int panelH,
-                       int mouseX, int mouseY, float partialTick) {
+                       int mouseX, int mouseY, float partialTick, int guiLeft, int guiTop) {
         Minecraft mc = Minecraft.getInstance();
         computeLayout(panelX, panelY, panelW, panelH);
 
@@ -393,11 +419,11 @@ public final class NetworkOrderPanel {
                 guiGraphics.fill(cellX + 1, cellY + 1, cellX + ME_CELL - 1, cellY + ME_CELL - 1, 0x99000000);
             }
             if (hovered) {
-                guiGraphics.renderTooltip(font, List.of(
+                renderTooltipAtScreenOrigin(guiGraphics, font, List.of(
                                 result.isEmpty() ? Component.translatable("gui.mekck.ui.unknown") : result.getHoverName(),
                                 craftable ? Component.translatable("gui.mekck.ui.craftable_times", maxQty)
                                         : Component.translatable("gui.mekck.ui.materials_insufficient")),
-                        Optional.empty(), mouseX, mouseY);
+                        mouseX, mouseY, guiLeft, guiTop);
             }
         }
 
@@ -460,6 +486,27 @@ public final class NetworkOrderPanel {
         drawAeButton(guiGraphics, font, confirmX + layoutConfirmW + 8, layoutConfirmY, layoutConfirmW, 18,
                 tr("gui.mekck.ui.cancel"), false,
                 isHovered(mouseX, mouseY, confirmX + layoutConfirmW + 8, layoutConfirmY, layoutConfirmW, 18));
+    }
+
+    /**
+     * 在屏幕原点 pose 下渲染 tooltip。
+     *
+     * <p>{@code renderForeground} 跑在 {@code translate(leftPos, topPos, 300)} 之后的 pose 里
+     * （javap 实测 {@code GuiElement.onRenderForeground} 只加 z 平移、不撤销 GUI 平移），
+     * 而 {@code GuiGraphics.renderTooltip} 的坐标是<b>绝对屏幕坐标</b>、且按当前 pose 绘制 ——
+     * 不撤销这层平移，tooltip 会整体偏移 (leftPos, topPos)。Mek 自家在
+     * {@code GuiMekanism.renderLabels} 末尾渲染元素 tooltip 前也是先
+     * {@code translate(-leftPos, -topPos, 0)}（javap 实测偏移 310-325）。</p>
+     *
+     * @param mouseX/mouseY GUI 相对鼠标（面板内部口径）；tooltip 需要绝对坐标，故加回 guiLeft/guiTop
+     */
+    private static void renderTooltipAtScreenOrigin(GuiGraphics guiGraphics, Font font, List<Component> lines,
+                                                    int mouseX, int mouseY, int guiLeft, int guiTop) {
+        PoseStack pose = guiGraphics.pose();
+        pose.pushPose();
+        pose.translate(-guiLeft, -guiTop, 0);
+        guiGraphics.renderTooltip(font, lines, Optional.empty(), mouseX + guiLeft, mouseY + guiTop);
+        pose.popPose();
     }
 
     private static ItemStack resultOf(Minecraft mc, Recipe<?> recipe) {

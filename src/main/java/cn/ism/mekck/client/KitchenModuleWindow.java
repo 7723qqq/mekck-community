@@ -222,12 +222,15 @@ public class KitchenModuleWindow extends GuiWindow {
 
     @Override
     public mekanism.client.gui.element.GuiElement mouseClickedNested(double mouseX, double mouseY, int button) {
+        // 命中侧统一换算成 GUI 相对坐标（绘制侧用的就是它），否则整体偏移 (leftPos, topPos)。
+        double relX = mouseX - getGuiLeft();
+        double relY = mouseY - getGuiTop();
         int x = relativeX + LIST_X;
         for (int i = 0; i < ROWS; i++) {
             int idx = scrollRow + i;
             if (idx >= families.size()) break;
             int y = relativeY + LIST_Y + i * ROW_H;
-            if (mouseX >= x - 2 && mouseX <= x + 188 && mouseY >= y - 2 && mouseY < y + ROW_H - 1) {
+            if (relX >= x - 2 && relX <= x + 188 && relY >= y - 2 && relY < y + ROW_H - 1) {
                 selectedRow = (selectedRow == idx) ? -1 : idx;
                 return this;
             }
@@ -239,19 +242,19 @@ public class KitchenModuleWindow extends GuiWindow {
             int bx = relativeX + LIST_X;
             int by = relativeY + FILTER_MODE_Y;
             // 模式按钮
-            if (mouseX >= bx && mouseX < bx + 70 && mouseY >= by && mouseY < by + 12) {
+            if (relX >= bx && relX < bx + 70 && relY >= by && relY < by + 12) {
                 sendFilter((byte) 0, family, 0, net.minecraft.world.item.ItemStack.EMPTY);
                 return this;
             }
             // 清空按钮
-            if (mouseX >= bx + 74 && mouseX < bx + 108 && mouseY >= by && mouseY < by + 12) {
+            if (relX >= bx + 74 && relX < bx + 108 && relY >= by && relY < by + 12) {
                 sendFilter((byte) 3, family, 0, net.minecraft.world.item.ItemStack.EMPTY);
                 return this;
             }
             // 自动加工开关：与服务端一样只对已装模块的系列响应，
             // 否则点了会被服务端忽略（本地却像生效了）。
             if ((menu.getFamilyMask() & (1 << family.ordinal())) != 0
-                    && mouseX >= bx + 112 && mouseX < bx + 188 && mouseY >= by && mouseY < by + 12) {
+                    && relX >= bx + 112 && relX < bx + 188 && relY >= by && relY < by + 12) {
                 sendFilter((byte) 5, family, 0, net.minecraft.world.item.ItemStack.EMPTY);
                 return this;
             }
@@ -260,7 +263,7 @@ public class KitchenModuleWindow extends GuiWindow {
             for (int i = 0; i < cn.ism.mekck.kitchen.KitchenFilter.MAX_ITEMS; i++) {
                 int sx = relativeX + FILTER_SLOT_X + i * FILTER_SLOT_STEP;
                 int sy = relativeY + FILTER_SLOT_Y;
-                if (mouseX < sx - 1 || mouseX >= sx + 15 || mouseY < sy - 1 || mouseY >= sy + 15) continue;
+                if (relX < sx - 1 || relX >= sx + 15 || relY < sy - 1 || relY >= sy + 15) continue;
                 var player = net.minecraft.client.Minecraft.getInstance().player;
                 if (player == null) return this;
                 net.minecraft.world.item.ItemStack carried = player.containerMenu.getCarried();

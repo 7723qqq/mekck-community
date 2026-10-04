@@ -111,8 +111,13 @@ public class KitchenOrderWindow extends GuiWindow {
         super.renderForeground(guiGraphics, mouseX, mouseY);
         // ME 来源：整块换成 AE 终端风格面板（本机"下单"列表原样保留在下面）
         mePanel.bind(menu.getMachine().getBlockPos());
+        // 面板/按钮绘制在 GUI 相对坐标（pose 已在 GUI 原点），悬停判定必须同坐标系：
+        // 把绝对鼠标换算成 GUI 相对再交给面板。
+        int relX = mouseX - getGuiLeft();
+        int relY = mouseY - getGuiTop();
         if (mePanel.isMe()) {
-            mePanel.render(guiGraphics, getFont(), panelX(), panelY(), PANEL_W, PANEL_H, mouseX, mouseY, 0f);
+            mePanel.render(guiGraphics, getFont(), panelX(), panelY(), PANEL_W, PANEL_H,
+                    relX, relY, 0f, getGuiLeft(), getGuiTop());
             return;
         }
         refresh();
@@ -166,7 +171,7 @@ public class KitchenOrderWindow extends GuiWindow {
                     px, ry + 4 * 10, last.contains("§c") ? 0xFFA02020 : 0xFF106010, false);
         }
         // 来源切换按钮**最后画**（本机列表会盖住它，点击判定仍在前面）
-        mePanel.renderModeButtons(guiGraphics, getFont(), panelX(), panelY(), PANEL_W, mouseX, mouseY);
+        mePanel.renderModeButtons(guiGraphics, getFont(), panelX(), panelY(), PANEL_W, relX, relY);
     }
 
     private void drawSmallButton(GuiGraphics guiGraphics, int bx, int by, int w, int h, String label) {
@@ -186,17 +191,20 @@ public class KitchenOrderWindow extends GuiWindow {
     public mekanism.client.gui.element.GuiElement mouseClickedNested(double mouseX, double mouseY, int button) {
         // ME 来源：整块交给共用面板（几何与渲染共用）
         mePanel.bind(menu.getMachine().getBlockPos());
+        // 命中侧统一换算成 GUI 相对坐标（绘制侧用的就是它），否则整体偏移 (leftPos, topPos)。
+        double relX = mouseX - getGuiLeft();
+        double relY = mouseY - getGuiTop();
         if (mePanel.isMe()) {
-            if (mouseX >= panelX() && mouseX <= panelX() + PANEL_W
-                    && mouseY >= panelY() && mouseY <= panelY() + PANEL_H) {
-                mePanel.mouseClicked(mouseX, mouseY, button, panelX(), panelY(), PANEL_W, PANEL_H,
+            if (NetworkOrderPanel.hitsRelativeRect(mouseX, mouseY, getGuiLeft(), getGuiTop(),
+                    panelX(), panelY(), PANEL_W, PANEL_H)) {
+                mePanel.mouseClicked(relX, relY, button, panelX(), panelY(), PANEL_W, PANEL_H,
                         (recipeId, qty) -> ModMessages.sendToServer(new NetworkOrderPacket(
                                 menu.getMachine().getBlockPos(), recipeId.toString(), qty)));
                 return this;
             }
             return super.mouseClickedNested(mouseX, mouseY, button);
         }
-        if (mePanel.handleModeClick(mouseX, mouseY, panelX(), panelY(), PANEL_W)) {
+        if (mePanel.handleModeClick(relX, relY, panelX(), panelY(), PANEL_W)) {
             return this;
         }
 
@@ -207,28 +215,28 @@ public class KitchenOrderWindow extends GuiWindow {
             int idx = recipePage * ROWS + i;
             if (idx >= recipeList.size()) break;
             int rowY = py + i * ROW_H;
-            if (mouseX >= px - 3 && mouseX <= px + 220 && mouseY >= rowY - 1 && mouseY < rowY + ROW_H - 2) {
+            if (relX >= px - 3 && relX <= px + 220 && relY >= rowY - 1 && relY < rowY + ROW_H - 2) {
                 selectedRecipe = (selectedRecipe == idx) ? -1 : idx;
                 return this;
             }
         }
         // 按钮行
         int by = relativeY + LIST_Y + ROWS * ROW_H + 4;
-        if (mouseY >= by && mouseY < by + BTN_H) {
+        if (relY >= by && relY < by + BTN_H) {
             int bx = px;
-            if (hit(mouseX, bx, 16)) { orderCount = Math.max(1, orderCount - 1); return this; }
+            if (hit(relX, bx, 16)) { orderCount = Math.max(1, orderCount - 1); return this; }
             bx += 18;
-            if (hit(mouseX, bx, 40)) { orderCount = Math.min(9999, orderCount * 2); return this; }
+            if (hit(relX, bx, 40)) { orderCount = Math.min(9999, orderCount * 2); return this; }
             bx += 60;
-            if (hit(mouseX, bx, 16)) { orderCount = Math.min(9999, orderCount + 1); return this; }
+            if (hit(relX, bx, 16)) { orderCount = Math.min(9999, orderCount + 1); return this; }
             bx += 84;
-            if (hit(mouseX, bx, BTN_W)) { recipePage = Math.max(0, recipePage - 1); return this; }
+            if (hit(relX, bx, BTN_W)) { recipePage = Math.max(0, recipePage - 1); return this; }
             bx += BTN_W + 2;
-            if (hit(mouseX, bx, BTN_W)) { recipePage = Math.min(maxPage(), recipePage + 1); return this; }
+            if (hit(relX, bx, BTN_W)) { recipePage = Math.min(maxPage(), recipePage + 1); return this; }
             bx += BTN_W + 2;
-            if (hit(mouseX, bx, BTN_W - 6)) { sendOrder((byte) 0); return this; }
+            if (hit(relX, bx, BTN_W - 6)) { sendOrder((byte) 0); return this; }
             bx += BTN_W - 4;
-            if (hit(mouseX, bx, BTN_W - 6)) { sendOrder((byte) 1); return this; }
+            if (hit(relX, bx, BTN_W - 6)) { sendOrder((byte) 1); return this; }
         }
         return super.mouseClickedNested(mouseX, mouseY, button);
     }

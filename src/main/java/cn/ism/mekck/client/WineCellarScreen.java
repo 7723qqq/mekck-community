@@ -8,6 +8,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import java.util.List;
 import mekanism.api.math.FloatingLong;
 import mekanism.client.gui.GuiMekanism;
+import mekanism.client.gui.GuiUtils;
 import mekanism.client.gui.element.GuiInnerScreen;
 import mekanism.client.gui.element.bar.GuiBar.IBarInfoHandler;
 import mekanism.client.gui.element.bar.GuiDynamicHorizontalRateBar;
@@ -41,8 +42,8 @@ import net.minecraft.world.phys.Vec3;
  * 黑屏区 + 3×3 储存格网格 + 右侧粗能量计 + 左上电源槽 + 顶部倍速数字输入框。
  * §F45：闪电/进度条/能量计/黑屏 1:1 照抄反质子核合成器 GuiAntiprotonicNucleosynthesizer
  * （源码见参考示例，含关键修正：构造器第 4 参是 segments 分段数，闪电条数必须走 .count() 链），
- * 仅配色换成我们的酒红→琥珀。§F47：储存格 setRenderAboveSlots 抬层免被黑屏盖没，
- * 物品栏标签下移免被进度条压住。
+ * 仅配色换成我们的酒红→琥珀。§F47：储存格不再被黑屏背板盖没（背板改画在 renderBg，
+ * 见 {@link #renderBg}），物品栏标签下移免被进度条压住。
  */
 public final class WineCellarScreen extends GuiMekanism<WineCellarMenu> {
     private static final int SPEED_LABEL_X = 44;
@@ -71,7 +72,10 @@ public final class WineCellarScreen extends GuiMekanism<WineCellarMenu> {
         super(menu, inventory, title);
         imageWidth = PANEL_WIDTH;
         imageHeight = PANEL_HEIGHT;
-        inventoryLabelY = INV_TOP - 9; // §F47：原 -12(=91) 被进度条 (5,88,h≈5) 压住，下移让位
+        // §F47：原 -12(=91) 被进度条 (5,88,h≈5) 压住，下移让位。
+        // 背包首行与标签同源：菜单覆写 getInventoryYOffset() 返回 WineCellarMenu.INV_TOP，
+        // 标签取同一个常量减一行字高（迁移后菜单不再自己摆背包，常量必须由菜单侧提供）。
+        inventoryLabelY = WineCellarMenu.INV_TOP - 9;
         dynamicSlots = true;
         // §F45：同 SPS 拓宽 20px，右侧给能量计 (172,18) 让位（GuiMekanism 背景按 imageWidth 自适应铺绘）
         imageWidth += 20;
@@ -85,8 +89,11 @@ public final class WineCellarScreen extends GuiMekanism<WineCellarMenu> {
 
     private static final int PANEL_WIDTH = 176;
     private static final int PANEL_HEIGHT = 184;
-    /** 玩家背包首行的 y —— 与 Mek 的 playerInventoryTitle 定位同源。 */
-    private static final int INV_TOP = 103;
+    /** 黑屏背板（同 SPS GuiInnerScreen 坐标）—— 画在 renderBg 里，见 renderBg 的注释。 */
+    private static final int INNER_SCREEN_X = 45;
+    private static final int INNER_SCREEN_Y = 18;
+    private static final int INNER_SCREEN_W = 104;
+    private static final int INNER_SCREEN_H = 68;
 
     @Override
     protected void addGuiElements() {
@@ -99,8 +106,8 @@ public final class WineCellarScreen extends GuiMekanism<WineCellarMenu> {
         // （MekCkSlots.WineCellar）。原先手画的 GuiVirtualSlot 与菜单的 Slot 各有一套坐标，
         // 靠 x-1/y-1 凑合对齐——那正是本次重写要消灭的「一个框两套坐标」。
         //
-        // 背板仍要画：它是槽位底下的纹理层，与槽位 widget 是两件事。
-        addRenderableWidget(new GuiInnerScreen(this, 45, 18, 104, 68));
+        // 背板仍要画：它是槽位底下的纹理层，与槽位 widget 是两件事 —— 但必须画在
+        // renderBg 里（见 renderBg），不能作为 widget 挂进来。
 
         // §F45：能量显示改 SPS 同款粗能量计 GuiEnergyGauge SMALL_MED (172,18)，替掉旧细 GuiVerticalPowerBar；
         // tooltip 覆写为 FE 口径（不走 Mekanism 默认 kJ 格式化）
@@ -155,6 +162,25 @@ public final class WineCellarScreen extends GuiMekanism<WineCellarMenu> {
         }, 5, 88, 183, Color.ColorFunction.scale(WINE_RED, AMBER)));
     }
 
+    /**
+     * 黑屏背板 —— 画在 {@code renderBg}（槽位 widget 与物品之前）。
+     *
+     * <p>迁移后自动 {@code GuiSlot} 不调 {@code setRenderAboveSlots}：槽贴图在
+     * {@code super.render} 阶段画、物品在 {@code renderSlot} 阶段画，而 widget 的
+     * {@code drawBackground}（{@code GuiInnerScreen} 背板原来挂在这里）要到
+     * {@code renderLabels} 阶段才跑 —— 背板会把 3×3 存储格整片盖没
+     * （{@code inner_screen.png} alpha 全 255）。画进 renderBg 后不再依赖元素顺序。</p>
+     */
+    @Override
+    protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
+        super.renderBg(guiGraphics, partialTick, mouseX, mouseY);
+        // renderBg 的 pose 在屏幕原点 ⇒ 这里用绝对屏幕坐标（leftPos/topPos + 面板相对）。
+        GuiUtils.renderBackgroundTexture(guiGraphics, GuiInnerScreen.SCREEN,
+                GuiInnerScreen.SCREEN_SIZE, GuiInnerScreen.SCREEN_SIZE,
+                leftPos + INNER_SCREEN_X, topPos + INNER_SCREEN_Y,
+                INNER_SCREEN_W, INNER_SCREEN_H, 256, 256);
+    }
+
     /** 各活跃格进度百分比的平均值（0..1）；非酒/空格自动跳过。 */
     private double overallProgress() {
         int sum = 0;
@@ -175,7 +201,9 @@ public final class WineCellarScreen extends GuiMekanism<WineCellarMenu> {
         net.minecraft.world.level.Level lvl = minecraft == null ? null : minecraft.level;
         double sum = 0;
         for (int i = 0; i < WineCellarBlockEntity.SLOT_COUNT; i++) {
-            ItemStack st = menu.slots.get(i).getItem();
+            // 菜单槽顺序是「升级 2 → 存储 9 → 电源 1 → 背包」：直接 slots.get(i) 会读到
+            // 升级槽与存储 0..6，漏掉存储 7、8（M6-M2）。走菜单的存储下标换算。
+            ItemStack st = menu.slots.get(menu.getStorageSlotIndex(i)).getItem();
             if (st.isEmpty() || !cn.ism.mekck.compat.WineAgeCompat.hasWineAge(st)) continue;
             if (cn.ism.mekck.compat.WineAgeCompat.isAgedOut(st, lvl)) continue;
             sum += 62.5D * st.getCount() * s;

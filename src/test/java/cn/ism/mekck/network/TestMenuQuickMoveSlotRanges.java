@@ -77,6 +77,15 @@ import static org.junit.Assert.assertTrue;
  * <p>另加一条「新增菜单必须登记」的守卫：{@code menu/} 下任何出现
  * {@code ItemStack quickMoveStack(Player} 的文件都必须在 {@link #MENUS} 表里，
  * 否则新增菜单会绕过全部断言。</p>
+ *
+ * <h3>Mek 容器菜单：只登记、跳过 A1–A4</h3>
+ * 迁到 {@code MekanismTileContainer} 的菜单（如 {@code WineCellarMenu}）槽全部由
+ * {@code MekanismContainer.addSlots()} 建，源码里<b>没有任何槽构造器</b> ——
+ * A1–A4 的输入（单槽目标、分区边界常量、机器槽/玩家槽的源码位置）都不存在，
+ * 强行套用只会得到假红或假绿。这类菜单在表里以 {@code mekContainer=true} 登记：
+ * <b>A0 照常生效</b>（出现 {@code quickMoveStack} 就必须登记），A1–A4 跳过。
+ * 它们的路由正确性由各自的专项护栏守（{@code WineCellarMenu} 见
+ * {@code TestWineCellarRegressions}）。</p>
  */
 public class TestMenuQuickMoveSlotRanges {
 
@@ -294,9 +303,17 @@ public class TestMenuQuickMoveSlotRanges {
      * @param derivedLocals 允许出现的派生局部量，值是<b>必须在源码里原样出现的推导式</b>
      *                      （name → anchor）。白名单因此不是橡皮图章：改写法就得同步改锚点
      * @param note          机器槽数的推导理由（人工核对用，不参与断言）
+     * @param mekContainer  <b>Mek 容器菜单</b>：槽全部由 {@code MekanismContainer.addSlots()} 建，
+     *                      源码里没有任何槽构造器 ⇒ A1–A4 的输入不存在，只登记、跳过槽序断言。
+     *                      A0（必须登记）对它照常生效。
      */
     private record Menu(String file, int machineSlots, Set<String> captured,
-                        Map<String, String> derivedLocals, String note) {
+                        Map<String, String> derivedLocals, String note, boolean mekContainer) {
+
+        Menu(String file, int machineSlots, Set<String> captured,
+             Map<String, String> derivedLocals, String note) {
+            this(file, machineSlots, captured, derivedLocals, note, false);
+        }
     }
 
     private static Set<String> set(String... names) {
@@ -358,18 +375,27 @@ public class TestMenuQuickMoveSlotRanges {
             new Menu("SkeweringMachineMenu.java", 89, set("powerSlotIndex"), map(),
                     "3 输入 + 产物 + 返还 + 速度 + 能量 + 81 存储 + 能源 = 8+STORAGE_SLOT_COUNT"),
             new Menu("SmartCookingPotMenu.java", 92, set("powerSlotIndex"), map(),
-                    "6 输入 + 产物 + 返还 + 速度 + 能量 + 81 存储 + 能源 = 11+STORAGE_SLOT_COUNT"));
+                    "6 输入 + 产物 + 返还 + 速度 + 能量 + 81 存储 + 能源 = 11+STORAGE_SLOT_COUNT"),
+            new Menu("WineCellarMenu.java", -1, set(), map(),
+                    "Mek 容器菜单（只登记、跳过 A1–A4）：槽全部由 MekanismContainer.addSlots() 建"
+                            + "（升级 2 → 存储 9 → 电源 1 → 背包），源码里没有任何槽构造器，"
+                            + "A1–A4 的输入不存在。quickMoveStack 只拦「玩家背包 → 机器」的能量物品"
+                            + "（PowerSlotUtil.isValidEnergyItem：红石或带能量 capability 的物品），"
+                            + "目标是 POWER_SLOT_INDEX = 2 + SLOT_POWER；其余交回 super（Mek 默认路由）。"
+                            + "该路由的护栏在 TestWineCellarRegressions。",
+                    true));
 
-    // ── 已不在表里的两个菜单（都是从「自研 AbstractContainerMenu」迁到 Mek 容器）────
+    // ── 已不在表里的菜单（从「自研 AbstractContainerMenu」迁到 Mek 容器）──────────
     //
     // GrillMenu：迁到 Mek 原生 TileEntityConfigurableMachine 体系后不再手写 quickMoveStack
     // （由 MekanismContainer 接管），本类的四条断言对它已无对象。缺陷记录保留在类注释里，
     // 因为那是 A3 规则的来源。
     //
-    // WineCellarMenu：2026-10-03 同样迁到 MekanismTileContainer，手写的 quickMoveStack
-    // （9 存储格 + 电源槽的双区间搬运）整段删除 —— 分区边界、单槽目标、机器槽先于玩家槽
-    // 这三条断言的全部输入都不存在了。**这不是把断言放宽**：判据「menu/ 下有多少个手写
-    // quickMoveStack，MENUS 表就得有多少条」仍然逐台生效，只是这台机器不再有手写实现。
+    // WineCellarMenu：2026-10-03 迁到 MekanismTileContainer 时手写的 quickMoveStack 整段删除；
+    // 2026-10-04（M21）为恢复「能量物品优先进电源槽」的旧路由重新覆写，并以
+    // mekContainer=true 登记进表 —— 只登记、跳过 A1–A4（Mek 容器菜单的槽由
+    // MekanismContainer.addSlots() 建，源码里没有槽构造器，四条槽序断言的输入不存在）。
+    // **A0 完整性检查没有被削弱**：menu/ 下任何出现 quickMoveStack 的文件仍必须登记。
 
     private static List<String> menuFilesWithQuickMove() throws IOException {
         List<String> files = new ArrayList<>();
@@ -404,6 +430,9 @@ public class TestMenuQuickMoveSlotRanges {
     @Test
     public void singleSlotTargetsStayInsideMachineRegion() throws IOException {
         for (Menu m : MENUS) {
+            if (m.mekContainer()) {
+                continue; // Mek 容器菜单：槽由 MekanismContainer.addSlots() 建，源码无槽构造器，A1/A2 无对象
+            }
             String src = stripComments(read(MENU_DIR + m.file()));
             List<String> targets = singleSlotTargets(src);
             for (String target : targets) {
@@ -438,6 +467,9 @@ public class TestMenuQuickMoveSlotRanges {
     @Test
     public void declaredBoundaryMatchesRealMachineSlotCount() throws IOException {
         for (Menu m : MENUS) {
+            if (m.mekContainer()) {
+                continue; // Mek 容器菜单：边界由 Mek 的槽装配决定，源码里没有可比的声明
+            }
             if (m.machineSlots() < 0) {
                 continue; // 布局随档位变化，没有静态边界常量可比
             }
@@ -460,6 +492,9 @@ public class TestMenuQuickMoveSlotRanges {
     @Test
     public void machineSlotsAreAllocatedBeforePlayerInventory() throws IOException {
         for (Menu m : MENUS) {
+            if (m.mekContainer()) {
+                continue; // Mek 容器菜单：槽序由 MekanismContainer.addSlots() 决定，源码里没有槽构造器
+            }
             String src = stripComments(read(MENU_DIR + m.file()));
             Matcher player = PLAYER_SLOT.matcher(src);
             assertTrue(m.file() + " 找不到玩家背包槽（new Slot(inventory/playerInventory, ..)）", player.find());

@@ -19,6 +19,8 @@ import mekanism.common.capabilities.holder.energy.IEnergyContainerHolder;
 import mekanism.common.capabilities.holder.slot.IInventorySlotHolder;
 import mekanism.common.capabilities.holder.slot.InventorySlotHelper;
 import mekanism.common.inventory.container.MekanismContainer;
+import mekanism.common.inventory.container.slot.ContainerSlotType;
+import mekanism.common.inventory.container.slot.SlotOverlay;
 import mekanism.common.inventory.container.sync.SyncableFloat;
 import mekanism.common.inventory.container.sync.SyncableInt;
 import mekanism.common.lib.transmitter.TransmissionType;
@@ -226,9 +228,16 @@ public final class WineCellarBlockEntity extends TileEntityConfigurableMachine
         // 电源槽：只收能量物品/红石 —— 用 inputFiltered 表达准入谓词
         // （旧 PowerSlot.mayPlace 的语义，见 MekCkSlot#inputFiltered 的说明）。
         SlotDef powerDef = MekCkSlots.WineCellar.POWER;
-        powerSlot = MekCkSlot.inputFiltered(64,
+        MekCkSlot power = MekCkSlot.inputFiltered(64,
                 (stack, type) -> PowerSlotUtil.isValidEnergyItem(stack),
                 listener, powerDef.x(), powerDef.y());
+        // 槽型与覆盖图标：inputFiltered 建出来的是 INPUT，而电源槽在 Mek 的 GUI 里是
+        // POWER 槽型 + 闪电覆盖图标（GuiMekanism.addSlots 读 InventoryContainerSlot 的
+        // slotType/slotOverlay 决定，javap 实测）。迁移后自动槽不再由屏幕手画
+        // GuiVirtualSlot.with(SlotOverlay.POWER)，这两项必须在建槽时补上。
+        power.setSlotType(ContainerSlotType.POWER);
+        power.setSlotOverlay(SlotOverlay.POWER);
+        powerSlot = power;
         builder.addSlot(powerSlot);
 
         return builder.build();

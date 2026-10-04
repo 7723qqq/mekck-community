@@ -392,11 +392,28 @@ public final class MekCkFactoryLayout {
     }
 
     /**
+     * 烹饪的 3 个流体条几何 —— <b>屏幕与面板高度公式共用同一份</b>。
+     *
+     * <p>{@code GuiCkFluidGauge} 用 {@code GaugeType.STANDARD}（javap 实测
+     * {@code GaugeOverlay.STANDARD} = 16×58，{@code GuiGauge} 构造器再加 2 ⇒ 18×60），
+     * 所以条占 {@code y = 88..148}。</p>
+     */
+    public static final int COOKING_FLUID_GAUGE_Y = 88;
+    public static final int COOKING_FLUID_GAUGE_H = 60;
+
+    /**
      * 烹饪：输入固定 6 格（3 列 2 行）、输出固定 12 格（3 列 4 行），
-     * 与档位无关，所以面板高度是常量 184 + (4-2)*18。
+     * 与档位无关，所以面板高度是常量 184 + (4-2)*18 = 220 —— <b>但 220 不够</b>：
+     * 3 个流体条占 {@code 88..148}，而 220 档的玩家背包首行是 138、「Inventory」标签是 128，
+     * 条的下缘压住背包首行 10px、标签整行落在条内。
+     *
+     * <p>所以面板高度取「条底 + 标签余量 + 背包余量」：
+     * {@code 88 + 60 + 10 + 82 = 240}。背包首行随之下移到 158、标签到 148，
+     * 与条底（148）齐平，两者都不再与条重叠。</p>
      */
     public static int cookingImageHeight() {
-        return BASE_PANEL_HEIGHT + (4 - 2) * 18;
+        return Math.max(BASE_PANEL_HEIGHT + (4 - 2) * 18,
+                COOKING_FLUID_GAUGE_Y + COOKING_FLUID_GAUGE_H + LABEL_ABOVE_INVENTORY + BOTTOM_MARGIN);
     }
 
     /** 穿串：输入固定 3 格 + 产物/返还 2 格，面板高度与档位无关。 */

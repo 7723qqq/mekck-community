@@ -176,23 +176,22 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
     protected void drawForegroundText(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         renderTitleText(guiGraphics);
         drawString(guiGraphics, playerInventoryTitle, 8, inventoryLabelY, titleTextColor());
-        int x = leftPos;
-        int y = topPos;
+        // drawForegroundText 跑在 translate(leftPos, topPos) 之后的 pose 里 ⇒ 本方法内一律用
+        // GUI 相对坐标，不能再加 leftPos/topPos（加了就画到面板外）。
         int mode = menu.getMode();
         String modeLabel = Component.translatable(mode == SandwichAssemblerBlockEntity.MODE_COPY
                 ? "gui.mekck.ui.sandwich_mode.copy"
                 : mode == SandwichAssemblerBlockEntity.MODE_CUSTOM
                 ? "gui.mekck.ui.sandwich_mode.custom"
                 : "gui.mekck.ui.sandwich_mode.sequenced").getString();
-        guiGraphics.drawString(font, modeLabel,
-                x + MODE_BTN_X - leftPos + 6, MODE_BTN_Y + 4, 0xFF101010, false);
+        guiGraphics.drawString(font, modeLabel, MODE_BTN_X + 6, MODE_BTN_Y + 4, 0xFF101010, false);
         String countText = mode == SandwichAssemblerBlockEntity.MODE_COPY
                 ? Component.translatable("gui.mekck.ui.sandwich_count.copy").getString()
                 : mode == SandwichAssemblerBlockEntity.MODE_SEQUENCED
                 ? Component.translatable("gui.mekck.ui.sandwich_count.sequenced").getString()
                 : Component.translatable("gui.mekck.ui.sandwich_count.remaining",
                         menu.getTargetCount()).getString();
-        guiGraphics.drawString(font, countText, x + MODE_BTN_X + 24, y + COUNT_Y + 4, 0xFF202020, false);
+        guiGraphics.drawString(font, countText, MODE_BTN_X + 24, COUNT_Y + 4, 0xFF202020, false);
         if (!SandwichAssemblerBlockEntity.hasSar()) {
             guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.sandwich_sample_slot.requires_sar").getString(), 8, 96, 0xFFFF5555, false);
         }

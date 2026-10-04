@@ -56,7 +56,6 @@ public final class CookingFactoryScreen
     private static final int PANEL_WIDTH = 204;
     /** 3 个流体条：横向排开，每个间隔 28px（与旧 GUI 的 {@code 40 + i * 28} 同值）。 */
     private static final int FLUID_GAUGE_X = 40;
-    private static final int FLUID_GAUGE_Y = 88;
     private static final int FLUID_GAUGE_STEP = 28;
 
     public CookingFactoryScreen(CookingFactoryMenu menu, Inventory inventory, Component title) {
@@ -96,10 +95,11 @@ public final class CookingFactoryScreen
                 38 + INPUT_COLS * 18, GAP_BETWEEN, 41 + 2 * 18 / 2);
 
         // 3 个流体液位条：唯一 Mek 没有对应物、必须自己建的控件。
+        // y 取自 MekCkFactoryLayout（面板高度公式按同一个常量保证条不压背包与标签）。
         for (int i = 0; i < CookingFactoryTile.FLUID_TANKS; i++) {
             int index = i;
             addRenderableWidget(new GuiCkFluidGauge(this, FLUID_GAUGE_X + index * FLUID_GAUGE_STEP,
-                    FLUID_GAUGE_Y,
+                    cn.ism.mekck.menu.MekCkFactoryLayout.COOKING_FLUID_GAUGE_Y,
                     () -> fluidStackOf(index),
                     () -> capacityOf(index)));
         }
