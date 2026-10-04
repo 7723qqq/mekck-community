@@ -48,9 +48,17 @@ public final class IceMakerMenu extends AbstractContainerMenu implements ISideCo
     private final UpgradeSlot speedUpgradeSlot;
     private final UpgradeSlot energyUpgradeSlot;
 
+    /**
+     * 客户端构造器：方块在 OpenScreen 到达前被破坏/替换、或区块被卸载时，
+     * {@code getBlockEntity} 返回 null。旧写法直接强转后交给主构造器，
+     * 主构造器第一行 {@code machine.getItems()} 就 NPE 崩客户端。这里显式判空
+     * （{@code instanceof} 同时挡掉类型不符），null 时构造「空菜单」：
+     * 槽位数量与坐标照旧，所有读取走 {@code machine == null} 的兜底分支。
+     */
     public IceMakerMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
-                (IceMakerBlockEntity) inventory.player.level().getBlockEntity(buffer.readBlockPos()),
+                inventory.player.level().getBlockEntity(buffer.readBlockPos())
+                        instanceof IceMakerBlockEntity machine ? machine : null,
                 new SimpleContainerData(IceMakerBlockEntity.DATA_SIZE));
     }
 
@@ -59,24 +67,30 @@ public final class IceMakerMenu extends AbstractContainerMenu implements ISideCo
         this.machine = machine;
         this.data = data;
 
+        // 空菜单（客户端 BE 缺失）用等长的空 handler 兜底：槽位数量与坐标必须照旧，
+        // 否则客户端与服务端的槽位契约不一致；读取路径全部走 machine == null 分支。
+        ItemStackHandler items = machine == null
+                ? new ItemStackHandler(IceMakerBlockEntity.TOTAL_SLOTS)
+                : machine.getItems();
+
         // 容器槽顺序与 handler 索引一致：input, output, speed, energy, creative, cb1-4, power
-        addSlot(new InputSlot(machine.getItems(), IceMakerBlockEntity.INPUT_SLOT, INPUT_X, INPUT_Y));
-        addSlot(new OutputSlot(machine.getItems(), IceMakerBlockEntity.OUTPUT_SLOT, OUTPUT_X, OUTPUT_Y));
+        addSlot(new InputSlot(items, IceMakerBlockEntity.INPUT_SLOT, INPUT_X, INPUT_Y));
+        addSlot(new OutputSlot(items, IceMakerBlockEntity.OUTPUT_SLOT, OUTPUT_X, OUTPUT_Y));
 
         // 升级槽（仅升级弹窗打开时可用）
-        this.speedUpgradeSlot = new UpgradeSlot(machine.getItems(), IceMakerBlockEntity.SLOT_SPEED_UPGRADE, 40, 46, this);
+        this.speedUpgradeSlot = new UpgradeSlot(items, IceMakerBlockEntity.SLOT_SPEED_UPGRADE, 40, 46, this);
         addSlot(this.speedUpgradeSlot);
-        this.energyUpgradeSlot = new UpgradeSlot(machine.getItems(), IceMakerBlockEntity.SLOT_ENERGY_UPGRADE, 40, 72, this);
+        this.energyUpgradeSlot = new UpgradeSlot(items, IceMakerBlockEntity.SLOT_ENERGY_UPGRADE, 40, 72, this);
         addSlot(this.energyUpgradeSlot);
 
         // 创造升级槽 + 冷萃升级槽（主界面常显；冷萃 ①~⑤ 一排 5 格）
-        addSlot(new ColdBrewSlot(machine.getItems(), IceMakerBlockEntity.SLOT_CREATIVE_UPGRADE, INPUT_X + 5 * 18 + 8, CB_ROW_Y));
+        addSlot(new ColdBrewSlot(items, IceMakerBlockEntity.SLOT_CREATIVE_UPGRADE, INPUT_X + 5 * 18 + 8, CB_ROW_Y));
         for (int i = 0; i < 5; i++) {
-            addSlot(new ColdBrewSlot(machine.getItems(), IceMakerBlockEntity.CB_SLOT_1 + i, INPUT_X + i * 18, CB_ROW_Y));
+            addSlot(new ColdBrewSlot(items, IceMakerBlockEntity.CB_SLOT_1 + i, INPUT_X + i * 18, CB_ROW_Y));
         }
 
         // 能源槽（能量物品），Mekanism 风格位置
-        addSlot(new PowerSlot(machine.getItems(), IceMakerBlockEntity.SLOT_POWER, 7, 13));
+        addSlot(new PowerSlot(items, IceMakerBlockEntity.SLOT_POWER, 7, 13));
 
         // 玩家物品栏（居中）
         int invLeft = (IMAGE_WIDTH - 162) / 2;
@@ -92,13 +106,17 @@ public final class IceMakerMenu extends AbstractContainerMenu implements ISideCo
         addDataSlots(data);
     }
 
-    /** 机器实例（客户端也持有，槽位内容由菜单同步 ⇒ 可用于「本机下单」列表）。 */
+    /** 机器实例（客户端也持有，槽位内容由菜单同步 ⇒ 可用于「本机下单」列表）；空菜单（客户端 BE 缺失）时为 null。 */
     public cn.ism.mekck.blockentity.IceMakerBlockEntity getMachine() {
         return machine;
     }
 
     @Override
     public boolean stillValid(Player player) {
+        // 空菜单一律视为失效：服务端据此关闭窗口，客户端也不再接受交互。
+        if (machine == null) {
+            return false;
+        }
         Level level = player.level();
         return level.getBlockEntity(machine.getBlockPos()) == machine
                 && player.distanceToSqr(machine.getBlockPos().getX() + 0.5D, machine.getBlockPos().getY() + 0.5D,
@@ -177,7 +195,8 @@ public final class IceMakerMenu extends AbstractContainerMenu implements ISideCo
     }
 
     public int getWaterCapacity() {
-        return machine.getWaterTank().getCapacity();
+        // 空菜单没有机器可读：容量按 0（流体条对 capacity <= 0 直接不画）。
+        return machine == null ? 0 : machine.getWaterTank().getCapacity();
     }
 
     public int getEncodedSideConfig() {
@@ -224,13 +243,18 @@ public final class IceMakerMenu extends AbstractContainerMenu implements ISideCo
 
     @Override
     public BlockPos getBlockPos() {
-        return machine.getBlockPos();
+        // 空菜单没有真实坐标，返回 ZERO 而不是 NPE（同 GrillMenu 的 tile == null 写法）。
+        return machine == null ? BlockPos.ZERO : machine.getBlockPos();
     }
 
     // ================== IUpgradeMenu ==================
     /** 卸载升级（升级界面卸载按钮）。 */
     @Override
     public void uninstallUpgrade(byte mode, int slot) {
+        // 空菜单没有机器可卸载：不发包。
+        if (machine == null) {
+            return;
+        }
         cn.ism.mekck.network.ModMessages.sendToServer(
                 new cn.ism.mekck.network.UpgradeUninstallPacket(machine.getBlockPos(), mode, slot));
     }

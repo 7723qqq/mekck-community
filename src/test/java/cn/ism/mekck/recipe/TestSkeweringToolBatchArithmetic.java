@@ -12,8 +12,8 @@ import static org.junit.Assert.assertTrue;
  * <p>背景：批量按「三种材料各还剩多少」分别算再取小（{@code batchSize}），其中签子那一支
  * 读的是 {@code ingredientCount}——<b>注意它管的是签子，不是主料</b>（主料恒 1）。
  *
- * <p>{@code mekck:skewering} 的签子<b>不消耗</b>（产物完成后由
- * {@code returnPayload} 从输入槽 0 原样取回返还槽），因此 {@code ingredientCount} 恒为 0。
+ * <p>{@code mekck:skewering} 的签子<b>不消耗</b>（自有配方 toolCount=0：签子不消耗、也不返还），
+ * 因此 {@code ingredientCount} 恒为 0。
  * 旧实现写的是 {@code toolAvailable / toolCount}，{@code toolCount == 0} 时除零，
  * {@code ArithmeticException} 被外层 {@code catch (Exception) { return 0; }} 吞掉，
  * 净效果是批量恒 0 → 配方列表恒空 → 订单设不了 → <b>机器完全惰性且无任何日志</b>。

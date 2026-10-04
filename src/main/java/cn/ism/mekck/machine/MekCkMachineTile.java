@@ -1680,10 +1680,13 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine
     /**
      * 本家族是否支持自动分选。
      *
-     * <p>默认支持。穿串工厂覆写成 {@code false}：它的 3 个输入槽是<b>签子 / 主料 / 辅料</b>
-     * 三种不同角色，而匹配是位置无关的、返还槽却复制「输入槽 0 的整叠」
-     * （见 {@code SkeweringFactoryTile} 类注释的已知坑 ①）。分选会把签子挪出槽 0，
-     * 让那个坑从「可达」变成「常态」，所以这台机器不提供这个开关。</p>
+     * <p>默认支持。穿串工厂覆写成 {@code false}：本机是整机批次操作（{@code processCount} 恒 1），
+     * 没有「多路并行」可分；而配方匹配位置无关（材料放哪个输入槽都能开工），
+     * 分选只会把材料在等价位置之间搬来搬去，没有收益。</p>
+     *
+     * <p>历史注记：M29 之前返还槽复制「输入槽 0 的整叠」，分选会把签子挪出槽 0、
+     * 让错配从「可达」变成「常态」；M29 把返还改成「按实际消耗的签子记录落槽」后，
+     * 这条危险不再存在，但上面的「无收益」理由仍然成立。</p>
      */
     public boolean supportsSorting() {
         return true;

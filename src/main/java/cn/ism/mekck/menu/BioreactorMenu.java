@@ -13,6 +13,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerData;
+import net.minecraft.world.inventory.SimpleContainerData;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -45,13 +46,24 @@ public final class BioreactorMenu extends AbstractContainerMenu {
     private static final int TANK_SLOT_Y = 82;
     private static final int INV_TOP = 103;
 
+    /**
+     * 客户端构造器：方块在 OpenScreen 到达前被破坏/替换、或区块被卸载时，
+     * {@code getBlockEntity} 返回 null。旧写法直接强转后交给主构造器，
+     * 主构造器第一行 {@code machine.getItems()} 就 NPE 崩客户端。这里显式判空
+     * （{@code instanceof} 同时挡掉类型不符），null 时构造「空菜单」：
+     * 槽位数量与坐标照旧，所有读取走 {@code machine == null} 的兜底分支。
+     */
     public BioreactorMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
-                (BioreactorBlockEntity) inventory.player.level().getBlockEntity(buffer.readBlockPos()));
+                inventory.player.level().getBlockEntity(buffer.readBlockPos())
+                        instanceof BioreactorBlockEntity machine ? machine : null);
     }
 
     public BioreactorMenu(int containerId, Inventory inventory, BioreactorBlockEntity machine) {
-        this(containerId, inventory, machine, machine.getData());
+        // 空菜单（客户端 BE 缺失）用等长的空数据槽兜底：屏幕侧会读这些槽，
+        // 不兜底就是「构造器不崩了、第一帧渲染崩」。
+        this(containerId, inventory, machine,
+                machine == null ? new SimpleContainerData(BioreactorBlockEntity.DATA_SIZE) : machine.getData());
     }
 
     public BioreactorMenu(int containerId, Inventory inventory, BioreactorBlockEntity machine, ContainerData data) {
@@ -59,19 +71,25 @@ public final class BioreactorMenu extends AbstractContainerMenu {
         this.machine = machine;
         this.data = data;
 
+        // 空菜单（客户端 BE 缺失）用等长的空 handler 兜底：槽位数量与坐标必须照旧，
+        // 否则客户端与服务端的槽位契约不一致；读取路径全部走 machine == null 分支。
+        ItemStackHandler items = machine == null
+                ? new ItemStackHandler(BioreactorBlockEntity.TOTAL_SLOTS)
+                : machine.getItems();
+
         // 4×4 输入格
         for (int row = 0; row < 4; row++) {
             for (int col = 0; col < INPUT_COLS; col++) {
-                addSlot(new InputSlot(machine.getItems(), row * INPUT_COLS + col,
+                addSlot(new InputSlot(items, row * INPUT_COLS + col,
                         INPUT_START_X + col * INPUT_SPACING, INPUT_START_Y + row * INPUT_SPACING));
             }
         }
 
         // 能源槽（能量立方/能量板/红石）
-        addSlot(new PowerSlot(machine, machine.getPowerSlot(), POWER_SLOT_X, POWER_SLOT_Y, this));
+        addSlot(new PowerSlot(items, BioreactorBlockEntity.POWER_SLOT, POWER_SLOT_X, POWER_SLOT_Y, this));
 
         // 流体储罐槽（流体物品 → 流体格，仅供能发电的燃料流体）
-        addSlot(new TankSlot(machine.getItems(), BioreactorBlockEntity.TANK_SLOT, TANK_SLOT_X, TANK_SLOT_Y));
+        addSlot(new TankSlot(items, BioreactorBlockEntity.TANK_SLOT, TANK_SLOT_X, TANK_SLOT_Y));
 
         // 玩家物品栏（GUI 高 184）
         int invLeft = (176 - 162) / 2;
@@ -89,6 +107,10 @@ public final class BioreactorMenu extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(Player player) {
+        // 空菜单一律视为失效：服务端据此关闭窗口，客户端也不再接受交互。
+        if (machine == null) {
+            return false;
+        }
         Level level = player.level();
         return level.getBlockEntity(machine.getBlockPos()) == machine
                 && player.distanceToSqr(machine.getBlockPos().getX() + 0.5D, machine.getBlockPos().getY() + 0.5D,
@@ -180,14 +202,15 @@ public final class BioreactorMenu extends AbstractContainerMenu {
     }
 
     public BlockPos getBlockPos() {
-        return machine.getBlockPos();
+        // 空菜单没有真实坐标，返回 ZERO 而不是 NPE（同 GrillMenu 的 tile == null 写法）。
+        return machine == null ? BlockPos.ZERO : machine.getBlockPos();
     }
 
     // ── 槽位 ──────────────────────────────────────────────────────────
 
     private static final class PowerSlot extends SlotItemHandler implements IVirtualSlot {
-        private PowerSlot(BioreactorBlockEntity machine, int slot, int x, int y, BioreactorMenu menu) {
-            super(machine.getItems(), slot, x, y);
+        private PowerSlot(ItemStackHandler handler, int slot, int x, int y, BioreactorMenu menu) {
+            super(handler, slot, x, y);
         }
 
         @Override
