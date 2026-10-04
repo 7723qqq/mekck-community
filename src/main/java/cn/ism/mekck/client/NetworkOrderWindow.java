@@ -107,8 +107,8 @@ public class NetworkOrderWindow extends GuiWindow {
 
     /** 鼠标是否落在面板矩形内（渲染与点击共用同一份几何）。 */
     private boolean inPanel(double mouseX, double mouseY) {
-        return mouseX >= panelX() && mouseX <= panelX() + PANEL_W
-                && mouseY >= panelY() && mouseY <= panelY() + PANEL_H;
+        return NetworkOrderPanel.hitsRelativeRect(mouseX, mouseY, getGuiLeft(), getGuiTop(),
+                panelX(), panelY(), PANEL_W, PANEL_H);
     }
 
     @Override
@@ -118,7 +118,10 @@ public class NetworkOrderWindow extends GuiWindow {
         drawTitleText(guiGraphics, Component.translatable("tooltip.mekck.order_panel"), 5);
         // 每帧 bind：机器坐标不变时是空操作，但面板靠它触发首次数据拉取（bind 里判 dataRequested）。
         panel.bind(pos);
-        panel.render(guiGraphics, getFont(), panelX(), panelY(), PANEL_W, PANEL_H, mouseX, mouseY, 0f);
+        // 面板绘制在 GUI 相对坐标（pose 已在 GUI 原点），悬停判定必须用同一坐标系：
+        // 把绝对鼠标换算成 GUI 相对再交给面板（否则高亮/搜索框悬停整体偏移 (leftPos, topPos)）。
+        panel.render(guiGraphics, getFont(), panelX(), panelY(), PANEL_W, PANEL_H,
+                mouseX - getGuiLeft(), mouseY - getGuiTop(), 0f, getGuiLeft(), getGuiTop());
     }
 
     /**
@@ -133,7 +136,8 @@ public class NetworkOrderWindow extends GuiWindow {
     public GuiElement mouseClickedNested(double mouseX, double mouseY, int button) {
         if (inPanel(mouseX, mouseY)) {
             panel.bind(pos);
-            panel.mouseClicked(mouseX, mouseY, button, panelX(), panelY(), PANEL_W, PANEL_H,
+            // 面板内部按 GUI 相对坐标命中（与绘制同源），这里把绝对鼠标换算过去。
+            panel.mouseClicked(mouseX - getGuiLeft(), mouseY - getGuiTop(), button, panelX(), panelY(), PANEL_W, PANEL_H,
                     (recipeId, qty) -> ModMessages.sendToServer(
                             new NetworkOrderPacket(pos, recipeId.toString(), qty)));
             return this;

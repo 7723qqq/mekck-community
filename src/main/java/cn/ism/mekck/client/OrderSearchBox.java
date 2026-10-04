@@ -23,6 +23,11 @@ import net.minecraft.world.item.crafting.Recipe;
  *   // 列表赋值后:        recipes = search.filter(recipes)
  *   // keyPressed/charTyped/mouseClicked/render: 转发给 search（见各方法注释）
  * </pre>
+ *
+ * <p><b>坐标口径</b>：{@code EditBox} 的 x/y 与 {@code mouseClicked}/{@code render} 收到的
+ * mouseX/mouseY 必须处在<b>同一个坐标系</b>里（{@code EditBox} 内部就是拿它们直接比 x/y）。
+ * {@link NetworkOrderPanel} 传的是 GUI 相对坐标（面板绘制所在的空间），所以调用方必须先把
+ * 绝对鼠标换算成 GUI 相对再转发 —— 否则搜索框「画对了、点不到」。</p>
  */
 public final class OrderSearchBox {
 

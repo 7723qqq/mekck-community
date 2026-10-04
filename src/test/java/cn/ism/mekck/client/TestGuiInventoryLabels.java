@@ -1,5 +1,7 @@
 package cn.ism.mekck.client;
 
+import cn.ism.mekck.TestSourceText;
+import cn.ism.mekck.menu.MekCkFactoryLayout;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -36,10 +38,13 @@ import static org.junit.Assert.assertTrue;
  *       问题，方向正好反了 —— 那 12px 恰恰是正确的间距。</li>
  * </ul>
  *
- * <h3>三条断言</h3>
+ * <h3>四条断言</h3>
  * <ol>
  *   <li><b>该画字的屏必须真的覆写</b>（或继承一个已覆写的屏基类）；</li>
- *   <li><b>标签不得压住背包首行</b>：{@code inventoryLabelY + 标签高 ≤ 背包首行}；</li>
+ *   <li><b>标签不得压住背包首行</b>：{@code inventoryLabelY + 标签高 ≤ 背包首行}
+ *       —— 背包首行按<b>屏幕的菜单类型</b>解析（Mek 容器不覆写 = 84；覆写 = 解析返回值），
+ *       不再拿「源码里出现过 getInventoryYOffset」当代理（M4-10）；</li>
+ *   <li><b>烹饪面板的流体条不得压背包与标签</b>（纯函数：条底 ≤ 标签 ≤ 背包首行）；</li>
  *   <li>判据不许空转。</li>
  * </ol>
  *
@@ -123,36 +128,132 @@ public class TestGuiInventoryLabels {
     /**
      * {@code inventoryLabelY} 必须在玩家背包首行<b>之上</b>，且留得下一行字高。
      *
-     * <p>判据只覆盖<b>字面量</b>赋值；引用 {@code MekCkFactoryLayout.INVENTORY_LABEL_Y}
-     * 这类常量的写法由 {@link #labelConstantsResolveAboveTheInventory} 单独钉。
-     * 两者合起来覆盖了本仓现有的全部写法。</p>
+     * <p>判据<b>不再</b>用「屏幕源码里出现过 getInventoryYOffset」当代理（M4-10：
+     * {@code WineCellarScreen} 不含该串 ⇒ 被跳过，而它的菜单恰恰是 Mek 容器且不覆写）。
+     * 改为解析屏幕的菜单类型：</p>
+     * <ul>
+     *   <li>菜单 {@code extends MekanismTileContainer} 且<b>不覆写</b>
+     *       {@code getInventoryYOffset()} ⇒ 背包首行 = Mek 默认 {@code BASE_Y_OFFSET}；</li>
+     *   <li>覆写 ⇒ 解析覆写返回的常量（如 {@code return INV_TOP;}）；</li>
+     *   <li>自定义 {@code AbstractContainerMenu} ⇒ 背包由菜单自己摆，判据不适用（跳过）。</li>
+     * </ul>
+     * <p>表达式型 {@code inventoryLabelY} 也做常量解析（{@code XxxMenu.INV_TOP - 9}、
+     * 本文件常量 ± 偏移）；解析不出的（如工厂布局公式）交给
+     * {@link #labelConstantsResolveAboveTheInventory} 与布局类自己的断言。</p>
      */
     @Test
-    public void literalLabelYDoesNotOverlapTheInventory() throws IOException {
-        // 这些菜单继承 MekanismTileContainer 且**不覆写** getInventoryYOffset() ⇒ 背包首行 = 84
-        final int mekDefaultInventoryY = 84;
-
+    public void labelYDoesNotOverlapTheInventory() throws IOException {
         List<String> offenders = new ArrayList<>();
+        List<String> checkedScreens = new ArrayList<>();
         for (Path file : screens()) {
             String source = read(file);
-            if (!source.contains("getInventoryYOffset")) {
-                continue;   // 该屏的菜单不是 Mek 容器，背包由菜单自己摆，判据不适用
+            List<String> exprs = labelAssignments(source);
+            if (exprs.isEmpty()) {
+                continue;
             }
-            for (String expr : labelAssignments(source)) {
-                Matcher num = Pattern.compile("^-?\\d+$").matcher(expr);
-                if (!num.matches()) {
-                    continue;   // 常量 / 表达式，交给另一条断言
+            String menu = menuTypeOf(source);
+            if (menu == null) {
+                continue;
+            }
+            Path menuFile = Path.of("src/main/java/cn/ism/mekck/menu", menu + ".java");
+            if (!Files.isRegularFile(menuFile)) {
+                continue;
+            }
+            String menuSource = read(menuFile);
+            if (!menuSource.contains("extends MekanismTileContainer")) {
+                continue;   // 自定义菜单：背包由菜单自己摆，判据不适用
+            }
+            Integer inventoryTop = menuInventoryTop(menuSource);
+            if (inventoryTop == null) {
+                continue;   // 覆写值解析不出来（如工厂布局公式），交给布局类断言
+            }
+            for (String expr : exprs) {
+                Integer label = resolveLabel(source, menuSource, expr);
+                if (label == null) {
+                    continue;
                 }
-                int y = Integer.parseInt(expr);
-                if (y + LABEL_HEIGHT > mekDefaultInventoryY) {
-                    offenders.add(file.getFileName() + " → inventoryLabelY = " + y
-                            + "（背包首行 " + mekDefaultInventoryY + "，标签底边 " + (y + LABEL_HEIGHT)
-                            + " 已压到槽位上）");
+                checkedScreens.add(file.getFileName().toString());
+                if (label + LABEL_HEIGHT > inventoryTop) {
+                    offenders.add(file.getFileName() + " → inventoryLabelY = " + expr
+                            + "（解析为 " + label + "，标签底边 " + (label + LABEL_HEIGHT)
+                            + " 压住背包首行 " + inventoryTop + "）");
                 }
             }
         }
+        assertTrue("WineCellarScreen 必须被这条判据覆盖（M4-10 的漏屏就是它）",
+                checkedScreens.contains("WineCellarScreen.java"));
         assertEquals("这些屏把「Inventory」标签画在玩家背包首行上：\n  " + String.join("\n  ", offenders),
                 List.of(), offenders);
+    }
+
+    /** 解析屏幕的菜单类型：{@code extends X<..., YyyMenu>} 里最后一个以 Menu 结尾的类型参数。 */
+    private static String menuTypeOf(String source) {
+        Matcher m = Pattern.compile("class\\s+\\w+\\s+extends\\s+[\\w.]+\\s*<([^<>]*)>").matcher(source);
+        if (!m.find()) {
+            return null;
+        }
+        String[] args = m.group(1).split(",");
+        for (int i = args.length - 1; i >= 0; i--) {
+            String arg = args[i].trim();
+            if (arg.endsWith("Menu")) {
+                return arg;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 菜单的玩家背包首行：不覆写 {@code getInventoryYOffset()} ⇒ Mek 默认
+     * {@code BASE_Y_OFFSET}；覆写 ⇒ 解析 {@code return <常量>;}；解析不出返回 null。
+     */
+    private static Integer menuInventoryTop(String menuSource) {
+        if (!menuSource.contains("protected int getInventoryYOffset")) {
+            return MekCkFactoryLayout.MEK_DEFAULT_INVENTORY_Y;
+        }
+        String body = TestSourceText.methodBody(menuSource, "protected int getInventoryYOffset");
+        Matcher m = Pattern.compile("return\\s+([^;]+);").matcher(body);
+        if (!m.find()) {
+            return null;
+        }
+        return resolveNamedConstant(menuSource, null, m.group(1).trim());
+    }
+
+    /** 解析 {@code inventoryLabelY} 表达式：字面量 / 常量 / 常量 ± 数字。 */
+    private static Integer resolveLabel(String screenSource, String menuSource, String expr) {
+        String e = expr.trim();
+        Matcher m = Pattern.compile("([\\w.]+)\\s*([+-])\\s*(\\d+)").matcher(e);
+        if (m.matches()) {
+            Integer base = resolveNamedConstant(screenSource, menuSource, m.group(1));
+            if (base == null) {
+                return null;
+            }
+            int delta = Integer.parseInt(m.group(3));
+            return m.group(2).equals("-") ? base - delta : base + delta;
+        }
+        return resolveNamedConstant(screenSource, menuSource, e);
+    }
+
+    /**
+     * 解析一个具名常量：字面量 / 本文件 {@code NAME = <数字>} / {@code XxxMenu.NAME}（菜单文件里）。
+     * 其余（{@code MekCkFactoryLayout.INVENTORY_LABEL_Y} 这类表达式型常量）返回 null。
+     */
+    private static Integer resolveNamedConstant(String screenSource, String menuSource, String name) {
+        if (name.matches("-?\\d+")) {
+            return Integer.parseInt(name);
+        }
+        int dot = name.lastIndexOf('.');
+        String owner = dot > 0 ? name.substring(0, dot) : null;
+        String field = dot > 0 ? name.substring(dot + 1) : name;
+        String source;
+        if (owner == null) {
+            source = screenSource;
+        } else if (owner.endsWith("Menu") && menuSource != null) {
+            source = menuSource;
+        } else {
+            return null;
+        }
+        Matcher m = Pattern.compile("\\b" + Pattern.quote(field) + "\\s*=\\s*(-?\\d+)").matcher(source);
+        return m.find() ? Integer.parseInt(m.group(1)) : null;
     }
 
     /**
@@ -190,7 +291,38 @@ public class TestGuiInventoryLabels {
         return Integer.parseInt(m.group(1));
     }
 
-    // ── 3. 判据不许空转 ────────────────────────────────────────────────
+    // ── 3. 烹饪面板：流体条不得压背包与标签 ─────────────────────────────
+
+    /**
+     * 烹饪面板的 3 个流体条必须整块落在玩家背包与「Inventory」标签之上。
+     *
+     * <p>纯函数断言：条底 = {@code COOKING_FLUID_GAUGE_Y + COOKING_FLUID_GAUGE_H}；
+     * 背包首行 = {@code inventoryYOffset(cookingImageHeight())}；标签 =
+     * {@code inventoryLabelY(...)}。三者必须满足 条底 ≤ 标签 ≤ 背包首行。</p>
+     */
+    @Test
+    public void cookingFluidGaugesClearTheInventory() {
+        int gaugeBottom = MekCkFactoryLayout.COOKING_FLUID_GAUGE_Y + MekCkFactoryLayout.COOKING_FLUID_GAUGE_H;
+        int panelHeight = MekCkFactoryLayout.cookingImageHeight();
+        int inventoryTop = MekCkFactoryLayout.inventoryYOffset(panelHeight);
+        int labelY = MekCkFactoryLayout.inventoryLabelY(panelHeight);
+        assertTrue("流体条底边 " + gaugeBottom + " 压住玩家背包首行 " + inventoryTop
+                        + "（面板高 " + panelHeight + "）",
+                gaugeBottom <= inventoryTop);
+        assertTrue("流体条底边 " + gaugeBottom + " 压住「Inventory」标签 " + labelY
+                        + "（面板高 " + panelHeight + "）",
+                gaugeBottom <= labelY);
+    }
+
+    /** 屏幕摆条用的 y 必须取自布局类常量 —— 否则「屏幕摆条、布局算高度」两处会漂移。 */
+    @Test
+    public void cookingScreenUsesTheSharedGaugeGeometry() throws IOException {
+        String src = TestSourceText.read("src/main/java/cn/ism/mekck/client/CookingFactoryScreen.java");
+        assertTrue("CookingFactoryScreen 的流体条 y 必须取自 MekCkFactoryLayout.COOKING_FLUID_GAUGE_Y",
+                src.contains("MekCkFactoryLayout.COOKING_FLUID_GAUGE_Y"));
+    }
+
+    // ── 4. 判据不许空转 ────────────────────────────────────────────────
 
     /**
      * 确认判据在本仓<b>确实还能匹配到东西</b>。
@@ -205,6 +337,7 @@ public class TestGuiInventoryLabels {
 
         int withLabel = 0;
         int withOverride = 0;
+        int withMenu = 0;
         for (Path file : screens()) {
             String source = read(file);
             if (!labelAssignments(source).isEmpty()) {
@@ -213,8 +346,12 @@ public class TestGuiInventoryLabels {
             if (source.contains("protected void drawForegroundText")) {
                 withOverride++;
             }
+            if (menuTypeOf(source) != null) {
+                withMenu++;
+            }
         }
         assertTrue("一个 inventoryLabelY 都没扫到，判据失效了", withLabel >= 10);
         assertTrue("一个 drawForegroundText 覆写都没扫到，判据失效了", withOverride >= 10);
+        assertTrue("菜单类型解析失效了（一个都没认出来）", withMenu >= 15);
     }
 }
