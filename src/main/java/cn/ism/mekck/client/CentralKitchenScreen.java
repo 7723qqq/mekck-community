@@ -181,8 +181,15 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
     private mekanism.client.gui.element.button.MekanismButton sortButton(String modeKey) {
         return MekCkButtons.text(this, SORT_X, SORT_Y, SORT_W, SORT_H,
                 Component.translatable("gui.mekck.ui.sort", Component.translatable(modeKey)),
-                () -> ModMessages.sendToServer(new KitchenViewPacket(menu.getMachine().getBlockPos(), (byte) 1, "",
-                        (menu.getSortMode().ordinal() + 1) % CentralKitchenMenu.SortMode.values().length)));
+                () -> {
+                    // 空菜单（BE 缺失）：没有可排序的机器，点了也不发包。
+                    var machine = menu.getMachine();
+                    if (machine == null) {
+                        return;
+                    }
+                    ModMessages.sendToServer(new KitchenViewPacket(machine.getBlockPos(), (byte) 1, "",
+                            (menu.getSortMode().ordinal() + 1) % CentralKitchenMenu.SortMode.values().length));
+                });
     }
 
     @Override
@@ -209,8 +216,11 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
         guiGraphics.drawString(font, scrollInfo, x + 120, y + 132, 0xFF404040, false);
 
         // ===== 三明治样品槽（槽底由 GuiVirtualSlot 画；幽灵与悬停说明保留在渲染层）=====
-        var sampleStack = menu.getMachine().items.getStackInSlot(
-                cn.ism.mekck.blockentity.CentralKitchenBlockEntity.SANDWICH_SAMPLE_SLOT);
+        // 空菜单（BE 缺失）：按空槽处理，照常画幽灵提示。
+        var machine = menu.getMachine();
+        var sampleStack = machine == null ? net.minecraft.world.item.ItemStack.EMPTY
+                : machine.items.getStackInSlot(
+                        cn.ism.mekck.blockentity.CentralKitchenBlockEntity.SANDWICH_SAMPLE_SLOT);
         if (sampleStack.isEmpty()) {
             // 空位提示：半透明三明治图标（先画图标，再覆盖半透明底色做“幽灵”淡出效果）
             var ghost = cn.ism.mekck.blockentity.SandwichAssemblerBlockEntity.sarSandwich();
@@ -253,11 +263,13 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
         renderTitleText(guiGraphics);
         drawString(guiGraphics, playerInventoryTitle, 39, inventoryLabelY, titleTextColor());
         var machine = menu.getMachine();
-        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.heat_side", machine.getHeatTemperature() - 273.15).getString(),
-                12, 6, 0xFFFF5555);
-        // 排序模式的「键 → 文案」显示已由排序按钮的 label 承担（MekCkButtons.text，按模式切换显示）。
-        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.threads", machine.runningThreads(), machine.totalThreads()).getString(),
-                12, 84, 0xFF006000);
+        if (machine != null) {
+            guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.heat_side", machine.getHeatTemperature() - 273.15).getString(),
+                    12, 6, 0xFFFF5555);
+            // 排序模式的「键 → 文案」显示已由排序按钮的 label 承担（MekCkButtons.text，按模式切换显示）。
+            guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.threads", machine.runningThreads(), machine.totalThreads()).getString(),
+                    12, 84, 0xFF006000);
+        }
         int milli = menu.getOrderProgressMilli();
         if (milli > 0) {
             guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.order_progress", milli / 10).getString(), 12, 138, 0xFF604000, false);
@@ -277,8 +289,11 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
         int y = topPos;
         // 仅在存储区范围内滚动
         if (mouseX >= x + 119 && mouseX < x + 119 + 9 * 18 && mouseY >= y + 19 && mouseY < y + 19 + 6 * 18) {
-            ModMessages.sendToServer(new KitchenViewPacket(menu.getMachine().getBlockPos(), (byte) 2,
-                    "", delta > 0 ? -1 : 1));
+            var machine = menu.getMachine();
+            if (machine != null) {
+                ModMessages.sendToServer(new KitchenViewPacket(machine.getBlockPos(), (byte) 2,
+                        "", delta > 0 ? -1 : 1));
+            }
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, delta);
@@ -332,7 +347,12 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
     private void openSideConfigWindow() {
         if (sideWindow == null || !getWindows().contains(sideWindow)) {
             sideWindow = new GuiMekCkSideConfiguration(this, menu, () -> {
-                var state = menu.getMachine().getBlockState();
+                // 空菜单（BE 缺失）：没有方块状态可读，朝向按 NORTH 兜底。
+                var machine = menu.getMachine();
+                if (machine == null) {
+                    return net.minecraft.core.Direction.NORTH;
+                }
+                var state = machine.getBlockState();
                 return state.hasProperty(cn.ism.mekck.block.CentralKitchenBlock.FACING)
                         ? state.getValue(cn.ism.mekck.block.CentralKitchenBlock.FACING)
                         : net.minecraft.core.Direction.NORTH;
@@ -356,7 +376,11 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
     }
 
     private void pushSearch() {
-        ModMessages.sendToServer(new KitchenViewPacket(menu.getMachine().getBlockPos(), (byte) 0,
+        var machine = menu.getMachine();
+        if (machine == null) {
+            return;
+        }
+        ModMessages.sendToServer(new KitchenViewPacket(machine.getBlockPos(), (byte) 0,
                 searchField == null ? "" : searchField.getText(), 0));
     }
 }

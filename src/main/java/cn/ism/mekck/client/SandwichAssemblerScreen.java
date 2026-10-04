@@ -127,11 +127,19 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
     }
 
     private void sendMode(int mode) {
-        ModMessages.sendToServer(new SandwichConfigPacket(menu.getMachine().getBlockPos(), (byte) 0, mode));
+        var machine = menu.getMachine();
+        if (machine == null) {
+            return;
+        }
+        ModMessages.sendToServer(new SandwichConfigPacket(machine.getBlockPos(), (byte) 0, mode));
     }
 
     private void sendCount(int delta) {
-        ModMessages.sendToServer(new SandwichConfigPacket(menu.getMachine().getBlockPos(), (byte) 2, delta));
+        var machine = menu.getMachine();
+        if (machine == null) {
+            return;
+        }
+        ModMessages.sendToServer(new SandwichConfigPacket(machine.getBlockPos(), (byte) 2, delta));
     }
 
     @Override
@@ -151,8 +159,10 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
         // 「空槽画半透明预览」在 Mek 元件体系里没有标准行为。
         int x = leftPos;
         int y = topPos;
-        var sample = menu.getMachine().items.getStackInSlot(
-                SandwichAssemblerBlockEntity.SAMPLE_SLOT);
+        // 空菜单（BE 缺失）：按空槽处理，照常画幽灵提示。
+        var machine = menu.getMachine();
+        var sample = machine == null ? net.minecraft.world.item.ItemStack.EMPTY
+                : machine.items.getStackInSlot(SandwichAssemblerBlockEntity.SAMPLE_SLOT);
         if (sample.isEmpty()) {
             var ghost = SandwichAssemblerBlockEntity.sarSandwich();
             if (!ghost.isEmpty()) {
@@ -195,8 +205,11 @@ public class SandwichAssemblerScreen extends mekanism.client.gui.GuiMekanism<San
         if (!SandwichAssemblerBlockEntity.hasSar()) {
             guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.sandwich_sample_slot.requires_sar").getString(), 8, 96, 0xFFFF5555, false);
         }
-        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.layers", menu.getMachine().currentLayers()).getString(),
-                8, 106, 0xFF404040, false);
+        var machine = menu.getMachine();
+        if (machine != null) {
+            guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.layers", machine.currentLayers()).getString(),
+                    8, 106, 0xFF404040, false);
+        }
         super.drawForegroundText(guiGraphics, mouseX, mouseY);
     }
 
