@@ -97,8 +97,13 @@ public class FerreroRecipeCategory implements IRecipeCategory<FerreroRecipe> {
                 .addItemStacks(listOf(recipe.getInput()));
         builder.addSlot(RecipeIngredientRole.INPUT, EXTRA_X + 1, EXTRA_Y + 1)
                 .addItemStacks(listOf(recipe.getExtra()));
-        builder.addSlot(RecipeIngredientRole.OUTPUT, OUTPUT_X + 1, OUTPUT_Y + 1)
-                .addItemStack(recipe.getResultItem(Minecraft.getInstance().level.registryAccess()));
+        // 产物 ItemStack 需要 registryAccess：level 为空（标题界面等无世界上下文）时跳过该槽，
+        // 不裸解引用 —— 写法对齐 JEIPlugin.registerRecipes 的 mc.level 判空。
+        net.minecraft.world.level.Level level = Minecraft.getInstance().level;
+        if (level != null) {
+            builder.addSlot(RecipeIngredientRole.OUTPUT, OUTPUT_X + 1, OUTPUT_Y + 1)
+                    .addItemStack(recipe.getResultItem(level.registryAccess()));
+        }
     }
 
     private static List<ItemStack> listOf(net.minecraft.world.item.crafting.Ingredient ingredient) {

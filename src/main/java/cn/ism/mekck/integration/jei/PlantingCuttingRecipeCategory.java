@@ -215,8 +215,10 @@ public class PlantingCuttingRecipeCategory implements IRecipeCategory<PlantingCu
         drawTexture(guiGraphics, SLOT_POWER_OVERLAY, POWER_X, POWER_Y, SLOT, SLOT);
         drawTexture(guiGraphics, SLOT_INPUT, INPUT_X, INPUT_Y, SLOT, SLOT);
         drawTexture(guiGraphics, SLOT_EXTRA, EXTRA_X, EXTRA_Y, SLOT, SLOT);
-        drawTexture(guiGraphics, SLOT_OUTPUT_WIDE, MAIN_OUTPUT_X, MAIN_OUTPUT_Y, SLOT, SLOT);
-        drawTexture(guiGraphics, SLOT_OUTPUT_WIDE, SECONDARY_OUTPUT_X, SECONDARY_OUTPUT_Y, SLOT, SLOT);
+        // 产物槽底图：output_wide.png 是 42×26 的「两格宽」底图（3px 边距 + 18×18 + 18×18 + 3px 边距），
+        // 一次覆盖主/副产物两格。旧实现把它按 18×18 画两次 ⇒ 整张 42×26 被压进 18×18、描边压扁。
+        // blit 的 textureWidth/Height 必须等于贴图真实尺寸（护栏 TestJeiTextureSizes 钉住）。
+        guiGraphics.blit(SLOT_OUTPUT_WIDE, MAIN_OUTPUT_X - 3, MAIN_OUTPUT_Y - 4, 0, 0, 42, 26, 42, 26);
         // 生长方块格底图：只在配方需要时画（与 setRecipe 的加槽条件一致）
         if (recipe.requiresGrowthSoil()) {
             drawTexture(guiGraphics, SLOT_EXTRA, GROWTH_X, GROWTH_Y, SLOT, SLOT);

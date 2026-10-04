@@ -38,20 +38,6 @@ public final class MekCkMultiblock {
     public static final TriConsumer<BlockPos, BlockState, Stream.Builder<BlockPos>> SHAPE_2_TALL =
             (pos, state, builder) -> builder.add(pos.above());
 
-    /** 种植切配工厂：3×3×2（与 Mekanism 数字型采矿机同款，主方块位于底部中心）。 */
-    public static final TriConsumer<BlockPos, BlockState, Stream.Builder<BlockPos>> SHAPE_3X3X2 =
-            (pos, state, builder) -> {
-                for (int x = -1; x <= 1; x++) {
-                    for (int y = 0; y <= 1; y++) {
-                        for (int z = -1; z <= 1; z++) {
-                            if (x != 0 || y != 0 || z != 0) {
-                                builder.add(pos.offset(x, y, z));
-                            }
-                        }
-                    }
-                }
-            };
-
     /**
      * 生物反应堆：3×3×3（<b>主方块位于底部正中</b>，绑定方块占其余 26 格）。
      *

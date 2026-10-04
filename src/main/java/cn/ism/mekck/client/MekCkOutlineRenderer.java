@@ -80,20 +80,12 @@ public final class MekCkOutlineRenderer {
                                            net.minecraft.client.renderer.MultiBufferSource mbs,
                                            Level level, BlockState state,
                                            net.minecraft.core.BlockPos pos, int light) {
-        net.minecraft.world.level.block.entity.BlockEntity be = null;
-        try {
-            if (state.getBlock() instanceof net.minecraft.world.level.block.EntityBlock entityBlock) {
-                be = entityBlock.newBlockEntity(pos, state);
-            }
-        } catch (Throwable ignored) {
-            return false;
-        }
+        net.minecraft.world.level.block.entity.BlockEntity be = previewBlockEntity(level, state, pos);
         if (be == null) return false;
         // §F26：能量立方的临时 BE 储能为 0 会让 RenderEnergyCube.shouldRender 直接 false（内部旋转核不画）
         // → 取/调 BER 前先灌满储能（全反射、静默失败；只碰临时 BE，不碰世界真实方块）。
         cn.ism.mekck.util.EnergyCubePreviewUtil.seedTempEnergyIfCube(be);
         try {
-            be.setLevel(level); // 临时 BE 补 world 上下文，避免 BER 内 getLevel() NPE
             net.minecraft.client.renderer.blockentity.BlockEntityRenderer<?> ber =
                     Minecraft.getInstance().getBlockEntityRenderDispatcher().getRenderer(be);
             if (ber == null) return false;
@@ -106,6 +98,45 @@ public final class MekCkOutlineRenderer {
                     net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(state.getBlock()), t.toString());
             return false;
         }
+    }
+
+    // 预览用临时 BE 缓存（客户端渲染线程单线程访问，无需同步）：
+    // 旧实现每帧 newBlockEntity —— 能量立方/风机的 tile 构造期持有 10+ 个 handler/component，
+    // 60fps 下就是每秒上百个短命对象。缓存键必须含 BlockPos：BE 的 worldPosition 是 final
+    // （javap 已证），而 RenderEnergyCube 用 Vec3.atCenterOf(getBlockPos()) 决定能量核的世界位置、
+    // BioreactorRenderer 用 pos.above(i) 取逐层光照 —— 位置变了必须换 BE，不能只按状态复用。
+    private static BlockState berPreviewState;
+    private static net.minecraft.core.BlockPos berPreviewPos;
+    private static net.minecraft.world.level.block.entity.BlockEntity berPreviewBe;
+
+    /** 取预览用临时 BE：同 (BlockState, BlockPos) 复用；换世界时刷新 level 引用。 */
+    private static net.minecraft.world.level.block.entity.BlockEntity previewBlockEntity(
+            Level level, BlockState state, net.minecraft.core.BlockPos pos) {
+        if (berPreviewBe != null && berPreviewState == state && pos.equals(berPreviewPos)) {
+            if (berPreviewBe.getLevel() != level) {
+                berPreviewBe.setLevel(level); // 临时 BE 补 world 上下文，避免 BER 内 getLevel() NPE
+            }
+            return berPreviewBe;
+        }
+        net.minecraft.world.level.block.entity.BlockEntity be = null;
+        try {
+            if (state.getBlock() instanceof net.minecraft.world.level.block.EntityBlock entityBlock) {
+                be = entityBlock.newBlockEntity(pos, state);
+            }
+        } catch (Throwable ignored) {
+            be = null;
+        }
+        if (be == null) {
+            // 创建失败：清掉旧缓存，避免继续复用与当前状态/位置不匹配的 BE
+            berPreviewState = null;
+            berPreviewPos = null;
+            berPreviewBe = null;
+            return null;
+        }
+        berPreviewState = state;
+        berPreviewPos = pos.immutable();
+        berPreviewBe = be;
+        return be;
     }
 
     private static final org.slf4j.Logger PREVIEW_LOGGER = org.slf4j.LoggerFactory.getLogger("mekck-preview");
