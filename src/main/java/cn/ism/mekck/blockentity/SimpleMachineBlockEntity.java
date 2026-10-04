@@ -1345,10 +1345,6 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
 
         BlockState newState = state.setValue(SimpleMachineBlock.ACTIVE, machine.progress > 0);
         if (newState != state) level.setBlock(pos, newState, 3);
-
-        if (!level.isClientSide) {
-            machine.data.get(DATA_ENERGY);
-        }
     }
 
     // ================== ME 终端下单 ==================
@@ -2709,7 +2705,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         cn.ism.mekck.compat.AE2Compat.load(this, tag);
         cn.ism.mekck.advancement.PlacerPersist.load(this, tag);
         items.deserializeNBT(tag.getCompound("Items"));
-        energy.receiveEnergy(tag.getInt("Energy"), false);
+        loadEnergy(energy, tag.getInt("Energy"));
         progress = tag.getInt("Progress");
         if (tag.contains("SpeedUpgrade", net.minecraft.nbt.Tag.TAG_COMPOUND)) speedTracker.load(tag.getCompound("SpeedUpgrade"));
         if (tag.contains("EnergyUpgrade", net.minecraft.nbt.Tag.TAG_COMPOUND)) energyTracker.load(tag.getCompound("EnergyUpgrade"));
@@ -2756,6 +2752,26 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
         fluids.readTanks(tag);
         if (tag.contains("CustomName")) {
             customName = Component.Serializer.fromJson(tag.getString("CustomName"));
+        }
+    }
+
+    /**
+     * 读档灌能量：单次 {@code receiveEnergy} 受 {@code maxReceive} 夹断
+     * （本机容量 {@link #ENERGY_CAPACITY} / 单次上限 {@link #MAX_RECEIVE}），
+     * 一次最多只能灌进 1,000 —— 必须循环到灌完或容器拒收为止。
+     *
+     * <p>与 {@code MekCkLegacyMachine.load} 的循环逐字同形。抽成静态纯函数是为了让
+     * 「容量 100k / maxReceive 1k 灌 100k 必须得 100k」这条断言能在裸 JVM 里直接跑：
+     * {@code SimpleMachineBlockEntity} 本身需要注册表与 level，单测里构造不出来。</p>
+     */
+    static void loadEnergy(EnergyStorage storage, int stored) {
+        int remaining = stored;
+        while (remaining > 0) {
+            int received = storage.receiveEnergy(remaining, false);
+            if (received == 0) {
+                break;
+            }
+            remaining -= received;
         }
     }
 

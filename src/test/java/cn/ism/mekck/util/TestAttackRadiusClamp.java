@@ -133,9 +133,11 @@ public class TestAttackRadiusClamp {
                     src.contains("radius = tag.getInt(\"Radius\")"));
         }
         // 顺带钉死本轮删掉的死语句（读取结果被丢弃的 machine.data.get(DATA_ENERGY)）不得回潮。
-        // 三台同型：IceMaker（第 6 轮删）+ ChocolateCannon / NutRoaster（本轮删）。
+        // 四台同型：IceMaker（第 6 轮删）+ ChocolateCannon / NutRoaster（M13 删）
+        // + SimpleMachineBlockEntity（M17 删）。
         String[] deadStatementMachines = {
-                "IceMakerBlockEntity", "ChocolateCannonBlockEntity", "NutRoasterBlockEntity"
+                "IceMakerBlockEntity", "ChocolateCannonBlockEntity", "NutRoasterBlockEntity",
+                "SimpleMachineBlockEntity"
         };
         for (String m : deadStatementMachines) {
             String dead = java.nio.file.Files.readString(
