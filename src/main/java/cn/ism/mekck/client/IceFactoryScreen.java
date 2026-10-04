@@ -170,7 +170,7 @@ public final class IceFactoryScreen extends GuiMekanism<IceFactoryMenu> implemen
                 Component.translatable("gui.mekck.energy_stored",
                         menu.getEnergy(), menu.getEnergyCapacity()),
                 Component.translatable("gui.mekck.energy_per_tick",
-                        tier.energyPerTick)
+                        tier == null ? 0 : tier.energyPerTick)
         )));
 
         // 能源槽（能量物品）

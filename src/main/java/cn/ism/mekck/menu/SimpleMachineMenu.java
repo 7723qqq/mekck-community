@@ -57,6 +57,9 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
 
     private final SimpleMachineBlockEntity machine;
     private final ContainerData data;
+    /** 布局描述（OpenScreen 下发）：扩展输入槽 / 陈酿机分支，BE 为 null 时也据此建槽。 */
+    private final boolean extended;
+    private final boolean winery;
     private boolean upgradePageActive = false;
 
     private final UpgradeSlot speedUpgradeSlot;
@@ -81,14 +84,33 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
 
     public SimpleMachineMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
-                (SimpleMachineBlockEntity) inventory.player.level().getBlockEntity(buffer.readBlockPos()),
-                new SimpleContainerData(SimpleMachineBlockEntity.DATA_SIZE));
+                inventory.player.level().getBlockEntity(buffer.readBlockPos())
+                        instanceof SimpleMachineBlockEntity machine ? machine : null,
+                new SimpleContainerData(SimpleMachineBlockEntity.DATA_SIZE),
+                buffer.readBoolean(),
+                buffer.readBoolean());
     }
 
+    /** 服务端路径（{@code BE.createMenu}）：布局一律取机器派生值。 */
     public SimpleMachineMenu(int containerId, Inventory inventory, SimpleMachineBlockEntity machine, ContainerData data) {
+        this(containerId, inventory, machine, data, machine.usesExtendedInputSlots(),
+                machine.getMachineKind() == cn.ism.mekck.MachineKind.WINERY);
+    }
+
+    /**
+     * 显式布局构造器：槽位数量/坐标全部由 {@code extended} / {@code winery} 推导，
+     * 与 {@link SimpleMachineBlockEntity} 的真实布局逐位一致；{@code machine == null}
+     * （客户端 OpenScreen 竞态：方块已破坏/区块卸载）时用等长空处理器兜底，槽位契约不变。
+     */
+    public SimpleMachineMenu(int containerId, Inventory inventory, SimpleMachineBlockEntity machine, ContainerData data,
+                             boolean extended, boolean winery) {
         super(MekCkLegacyMachines.SIMPLE_MACHINE_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
+        this.extended = extended;
+        this.winery = winery;
+        ItemStackHandler items = machine != null ? machine.getItems()
+                : new ItemStackHandler(SimpleMachineBlockEntity.TOTAL_SLOTS);
 
         // winery 复刻 vinery 时套用陈酿桶对位坐标；其余机器沿用通用输入行。
         boolean wl = vineryLayout();
@@ -107,16 +129,16 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
             } else {
                 sx = INPUT_X + i * 18; sy = INPUT_Y;
             }
-            addSlot(new InputSlot(machine.getItems(), i, sx, sy));
+            addSlot(new InputSlot(items, i, sx, sy));
         }
         // 搅拌机/智能烤炉：扩展输入槽 10..13（第二行，第 6~9 个输入）
-        if (machine.usesExtendedInputSlots()) {
+        if (extended) {
             for (int i = 0; i < SimpleMachineBlockEntity.EXT_INPUT_COUNT; i++) {
-                addSlot(new InputSlot(machine.getItems(), SimpleMachineBlockEntity.EXT_INPUT_START + i,
+                addSlot(new InputSlot(items, SimpleMachineBlockEntity.EXT_INPUT_START + i,
                         INPUT_X + i * 18, INPUT_Y + 18));
             }
         }
-        addSlot(new OutputSlot(machine.getItems(), SimpleMachineBlockEntity.OUTPUT_SLOT,
+        addSlot(new OutputSlot(items, SimpleMachineBlockEntity.OUTPUT_SLOT,
                 wl ? WV_OUT_X : OUTPUT_X, wl ? WV_OUT_Y : OUTPUT_Y));
 
         // 升级槽（仅升级弹窗打开时可用）：构造坐标故意放屏幕外（-1000），避免主界面 AbstractContainerScreen.renderSlots
@@ -124,21 +146,21 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
         // 升级弹窗内由 GuiUpgradeWindow.selectedSlot.updateVirtualSlot → IVirtualSlot.updatePosition 绑定窗口坐标供给器，
         // 渲染与点击命中均走 getActualX/Y（与这里的 x/y 无关），故不影响升级功能。
         this.speedSlotIndex = slots.size();
-        this.speedUpgradeSlot = new UpgradeSlot(machine.getItems(), SimpleMachineBlockEntity.SLOT_SPEED_UPGRADE, -1000, -1000, this);
+        this.speedUpgradeSlot = new UpgradeSlot(items, SimpleMachineBlockEntity.SLOT_SPEED_UPGRADE, -1000, -1000, this);
         addSlot(this.speedUpgradeSlot);
         this.energySlotIndex = slots.size();
-        this.energyUpgradeSlot = new UpgradeSlot(machine.getItems(), SimpleMachineBlockEntity.SLOT_ENERGY_UPGRADE, -1000, -1000, this);
+        this.energyUpgradeSlot = new UpgradeSlot(items, SimpleMachineBlockEntity.SLOT_ENERGY_UPGRADE, -1000, -1000, this);
         addSlot(this.energyUpgradeSlot);
 
         // 创造升级槽：与速度/能量升级槽完全一致——主界面不常显，坐标放屏外，仅升级页选中时由 selectedSlot 重定位绘制；不可取出，靠升级页卸载按钮卸下。
         this.creativeSlotIndex = slots.size();
-        this.creativeUpgradeSlot = new UpgradeSlot(machine.getItems(), SimpleMachineBlockEntity.SLOT_CREATIVE_UPGRADE, -1000, -1000, this);
+        this.creativeUpgradeSlot = new UpgradeSlot(items, SimpleMachineBlockEntity.SLOT_CREATIVE_UPGRADE, -1000, -1000, this);
         addSlot(this.creativeUpgradeSlot);
 
         // 能源槽（能量物品）：坐标与 SimpleMachineScreen 的 GuiVirtualSlot 完全一致（见 WV_POWER_* 注释），
         // 否则主界面会在旧位 (7,13) 残留一个裸露的原版空槽框。
         this.powerSlotIndex = slots.size();
-        addSlot(new PowerSlot(machine.getItems(), SimpleMachineBlockEntity.SLOT_POWER,
+        addSlot(new PowerSlot(items, SimpleMachineBlockEntity.SLOT_POWER,
                 wl ? WV_POWER_X : 6, wl ? WV_POWER_Y : 12));
 
         // 陈酿机：专用果汁格（handler 索引 JUICE_SLOT=10）——坐标必须与 SimpleMachineScreen 里果汁格渲染位置一致，
@@ -146,13 +168,13 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
         if (isWinery()) {
             // 果汁格（瓶装→液位 ∪ 流体桶→inputTank，共用一格）：vinery 对位 (39,17)，否则沿用通用第二行首格
             this.juiceSlotIndex = slots.size();
-            addSlot(new InputSlot(machine.getItems(), SimpleMachineBlockEntity.JUICE_SLOT,
+            addSlot(new InputSlot(items, SimpleMachineBlockEntity.JUICE_SLOT,
                     wl ? WV_JUICE_X : INPUT_X, wl ? WV_JUICE_Y : INPUT_Y + 18));
             // 返还槽（只出不进）：vinery 对位放配料行左侧，否则产物正下方
-            addSlot(new OutputSlot(machine.getItems(), SimpleMachineBlockEntity.RETURN_SLOT,
+            addSlot(new OutputSlot(items, SimpleMachineBlockEntity.RETURN_SLOT,
                     wl ? WV_RETURN_X : OUTPUT_X, wl ? WV_RETURN_Y : OUTPUT_Y + 18));
             // 流体物品输入格：已废弃（与果汁格共用），坐标移出屏外使其不渲染、不可点击；索引保留保 NBT 兼容。
-            addSlot(new InputSlot(machine.getItems(), SimpleMachineBlockEntity.FLUID_ITEM_SLOT,
+            addSlot(new InputSlot(items, SimpleMachineBlockEntity.FLUID_ITEM_SLOT,
                     -1000, -1000));
         }
 
@@ -174,6 +196,10 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
 
     @Override
     public boolean stillValid(Player player) {
+        // 空菜单（客户端 BE 为 null）一律视为失效。
+        if (machine == null) {
+            return false;
+        }
         Level level = player.level();
         return level.getBlockEntity(machine.getBlockPos()) == machine
                 && player.distanceToSqr(machine.getBlockPos().getX() + 0.5D, machine.getBlockPos().getY() + 0.5D,
@@ -256,17 +282,18 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
     }
 
     public int getEnergyPerTick() {
-        return machine.getEnergyPerTickBase();
+        return machine == null ? 0 : machine.getEnergyPerTickBase();
     }
 
     /** 该机器是否支持勾选持续自动补料（简单配方机器）。 */
     public boolean supportsAutoPull() {
-        return machine instanceof cn.ism.mekck.ae2.INetworkPullable && ((cn.ism.mekck.ae2.INetworkPullable) machine).supportsAutoPull();
+        return machine != null && machine instanceof cn.ism.mekck.ae2.INetworkPullable
+                && ((cn.ism.mekck.ae2.INetworkPullable) machine).supportsAutoPull();
     }
 
     /** 是否为加热类机器（GUI 显示机身温度）。 */
     public boolean isHeatingMachine() {
-        return machine.isHeatingMachine();
+        return machine != null && machine.isHeatingMachine();
     }
 
     /** 机身温度（单位 0.01 ℃）。 */
@@ -289,9 +316,9 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
         return cn.ism.mekck.util.VineryJuice.typeAt(getJuiceTypeIndex());
     }
 
-    /** 是否为陈酿机（GUI 显示果汁液位条）。 */
+    /** 是否为陈酿机（GUI 显示果汁液位条）。布局描述下发，BE 为 null 时也成立。 */
     public boolean isWinery() {
-        return machine.getMachineKind() == cn.ism.mekck.MachineKind.WINERY;
+        return winery;
     }
 
     /** winery 是否套用 vinery 陈酿桶皮肤对位（kind==WINERY 且已装 vinery）。 */
@@ -317,12 +344,12 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
 
     /** winery 内部 inputTank 容量（mb）。 */
     public int getFluidCapacity() {
-        return isWinery() ? machine.getInputTank().getCapacity() : 0;
+        return isWinery() && machine != null ? machine.getInputTank().getCapacity() : 0;
     }
 
-    /** 是否启用扩展输入槽（10..13）：搅拌机 / 智能烤炉。 */
+    /** 是否启用扩展输入槽（10..13）：搅拌机 / 智能烤炉。布局描述下发，BE 为 null 时也成立。 */
     public boolean usesExtendedSlots() {
-        return machine.usesExtendedInputSlots();
+        return extended;
     }
 
     public int getEncodedSideConfig() {
@@ -360,7 +387,7 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
     }
 
     public BlockPos getBlockPos() {
-        return machine.getBlockPos();
+        return machine == null ? BlockPos.ZERO : machine.getBlockPos();
     }
 
     // ================== IUpgradeMenu ==================
@@ -376,6 +403,9 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
     /** 卸载升级（升级界面卸载按钮）。 */
     @Override
     public void uninstallUpgrade(byte mode, int slot) {
+        if (machine == null) {
+            return;
+        }
         cn.ism.mekck.network.ModMessages.sendToServer(
                 new cn.ism.mekck.network.UpgradeUninstallPacket(machine.getBlockPos(), mode, slot));
     }

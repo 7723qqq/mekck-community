@@ -262,7 +262,11 @@ public final class SimpleMachineScreen extends GuiMekanism<SimpleMachineMenu> im
             // 按钮 21×10 ⇒ 顶 y = jbY-12）；两套皮肤共用此相对式：vinery 得 (82,32)、机甲风得 (16,54)。
             int jbX = wl ? VJ_BAR_X : JUICE_BAR_X;
             int jbY = wl ? VJ_BAR_Y : JUICE_BAR_Y;
-            addRenderableWidget(new MekCkWineryDumpButton(this, menu.getMachine(), jbX, jbY - 12));
+            // 空菜单（客户端 BE 为 null）不挂按钮：按钮点击要读 BE 的 pos，挂了也只会崩。
+            var machine = menu.getMachine();
+            if (machine != null) {
+                addRenderableWidget(new MekCkWineryDumpButton(this, machine, jbX, jbY - 12));
+            }
         }
 
         // 侧栏 tab **最后注册**：Mek 的 GuiMekanism#mouseClicked 对 children() 倒序遍历、命中即返回，
@@ -488,12 +492,14 @@ public final class SimpleMachineScreen extends GuiMekanism<SimpleMachineMenu> im
         return new NetworkOrderPanel.LocalSource() {
             @Override
             public List<Recipe<?>> recipes() {
-                return menu.getMachine().getAvailableRecipes();
+                var machine = menu.getMachine();
+                return machine == null ? List.of() : machine.getAvailableRecipes();
             }
 
             @Override
             public int maxCraftable(Recipe<?> recipe) {
-                return menu.getMachine().getMaxConsumableCountForOrder(recipe);
+                var machine = menu.getMachine();
+                return machine == null ? 0 : machine.getMaxConsumableCountForOrder(recipe);
             }
 
             @Override

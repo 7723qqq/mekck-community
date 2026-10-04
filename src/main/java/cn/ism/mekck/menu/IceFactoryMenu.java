@@ -50,16 +50,41 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
 
     public IceFactoryMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory,
-                (IceFactoryBlockEntity) inventory.player.level().getBlockEntity(buffer.readBlockPos()),
-                new SimpleContainerData(IceFactoryBlockEntity.DATA_SIZE));
+                inventory.player.level().getBlockEntity(buffer.readBlockPos())
+                        instanceof IceFactoryBlockEntity machine ? machine : null,
+                new SimpleContainerData(IceFactoryBlockEntity.DATA_SIZE),
+                buffer.readVarInt(),
+                buffer.readBoolean());
     }
 
+    /** 服务端路径（{@code BE.createMenu}）：布局一律取机器派生值。 */
     public IceFactoryMenu(int containerId, Inventory inventory, IceFactoryBlockEntity machine, ContainerData data) {
+        this(containerId, inventory, machine, data, machine.getProcesses(), machine.CREATIVE_SLOT >= 0);
+    }
+
+    /**
+     * 显式布局构造器：槽位数量/坐标/处理器下标全部由 {@code processes} / {@code hasCreative} 推导，
+     * 与 {@link IceFactoryBlockEntity} 的布局公式逐位一致；{@code machine == null}
+     * （客户端 OpenScreen 竞态：方块已破坏/区块卸载）时用等长空处理器兜底，槽位契约不变。
+     */
+    public IceFactoryMenu(int containerId, Inventory inventory, IceFactoryBlockEntity machine, ContainerData data,
+                          int processes, boolean hasCreative) {
         super(MekCkFactories.ICE_FACTORY_MENU.get(), containerId);
         this.machine = machine;
         this.data = data;
-        this.processes = machine.getProcesses();
-        this.hasCreative = machine.CREATIVE_SLOT >= 0;
+        this.processes = processes;
+        this.hasCreative = hasCreative;
+
+        // 处理器下标与 BE 同式：base = 输入 + 输出 = 2 * processes，升级/冷萃/能源槽紧随其后。
+        int base = processes * 2;
+        int speedSlot = base;
+        int energySlot = base + 1;
+        int stackSlot = base + 2;
+        int creativeSlot = base + 3;
+        int cbStart = base + 4;
+        int powerSlot = cbStart + 5;
+        ItemStackHandler items = machine != null ? machine.getItems()
+                : new ItemStackHandler(cbStart + 6);
 
         int cols = getGridCols();
         int rows = getGridRows();
@@ -68,7 +93,7 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
         for (int i = 0; i < processes; i++) {
             int col = i % cols;
             int row = i / cols;
-            addSlot(new InputSlot(machine.getItems(), i, INPUT_START_X + col * 18, INPUT_START_Y + row * 18));
+            addSlot(new InputSlot(items, i, INPUT_START_X + col * 18, INPUT_START_Y + row * 18));
         }
 
         // 输出格（与输入相同的方形网格，中间留出进度条间距）
@@ -76,33 +101,33 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
         for (int i = 0; i < processes; i++) {
             int col = i % cols;
             int row = i / cols;
-            addSlot(new OutputSlot(machine.getItems(), processes + i, outputBaseX + col * 18, INPUT_START_Y + row * 18));
+            addSlot(new OutputSlot(items, processes + i, outputBaseX + col * 18, INPUT_START_Y + row * 18));
         }
 
         // 升级槽（仅升级弹窗打开时可用）
-        this.speedUpgradeSlot = new UpgradeSlot(machine.getItems(), machine.SPEED_UPGRADE_SLOT, 40, 46, this);
+        this.speedUpgradeSlot = new UpgradeSlot(items, speedSlot, 40, 46, this);
         addSlot(this.speedUpgradeSlot);
-        this.energyUpgradeSlot = new UpgradeSlot(machine.getItems(), machine.ENERGY_UPGRADE_SLOT, 40, 72, this);
+        this.energyUpgradeSlot = new UpgradeSlot(items, energySlot, 40, 72, this);
         addSlot(this.energyUpgradeSlot);
-        this.stackUpgradeSlot = new UpgradeSlot(machine.getItems(), machine.STACK_UPGRADE_SLOT, 40, 98, this);
+        this.stackUpgradeSlot = new UpgradeSlot(items, stackSlot, 40, 98, this);
         addSlot(this.stackUpgradeSlot);
 
         // 冷萃升级槽 + 创造升级槽（主界面，输入网格下方；冷萃 ①~⑤ 一排 5 格）
         this.cbSlotStartIndex = slots.size();
         int cbY = getCbSlotY();
         for (int i = 0; i < 5; i++) {
-            addSlot(new ColdBrewSlot(machine.getItems(), machine.CB_SLOT_1 + i, INPUT_START_X + i * 18, cbY));
+            addSlot(new ColdBrewSlot(items, cbStart + i, INPUT_START_X + i * 18, cbY));
         }
         if (hasCreative) {
             this.creativeSlotIndex = slots.size();
-            addSlot(new ColdBrewSlot(machine.getItems(), machine.CREATIVE_SLOT, INPUT_START_X + 5 * 18 + 8, cbY));
+            addSlot(new ColdBrewSlot(items, creativeSlot, INPUT_START_X + 5 * 18 + 8, cbY));
         } else {
             this.creativeSlotIndex = -1;
         }
 
         // 能源槽（能量物品：能量立方/红石等），Mekanism 风格位置
         this.powerSlotIndex = slots.size();
-        addSlot(new PowerSlot(machine.getItems(), machine.POWER_SLOT, 7, 13));
+        addSlot(new PowerSlot(items, powerSlot, 7, 13));
 
         // 玩家物品栏（居中，随网格行数下移）
         int invTop = getInventoryTop();
@@ -148,6 +173,10 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
 
     @Override
     public boolean stillValid(Player player) {
+        // 空菜单（客户端 BE 为 null）一律视为失效。
+        if (machine == null) {
+            return false;
+        }
         Level level = player.level();
         return level.getBlockEntity(machine.getBlockPos()) == machine
                 && player.distanceToSqr(machine.getBlockPos().getX() + 0.5D, machine.getBlockPos().getY() + 0.5D,
@@ -231,7 +260,7 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
     }
 
     public int getEnergyCapacity() {
-        return machine.tier.energyCapacity > 0 ? machine.tier.energyCapacity : 100_000;
+        return machine == null ? 0 : (machine.tier.energyCapacity > 0 ? machine.tier.energyCapacity : 100_000);
     }
 
     /** 从 ContainerData 同步值重建流体（客户端 FluidTank 不进网络同步，直接读会是空罐）。 */
@@ -248,7 +277,7 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
     }
 
     public int getWaterCapacity() {
-        return machine.getWaterTank().getCapacity();
+        return machine == null ? 0 : machine.getWaterTank().getCapacity();
     }
 
     public int getEncodedSideConfig() {
@@ -282,8 +311,9 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
         return processes;
     }
 
+    /** 本档等级；空菜单（machine == null）返回 null，调用方需判空。 */
     public CuttingMachineFactoryTier getTier() {
-        return machine.tier;
+        return machine == null ? null : machine.tier;
     }
 
     public boolean hasCreative() {
@@ -304,13 +334,16 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
 
     @Override
     public BlockPos getBlockPos() {
-        return machine.getBlockPos();
+        return machine == null ? BlockPos.ZERO : machine.getBlockPos();
     }
 
     // ================== IUpgradeMenu ==================
     /** 卸载升级（升级界面卸载按钮）。 */
     @Override
     public void uninstallUpgrade(byte mode, int slot) {
+        if (machine == null) {
+            return;
+        }
         cn.ism.mekck.network.ModMessages.sendToServer(
                 new cn.ism.mekck.network.UpgradeUninstallPacket(machine.getBlockPos(), mode, slot));
     }
@@ -340,12 +373,12 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
 
     @Override
     public int getSpeedUpgradeMax() {
-        return MekckConfig.getFactorySpeedUpgradeMax(machine.tier);
+        return machine == null ? 0 : MekckConfig.getFactorySpeedUpgradeMax(machine.tier);
     }
 
     @Override
     public int getEnergyUpgradeMax() {
-        return MekckConfig.getFactoryEnergyUpgradeMax(machine.tier);
+        return machine == null ? 0 : MekckConfig.getFactoryEnergyUpgradeMax(machine.tier);
     }
 
     @Override
