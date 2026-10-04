@@ -21,6 +21,7 @@ import mekanism.common.inventory.container.MekanismContainer;
 import mekanism.common.inventory.container.sync.SyncableInt;
 import mekanism.common.capabilities.holder.slot.InventorySlotHelper;
 import mekanism.common.inventory.slot.EnergyInventorySlot;
+import mekanism.common.item.interfaces.IUpgradeItem;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.component.TileComponentConfig;
 import mekanism.common.tile.component.TileComponentEjector;
@@ -190,6 +191,45 @@ public final class UniversalCuttingMachineTile extends TileEntityConfigurableMac
         supported.add(Upgrade.ENERGY);
         supported.add(MekCkUpgradeRefs.randomize());   // 即旧实现的「创造卡」
         return supported;
+    }
+
+    /**
+     * 潜行右键安装：把手持升级路由进组件的升级输入槽，走 20 tick 正常安装路径。
+     *
+     * <p><b>为什么不能直接 {@code addUpgrades(SPEED, 1)}</b>：{@code addUpgrades(Upgrade, int)}
+     * 的签名里没有 ItemStack —— 它既不校验类型也不消耗物品。旧分支对任意 upgradeLike 物品
+     * 都装速度卡，C1 补上 shrink 后变成「错物品被吃掉换速度卡」（能量/创造/冷萃/费列罗皆然）。
+     * 组件的升级槽自带类型闸门（{@code UpgradeInventorySlot.input} 的 validator 只收
+     * {@code getSupportedUpgrade()} 集合内的 {@code IUpgradeItem}），把物品交给它，
+     * 类型判定与安装都回到 Mek 的正常路径。</p>
+     *
+     * <p><b>返回语义</b>：实际从手持移入槽位的数量。类型不匹配 / 已装到上限 / 槽满 /
+     * 组件缺席都是 0 —— 调用方（{@code UpgradeInstallHandler}）据此决定是否 shrink 手持物品：
+     * 不匹配不消耗，匹配恰好消耗移入的数量（与 C1 的「恰好一次扣除」不冲突）。</p>
+     */
+    public int addUpgradesFromHand(ItemStack held) {
+        TileComponentUpgrade component = upgradeComponent;
+        if (component == null || held.isEmpty()
+                || !(held.getItem() instanceof IUpgradeItem upgradeItem)) {
+            return 0;
+        }
+        Upgrade upgrade = upgradeItem.getUpgradeType(held);
+        if (upgrade == null || !component.supports(upgrade)) {
+            return 0;
+        }
+        // 还能装几张：上限 - 已装 - 槽里已排队的同种卡（排队中的也会被正常路径装掉）。
+        int space = upgrade.getMax() - component.getUpgrades(upgrade);
+        ItemStack queued = component.getUpgradeSlot().getStack();
+        if (!queued.isEmpty() && ItemStack.isSameItemSameTags(queued, held)) {
+            space -= queued.getCount();
+        }
+        if (space <= 0) {
+            return 0;
+        }
+        ItemStack toInsert = held.copyWithCount(Math.min(held.getCount(), space));
+        ItemStack leftover = component.getUpgradeSlot().insertItem(
+                toInsert, Action.EXECUTE, AutomationType.MANUAL);
+        return toInsert.getCount() - leftover.getCount();
     }
 
     public int getSpeedUpgradeCount() {
