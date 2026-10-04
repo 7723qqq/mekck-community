@@ -1848,7 +1848,13 @@ public final class MekckAe2 {
 
         private boolean ownerBusy() {
             if (owner instanceof cn.ism.mekck.blockentity.SandwichAssemblerBlockEntity) {
-                return !orderDone();
+                // 组装机没有订单字段：不能拿 !orderDone() 当忙——orderDone() = 输出槽非空
+                //（产物待回网），取反后空闲（输出槽空）反而恒忙，而 AE2 的 CraftingCpuLogic
+                // 会直接跳过 isBusy() 为真的 provider（javap 实测），终端下单永远推不进来。
+                // 「有任务在跑」由 isBusy() 的 job != null 覆盖（与 AE2 自家
+                // PatternProviderLogic.isBusy() = 有待发送工作 同义）；输出槽被占时机器
+                // 自己不会开工（canProduce 判输出空间），不需要在这里拦。
+                return false;
             }
             if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity kitchen) {
                 return kitchen.orderCount() > 0;

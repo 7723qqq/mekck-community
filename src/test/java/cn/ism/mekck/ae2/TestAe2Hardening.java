@@ -25,6 +25,9 @@ import static org.junit.Assert.assertTrue;
  *   <li><b>M7-M3</b>：勾选自动补料清单必须有硬上限，且落盘读取与上限同源。</li>
  *   <li><b>M7-m2</b>：AUTO_INDEX 缓存必须存勾选列表的不可变快照，否则
  *       {@code selected().equals(selected)} 自比恒真、勾选变化要等 TTL 过期才生效。</li>
+ *   <li><b>复审折入 finding</b>（20261005-review-m27-bug-isbusy-ae2-cpu-me）：组装机
+ *       {@code ownerBusy()} 不得返回 {@code !orderDone()}——空闲（输出槽空）时恒忙，
+ *       AE2 的 CraftingCpuLogic 会跳过 {@code isBusy()} 为真的 provider，终端下单推不进来。</li>
  * </ol>
  *
  * <p>纯逻辑部分直接调 {@code MekckAe2.Hardening} 的包内静态函数（该嵌套类不引用 AE2 类型，
@@ -217,5 +220,22 @@ public class TestAe2Hardening {
                 src.contains("new CachedIndex(List.copyOf(selected)"));
         assertTrue("缓存命中必须比较快照与 live list（比较被短路即失效）",
                 src.contains("cached.selected().equals(selected)"));
+    }
+
+    @Test
+    public void assemblerOwnerBusyIsNotInverted() throws IOException {
+        // 组装机没有订单字段：ownerBusy() 曾写成 !orderDone()（= 输出槽空 ⇒ 空闲恒忙），
+        // 而 AE2 的 CraftingCpuLogic 会跳过 isBusy() 为真的 provider ⇒ 终端下单永远推不进来。
+        String src = TestSourceText.read(AE2);
+        String body = TestSourceText.methodBody(src, "boolean ownerBusy()");
+        assertFalse("源码里找不到 ownerBusy，判据失效", body.isEmpty());
+        int asm = body.indexOf("SandwichAssemblerBlockEntity");
+        assertTrue("ownerBusy 必须显式处理组装机（无订单字段机器）", asm >= 0);
+        int next = body.indexOf("if (owner instanceof", asm + 1);
+        String branch = next > asm ? body.substring(asm, next) : body.substring(asm);
+        assertFalse("组装机分支不得返回 !orderDone()（空闲时恒忙 ⇒ AE2 永远跳过 provider）",
+                branch.contains("!orderDone()"));
+        assertTrue("组装机分支必须显式返回 false（空闲即不忙；有任务由 job != null 覆盖）",
+                branch.contains("return false;"));
     }
 }
