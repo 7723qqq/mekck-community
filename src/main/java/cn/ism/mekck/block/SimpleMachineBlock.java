@@ -112,7 +112,13 @@ public final class SimpleMachineBlock extends BaseEntityBlock {
                     && machine.tryInsertHeldFluid(player.getItemInHand(hand), player, hand)) {
                 return InteractionResult.sidedSuccess(level.isClientSide);
             }
-            NetworkHooks.openScreen(serverPlayer, machine, pos);
+            // 布局描述随 OpenScreen 下发：客户端 BE 为 null（方块已破坏/区块卸载）时
+            // 仍能按真实布局建槽，见 SimpleMachineMenu 的显式布局构造器。
+            NetworkHooks.openScreen(serverPlayer, machine, buf -> {
+                buf.writeBlockPos(pos);
+                buf.writeBoolean(machine.usesExtendedInputSlots());
+                buf.writeBoolean(machine.getMachineKind() == MachineKind.WINERY);
+            });
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
