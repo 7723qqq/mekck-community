@@ -430,6 +430,7 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
         int effectiveProcessTime = hasCreative ? 1 : Math.max(1, (int) (recipeBaseTime / speedMult));
 
         if (canOperate && recipe != null && machine.energy.getEnergyStored() >= energyPerTick
+                && machine.hasRequiredFluid(recipe)
                 && machine.canFitAll(recipe)) {
             // Check order requirements: if we have an order, verify we haven't completed it yet
             boolean canProcess = true;
@@ -443,10 +444,9 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
                 machine.heatComponent.addHeatFromEnergy(energyPerTick);
                 machine.progress++;
                 if (machine.progress >= effectiveProcessTime) {
-                    machine.completeRecipe(level, recipe);
-                    
-                    // Update order tracking
-                    if (machine.orderQuantity > 0) {
+                    // 只有真产出才推进订单计数：completeRecipe 失败（输出装不下 / 材料或流体
+                    // 不足）时零产出，旧实现无条件 orderCompleted++ 会把订单在零产出下标记完成。
+                    if (machine.completeRecipe(level, recipe) && machine.orderQuantity > 0) {
                         machine.orderCompleted++;
                         if (machine.orderCompleted >= machine.orderQuantity) {
                             machine.orderQuantity = 0;
@@ -812,9 +812,17 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
     }
 
     /**
-     * 在输入+存储展平库存里寻找 1 份 ingredient，返回"展平的索引"（-1 没找到）。
-     * 展平顺序: 输入(0..5) → 存储(0..80)，共 87 项。
+     * 在 {@code handler} 的输入+存储展平库存里寻找 1 份 ingredient，返回"展平的索引"
+     * （-1 没找到）。展平顺序: 输入(0..5) → 存储(0..80)，共 87 项。
      * simulate=false 时真实抽 1 件。
+     *
+     * <p><b>模拟账本</b>：模拟模式不真的减计数，必须靠 {@code used}（每槽已用次数）
+     * 让同一件物品不会被重复匹配 —— 否则模拟会放过「canMatch 过、贪心不过」的形态
+     * （finding 反例：I1={A,B}、I2={A}、A×1+B×1 ⇒ 模拟过、真扣半扣）。真扣模式传
+     * {@code null}：扣减本身就是账本。模拟与真扣因此走同一贪心顺序。</p>
+     *
+     * <p>包级可见 + 静态：护栏在裸 JVM 里用真实 handler 对 finding 反例做行为断言
+     * （本类构造链需要 BlockEntityType / Level，测试造不出实例）。</p>
      *
      * <p>If {@code consumedOut} is a non-null array of length ≥ 1, the single
      * item that was actually consumed (a 1-count copy of the matched stack,
@@ -830,34 +838,45 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
      * the container return; this helper simply records the match in
      * {@code consumedOut}.
      */
-    private int findAndConsumeOne(Ingredient ing, boolean simulate,
-                                   @Nullable ItemStack[] consumedOut) {
+    static int findAndConsumeOne(ItemStackHandler handler, Ingredient ing, boolean simulate,
+                                 @Nullable ItemStack[] consumedOut, @Nullable int[] used) {
         if (consumedOut != null) consumedOut[0] = ItemStack.EMPTY;
         // 遍历输入槽
         for (int i = INPUT_SLOT_START; i <= INPUT_SLOT_END; i++) {
-            ItemStack s = items.getStackInSlot(i);
-            if (!s.isEmpty() && ing.test(s) && s.getCount() > 0) {
+            ItemStack s = handler.getStackInSlot(i);
+            if (!s.isEmpty() && ing.test(s) && s.getCount() > usedCount(used, i)) {
+                if (used != null) used[i]++;
                 if (consumedOut != null) consumedOut[0] = s.copyWithCount(1);
-                if (!simulate) items.extractItem(i, 1, false);
+                if (!simulate) handler.extractItem(i, 1, false);
                 return i;
             }
         }
         int storageBase = INPUT_SLOT_END - INPUT_SLOT_START + 1; // =6
         for (int j = 0; j < STORAGE_SLOT_COUNT; j++) {
             int realSlot = STORAGE_SLOT_START + j;
-            ItemStack s = items.getStackInSlot(realSlot);
-            if (!s.isEmpty() && ing.test(s) && s.getCount() > 0) {
+            ItemStack s = handler.getStackInSlot(realSlot);
+            if (!s.isEmpty() && ing.test(s) && s.getCount() > usedCount(used, storageBase + j)) {
+                if (used != null) used[storageBase + j]++;
                 if (consumedOut != null) consumedOut[0] = s.copyWithCount(1);
-                if (!simulate) items.extractItem(realSlot, 1, false);
+                if (!simulate) handler.extractItem(realSlot, 1, false);
                 return storageBase + j;
             }
         }
         return -1;
     }
 
+    /** 模拟账本查询：真扣模式（{@code used == null}）恒为 0。 */
+    private static int usedCount(@Nullable int[] used, int index) {
+        return used == null ? 0 : used[index];
+    }
+
     /**
      * 一次性扣 N 份配方所需的"全部消耗"（固体食材+容器+附加 oil/carrier）。
      * 仅在 simulate=false 时真实扣除。返回 true 表示材料够。
+     *
+     * <p><b>模拟账本</b>：模拟模式用「每槽已用次数」跟踪贪心匹配，保证模拟与真扣
+     * 走同一贪心顺序 —— 不跟踪时同一件物品会被多个 ingredient 重复匹配，模拟会
+     * 放过「canMatch 过、贪心不过」的形态（半扣中间态）。</p>
      *
      * <p>Ingredients that have a {@link Item#getCraftingRemainingItem(ItemStack)
      * remaining item} (e.g. {@code water_bucket → bucket}) plus a few
@@ -878,12 +897,15 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
 
         ItemStack[] consumedHolder = simulate ? null : new ItemStack[1];
         List<Runnable> deferredReturns = simulate ? null : new ArrayList<>();
+        // 模拟账本：模拟不真的减计数，必须记录每槽已用次数，否则同一件物品会被
+        // 多个 ingredient 重复匹配 ⇒ 模拟放过「canMatch 过、贪心不过」的形态。
+        int[] used = simulate ? new int[INPUT_SLOT_COUNT + STORAGE_SLOT_COUNT] : null;
 
         // 扣 n 次
         for (int k = 0; k < n; k++) {
             // 固体
             for (Ingredient ing : solids) {
-                int idx = findAndConsumeOne(ing, simulate, consumedHolder);
+                int idx = findAndConsumeOne(items, ing, simulate, consumedHolder, used);
                 if (idx < 0) return false;
                 if (!simulate) queueReturnFor(consumedHolder[0], ing, deferredReturns);
             }
@@ -896,7 +918,7 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
                 // KaleidoscopeCompat.getExtraConsumables 再附加一次——为了防重复，
                 // 这里只在"农夫乐事类型（即非森罗）"时才在容器里消耗；森罗走 extras。
                 if (!(KaleidoscopeCompat.isKaleidoscopeRecipe(recipe))) {
-                    int idx = findAndConsumeOne(containerIng, simulate, consumedHolder);
+                    int idx = findAndConsumeOne(items, containerIng, simulate, consumedHolder, used);
                     if (idx < 0) return false;
                     if (!simulate) queueReturnFor(consumedHolder[0], containerIng, deferredReturns);
                 }
@@ -904,7 +926,7 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
             // 附加消耗：森罗的 carrier(非bowl)/pot oil
             for (Ingredient ing : extras) {
                 if (ing.isEmpty()) continue;
-                int idx = findAndConsumeOne(ing, simulate, consumedHolder);
+                int idx = findAndConsumeOne(items, ing, simulate, consumedHolder, used);
                 if (idx < 0) return false;
                 if (!simulate) queueReturnFor(consumedHolder[0], ing, deferredReturns);
             }
@@ -983,22 +1005,40 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
      * 返回值当门禁；扣不动就整单放弃，绝不产出。旧顺序是「先扣流体 → 复检流体
      * 失败 → 返回值被丢弃 → 照出产物」：罐内流体不足一份时零固体消耗出产物
      * （物品复制）。</p>
+     *
+     * <p><b>先模拟再真扣</b>：{@code canMatch} 用回溯判定可合成，而
+     * {@code consumeAllMaterials} 用贪心真扣、不跟踪已用槽 —— 两者对同一库存可能
+     * 结论不同，旧实现贪心扣到一半失败会留下「扣了一半」的中间态（材料被扣、无产物）。
+     * 模拟与真扣走同一贪心顺序，模拟失败时零消耗。</p>
+     *
+     * @return 是否真的产出了（失败时零消耗、零产出，调用方据此决定是否推进订单计数）
      */
-    private void completeRecipe(Level level, Recipe<?> recipe) {
-        if (!canFitAll(recipe)) return;
+    private boolean completeRecipe(Level level, Recipe<?> recipe) {
+        if (!canFitAll(recipe)) return false;
         // 固体+容器+附加油/carrier 一并扣 1 份；扣不动（含流体不足）就整单放弃
-        if (!consumeAllMaterials(recipe, 1, false)) return;
+        if (!consumeAllMaterials(recipe, 1, true)) return false;
+        if (!consumeAllMaterials(recipe, 1, false)) return false;
         consumeFluidForRecipe(recipe);
         // 产物
         ItemStack result = getResultStack(recipe);
         if (!result.isEmpty()) insertOutput(items, result.copy(), OUTPUT_SLOT);
+        return true;
     }
 
     /**
      * 模拟一次产物放入：只看 OUTPUT_SLOT 能否容纳（不再写入 RETURN_SLOT）。
+     *
+     * <p>副本必须回答与真槽相同的上限（{@code BigStackItemHandler} 默认 64，而输出槽是
+     * {@code Integer.MAX_VALUE}）：否则预检会比真实落槽更严，输出槽堆到 64 个同种产物后
+     * 预检永远失败、{@code progress} 每 tick 清零，机器静默停摆。</p>
      */
     private boolean canFitAll(Recipe<?> recipe) {
-        ItemStackHandler simulated = new cn.ism.mekck.util.BigStackItemHandler(items.getSlots());
+        ItemStackHandler simulated = new cn.ism.mekck.util.BigStackItemHandler(items.getSlots()) {
+            @Override
+            public int getSlotLimit(int slot) {
+                return items.getSlotLimit(slot);
+            }
+        };
         for (int slot = 0; slot < items.getSlots(); slot++) {
             simulated.setStackInSlot(slot, items.getStackInSlot(slot).copy());
         }
