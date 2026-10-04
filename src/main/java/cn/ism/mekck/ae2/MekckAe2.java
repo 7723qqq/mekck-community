@@ -86,6 +86,35 @@ public final class MekckAe2 {
     private static final int CHANNELS = 8;
     private static final String TAG_EXTRA = "MekckAe2Extra";
     private static final int REFRESH_INTERVAL = 40;
+    /**
+     * 勾选自动补料清单的硬上限（条）。
+     *
+     * <p>清单来自客户端可控的 {@code itemId}（{@code NetworkPullPacket} 的 {@code readUtf}），
+     * 旧实现只 add/remove、无任何上限 ⇒ 恶意客户端可反复发不同 id 把列表撑到任意大，
+     * 而自动补料每 tick 都要遍历它。取 64：与落盘读取同源（见 {@code loadFromNBT}），
+     * 正常玩法远达不到。</p>
+     */
+    static final int AUTO_SELECT_LIMIT = 64;
+    /**
+     * AE2 任务停滞回收超时（tick）。
+     *
+     * <p>订单已完成（或机器无订单概念）后，产物仍连续这么多刻无法回写网络，就判定该 job
+     * 已死：清掉并记一条 WARN。取 1200 = 60 秒：停滞判定只在 {@code orderDone()} 之后运行
+     * ——有订单读数的机器在订单跑完前不判停滞（SimpleMachine 的 CURD_MAKER / FERMENTER
+     * 单批 1200、WINERY 2400 都因此不受影响），无订单读数的机器（制冰厂 100 /
+     * 种植切配站 200 tick）单批耗时远小于 1200。所以正常加工不会被误杀，而
+     * 「订单已结束却永远导不出产物」的 job 正是永久锁死 {@code isBusy()} 的那一类。</p>
+     */
+    static final long JOB_STALL_TIMEOUT_TICKS = 1200L;
+    /**
+     * 网络库存快照的节流窗口（tick）。
+     *
+     * <p>面板类只读请求（可下单列表 / 缺料清单）此前每次都在 {@code getNetworkAvail}
+     * 里全量扫描网络并新建 HashMap —— 样板重建虽然过了 {@code entriesForPanel} 的节流，
+     * 这一步仍在窗口之外。取 10（与 {@code PacketGuard.PANEL_REFRESH_MIN_TICKS} 同值）：
+     * 窗口内复用同一份快照，客户端连点不再反复触发全量扫描。</p>
+     */
+    static final long AVAIL_SNAPSHOT_TTL = 10L;
     private static final Logger LOGGER = LogManager.getLogger("MekckAe2");
     private static final Map<BlockEntity, FactoryGridHost> HOSTS = new WeakHashMap<>();
 
@@ -272,6 +301,16 @@ public final class MekckAe2 {
         return host.entriesForPanel();
     }
 
+    /** recipeId 是否在本机注册到 ME 终端的样板里（面板 ME 下单的准入判据）。 */
+    private static boolean isRegisteredRecipe(BlockEntity be, ResourceLocation recipeId) {
+        for (PatternEntry entry : panelEntries(be)) {
+            if (recipeId.equals(entry.recipeId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** 样板每份所需输入（possibleInputs 首项 × multiplier）。 */
     private static List<GenericStack> patternInputs(PatternEntry entry) {
         List<GenericStack> need = new ArrayList<>();
@@ -367,6 +406,9 @@ public final class MekckAe2 {
         if (!(be instanceof INetworkPullable)) return false;
         FactoryGridHost host = HOSTS.get(be);
         if (host == null || host.mainNode == null || !host.mainNode.isActive()) return false;
+        // 机器忙时拒绝新单：旧实现直接覆盖 host.job，前一笔任务的产物记账被静默丢弃；
+        // 机器自己的订单未完成时同样拒绝（ownerBusy），避免两笔订单互相覆盖。
+        if (host.job != null || host.ownerBusy()) return false;
         IGrid grid = host.mainNode.getGrid();
         if (grid == null) return false;
         MEStorage storage = grid.getStorageService().getInventory();
@@ -378,6 +420,9 @@ public final class MekckAe2 {
         if (rid == null) return false;
         Recipe<?> recipe = level.getRecipeManager().byKey(rid).orElse(null);
         if (recipe == null) return false;
+        // 配方必须在本机注册到 ME 终端的样板里：否则机器不认这张配方，订单永不完成、
+        // job 永不回收，机器被 isBusy() 永久锁死（恶意客户端可任意构造 recipeId）。
+        if (!isRegisteredRecipe(be, rid)) return false;
 
         List<InputSpec> specs = new ArrayList<>();
         for (Ingredient ing : recipe.getIngredients()) {
@@ -559,13 +604,14 @@ public final class MekckAe2 {
         long nowTick = be.getLevel() != null ? be.getLevel().getGameTime() : 0L;
         Map<String, AEItemKey> found;
         CachedIndex cached = AUTO_INDEX.get(be);
-        // 直接比勾选列表本身，不再 String.join 出一把字符串：本方法每 tick 每台机器都跑，
-        // 81 个勾选项就意味着每 tick 一次 81 元素的字符串拼接，而它唯一的用途就是当下这个比较。
+        // 缓存里存的是勾选列表的不可变快照（List.copyOf）：直接存 live list 会自比恒真
+        // （selected 与 cached.selected() 是同一个对象），勾选变化只能等 20 tick 过期才生效。
+        // 不拼字符串键：本方法每 tick 每台机器都跑，勾选项上限 64，意味着每 tick 一次 64 元素的拼接。
         if (cached != null && cached.selected().equals(selected) && nowTick - cached.tick() < AUTO_INDEX_TTL) {
             found = cached.index();
         } else {
             found = indexSelected(storage, selected);
-            AUTO_INDEX.put(be, new CachedIndex(selected, nowTick, found));
+            AUTO_INDEX.put(be, new CachedIndex(List.copyOf(selected), nowTick, found));
         }
         if (found.isEmpty()) return;
 
@@ -632,7 +678,10 @@ public final class MekckAe2 {
      * 缓存的网络索引（勾选集合 + 采集时刻 + 物品索引）。
      *
      * <p>存 {@code List} 而不是拼好的字符串键：字符串方案每 tick 都要 {@code String.join}
-     * 一次（勾选项可达 81 个），而列表比较只需逐元素 equals，且命中缓存时一次分配都不做。</p>
+     * 一次（勾选项上限 64），而列表比较只需逐元素 equals，且命中缓存时一次分配都不做。</p>
+     *
+     * <p>{@code selected} 必须是<b>不可变快照</b>（{@code List.copyOf}）：存 live list 会与
+     * 调用方传入的同一个对象自比恒真，勾选变化只能等 TTL 过期才生效。</p>
      */
     private record CachedIndex(List<String> selected, long tick, Map<String, AEItemKey> index) {
     }
@@ -689,20 +738,17 @@ public final class MekckAe2 {
         return extracted;
     }
 
+    /**
+     * 网络库存快照（面板类只读请求的唯一入口）。
+     *
+     * <p>旧实现每次调用都全量扫描网络并新建 HashMap：样板重建虽然过了
+     * {@code entriesForPanel} 的节流，这一步仍在窗口之外，客户端连点即可反复触发。
+     * 现在委托给 {@link FactoryGridHost#networkAvailSnapshot()}，按 host + tick 节流。</p>
+     */
     private static Map<AEKey, Long> getNetworkAvail(BlockEntity be) {
         FactoryGridHost host = HOSTS.get(be);
-        if (host == null || host.mainNode == null || !host.mainNode.isActive()) return null;
-        IGrid grid = host.mainNode.getGrid();
-        if (grid == null) return null;
-        MEStorage storage = grid.getStorageService().getInventory();
-        if (storage == null) return null;
-        Map<AEKey, Long> avail = new HashMap<>();
-        for (var e : storage.getAvailableStacks()) {
-            if (e.getLongValue() > 0) {
-                avail.put(e.getKey(), e.getLongValue());
-            }
-        }
-        return avail;
+        if (host == null) return null;
+        return host.networkAvailSnapshot();
     }
 
 
@@ -1155,6 +1201,9 @@ public final class MekckAe2 {
         private long lastChannelLog = -1;
         private long powerReaddTick = 0;
         private AeJob job;
+        /** 网络库存快照缓存（getNetworkAvail 用）：按 host + tick 节流，窗口内复用同一份 Map。 */
+        private Map<AEKey, Long> availSnapshot;
+        private long availSnapshotTick = -1L;
         private final Ae2PowerStorage powerStorage = new Ae2PowerStorage();
         private CompoundTag pendingTag;
         /** 上一次联网状态（沿边检测：false→true 时允许尝试授予）。 */
@@ -1318,7 +1367,8 @@ public final class MekckAe2 {
             selectedAutoItems.clear();
             if (tag.contains("MekCkAutoSel", Tag.TAG_COMPOUND)) {
                 CompoundTag sel = tag.getCompound("MekCkAutoSel");
-                for (int i = 0; i < 32; i++) {
+                // 读取条数与写入上限同源：上限调大后仍只读 32 项会让 33..64 项读档即丢。
+                for (int i = 0; i < AUTO_SELECT_LIMIT; i++) {
                     String s = sel.getString("s" + i);
                     if (!s.isEmpty()) selectedAutoItems.add(s);
                 }
@@ -1334,9 +1384,10 @@ public final class MekckAe2 {
         }
 
         void toggleAutoItem(String itemId) {
-            if (!selectedAutoItems.remove(itemId)) {
-                selectedAutoItems.add(itemId);
-            }
+            List<String> next = Hardening.toggledAutoItems(selectedAutoItems, itemId, AUTO_SELECT_LIMIT);
+            if (next.equals(selectedAutoItems)) return;
+            selectedAutoItems.clear();
+            selectedAutoItems.addAll(next);
             owner.setChanged();
         }
 
@@ -1513,6 +1564,39 @@ public final class MekckAe2 {
             return provider.entries;
         }
 
+        /**
+         * 网络库存快照（面板类只读请求的唯一入口）。
+         *
+         * <p>旧实现每次调用都全量扫描网络并新建 HashMap：样板重建虽然过了
+         * {@link #entriesForPanel()} 的节流，这一步仍在窗口之外，客户端连点即可反复触发。
+         * 这里按 host + tick 缓存 {@link MekckAe2#AVAIL_SNAPSHOT_TTL} 刻，窗口内复用同一份快照。
+         * 返回的 Map 只读，调用方不得修改。</p>
+         */
+        Map<AEKey, Long> networkAvailSnapshot() {
+            if (mainNode == null || !mainNode.isActive()) return null;
+            IGrid grid = mainNode.getGrid();
+            if (grid == null) return null;
+            MEStorage storage = grid.getStorageService().getInventory();
+            if (storage == null) return null;
+            Level level = owner.getLevel();
+            long now = level == null ? -1L : level.getGameTime();
+            if (now >= 0L && availSnapshot != null && availSnapshotTick >= 0L
+                    && now >= availSnapshotTick && now - availSnapshotTick < AVAIL_SNAPSHOT_TTL) {
+                return availSnapshot;
+            }
+            Map<AEKey, Long> avail = new HashMap<>();
+            for (var e : storage.getAvailableStacks()) {
+                if (e.getLongValue() > 0) {
+                    avail.put(e.getKey(), e.getLongValue());
+                }
+            }
+            if (now >= 0L) {
+                availSnapshot = avail;
+                availSnapshotTick = now;
+            }
+            return avail;
+        }
+
         void refreshPatterns() {
             // 统一记录刷新时刻：tick / 网格状态变化 / 任务完成 / 面板请求触发的重建都写这里，
             // 面板入口据此判断是否处于窗口内（见 entriesForPanel）。
@@ -1617,9 +1701,18 @@ public final class MekckAe2 {
             if (grid == null) return;
             MEStorage storage = grid.getStorageService().getInventory();
             if (storage == null) return;
-            if (!orderDone()) return;
+            if (!orderDone()) {
+                // 订单还在跑：产物要等订单结束才回网，这里不判停滞
+                //（订单本身卡住时 ownerBusy() 已拦住新任务，回收 job 也解不开机器）。
+                return;
+            }
+            long now = level.getGameTime();
+            if (job.lastProgressTick < 0L) {
+                job.lastProgressTick = now;
+            }
 
             IActionSource src = IActionSource.ofMachine(this);
+            long before = job.remainingOutput;
             for (GenericStack out : job.entry.outputs) {
                 if (job.remainingOutput <= 0) break;
                 if (out.what() instanceof AEItemKey key) {
@@ -1633,6 +1726,21 @@ public final class MekckAe2 {
                 exportReturnSlots(storage, src);
                 job = null;
                 nextRefreshTick = level.getGameTime() + REFRESH_INTERVAL;
+                refreshPatterns();
+                return;
+            }
+            if (job.remainingOutput < before) {
+                job.lastProgressTick = now;
+                return;
+            }
+            // 订单已结束（或机器无订单概念）却连续超时导不出产物：job 已死，清掉并记日志。
+            // 不清机器自己的订单——那是机器侧的状态，取消走机器自己的入口。
+            if (Hardening.jobStalled(now, job.lastProgressTick, JOB_STALL_TIMEOUT_TICKS)) {
+                LOGGER.warn("AE2 任务停滞回收：机器 {} 连续 {} tick 无法把产物回写网络（剩余 {}），"
+                                + "已清掉任务；产物仍在机器内，可手动取出",
+                        owner.getBlockPos(), JOB_STALL_TIMEOUT_TICKS, job.remainingOutput);
+                job = null;
+                nextRefreshTick = now + REFRESH_INTERVAL;
                 refreshPatterns();
             }
         }
@@ -1740,7 +1848,13 @@ public final class MekckAe2 {
 
         private boolean ownerBusy() {
             if (owner instanceof cn.ism.mekck.blockentity.SandwichAssemblerBlockEntity) {
-                return !orderDone();
+                // 组装机没有订单字段：不能拿 !orderDone() 当忙——orderDone() = 输出槽非空
+                //（产物待回网），取反后空闲（输出槽空）反而恒忙，而 AE2 的 CraftingCpuLogic
+                // 会直接跳过 isBusy() 为真的 provider（javap 实测），终端下单永远推不进来。
+                // 「有任务在跑」由 isBusy() 的 job != null 覆盖（与 AE2 自家
+                // PatternProviderLogic.isBusy() = 有待发送工作 同义）；输出槽被占时机器
+                // 自己不会开工（canProduce 判输出空间），不需要在这里拦。
+                return false;
             }
             if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity kitchen) {
                 return kitchen.orderCount() > 0;
@@ -2481,6 +2595,47 @@ public final class MekckAe2 {
     //  数据结构
     // ==================================================================
 
+    /**
+     * 加固逻辑的纯函数集合（供裸 JVM 单测直接加载）。
+     *
+     * <p>为什么不放在 {@link MekckAe2} 本体上：本类引用 AE2 API，而 AE2 在构建里是
+     * {@code compileOnly}（测试运行时不在 classpath 上），加载 {@code MekckAe2} 会
+     * {@code NoClassDefFoundError}。这里的两个函数不引用任何 AE2 类型，
+     * 因此测试可以只加载这个静态嵌套类。</p>
+     */
+    static final class Hardening {
+        private Hardening() {
+        }
+
+        /**
+         * 纯函数形态的停滞判定：job 是否已连续 {@code timeoutTicks} 刻没有进展。
+         *
+         * @param nowTick          当前游戏刻
+         * @param lastProgressTick 上次观察到进展的刻；{@code <0} = 尚未观察过（先记时刻，不回收）
+         * @param timeoutTicks     停滞回收超时
+         */
+        static boolean jobStalled(long nowTick, long lastProgressTick, long timeoutTicks) {
+            if (lastProgressTick < 0L) return false;
+            if (nowTick < lastProgressTick) return false; // 时钟回拨（存档重载）：保守不回收
+            return nowTick - lastProgressTick >= timeoutTicks;
+        }
+
+        /**
+         * 纯函数形态的勾选清单切换：返回切换后的清单。
+         *
+         * <p>规则：已勾选的移除；未勾选且未到 {@code limit} 的加入；到上限后不再增长；
+         * 空 id 不产生任何变化。返回新对象，调用方据此写回。</p>
+         */
+        static List<String> toggledAutoItems(List<String> current, String itemId, int limit) {
+            List<String> next = new ArrayList<>(current);
+            if (itemId == null || itemId.isEmpty()) return next;
+            if (!next.remove(itemId) && next.size() < limit) {
+                next.add(itemId);
+            }
+            return next;
+        }
+    }
+
     private static final class PatternEntry {
         final IPatternDetails details;
         final ResourceLocation recipeId;
@@ -2506,6 +2661,13 @@ public final class MekckAe2 {
     private static final class AeJob {
         final PatternEntry entry;
         long remainingOutput;
+        /**
+         * 上次观察到进展的游戏刻（{@code <0} = 尚未在 processJob 里观察过）。
+         *
+         * <p>进展 = 待回网产物量减少。订单还在跑时不判停滞（见 {@code processJob}），
+         * 所以这个时刻只在「订单已结束」之后才有意义。</p>
+         */
+        long lastProgressTick = -1L;
 
         AeJob(PatternEntry entry) {
             this.entry = entry;
