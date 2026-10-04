@@ -99,10 +99,11 @@ public final class MekckAe2 {
      * AE2 任务停滞回收超时（tick）。
      *
      * <p>订单已完成（或机器无订单概念）后，产物仍连续这么多刻无法回写网络，就判定该 job
-     * 已死：清掉并记一条 WARN。取 1200 = 60 秒：本模组所有家族的单批加工基础耗时都是
-     * 200 tick（各 {@code PROCESS_TIME} 常量），1200 是它的 6 倍，正常加工不可能连续
-     * 60 秒不出产物；而「订单已结束却永远导不出产物」的 job 正是永久锁死 {@code isBusy()}
-     * 的那一类。</p>
+     * 已死：清掉并记一条 WARN。取 1200 = 60 秒：停滞判定只在 {@code orderDone()} 之后运行
+     * ——有订单读数的机器在订单跑完前不判停滞（SimpleMachine 的 CURD_MAKER / FERMENTER
+     * 单批 1200、WINERY 2400 都因此不受影响），无订单读数的机器（制冰厂 100 /
+     * 种植切配站 200 tick）单批耗时远小于 1200。所以正常加工不会被误杀，而
+     * 「订单已结束却永远导不出产物」的 job 正是永久锁死 {@code isBusy()} 的那一类。</p>
      */
     static final long JOB_STALL_TIMEOUT_TICKS = 1200L;
     /**
@@ -605,7 +606,7 @@ public final class MekckAe2 {
         CachedIndex cached = AUTO_INDEX.get(be);
         // 缓存里存的是勾选列表的不可变快照（List.copyOf）：直接存 live list 会自比恒真
         // （selected 与 cached.selected() 是同一个对象），勾选变化只能等 20 tick 过期才生效。
-        // 不拼字符串键：本方法每 tick 每台机器都跑，81 个勾选项意味着每 tick 一次 81 元素的拼接。
+        // 不拼字符串键：本方法每 tick 每台机器都跑，勾选项上限 64，意味着每 tick 一次 64 元素的拼接。
         if (cached != null && cached.selected().equals(selected) && nowTick - cached.tick() < AUTO_INDEX_TTL) {
             found = cached.index();
         } else {
@@ -677,7 +678,7 @@ public final class MekckAe2 {
      * 缓存的网络索引（勾选集合 + 采集时刻 + 物品索引）。
      *
      * <p>存 {@code List} 而不是拼好的字符串键：字符串方案每 tick 都要 {@code String.join}
-     * 一次（勾选项可达 81 个），而列表比较只需逐元素 equals，且命中缓存时一次分配都不做。</p>
+     * 一次（勾选项上限 64），而列表比较只需逐元素 equals，且命中缓存时一次分配都不做。</p>
      *
      * <p>{@code selected} 必须是<b>不可变快照</b>（{@code List.copyOf}）：存 live list 会与
      * 调用方传入的同一个对象自比恒真，勾选变化只能等 TTL 过期才生效。</p>

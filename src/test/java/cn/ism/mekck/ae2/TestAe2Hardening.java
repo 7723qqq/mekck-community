@@ -30,6 +30,13 @@ import static org.junit.Assert.assertTrue;
  * <p>纯逻辑部分直接调 {@code MekckAe2.Hardening} 的包内静态函数（该嵌套类不引用 AE2 类型，
  * 普通 JVM 可加载）；结构部分用 {@link TestSourceText} 剥注释后断言源码形态，
  * 避免注释里的示意代码被当成真代码。</p>
+ *
+ * <p><b>源码形态断言一律钉「效果」而不是「token 存在」</b>：必须出现
+ * {@code ownerBusy()) return false}、{@code !isRegisteredRecipe(be, rid)) return false}、
+ * {@code if (Hardening.jobStalled(...)) {}、{@code return host.networkAvailSnapshot();}、
+ * {@code List<String> next = ...} + {@code selectedAutoItems.addAll(next)} 这类
+ * 「调用真的生效」的片段。只断言 token 出现时，「保留调用、去掉效果」的变异会静默全绿
+ * （M27 复审 P2-1 实测）。</p>
  */
 public class TestAe2Hardening {
 
@@ -125,11 +132,11 @@ public class TestAe2Hardening {
         String body = TestSourceText.methodBody(src,
                 "boolean pullGenericIngredients(BlockEntity be, String recipeId, int quantity, String seasoningId)");
         assertFalse("源码里找不到 pullGenericIngredients，判据失效", body.isEmpty());
-        assertTrue("必须先拒绝忙机器（job 未回收 / 机器订单未完成），否则覆盖进行中的任务",
-                body.contains("job != null") && body.contains("ownerBusy()"));
-        assertTrue("必须校验配方在本机样板里，否则机器不认的配方会永久锁死 job",
-                body.contains("isRegisteredRecipe"));
-        int busy = body.indexOf("ownerBusy()");
+        assertTrue("忙检查必须真的拒绝（保留调用但去掉 return false 即失效）",
+                body.contains("ownerBusy()) return false"));
+        assertTrue("配方校验必须真的拒绝（保留调用但去掉 return false 即失效）",
+                body.contains("!isRegisteredRecipe(be, rid)) return false"));
+        int busy = body.indexOf("ownerBusy()) return false");
         int extract = body.indexOf("extractAll(");
         assertTrue("忙检查必须发生在抽料之前（先抽料再拒绝会白扣网络材料）",
                 busy >= 0 && extract > busy);
@@ -141,7 +148,12 @@ public class TestAe2Hardening {
         String body = TestSourceText.methodBody(src, "boolean isRegisteredRecipe(BlockEntity be, ResourceLocation recipeId)");
         assertFalse("源码里找不到 isRegisteredRecipe，判据失效", body.isEmpty());
         assertTrue("准入判据必须来自本机注册到终端的样板（panelEntries）", body.contains("panelEntries"));
-        assertTrue("必须按 recipeId 比对", body.contains("entry.recipeId"));
+        assertTrue("必须按 recipeId 比对", body.contains("recipeId.equals(entry.recipeId)"));
+        int loop = body.indexOf("for (PatternEntry entry : panelEntries(be))");
+        int yes = body.indexOf("return true;", loop);
+        int no = body.indexOf("return false;", yes);
+        assertTrue("必须命中才 true、遍历完才 false（恒 true 即失效）",
+                loop >= 0 && yes > loop && no > yes);
     }
 
     @Test
@@ -150,9 +162,11 @@ public class TestAe2Hardening {
         String body = TestSourceText.methodBody(src, "void processJob(Level level)");
         assertFalse("源码里找不到 processJob，判据失效", body.isEmpty());
         int done = body.indexOf("orderDone()");
-        int stalled = body.indexOf("Hardening.jobStalled(");
+        int stalled = body.indexOf("if (Hardening.jobStalled(");
         assertTrue("停滞判定必须在 orderDone() 之后（订单还在跑时不能判停滞）",
                 done >= 0 && stalled > done);
+        assertTrue("停滞判定必须真的作为 if 条件（保留调用但去掉 if 即失效）",
+                body.contains("if (Hardening.jobStalled(now, job.lastProgressTick, JOB_STALL_TIMEOUT_TICKS)) {"));
         assertTrue("停滞回收必须记日志", body.contains("LOGGER.warn"));
         int cleared = body.indexOf("job = null", stalled);
         assertTrue("停滞分支必须清掉 job", cleared > stalled);
@@ -163,12 +177,16 @@ public class TestAe2Hardening {
         String src = TestSourceText.read(AE2);
         String body = TestSourceText.methodBody(src, "Map<AEKey, Long> getNetworkAvail(BlockEntity be)");
         assertFalse("源码里找不到 getNetworkAvail，判据失效", body.isEmpty());
-        assertTrue("getNetworkAvail 必须走 host 的节流快照入口", body.contains("networkAvailSnapshot"));
-        assertFalse("getNetworkAvail 不得再无条件全量扫描 + 建 HashMap", body.contains("new HashMap"));
+        assertTrue("getNetworkAvail 必须真的返回快照（保留调用但丢弃返回值即失效）",
+                body.contains("return host.networkAvailSnapshot();"));
+        assertFalse("getNetworkAvail 不得再无条件全量扫描 + 建 HashMap（含全限定写法）",
+                body.contains("HashMap"));
 
         String snapshot = TestSourceText.methodBody(src, "Map<AEKey, Long> networkAvailSnapshot()");
         assertFalse("源码里找不到 networkAvailSnapshot，判据失效", snapshot.isEmpty());
         assertTrue("快照必须按 tick 窗口复用", snapshot.contains("AVAIL_SNAPSHOT_TTL"));
+        assertTrue("窗口内必须真的复用缓存（return availSnapshot）",
+                snapshot.contains("return availSnapshot;"));
         assertTrue("快照必须真的扫描网络（否则是空实现）", snapshot.contains("getAvailableStacks"));
     }
 
@@ -177,7 +195,10 @@ public class TestAe2Hardening {
         String src = TestSourceText.read(AE2);
         String body = TestSourceText.methodBody(src, "void toggleAutoItem(String itemId)");
         assertFalse("源码里找不到 toggleAutoItem，判据失效", body.isEmpty());
-        assertTrue("toggleAutoItem 必须走带上限的纯函数", body.contains("Hardening.toggledAutoItems"));
+        assertTrue("toggleAutoItem 必须把带上限的纯函数结果写回清单（丢弃返回值即失效）",
+                body.contains("List<String> next = Hardening.toggledAutoItems(")
+                        && body.contains("selectedAutoItems.addAll(next)"));
+        assertTrue("纯函数调用必须传入上限常量", body.contains("itemId, AUTO_SELECT_LIMIT)"));
         assertTrue("上限常量必须存在", src.contains("AUTO_SELECT_LIMIT"));
         assertTrue("纯函数必须放在不引用 AE2 的静态嵌套类里（测试运行时 AE2 不在 classpath）",
                 src.contains("static final class Hardening"));
@@ -185,7 +206,7 @@ public class TestAe2Hardening {
         String load = TestSourceText.methodBody(src, "void loadFromNBT(CompoundTag tag)");
         assertFalse("源码里找不到 loadFromNBT，判据失效", load.isEmpty());
         assertTrue("落盘读取必须与上限同源（否则 33..64 项读档即丢）",
-                load.contains("AUTO_SELECT_LIMIT"));
+                load.contains("i < AUTO_SELECT_LIMIT"));
     }
 
     @Test
@@ -194,5 +215,7 @@ public class TestAe2Hardening {
         assertTrue("AUTO_INDEX 缓存必须存勾选列表快照（List.copyOf），"
                         + "否则 selected().equals(selected) 自比恒真",
                 src.contains("new CachedIndex(List.copyOf(selected)"));
+        assertTrue("缓存命中必须比较快照与 live list（比较被短路即失效）",
+                src.contains("cached.selected().equals(selected)"));
     }
 }
