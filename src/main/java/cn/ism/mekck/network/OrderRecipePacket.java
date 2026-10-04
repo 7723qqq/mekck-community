@@ -65,15 +65,18 @@ public class OrderRecipePacket {
                 // 烧烤工厂是 (ResourceLocation,int,String=调味)，中央厨房走 placeOrder）。
                 // 原来写死 4 台的 instanceof 阶梯已改为反射 ⇒ **新机器（含 14 台联动机器）无需再改这里**。
                 //
-                // quantity 是客户端可控的 int，这里必须夹下界：13 个 setOrder 实现里有 4 个
+                // quantity 是客户端可控的 int，这里必须夹上下界：13 个 setOrder 实现里有 4 个
                 // （SmartCookingPot / SkeweringMachine / SimpleMachine / GrillBlockEntity）
                 // 把 quantity 原样存进 orderQuantity。负数会让订单门禁（orderQuantity > 0）
                 // 与订单推进（orderCompleted >= orderQuantity）同时失效 ⇒ orderRecipeId 永久非 null、
                 // 订单永不完成；AE2 侧 orderStateOf 读到 OrderState(true, 负数) ⇒
                 // processJob 永久早退、job 永不释放。
+                // 上界同理：机器侧 setOrder 只夹下界，任意大的订单会让 ownerBusy() 恒真
+                // （finding 20261005）；中央厨房那条还会把份数交给 KitchenCraftingPlan.solve。
                 // recipeId == null 是「取消订单」（两个 GUI 都发 (null, 0)），必须原样透传，
                 // 不能被夹成「下 1 件」。
-                int quantity = packet.recipeId == null ? packet.quantity : Math.max(1, packet.quantity);
+                int quantity = packet.recipeId == null ? packet.quantity
+                        : NetworkOrderPacket.clampQuantity(packet.quantity);
                 if (!setOrderReflectively(be, packet.recipeId, quantity)
                         && be instanceof CentralKitchenBlockEntity kitchen && packet.recipeId != null) {
                     // 与 KitchenOrderPacket 同一道三态节流：placeOrder 每次都走
@@ -83,12 +86,12 @@ public class OrderRecipePacket {
                     // 每次都是一次全模组配方扫描。
                     // 本包没有回包：ALLOW_CACHED（冷却期内的重复）直接跳过即可。
                     long fingerprint = PacketGuard.fingerprint(packet.pos.asLong(),
-                            packet.recipeId.hashCode(), Math.max(1, quantity));
+                            packet.recipeId.hashCode(), quantity);
                     if (PacketGuard.expensiveRequestState(player, fingerprint)
                             != PacketGuard.ExpensiveRequest.ALLOW_COMPUTE) {
                         return;
                     }
-                    kitchen.placeOrder(player.level(), packet.recipeId, Math.max(1, quantity));
+                    kitchen.placeOrder(player.level(), packet.recipeId, quantity);
                 }
             }
         });
