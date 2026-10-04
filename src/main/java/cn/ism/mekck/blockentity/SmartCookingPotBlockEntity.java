@@ -5,6 +5,7 @@ import cn.ism.mekck.SideMode;
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.block.SmartCookingPotBlock;
 import cn.ism.mekck.config.MekckConfig;
+import cn.ism.mekck.machine.cooking.CookingFactoryExecutor;
 import cn.ism.mekck.menu.SmartCookingPotMenu;
 import cn.ism.mekck.util.RecipeInputMatcher;
 import cn.ism.mekck.util.AutoIO;
@@ -977,12 +978,17 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
      * 完成一次处理：扣材料 + 流体 + 放入产物到 OUTPUT_SLOT。
      * 重要：不再返还 bowl/container 到 RETURN_SLOT；容器在 consumeAllMaterials
      *       里已经被**消耗**，对应农夫乐事的 CookingPotBlockEntity 盛出逻辑。
+     *
+     * <p><b>顺序</b>：先 {@code consumeAllMaterials}（它内部第一步就校验流体），
+     * 返回值当门禁；扣不动就整单放弃，绝不产出。旧顺序是「先扣流体 → 复检流体
+     * 失败 → 返回值被丢弃 → 照出产物」：罐内流体不足一份时零固体消耗出产物
+     * （物品复制）。</p>
      */
     private void completeRecipe(Level level, Recipe<?> recipe) {
         if (!canFitAll(recipe)) return;
+        // 固体+容器+附加油/carrier 一并扣 1 份；扣不动（含流体不足）就整单放弃
+        if (!consumeAllMaterials(recipe, 1, false)) return;
         consumeFluidForRecipe(recipe);
-        // 固体+容器+附加油/carrier 一并扣 1 份
-        consumeAllMaterials(recipe, 1, false);
         // 产物
         ItemStack result = getResultStack(recipe);
         if (!result.isEmpty()) insertOutput(items, result.copy(), OUTPUT_SLOT);
@@ -1315,14 +1321,15 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
         allNeeds.addAll(KaleidoscopeCompat.getExtraConsumables(recipe));
         if (allNeeds.isEmpty()) return 0;
 
-        // 流体限制：对水和奶分别除以"每份所需 mb"得到独立的份数上限，再取最小
+        // 流体限制：对水和奶分别除以"每份所需 mb"得到独立的份数上限，再取最小。
+        // 口径与 hasRequiredFluid / drainOf 一致：单个罐足量，跨罐取最大（不是求和）。
         int fluidCap = Integer.MAX_VALUE;
         FluidIngredientHelper.FluidInfo fluid = getFluidPerUnit(recipe);
         if (!fluid.isEmpty()) {
             if (!hasRequiredFluid(recipe, 1)) fluidCap = 0;
             else {
-                if (fluid.waterMb > 0) fluidCap = Math.min(fluidCap, fluidTank.totalOf(true) / fluid.waterMb);
-                if (fluid.milkMb  > 0) fluidCap = Math.min(fluidCap, fluidTank.totalOf(false) / fluid.milkMb);
+                if (fluid.waterMb > 0) fluidCap = Math.min(fluidCap, fluidBatchFor(true, fluid.waterMb));
+                if (fluid.milkMb  > 0) fluidCap = Math.min(fluidCap, fluidBatchFor(false, fluid.milkMb));
             }
         }
 
@@ -1369,6 +1376,30 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
         }
         minCount = Math.min(minCount, fluidCap);
         return minCount == Integer.MAX_VALUE ? 0 : minCount;
+    }
+
+    /**
+     * 单罐口径的流体可支撑份数 —— 与 {@link #hasRequiredFluid} / {@code drainOf}
+     * 的「某一个罐必须足量」语义对齐。
+     *
+     * <p>旧实现用 {@code totalOf}（跨罐求和）估算：两罐各 150 mB 对 250 mB 的需求
+     * 会算成 1 份，而实际 {@code drainOf} 两罐都不够、一滴都抽不出 —— 估算偏大。
+     * 这里复用工厂侧已修好的同一段算术（{@link CookingFactoryExecutor#batchForFluidAmounts}），
+     * 「跨罐取最大」的口径只有一处实现。</p>
+     */
+    private int fluidBatchFor(boolean water, int perUnitMb) {
+        if (perUnitMb <= 0) return Integer.MAX_VALUE;
+        int count = fluidTank.getTankCount();
+        int[] amounts = new int[count];
+        boolean[] matches = new boolean[count];
+        for (int i = 0; i < count; i++) {
+            FluidTank tank = fluidTank.getTank(i);
+            if (tank == null) continue;
+            FluidStack fluid = tank.getFluid();
+            matches[i] = water ? CookingFactoryExecutor.isWater(fluid) : CookingFactoryExecutor.isNotWater(fluid);
+            amounts[i] = matches[i] ? fluid.getAmount() : 0;
+        }
+        return CookingFactoryExecutor.batchForFluidAmounts(amounts, matches, perUnitMb);
     }
 
     public void setCustomName(Component customName) {
@@ -1471,7 +1502,10 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
             orderRecipeId = ResourceLocation.tryParse(tag.getString("OrderRecipeId"));
         }
         meOrderEnabled = !tag.contains("MeOrderEnabled") || tag.getBoolean("MeOrderEnabled");
-        orderQuantity = tag.getInt("OrderQuantity");
+        // 与 setOrder / MekCkOrderState.load 对齐：有订单时份数下界为 1，无订单时为 0。
+        // 旧档可能留下 OrderRecipeId 非空 + OrderQuantity=0（旧版 setOrder 原样存），
+        // 原样读会让 orderQuantity > 0 门禁失效 ⇒ 无限加工、订单永不完成。
+        orderQuantity = orderRecipeId == null ? 0 : Math.max(1, tag.getInt("OrderQuantity"));
         orderCompleted = tag.getInt("OrderCompleted");
         if (tag.contains("RedstoneControl")) {
             redstoneControl = RedstoneControl.byOrdinal(tag.getInt("RedstoneControl"));
