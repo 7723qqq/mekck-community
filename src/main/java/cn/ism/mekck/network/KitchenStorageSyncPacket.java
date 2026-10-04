@@ -119,7 +119,7 @@ public final class KitchenStorageSyncPacket {
             // 不能在这里向 Context 索取发送方玩家：本包是 S2C，客户端侧那个取值恒为 null
             // （packet listener 是 ClientPacketListener），旧实现因此每次都提前返回 ⇒
             // 快照从不落地、界面 54 格恒空。玩家只能由客户端实现类去取，故走门面。
-            cn.ism.mekck.util.ClientPacketBridge.applyStorageSnapshot(
+            cn.ism.mekck.network.ClientPacketBridge.applyStorageSnapshot(
                     pos, scrollRow, sortModeOrdinal, filteredCount, visible);
         });
         context.setPacketHandled(true);

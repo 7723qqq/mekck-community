@@ -159,7 +159,7 @@ public final class GrillBlockEntity extends TileEntityConfigurableMachine
     public static final int PROCESS_TIME = 200;
 
     /** 烧烤配方类型 id（Barbeque's Delight）。 */
-    private static final ResourceLocation GRILLING_TYPE_ID = new ResourceLocation("barbequesdelight", "grilling");
+    private static final ResourceLocation GRILLING_TYPE_ID = ResourceLocation.fromNamespaceAndPath("barbequesdelight", "grilling");
 
     // ── 槽位对象 ────────────────────────────────────────────────────────
 
@@ -600,11 +600,11 @@ public final class GrillBlockEntity extends TileEntityConfigurableMachine
 
     @Nullable
     private Recipe<?> findRecipeById(Level level, ResourceLocation recipeId) {
-        RecipeType<?> grillingType = cn.ism.mekck.util.RecipeCache.type(GRILLING_TYPE_ID);
+        RecipeType<?> grillingType = cn.ism.mekck.recipe.RecipeCache.type(GRILLING_TYPE_ID);
         if (grillingType == null) {
             return null;
         }
-        for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, grillingType)) {
+        for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, grillingType)) {
             if (recipe.getId().equals(recipeId)) {
                 return recipe;
             }
@@ -632,11 +632,11 @@ public final class GrillBlockEntity extends TileEntityConfigurableMachine
         if (input.isEmpty() || level == null) {
             return available;
         }
-        RecipeType<?> grillingType = cn.ism.mekck.util.RecipeCache.type(GRILLING_TYPE_ID);
+        RecipeType<?> grillingType = cn.ism.mekck.recipe.RecipeCache.type(GRILLING_TYPE_ID);
         if (grillingType == null) {
             return available;
         }
-        for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, grillingType)) {
+        for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, grillingType)) {
             if (matchesInput(recipe, input)) {
                 available.add(recipe);
             }

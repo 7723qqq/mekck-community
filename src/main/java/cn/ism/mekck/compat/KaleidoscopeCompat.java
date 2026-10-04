@@ -53,10 +53,10 @@ public final class KaleidoscopeCompat {
         RecipeType flexStockpot = Bridge.FLEX_STOCKPOT;
         RecipeType pot = Bridge.POT;
         RecipeType flexPot = Bridge.FLEX_POT;
-        all.addAll(cn.ism.mekck.util.RecipeCache.all(level, stockpot));
-        all.addAll(cn.ism.mekck.util.RecipeCache.all(level, flexStockpot));
-        all.addAll(cn.ism.mekck.util.RecipeCache.all(level, pot));
-        all.addAll(cn.ism.mekck.util.RecipeCache.all(level, flexPot));
+        all.addAll(cn.ism.mekck.recipe.RecipeCache.all(level, stockpot));
+        all.addAll(cn.ism.mekck.recipe.RecipeCache.all(level, flexStockpot));
+        all.addAll(cn.ism.mekck.recipe.RecipeCache.all(level, pot));
+        all.addAll(cn.ism.mekck.recipe.RecipeCache.all(level, flexPot));
         return all;
     }
 
@@ -79,7 +79,7 @@ public final class KaleidoscopeCompat {
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static ResourceLocation registryId(RecipeType type) {
         ResourceLocation id = net.minecraftforge.registries.ForgeRegistries.RECIPE_TYPES.getKey(type);
-        return id != null ? id : new ResourceLocation(MOD_ID, "unknown");
+        return id != null ? id : ResourceLocation.fromNamespaceAndPath(MOD_ID, "unknown");
     }
 
 
@@ -99,7 +99,7 @@ public final class KaleidoscopeCompat {
     @SuppressWarnings("rawtypes")
     public static List<Recipe<?>> getAllMillstoneRecipes(Level level) {
         if (!isLoaded()) return List.of();
-        return new ArrayList<>(cn.ism.mekck.util.RecipeCache.all(level, Bridge.MILLSTONE));
+        return new ArrayList<>(cn.ism.mekck.recipe.RecipeCache.all(level, Bridge.MILLSTONE));
     }
 
     /** 查找匹配输入物品的石磨配方（无则 Optional.empty）。 */

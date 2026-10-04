@@ -25,10 +25,10 @@ import cn.ism.mekck.compat.KaleidoscopeCompat;
  */
 public final class RecipeInputMatcher {
 
-    private static final ResourceLocation GRILLING_TYPE_ID = new ResourceLocation("barbequesdelight", "grilling");
-    private static final ResourceLocation SKEWERING_TYPE_ID = new ResourceLocation("barbequesdelight", "skewering");
-    private static final ResourceLocation EXTREME_COOKING_SHAPED_ID = new ResourceLocation("avaritia_delight", "extreme_cooking_shaped");
-    private static final ResourceLocation EXTREME_COOKING_SHAPELESS_ID = new ResourceLocation("avaritia_delight", "extreme_cooking_shapeless");
+    private static final ResourceLocation GRILLING_TYPE_ID = ResourceLocation.fromNamespaceAndPath("barbequesdelight", "grilling");
+    private static final ResourceLocation SKEWERING_TYPE_ID = ResourceLocation.fromNamespaceAndPath("barbequesdelight", "skewering");
+    private static final ResourceLocation EXTREME_COOKING_SHAPED_ID = ResourceLocation.fromNamespaceAndPath("avaritia_delight", "extreme_cooking_shaped");
+    private static final ResourceLocation EXTREME_COOKING_SHAPELESS_ID = ResourceLocation.fromNamespaceAndPath("avaritia_delight", "extreme_cooking_shapeless");
 
     private RecipeInputMatcher() {
     }
@@ -39,7 +39,7 @@ public final class RecipeInputMatcher {
         if (type == null) {
             return false;
         }
-        for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+        for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
             for (Ingredient ingredient : recipe.getIngredients()) {
                 if (ingredient.test(stack)) {
                     return true;
@@ -52,10 +52,10 @@ public final class RecipeInputMatcher {
     /** 网络拉料辅助：某配方类型可处理的所有首个成分的并集 Ingredient（用于空输入槽拉料）。 */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static Ingredient unionFirstIngredients(Level level, ResourceLocation typeId) {
-        RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(typeId);
+        RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(typeId);
         if (type == null) return Ingredient.EMPTY;
         java.util.List<Ingredient> all = new java.util.ArrayList<>();
-        for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+        for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
             List<Ingredient> ings = recipe.getIngredients();
             if (!ings.isEmpty() && !ings.get(0).isEmpty()) {
                 all.add(ings.get(0));
@@ -73,7 +73,7 @@ public final class RecipeInputMatcher {
     /** 烹饪（智能厨锅 / 烹饪工厂）：农夫乐事 cooking + 森罗物语 pot/stockpot（若装）。 */
     public static boolean matchesCooking(Level level, ItemStack stack) {
         if (level == null) return true;
-        for (CookingPotRecipe recipe : (java.util.List<CookingPotRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, ModRecipeTypes.COOKING.get())) {
+        for (CookingPotRecipe recipe : (java.util.List<CookingPotRecipe>) (java.util.List<?>) cn.ism.mekck.recipe.RecipeCache.all(level, ModRecipeTypes.COOKING.get())) {
             for (Ingredient ingredient : recipe.getIngredients()) {
                 if (ingredient.test(stack)) {
                     return true;
@@ -98,8 +98,8 @@ public final class RecipeInputMatcher {
     /** 无尽乐事终焉烹饪（仅奇点创世烹饪工厂调用）。 */
     public static boolean matchesExtremeCooking(Level level, ItemStack stack) {
         if (level == null) return true;
-        return matchesAnyIngredient(level, cn.ism.mekck.util.RecipeCache.type(EXTREME_COOKING_SHAPED_ID), stack)
-                || matchesAnyIngredient(level, cn.ism.mekck.util.RecipeCache.type(EXTREME_COOKING_SHAPELESS_ID), stack);
+        return matchesAnyIngredient(level, cn.ism.mekck.recipe.RecipeCache.type(EXTREME_COOKING_SHAPED_ID), stack)
+                || matchesAnyIngredient(level, cn.ism.mekck.recipe.RecipeCache.type(EXTREME_COOKING_SHAPELESS_ID), stack);
     }
 
     /** 烧烤（电力烧烤架 / 烧烤工厂）：mekck:grilling 优先，回落 barbequesdelight:grilling。 */
@@ -108,7 +108,7 @@ public final class RecipeInputMatcher {
         if (matchesAnyIngredient(level, MekCkRecipeTypes.GRILLING_RECIPE_TYPE.get(), stack)) {
             return true;
         }
-        return matchesAnyIngredient(level, cn.ism.mekck.util.RecipeCache.type(GRILLING_TYPE_ID), stack);
+        return matchesAnyIngredient(level, cn.ism.mekck.recipe.RecipeCache.type(GRILLING_TYPE_ID), stack);
     }
 
     /** 原版食物类烹饪配方（烟熏炉 / 篝火）——烧烤工厂全档位可处理。 */
@@ -126,7 +126,7 @@ public final class RecipeInputMatcher {
     public static boolean matchesFoodCooking(Level level, ItemStack stack) {
         if (level == null) return true;
         for (RecipeType<?> type : FOOD_COOKING_TYPES) {
-            for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+            for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
                 List<Ingredient> ingredients = recipe.getIngredients();
                 if (!ingredients.isEmpty() && ingredients.get(0).test(stack)) {
                     return true;
@@ -141,7 +141,7 @@ public final class RecipeInputMatcher {
     public static boolean matchesFurnaceFamily(Level level, ItemStack stack) {
         if (level == null) return true;
         for (RecipeType<?> type : FURNACE_FAMILY_TYPES) {
-            for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+            for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
                 List<Ingredient> ingredients = recipe.getIngredients();
                 if (!ingredients.isEmpty() && ingredients.get(0).test(stack)) {
                     return true;
@@ -152,14 +152,14 @@ public final class RecipeInputMatcher {
     }
 
     /** 沉浸农艺厨锅（farm_and_charm:pot_cooking）。 */
-    private static final ResourceLocation FARM_CHARM_POT_COOKING_ID = new ResourceLocation("farm_and_charm", "pot_cooking");
+    private static final ResourceLocation FARM_CHARM_POT_COOKING_ID = ResourceLocation.fromNamespaceAndPath("farm_and_charm", "pot_cooking");
 
     /** 沉浸农艺 pot_cooking 配方（厨锅/烹饪工厂扩展支持）。 */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static List<Recipe<?>> getPotCookingRecipes(Level level) {
-        RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(FARM_CHARM_POT_COOKING_ID);
+        RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(FARM_CHARM_POT_COOKING_ID);
         if (type == null) return List.of();
-        return cn.ism.mekck.util.RecipeCache.all(level, type);
+        return cn.ism.mekck.recipe.RecipeCache.all(level, type);
     }
 
     /** 是否沉浸农艺 pot_cooking 配方。 */
@@ -171,7 +171,7 @@ public final class RecipeInputMatcher {
     /** 输入格判定：沉浸农艺厨锅配方的任一成分。 */
     public static boolean matchesPotCooking(Level level, ItemStack stack) {
         if (level == null) return true;
-        RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(FARM_CHARM_POT_COOKING_ID);
+        RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(FARM_CHARM_POT_COOKING_ID);
         return type != null && matchesAnyIngredient(level, type, stack);
     }
 
@@ -181,7 +181,7 @@ public final class RecipeInputMatcher {
         if (matchesAnyIngredient(level, MekCkRecipeTypes.SKEWERING_RECIPE_TYPE.get(), stack)) {
             return true;
         }
-        return matchesAnyIngredient(level, cn.ism.mekck.util.RecipeCache.type(SKEWERING_TYPE_ID), stack);
+        return matchesAnyIngredient(level, cn.ism.mekck.recipe.RecipeCache.type(SKEWERING_TYPE_ID), stack);
     }
 
     /** 石磨研磨（电力研磨机 / 研磨工厂）：kaleidoscope_cookery:millstone（未装森罗时无配方，全部拒绝）。 */
@@ -196,7 +196,7 @@ public final class RecipeInputMatcher {
     /** 制冰（急冻制冰机 / 制冰工厂）。 */
     public static boolean matchesIceMake(Level level, ItemStack stack) {
         if (level == null) return true;
-        for (IceMakeRecipe recipe : (java.util.List<IceMakeRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, MekCkRecipeTypes.ICE_MAKE_RECIPE_TYPE.get())) {
+        for (IceMakeRecipe recipe : (java.util.List<IceMakeRecipe>) (java.util.List<?>) cn.ism.mekck.recipe.RecipeCache.all(level, MekCkRecipeTypes.ICE_MAKE_RECIPE_TYPE.get())) {
             if (recipe.getIngredient().test(stack)) {
                 return true;
             }
@@ -207,7 +207,7 @@ public final class RecipeInputMatcher {
     /** 炒坚果（坚果爆炒机）。 */
     public static boolean matchesNutRoasting(Level level, ItemStack stack) {
         if (level == null) return true;
-        for (NutRoastingRecipe recipe : (java.util.List<NutRoastingRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, MekCkRecipeTypes.NUT_ROASTING_RECIPE_TYPE.get())) {
+        for (NutRoastingRecipe recipe : (java.util.List<NutRoastingRecipe>) (java.util.List<?>) cn.ism.mekck.recipe.RecipeCache.all(level, MekCkRecipeTypes.NUT_ROASTING_RECIPE_TYPE.get())) {
             if (recipe.getIngredient().test(stack)) {
                 return true;
             }
@@ -218,7 +218,7 @@ public final class RecipeInputMatcher {
     /** 费列罗配方物品输入（巧克力大炮输入格）。 */
     public static boolean matchesFerreroInput(Level level, ItemStack stack) {
         if (level == null) return true;
-        for (FerreroRecipe recipe : (java.util.List<FerreroRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, MekCkRecipeTypes.FERRERO_RECIPE_TYPE.get())) {
+        for (FerreroRecipe recipe : (java.util.List<FerreroRecipe>) (java.util.List<?>) cn.ism.mekck.recipe.RecipeCache.all(level, MekCkRecipeTypes.FERRERO_RECIPE_TYPE.get())) {
             if (recipe.getInput().test(stack)) {
                 return true;
             }
@@ -229,7 +229,7 @@ public final class RecipeInputMatcher {
     /** 费列罗配方 extra 输入（巧克力大炮 extra 格）。 */
     public static boolean matchesFerreroExtra(Level level, ItemStack stack) {
         if (level == null) return true;
-        for (FerreroRecipe recipe : (java.util.List<FerreroRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, MekCkRecipeTypes.FERRERO_RECIPE_TYPE.get())) {
+        for (FerreroRecipe recipe : (java.util.List<FerreroRecipe>) (java.util.List<?>) cn.ism.mekck.recipe.RecipeCache.all(level, MekCkRecipeTypes.FERRERO_RECIPE_TYPE.get())) {
             if (recipe.getExtra().test(stack)) {
                 return true;
             }
@@ -240,7 +240,7 @@ public final class RecipeInputMatcher {
     /** 种植切配种子（种植切配站 / 种植切配工厂种子格）。 */
     public static boolean matchesPlantingSeed(Level level, ItemStack stack) {
         if (level == null) return true;
-        for (PlantingCuttingRecipe recipe : (java.util.List<PlantingCuttingRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, MekCkRecipeTypes.PLANTING_CUTTING_RECIPE_TYPE.get())) {
+        for (PlantingCuttingRecipe recipe : (java.util.List<PlantingCuttingRecipe>) (java.util.List<?>) cn.ism.mekck.recipe.RecipeCache.all(level, MekCkRecipeTypes.PLANTING_CUTTING_RECIPE_TYPE.get())) {
             if (recipe.getSeed().test(stack)) {
                 return true;
             }

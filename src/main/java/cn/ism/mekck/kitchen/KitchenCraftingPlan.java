@@ -97,9 +97,9 @@ public final class KitchenCraftingPlan {
                 }
             }
             for (String typeId : ability.family().recipeTypes) {
-                RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation(typeId));
+                RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.tryParse(typeId));
                 if (type == null) continue;
-                for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+                for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
                     try {
                         ItemStack out = recipe.getResultItem(level.registryAccess());
                         if (out.isEmpty()) continue;

@@ -9,7 +9,7 @@ import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.upgrade.MekCkUpgradeTypes;
 import cn.ism.mekck.util.CountMath;
 import cn.ism.mekck.compat.KaleidoscopeCompat;
-import cn.ism.mekck.util.RecipeCache;
+import cn.ism.mekck.recipe.RecipeCache;
 import mekanism.api.Upgrade;
 import mekanism.api.inventory.IInventorySlot;
 import net.minecraft.nbt.CompoundTag;

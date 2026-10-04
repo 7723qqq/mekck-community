@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@link cn.ism.mekck.util.ClientPacketBridge} 的客户端实现 —— 全部客户端符号都关在这里。
+ * {@link cn.ism.mekck.network.ClientPacketBridge} 的客户端实现 —— 全部客户端符号都关在这里。
  *
  * <p>门面那边用 {@code Class.forName} 加载本类，因此<b>本类在专用服务端永远不会被加载</b>，
  * 里面的 {@code Minecraft} / {@code Screen} 引用也就不会出现在任何双端都要链接的字节码里。

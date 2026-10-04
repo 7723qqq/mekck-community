@@ -130,7 +130,7 @@ public final class MekckAe2 {
             return;
         }
         FactoryGridHost host = HOSTS.computeIfAbsent(be, FactoryGridHost::new);
-        event.addCapability(new ResourceLocation("mekck", "ae2_grid_node"), new ICapabilityProvider() {
+        event.addCapability(ResourceLocation.fromNamespaceAndPath("mekck", "ae2_grid_node"), new ICapabilityProvider() {
             @Override
             public <T> LazyOptional<T> getCapability(Capability<T> cap, @Nullable Direction side) {
                 if (cap == Capabilities.IN_WORLD_GRID_NODE_HOST) {
@@ -759,9 +759,9 @@ public final class MekckAe2 {
 
     private static List<Recipe<?>> allSkeweringRecipes(Level level) {
         List<Recipe<?>> list = new ArrayList<>();
-        RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("barbequesdelight", "skewering"));
+        RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("barbequesdelight", "skewering"));
         if (type != null) {
-            list.addAll(cn.ism.mekck.util.RecipeCache.all(level, type));
+            list.addAll(cn.ism.mekck.recipe.RecipeCache.all(level, type));
         }
         if (KaleidoscopeGrillingCompat.isLoaded()) {
             for (KaleidoscopeGrillingCompat.VirtualRecipe vr : KaleidoscopeGrillingCompat.getThreadingVirtualRecipes()) {
@@ -952,7 +952,7 @@ public final class MekckAe2 {
      */
     private static boolean grindingIngredientMatches(Level level, ItemStack stack) {
         if (!cn.ism.mekck.compat.KaleidoscopeCompat.isLoaded()) return false;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, "kaleidoscope_cookery", "millstone")) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, "kaleidoscope_cookery", "millstone")) {
             for (Ingredient ing : r.getIngredients()) {
                 if (ing != null && !ing.isEmpty() && ing.test(stack)) return true;
             }
@@ -971,7 +971,7 @@ public final class MekckAe2 {
 
     /** 该物品能否作为切菜配料的任一项（供端口声明型机器判定「网络里的这堆料我吃不吃」）。 */
     private static boolean cuttingIngredientMatches(Level level, ItemStack stack) {
-        for (CuttingBoardRecipe r : (java.util.List<CuttingBoardRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, ModRecipeTypes.CUTTING.get())) {
+        for (CuttingBoardRecipe r : (java.util.List<CuttingBoardRecipe>) (java.util.List<?>) cn.ism.mekck.recipe.RecipeCache.all(level, ModRecipeTypes.CUTTING.get())) {
             for (Ingredient ing : r.getIngredients()) {
                 if (!ing.isEmpty() && ing.test(stack)) return true;
             }
@@ -1005,9 +1005,9 @@ public final class MekckAe2 {
             return grindingIngredientMatches(level, stack);
         }
         if (family == MekCkFactoryType.GRILLING) {
-            RecipeType<?> grillingType = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("barbequesdelight", "grilling"));
+            RecipeType<?> grillingType = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("barbequesdelight", "grilling"));
             if (grillingType != null) {
-                for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, grillingType)) {
+                for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, grillingType)) {
                     if (grillIngredientMatches(r, stack)) return true;
                 }
             }
@@ -1051,7 +1051,7 @@ public final class MekckAe2 {
         if (level == null) return out; // BE 尚未挂到世界（例如刚放置未加载），无配方可枚举
         MekCkFactoryType family = portedFamily(be);
         if (family == MekCkFactoryType.GRINDING) {
-            for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, "kaleidoscope_cookery", "millstone")) {
+            for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, "kaleidoscope_cookery", "millstone")) {
                 for (Ingredient ing : r.getIngredients()) {
                     if (ing == null || ing.isEmpty()) continue;
                     for (String sel : selected) {
@@ -1063,7 +1063,7 @@ public final class MekckAe2 {
                 }
             }
         } else if (family == MekCkFactoryType.CUTTING) {
-            for (CuttingBoardRecipe r : (java.util.List<CuttingBoardRecipe>) (java.util.List<?>) cn.ism.mekck.util.RecipeCache.all(level, ModRecipeTypes.CUTTING.get())) {
+            for (CuttingBoardRecipe r : (java.util.List<CuttingBoardRecipe>) (java.util.List<?>) cn.ism.mekck.recipe.RecipeCache.all(level, ModRecipeTypes.CUTTING.get())) {
                 for (Ingredient ing : r.getIngredients()) {
                     if (ing.isEmpty()) continue;
                     for (String sel : selected) {
@@ -1077,9 +1077,9 @@ public final class MekckAe2 {
                 }
             }
         } else if (family == MekCkFactoryType.GRILLING) {
-            RecipeType<?> grillingType = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("barbequesdelight", "grilling"));
+            RecipeType<?> grillingType = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("barbequesdelight", "grilling"));
             if (grillingType != null) {
-                for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, grillingType)) {
+                for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, grillingType)) {
                     Ingredient ing = grillIngredient(r);
                     if (ing == null || ing.isEmpty()) continue;
                     for (String sel : selected) {
@@ -1650,14 +1650,14 @@ public final class MekckAe2 {
             // 电力研磨机分支在阶段 3 样板迁移中删除：新 GrindingMachineTile 走
             // MekCkMachineTile 端口声明那条路（同切菜/烧烤/各工厂家族）。
             } else if (owner instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity) {
-                entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "nut_roasting"), avail);
+                entries = buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("mekck", "nut_roasting"), avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity) {
-                entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "ice_make"), avail);
+                entries = buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("mekck", "ice_make"), avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity) {
-                entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "ferrero"), avail);
+                entries = buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("mekck", "ferrero"), avail);
             } else if (owner instanceof MekCkMachineTile && portedFamily(owner) == MekCkFactoryType.PLANTING_CUTTING) {
                 // 端口声明型工厂（阶段 3）：plantcut 配方，构建器与旧的种植切配工厂同款
-                entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "plantcut"), avail);
+                entries = buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("mekck", "plantcut"), avail);
             } else if (owner instanceof MekCkMachineTile && portedFamily(owner) == MekCkFactoryType.CUTTING) {
                 // 端口声明型工厂（切菜，阶段 2 Task 4.6 起）：FD cutting 配方，
                 // 与通用切菜机同一批配方，构建器可复用
@@ -1679,10 +1679,10 @@ public final class MekckAe2 {
                 entries = buildSkeweringPatterns(level, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.IceFactoryBlockEntity) {
                 // 制冰工厂：mekck:ice_make（机器无需订单，材料推入即自动加工）
-                entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "ice_make"), avail);
+                entries = buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("mekck", "ice_make"), avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity) {
                 // 种植切配站：mekck:plantcut（同上，无需订单）
-                entries = buildSimpleSingleOutputPatterns(level, new ResourceLocation("mekck", "plantcut"), avail);
+                entries = buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("mekck", "plantcut"), avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity kitchen) {
                 entries = buildKitchenPatterns(level, kitchen, avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.SandwichAssemblerBlockEntity assembler) {
@@ -2248,9 +2248,9 @@ public final class MekckAe2 {
             }
             for (String typeId : ability.family().recipeTypes) {
                 try {
-                    RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation(typeId));
+                    RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.tryParse(typeId));
                     if (type == null) continue;
-                    for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+                    for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
                         List<InputSpec> specs = new ArrayList<>();
                         for (Ingredient ing : recipe.getIngredients()) {
                             if (ing.isEmpty()) continue;
@@ -2305,7 +2305,7 @@ public final class MekckAe2 {
             IPatternDetails details = encode(inputs, outputs, level);
             if (details != null) {
                 out.add(new PatternEntry(details,
-                        new ResourceLocation("mekck", "sandwich/auto"), outputs));
+                        ResourceLocation.fromNamespaceAndPath("mekck", "sandwich/auto"), outputs));
             }
         } catch (Throwable ignored) {
         }
@@ -2318,9 +2318,9 @@ public final class MekckAe2 {
         for (String typeId : new String[]{"kaleidoscope_cookery:millstone", "bakeries:flour_sieve",
                 "farm_and_charm:mincer", "mekck:grinding"}) {
             try {
-                RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation(typeId));
+                RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.tryParse(typeId));
                 if (type == null) continue;
-                for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+                for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
                     List<InputSpec> specs = new ArrayList<>();
                     for (Ingredient ing : recipe.getIngredients()) {
                         if (ing.isEmpty()) continue;
@@ -2345,13 +2345,13 @@ public final class MekckAe2 {
 
     /** 电力烧烤架（烧烤乐事 grilling）的 ME 样板。 */
     private static List<PatternEntry> buildGrillingPatterns(Level level, Map<AEKey, Long> avail) {
-        return buildSimpleSingleOutputPatterns(level, new ResourceLocation("barbequesdelight", "grilling"), avail);
+        return buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("barbequesdelight", "grilling"), avail);
     }
 
     /** 智能厨锅（农夫乐事 cooking + 森罗物语锅类）的 ME 样板。 */
     private static List<PatternEntry> buildCookingPotPatterns(Level level, Map<AEKey, Long> avail) {
         List<PatternEntry> out = new ArrayList<>(buildSimpleSingleOutputPatterns(level,
-                new ResourceLocation("farmersdelight", "cooking"), avail));
+                ResourceLocation.fromNamespaceAndPath("farmersdelight", "cooking"), avail));
         // 森罗物语：炒锅 / 汤锅配方（若模组已加载）。
         // 只列真实注册的锅类类型：实测森罗厨房 1.4.1 的配方 JSON `type` 全集为
         // pot/stockpot/flex_pot/flex_stockpot/steamer/millstone/chopping_board/teapot，
@@ -2359,7 +2359,7 @@ public final class MekckAe2 {
         // ⇒ 删除该死条目（flex_* / steamer 是否纳入属另一覆盖问题，未拍板，本单不动）。
         for (String typeId : new String[]{"kaleidoscope_cookery:pot", "kaleidoscope_cookery:stockpot"}) {
             try {
-                out.addAll(buildSimpleSingleOutputPatterns(level, new ResourceLocation(typeId), avail));
+                out.addAll(buildSimpleSingleOutputPatterns(level, ResourceLocation.tryParse(typeId), avail));
             } catch (Throwable ignored) {
             }
         }
@@ -2373,9 +2373,9 @@ public final class MekckAe2 {
     private static List<PatternEntry> buildSimpleSingleOutputPatterns(Level level, ResourceLocation typeId,
                                                                      Map<AEKey, Long> avail) {
         List<PatternEntry> out = new ArrayList<>();
-        RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(typeId);
+        RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(typeId);
         if (type == null) return out;
-        for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+        for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
             try {
                 List<InputSpec> specs = new ArrayList<>();
                 for (Ingredient ing : recipe.getIngredients()) {
@@ -2401,9 +2401,9 @@ public final class MekckAe2 {
     /** 通用切菜机（农夫乐事 cutting）的 ME 样板：输入 = 配方材料，输出 = 全部产物。 */
     private static List<PatternEntry> buildCuttingPatterns(Level level, Map<AEKey, Long> avail) {
         List<PatternEntry> out = new ArrayList<>();
-        RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("farmersdelight", "cutting"));
+        RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("farmersdelight", "cutting"));
         if (type == null) return out;
-        for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+        for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
             try {
                 List<InputSpec> specs = new ArrayList<>();
                 for (Ingredient ing : recipe.getIngredients()) {
@@ -2436,9 +2436,9 @@ public final class MekckAe2 {
     private static List<PatternEntry> buildSkeweringPatterns(Level level, Map<AEKey, Long> avail) {
         List<PatternEntry> out = new ArrayList<>();
         List<Recipe<?>> recipes = new ArrayList<>();
-        RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("barbequesdelight", "skewering"));
+        RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("barbequesdelight", "skewering"));
         if (type != null) {
-            recipes.addAll(cn.ism.mekck.util.RecipeCache.all(level, type));
+            recipes.addAll(cn.ism.mekck.recipe.RecipeCache.all(level, type));
         }
         if (KaleidoscopeGrillingCompat.isLoaded()) {
             for (KaleidoscopeGrillingCompat.VirtualRecipe vr : KaleidoscopeGrillingCompat.getThreadingVirtualRecipes()) {

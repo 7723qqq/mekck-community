@@ -138,7 +138,7 @@ public class TestNoClientSymbolsInCommonCode {
      * 里统一注册，所以这些类在服务端<b>一定</b>会被链接。第三轮审查实测到
      * {@code NetworkRecipeListPacket} 与 {@code NetworkMissingPacket} 的 {@code handle} 里
      * 直接写了 {@code Minecraft.getInstance()}。本断言对该目录<b>不给任何例外</b>：
-     * 真要放客户端逻辑，走 {@code util/ClientPacketBridge} 那个反射门面。</p>
+     * 真要放客户端逻辑，走 {@code network/ClientPacketBridge} 那个反射门面。</p>
      */
     @Test
     public void doubleSidedRegistrationPathIsClean() throws IOException {
@@ -166,7 +166,7 @@ public class TestNoClientSymbolsInCommonCode {
         }
         assertTrue("没有扫到任何 network 包：护栏在空转", scanned > 0);
         assertTrue("network/ 的包在双端注册路径上，不得 import 客户端类；"
-                        + "真要放客户端逻辑请走 util/ClientPacketBridge 反射门面：\n  "
+                        + "真要放客户端逻辑请走 network/ClientPacketBridge 反射门面：\n  "
                         + String.join("\n  ", violations),
                 violations.isEmpty());
     }

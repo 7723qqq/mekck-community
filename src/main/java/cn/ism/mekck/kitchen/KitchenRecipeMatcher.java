@@ -81,9 +81,9 @@ public final class KitchenRecipeMatcher {
         }
         // ② 常规：按原版配方类型扫描
         for (String typeId : family.recipeTypes) {
-            RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation(typeId));
+            RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.tryParse(typeId));
             if (type == null) continue;
-            for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+            for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
                 try {
                     if (!passesFilter(filter, recipe)) continue;
                     Match match = tryMatch(level, family, recipe, items, storageStart, storageEnd, fluidTank);
@@ -250,7 +250,7 @@ public final class KitchenRecipeMatcher {
         }
         ItemStack out = cn.ism.mekck.blockentity.SandwichAssemblerBlockEntity.buildSandwich(layers);
         if (out.isEmpty()) return null;
-        return new Match(new ResourceLocation("mekck", "sandwich/auto"),
+        return new Match(ResourceLocation.fromNamespaceAndPath("mekck", "sandwich/auto"),
                 KitchenFamily.SANDWICH, consumes, List.of(out),
                 Math.max(1, layers.size() * cn.ism.mekck.blockentity.SandwichAssemblerBlockEntity.TICKS_PER_LAYER),
                 null);

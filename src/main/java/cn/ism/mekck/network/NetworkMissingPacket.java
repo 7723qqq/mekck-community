@@ -1,6 +1,5 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.util.ClientPacketBridge;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.network.NetworkEvent;
@@ -39,7 +38,7 @@ public class NetworkMissingPacket {
     public static void handle(NetworkMissingPacket packet, Supplier<NetworkEvent.Context> context) {
         NetworkEvent.Context ctx = context.get();
         // ⚠️ 同 NetworkRecipeListPacket：本类在双端都要链接，客户端符号必须隔离。
-        // 背景与同类事故见 util/ClientPacketBridge 的类注释。
+        // 背景与同类事故见 network/ClientPacketBridge 的类注释。
         if (!PacketGuard.fromServer("NetworkMissingPacket", ctx)) {
             ctx.setPacketHandled(true);
             return;

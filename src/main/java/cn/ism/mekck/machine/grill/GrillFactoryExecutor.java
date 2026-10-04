@@ -11,7 +11,7 @@ import cn.ism.mekck.upgrade.MekCkUpgradeTypes;
 import cn.ism.mekck.compat.BarbequesDelightCompat;
 import cn.ism.mekck.util.CountMath;
 import cn.ism.mekck.compat.KaleidoscopeGrillingCompat;
-import cn.ism.mekck.util.RecipeCache;
+import cn.ism.mekck.recipe.RecipeCache;
 import mekanism.api.Upgrade;
 import mekanism.api.inventory.IInventorySlot;
 import net.minecraft.nbt.CompoundTag;

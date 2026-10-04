@@ -20,7 +20,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.slf4j.Logger;
-import cn.ism.mekck.util.RecipeCache;
+import cn.ism.mekck.recipe.RecipeCache;
 import cn.ism.mekck.util.Reflect;
 
 /**
@@ -54,11 +54,11 @@ public final class TavernBarrelCompat {
     private static final String KITCHEN_NAMESPACE = "kaleidoscope_cookery";
 
     /** 酒桶配方的类型 id：{@code kaleidoscope_tavern:barrel}（同时也是它的 serializer id）。 */
-    public static final ResourceLocation BARREL_TYPE = new ResourceLocation(TAVERN_NAMESPACE, "barrel");
+    public static final ResourceLocation BARREL_TYPE = ResourceLocation.fromNamespaceAndPath(TAVERN_NAMESPACE, "barrel");
     /** 榨汁盆（鲜果榨汁机的酒馆路径）。 */
-    public static final ResourceLocation PRESSING_TUB_TYPE = new ResourceLocation(TAVERN_NAMESPACE, "pressing_tub");
+    public static final ResourceLocation PRESSING_TUB_TYPE = ResourceLocation.fromNamespaceAndPath(TAVERN_NAMESPACE, "pressing_tub");
     /** 调酒（调酒机）。 */
-    public static final ResourceLocation SHAKER_TYPE = new ResourceLocation(TAVERN_NAMESPACE, "shaker");
+    public static final ResourceLocation SHAKER_TYPE = ResourceLocation.fromNamespaceAndPath(TAVERN_NAMESPACE, "shaker");
 
     /** 类型实例的持有类（javap 两个模组的 jar 得来；模组自有符号，reobf 不改名）。 */
     private static final String TAVERN_HOLDER_CLASS = "com.github.ysbbbbbb.kaleidoscopetavern.init.ModRecipes";

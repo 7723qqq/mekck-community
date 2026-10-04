@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.recipe;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -66,7 +66,7 @@ public final class RecipeCache {
     }
 
     // ── 配方类型查找缓存 ──
-    // 全模组有 45 处 ForgeRegistries.RECIPE_TYPES.getValue(new ResourceLocation(ns, path))，其中不少在
+    // 全模组有 45 处 ForgeRegistries.RECIPE_TYPES.getValue(ResourceLocation.fromNamespaceAndPath(ns, path))，其中不少在
     // tick 路径上（每次都要新建 ResourceLocation 并做字符串校验 + 注册表查询）。类型注册表在运行期是稳定的，
     // 因此按 id 字符串缓存查找结果，未安装的模组也会缓存"不存在"，避免每 tick 重复构造与查询。
     private static final Map<String, RecipeType<?>> TYPE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
@@ -88,7 +88,7 @@ public final class RecipeCache {
         if (MISSING_TYPES.contains(id)) return null;
         int idx = id.indexOf(':');
         if (idx <= 0 || idx == id.length() - 1) return null;
-        ResourceLocation rl = new ResourceLocation(id.substring(0, idx), id.substring(idx + 1));
+        ResourceLocation rl = ResourceLocation.fromNamespaceAndPath(id.substring(0, idx), id.substring(idx + 1));
         RecipeType<?> found = net.minecraftforge.registries.ForgeRegistries.RECIPE_TYPES.getValue(rl);
         if (found == null) {
             // 「类型存在但从不进注册表」的第三方模组：按 id 查恒为 null，会让整条配方路径静默当成未安装。

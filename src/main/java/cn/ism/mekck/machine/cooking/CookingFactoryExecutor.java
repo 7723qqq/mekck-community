@@ -8,7 +8,7 @@ import cn.ism.mekck.machine.MekCkRecipeExecutor;
 import cn.ism.mekck.util.CountMath;
 import cn.ism.mekck.util.FluidIngredientHelper;
 import cn.ism.mekck.compat.KaleidoscopeCompat;
-import cn.ism.mekck.util.RecipeCache;
+import cn.ism.mekck.recipe.RecipeCache;
 import mekanism.api.Action;
 import mekanism.api.AutomationType;
 import mekanism.api.fluid.IExtendedFluidTank;

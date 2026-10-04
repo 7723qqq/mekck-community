@@ -74,9 +74,9 @@ public final class SimpleMachineRecipes {
     MatchedRecipe matchSushi() {
         String[] types = {"cuisine_ordered", "cuisine_mixed", "cuisine_fixed"};
         for (String t : types) {
-            RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("youkaishomecoming", t));
+            RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("youkaishomecoming", t));
             if (rt == null) continue;
-            for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+            for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
                 try {
                     ResourceLocation base = (ResourceLocation) cn.ism.mekck.util.Reflect.call(r, "base");
                     if (base == null) continue;
@@ -119,9 +119,9 @@ public final class SimpleMachineRecipes {
     MatchedRecipe matchSlicer() {
         ItemStack in = be.items.getStackInSlot(0);
         if (in.isEmpty()) return null;
-        RecipeType<?> ct = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("farmersdelight", "cutting"));
+        RecipeType<?> ct = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("farmersdelight", "cutting"));
         if (ct == null) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), ct)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), ct)) {
             List<Ingredient> ings = r.getIngredients();
             if (ings.isEmpty() || !ings.get(0).test(in)) continue;
             List<ItemStack> results = be.cuttingResults(r);
@@ -145,11 +145,11 @@ public final class SimpleMachineRecipes {
     }
 
     MatchedRecipe matchBreadKnife() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("bakeries", "bread_knife"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("bakeries", "bread_knife"));
         if (rt == null || be.getLevel() == null) return null;
         ItemStack slot0 = be.items.getStackInSlot(0);
         if (slot0.isEmpty()) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 List<Ingredient> ings = r.getIngredients();
                 if (ings.isEmpty() || !ings.get(0).test(slot0)) continue;
@@ -166,9 +166,9 @@ public final class SimpleMachineRecipes {
     }
 
     MatchedRecipe matchRice() {
-        RecipeType<?> ct = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("farmersdelight", "cooking"));
+        RecipeType<?> ct = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("farmersdelight", "cooking"));
         if (ct == null) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), ct)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), ct)) {
             ItemStack res = r.getResultItem(be.getLevel().registryAccess());
             if (res.isEmpty()) continue;
             ResourceLocation rid = ForgeRegistries.ITEMS.getKey(res.getItem());
@@ -196,7 +196,9 @@ public final class SimpleMachineRecipes {
             default -> null;
         };
         if (outId != null) {
-            ItemStack result = new ItemStack(ForgeRegistries.ITEMS.getValue(new ResourceLocation(outId)));
+            ResourceLocation outLoc = ResourceLocation.tryParse(outId);
+            ItemStack result = outLoc == null ? ItemStack.EMPTY
+                    : new ItemStack(ForgeRegistries.ITEMS.getValue(outLoc));
             if (!result.isEmpty())
                 return new MatchedRecipe(java.util.Collections.singletonList(0), result);
         }
@@ -209,11 +211,11 @@ public final class SimpleMachineRecipes {
 
     MatchedRecipe matchCompacting() {
         if (be.getLevel() == null) return null;
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("create", "compacting"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("create", "compacting"));
         if (rt == null) return null;
         ItemStack slot0 = be.items.getStackInSlot(0);
         if (slot0.isEmpty()) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 ResourceLocation rid = r.getId();
                 if (rid == null || !"createcafe".equals(rid.getNamespace())) continue;
@@ -236,7 +238,7 @@ public final class SimpleMachineRecipes {
     }
 
     MatchedRecipe matchMeadowCheese() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("meadow", "cheese"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("meadow", "cheese"));
         if (rt == null || be.getLevel() == null) return null;
         java.util.List<Integer> slots = new java.util.ArrayList<>();
         java.util.List<ItemStack> slotStacks = new java.util.ArrayList<>();
@@ -248,7 +250,7 @@ public final class SimpleMachineRecipes {
             }
         }
         if (slots.isEmpty()) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 List<Ingredient> required = new ArrayList<>();
                 for (Ingredient ing : r.getIngredients()) {
@@ -281,9 +283,9 @@ public final class SimpleMachineRecipes {
     MatchedRecipe matchDry() {
         ItemStack in = be.items.getStackInSlot(0);
         if (in.isEmpty()) return null;
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("youkaishomecoming", "drying_rack"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("youkaishomecoming", "drying_rack"));
         if (rt != null) {
-            for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+            for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
                 List<Ingredient> ings = r.getIngredients();
                 if (ings.isEmpty() || !ings.get(0).test(in)) continue;
                 List<Integer> slots = matchIngredients(List.of(ings.get(0)));
@@ -300,11 +302,11 @@ public final class SimpleMachineRecipes {
     }
 
     MatchedRecipe matchFarmDrying() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("farm_and_charm", "drying"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("farm_and_charm", "drying"));
         if (rt == null || be.getLevel() == null) return null;
         ItemStack slot0 = be.items.getStackInSlot(0);
         if (slot0.isEmpty()) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 List<Ingredient> ings = r.getIngredients();
                 if (ings.isEmpty() || !ings.get(0).test(slot0)) continue;
@@ -324,9 +326,9 @@ public final class SimpleMachineRecipes {
     // ── 发酵机：youkaishomecoming:simple_fermentation（物品 + 输入/输出流体 + time）──
 
     MatchedRecipe matchFerment() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("youkaishomecoming", "simple_fermentation"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("youkaishomecoming", "simple_fermentation"));
         if (rt == null) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 // 配方字段：ingredients / results / inputFluid / outputFluid / time（l2library 直读字段）
                 @SuppressWarnings("unchecked")
@@ -373,9 +375,9 @@ public final class SimpleMachineRecipes {
         // 未命中再回退 create:mixing（createcafe 茶/咖啡/糖浆系，反射链路照旧）。
         MatchedRecipe own = matchExtracting();
         if (own != null) return own;
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("create", "mixing"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("create", "mixing"));
         if (rt == null) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 if (!isExtractorRecipe(r)) continue;
                 java.util.List<Ingredient> ings = new ArrayList<>(r.getIngredients());
@@ -415,10 +417,10 @@ public final class SimpleMachineRecipes {
      * 流体产物进 be.fluids.getOutputTank()（同型/容量预检），物品产物走通用 result 通道进产物槽 5。
      */
     MatchedRecipe matchExtracting() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(
-                new ResourceLocation(UniversalCuttingMachine.MOD_ID, "extracting"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(
+                ResourceLocation.fromNamespaceAndPath(UniversalCuttingMachine.MOD_ID, "extracting"));
         if (rt == null) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 if (!(r instanceof cn.ism.mekck.recipe.ExtractingRecipe er)) continue;
                 List<Integer> slots = matchIngredients(new ArrayList<>(er.getItemIngredients()));
@@ -500,10 +502,10 @@ public final class SimpleMachineRecipes {
     }
 
     MatchedRecipe matchBeverageAssembly() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(
-                new ResourceLocation(UniversalCuttingMachine.MOD_ID, "beverage_assembly"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(
+                ResourceLocation.fromNamespaceAndPath(UniversalCuttingMachine.MOD_ID, "beverage_assembly"));
         if (rt == null) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 if (!(r instanceof cn.ism.mekck.recipe.BeverageAssemblyRecipe bar)) continue;
                 List<Integer> slots = matchIngredients(bar.getItemIngredients());
@@ -530,10 +532,10 @@ public final class SimpleMachineRecipes {
      * 产出单个包材物品。无流体参与。只读本类型，因此「仅产包材」由配方内容天然约束。
      */
     MatchedRecipe matchPackaging() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(
-                new ResourceLocation(UniversalCuttingMachine.MOD_ID, "packaging"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(
+                ResourceLocation.fromNamespaceAndPath(UniversalCuttingMachine.MOD_ID, "packaging"));
         if (rt == null) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 if (!(r instanceof cn.ism.mekck.recipe.PackagingRecipe pr)) continue;
                 List<Integer> slots = matchIngredients(pr.getItemIngredients());
@@ -556,7 +558,7 @@ public final class SimpleMachineRecipes {
      * 时间取 brewingTime（反射 getBrewingTime）；cup（啤酒杯）由 isCupQualified 校验，MekCK 一并要求并扣除对应数量的空杯。
      */
     MatchedRecipe matchDrinkBeerBrewing() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("drinkbeer", "brewing"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("drinkbeer", "brewing"));
         if (rt == null || be.getLevel() == null) return null;
         java.util.List<Integer> slots = new java.util.ArrayList<>();
         java.util.List<ItemStack> slotStacks = new java.util.ArrayList<>();
@@ -568,7 +570,7 @@ public final class SimpleMachineRecipes {
             }
         }
         if (slots.isEmpty()) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 List<Ingredient> required = new ArrayList<>();
                 List<Integer> requiredCounts = new ArrayList<>();
@@ -625,7 +627,7 @@ public final class SimpleMachineRecipes {
      * material 字段为分类标签（WOOD 等），不参与匹配；结果取 getResultItem。
      */
     MatchedRecipe matchBreweryBrewing() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("brewery", "brewing"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("brewery", "brewing"));
         if (rt == null || be.getLevel() == null) return null;
         java.util.List<Integer> slots = new java.util.ArrayList<>();
         java.util.List<ItemStack> slotStacks = new java.util.ArrayList<>();
@@ -637,7 +639,7 @@ public final class SimpleMachineRecipes {
             }
         }
         if (slots.isEmpty()) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 List<Ingredient> required = new ArrayList<>();
                 for (Ingredient ing : r.getIngredients()) {
@@ -668,7 +670,7 @@ public final class SimpleMachineRecipes {
     }
 
     MatchedRecipe matchBakeriesFermentation() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("bakeries", "fermentation"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("bakeries", "fermentation"));
         if (rt == null || be.getLevel() == null) return null;
         // 非空输入槽集合
         java.util.List<Integer> slots = new java.util.ArrayList<>();
@@ -681,7 +683,7 @@ public final class SimpleMachineRecipes {
             }
         }
         if (slots.isEmpty()) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 List<Ingredient> required = new ArrayList<>();
                 for (Ingredient ing : r.getIngredients()) {
@@ -726,13 +728,13 @@ public final class SimpleMachineRecipes {
         if (in.isEmpty()) return null;
         // F11 §四.5：youkai 蒸笼 + 森罗万法 kaleidoscope_cookery:steamer（均单物品入→单物品出，同型）
         ResourceLocation[] steamTypes = {
-                new ResourceLocation("youkaishomecoming", "steaming"),
-                new ResourceLocation("kaleidoscope_cookery", "steamer"),
+                ResourceLocation.fromNamespaceAndPath("youkaishomecoming", "steaming"),
+                ResourceLocation.fromNamespaceAndPath("kaleidoscope_cookery", "steamer"),
         };
         for (ResourceLocation tid : steamTypes) {
-            RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(tid);
+            RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(tid);
             if (rt == null) continue;
-            for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+            for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
                 try {
                     List<Ingredient> ings = r.getIngredients();
                     if (ings.isEmpty() || !ings.get(0).test(in)) continue;
@@ -799,7 +801,7 @@ public final class SimpleMachineRecipes {
             ingredientStacks.add(be.items.getStackInSlot(i));
         }
         TavernBarrelPlan best = null;
-        for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), barrelT)) {
+        for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), barrelT)) {
             // 反射读取 record 访问器（避免编译期依赖 tavern）
             try {
                 Object fluidObj = cn.ism.mekck.util.Reflect.call(r, "fluid");
@@ -1161,15 +1163,15 @@ public final class SimpleMachineRecipes {
 
     ItemStack vineryEmptyBottles(int take) {
         if (take <= 0) return ItemStack.EMPTY;
-        net.minecraft.world.item.Item bottle = ForgeRegistries.ITEMS.getValue(new ResourceLocation("vinery", "wine_bottle"));
+        net.minecraft.world.item.Item bottle = ForgeRegistries.ITEMS.getValue(ResourceLocation.fromNamespaceAndPath("vinery", "wine_bottle"));
         if (bottle == null || bottle == net.minecraft.world.item.Items.AIR) return ItemStack.EMPTY;
         return new ItemStack(bottle, take);
     }
 
     MatchedRecipe matchWinery() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("vinery", "wine_fermentation"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("vinery", "wine_fermentation"));
         if (rt == null) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 // vinery 1.4.x 的 FermentationBarrelRecipe 是**扁平字段**：getJuiceType():String + getJuiceAmount():int
                 // + isWineBottleRequired():boolean，**不存在** getJuiceData()。早先按不存在的嵌套结构取值，
@@ -1237,7 +1239,7 @@ public final class SimpleMachineRecipes {
         net.minecraft.world.item.crafting.RecipeType<?> pressT = cn.ism.mekck.compat.TavernBarrelCompat.pressingTubType();
         if (pressT != null && be.getLevel() != null) {
             MatchedRecipe best = null;
-            for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), pressT)) {
+            for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), pressT)) {
                 java.util.List<Ingredient> ings = r.getIngredients();
                 if (ings.isEmpty() || !ings.get(0).test(in)) continue;
                 net.minecraft.world.level.material.Fluid fluid = null;
@@ -1280,9 +1282,9 @@ public final class SimpleMachineRecipes {
      */
     MatchedRecipe matchGrapePressing() {
         if (be.getLevel() == null) return null;
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("mekck", "grape_pressing"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("mekck", "grape_pressing"));
         if (rt == null) return null;
-        for (Recipe<?> rec : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> rec : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             if (!(rec instanceof cn.ism.mekck.recipe.GrapePressingRecipe r)) continue;
             List<Ingredient> ings = r.getItemIngredients();
             if (ings.isEmpty()) continue;
@@ -1319,14 +1321,14 @@ public final class SimpleMachineRecipes {
 
     MatchedRecipe matchVineryJuice(net.minecraft.world.item.ItemStack in) {
         if (be.getLevel() == null) return null;
-        net.minecraft.world.item.crafting.RecipeType<?> mashT = cn.ism.mekck.util.RecipeCache.type(
-                new net.minecraft.resources.ResourceLocation("vinery", "apple_mashing"));
-        net.minecraft.world.item.crafting.RecipeType<?> fermT = cn.ism.mekck.util.RecipeCache.type(
-                new net.minecraft.resources.ResourceLocation("vinery", "apple_fermenting"));
+        net.minecraft.world.item.crafting.RecipeType<?> mashT = cn.ism.mekck.recipe.RecipeCache.type(
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("vinery", "apple_mashing"));
+        net.minecraft.world.item.crafting.RecipeType<?> fermT = cn.ism.mekck.recipe.RecipeCache.type(
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("vinery", "apple_fermenting"));
         List<net.minecraft.world.item.crafting.Recipe<?>> mashRecipes = mashT == null ? java.util.List.of()
-                : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), mashT);
+                : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), mashT);
         List<net.minecraft.world.item.crafting.Recipe<?>> fermRecipes = fermT == null ? java.util.List.of()
-                : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), fermT);
+                : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), fermT);
         // 直接放苹果浆：apple_fermenting → 苹果汁（多个匹配按 recipeId 稳定取最小）
         MatchedRecipe bestFerm = null;
         for (net.minecraft.world.item.crafting.Recipe<?> ferm : fermRecipes) {
@@ -1404,9 +1406,9 @@ public final class SimpleMachineRecipes {
     }
 
     MatchedRecipe matchBakery() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("bakery", "baking_station"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("bakery", "baking_station"));
         if (rt == null) return matchBakeriesOven();
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             List<Ingredient> ings = r.getIngredients();
             if (ings.isEmpty()) continue;
             List<Integer> slots = matchIngredients(ings);
@@ -1431,9 +1433,9 @@ public final class SimpleMachineRecipes {
      * 无时间字段（用机器默认时长）；要求 ingredient 数之后的输入槽为空（防多余材料被无视）。
      */
     MatchedRecipe matchBakeriesCoffee() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("bakeries", "coffee"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("bakeries", "coffee"));
         if (rt == null || be.getLevel() == null) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 List<Ingredient> required = new ArrayList<>();
                 for (Ingredient ing : r.getIngredients()) {
@@ -1474,9 +1476,9 @@ public final class SimpleMachineRecipes {
      * [min,max] 内，且可标记 perfect），否则用 min_temperature（保证可烹饪且不烧焦）。
      */
     MatchedRecipe matchBakeriesOven() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("bakeries", "oven"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("bakeries", "oven"));
         if (rt == null || be.getLevel() == null) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 List<Ingredient> ings = r.getIngredients();
                 if (ings.isEmpty()) continue;
@@ -1514,9 +1516,9 @@ public final class SimpleMachineRecipes {
     // ── 灶台机：farm_and_charm:stove（含 farmers_bread 面包）──
 
     MatchedRecipe matchStove() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("farm_and_charm", "stove"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("farm_and_charm", "stove"));
         if (rt == null) return matchBakeriesStoneKiln();
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             List<Ingredient> ings = r.getIngredients();
             if (ings.isEmpty()) continue;
             List<Integer> slots = matchIngredients(ings);
@@ -1561,9 +1563,9 @@ public final class SimpleMachineRecipes {
                 {"meadow", "cooking"},
         };
         for (String[] type : types) {
-            RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation(type[0], type[1]));
+            RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath(type[0], type[1]));
             if (rt == null) continue;
-            for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+            for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
                 try {
                     List<Ingredient> required = new ArrayList<>();
                     for (Ingredient ing : r.getIngredients()) {
@@ -1639,11 +1641,11 @@ public final class SimpleMachineRecipes {
      * **只看槽 0**（inputItems.get(0).test(container.getItem(0))）；时间取 cooking_time 数组首项。
      */
     MatchedRecipe matchBakeriesStoneKiln() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("bakeries", "stone_kiln"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("bakeries", "stone_kiln"));
         if (rt == null || be.getLevel() == null) return null;
         ItemStack slot0 = be.items.getStackInSlot(0);
         if (slot0.isEmpty()) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 List<Ingredient> ings = r.getIngredients();
                 if (ings.isEmpty() || !ings.get(0).test(slot0)) continue;
@@ -1717,7 +1719,7 @@ public final class SimpleMachineRecipes {
 
 
     MatchedRecipe matchBlender() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("bakeries", "blender"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("bakeries", "blender"));
         if (rt == null || be.getLevel() == null) return null;
         java.util.List<Integer> slots = new java.util.ArrayList<>();
         java.util.List<ItemStack> slotStacks = new java.util.ArrayList<>();
@@ -1729,7 +1731,7 @@ public final class SimpleMachineRecipes {
             }
         }
         if (slots.isEmpty()) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 List<Ingredient> required = new ArrayList<>();
                 for (Ingredient ing : r.getIngredients()) {
@@ -1787,7 +1789,7 @@ public final class SimpleMachineRecipes {
             slotStacks.add(st);
         }
         if (slots.isEmpty()) return null;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 List<Ingredient> required = new ArrayList<>();
                 for (Ingredient ing : r.getIngredients()) {

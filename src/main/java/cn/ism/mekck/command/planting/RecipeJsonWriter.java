@@ -281,7 +281,7 @@ public final class RecipeJsonWriter {
       int count = 0;
 
       try {
-         RecipeType<?> plantingType = (RecipeType<?>)cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("mekmm", "planting"));
+         RecipeType<?> plantingType = (RecipeType<?>)cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("mekmm", "planting"));
          if (plantingType == null) {
             PlantingRecipeGenerator.LOGGER.info("mekmm:planting recipe type not found, skipping existing recipe scan.");
             return 0;

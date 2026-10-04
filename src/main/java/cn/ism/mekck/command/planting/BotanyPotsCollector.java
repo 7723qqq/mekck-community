@@ -74,7 +74,7 @@ public final class BotanyPotsCollector {
     */
    public static void collectBotanyPotsSoilRecipes(MinecraftServer server, Map<Item, java.util.Set<String>> soilCategoriesByItem) {
       soilCategoriesByItem.clear();
-      RecipeType<?> soilType = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("botanypots", "soil"));
+      RecipeType<?> soilType = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("botanypots", "soil"));
       if (soilType == null) {
          PlantingRecipeGenerator.LOGGER.info("botanypots:soil 配方类型不存在（未安装 BotanyPots），跳过土壤扫描。");
          return;
@@ -130,7 +130,7 @@ public final class BotanyPotsCollector {
          return map;
       }
       try {
-         RecipeType<?> cropType = cn.ism.mekck.util.RecipeCache.type(PlantingRecipeGenerator.BOTANY_CROP_TYPE_ID);
+         RecipeType<?> cropType = cn.ism.mekck.recipe.RecipeCache.type(PlantingRecipeGenerator.BOTANY_CROP_TYPE_ID);
          @SuppressWarnings({"unchecked", "rawtypes"})
          java.util.Collection<Recipe<?>> recipes = (java.util.Collection) (java.util.Collection) server.getRecipeManager().getAllRecipesFor((RecipeType) cropType);
          for (Recipe<?> recipe : recipes) {

@@ -6,7 +6,7 @@ import cn.ism.mekck.machine.MekCkOrderState;
 import cn.ism.mekck.machine.MekCkRecipeExecutor;
 import cn.ism.mekck.util.CountMath;
 import cn.ism.mekck.compat.KaleidoscopeGrillingCompat;
-import cn.ism.mekck.util.RecipeCache;
+import cn.ism.mekck.recipe.RecipeCache;
 import mekanism.api.inventory.IInventorySlot;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;

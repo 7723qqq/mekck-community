@@ -567,8 +567,12 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
             return;
         }
         if (tracker == null || tracker.getInstalled() <= 0) return;
-        net.minecraft.world.item.Item item = net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(
-                new net.minecraft.resources.ResourceLocation(itemId));
+        // itemId 是上面的固定字面量，拆成 ns/path 走非空的 fromNamespaceAndPath
+        // （单参 tryParse 返回可空类型，注册表查询不接受 null）。
+        int sep = itemId.indexOf(':');
+        ResourceLocation upgradeId = ResourceLocation.fromNamespaceAndPath(
+                itemId.substring(0, sep), itemId.substring(sep + 1));
+        net.minecraft.world.item.Item item = net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(upgradeId);
         if (item == null || item == net.minecraft.world.item.Items.AIR) return;
         ItemStack inSlot = items.getStackInSlot(slot);
         ItemStack give = new ItemStack(item, 1);
@@ -744,9 +748,9 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
         List<net.minecraft.world.item.crafting.Recipe<?>> out = new ArrayList<>();
         if (level == null) return out;
         net.minecraft.world.item.crafting.RecipeType<?> type =
-                cn.ism.mekck.util.RecipeCache.type(new net.minecraft.resources.ResourceLocation("mekck:ice_make"));
+                cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.tryParse("mekck:ice_make"));
         if (type == null) return out;
-        for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+        for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
             if (matchesInput(r)) out.add(r);
         }
         return out;
@@ -814,7 +818,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
             return List.of(new cn.ism.mekck.ae2.AE2InputSpec(net.minecraft.world.item.crafting.Ingredient.of(slot0.getItem())));
         }
         net.minecraft.world.item.crafting.Ingredient union = cn.ism.mekck.recipe.RecipeInputMatcher.unionFirstIngredients(
-                level, new ResourceLocation("mekck", "ice_make"));
+                level, ResourceLocation.fromNamespaceAndPath("mekck", "ice_make"));
         return union.isEmpty() ? List.of() : List.of(new cn.ism.mekck.ae2.AE2InputSpec(union));
     }
 
@@ -1211,9 +1215,13 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
         }
         progress = tag.getInt("Progress");
         if (tag.contains("OrderRecipeId")) {
-            orderRecipeId = new net.minecraft.resources.ResourceLocation(tag.getString("OrderRecipeId"));
-            orderQuantity = tag.getInt("OrderQuantity");
-            orderCompleted = tag.getInt("OrderCompleted");
+            // 存档里的 id 可能是坏数据（旧版、手改、跨模组迁移）：旧构造器在这里抛异常会让整台机器
+            // 加载失败进而丢存档。改成解析失败就当作「无订单」，机器照常工作。
+            orderRecipeId = net.minecraft.resources.ResourceLocation.tryParse(tag.getString("OrderRecipeId"));
+            if (orderRecipeId != null) {
+                orderQuantity = tag.getInt("OrderQuantity");
+                orderCompleted = tag.getInt("OrderCompleted");
+            }
         }
         meOrderEnabled = !tag.contains("MeOrderEnabled") || tag.getBoolean("MeOrderEnabled");
         targetTemperature = tag.contains("TargetTemperature")

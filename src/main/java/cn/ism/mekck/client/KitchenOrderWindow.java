@@ -80,10 +80,10 @@ public class KitchenOrderWindow extends GuiWindow {
             for (String typeId : family.recipeTypes) {
                 var rl = net.minecraft.resources.ResourceLocation.tryParse(typeId);
                 if (rl == null) continue;
-                var type = cn.ism.mekck.util.RecipeCache.type(rl);
+                var type = cn.ism.mekck.recipe.RecipeCache.type(rl);
                 if (type == null) continue;
                 try {
-                    for (var recipe : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+                    for (var recipe : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
                         recipeList.add(recipe);
                     }
                 } catch (Throwable ignored) {

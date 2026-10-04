@@ -3,7 +3,7 @@ package cn.ism.mekck.machine.grinding;
 import cn.ism.mekck.compat.KaleidoscopeCompat;
 import cn.ism.mekck.machine.MekCkBatchPacking;
 import cn.ism.mekck.machine.MekCkOrderState;
-import cn.ism.mekck.util.RecipeCache;
+import cn.ism.mekck.recipe.RecipeCache;
 import mekanism.api.inventory.IInventorySlot;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;

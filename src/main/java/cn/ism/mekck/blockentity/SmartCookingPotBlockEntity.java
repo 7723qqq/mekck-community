@@ -580,7 +580,7 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
             java.util.stream.Stream<Recipe<?>> stream =
                     java.util.stream.Stream.concat(
                             java.util.stream.Stream.concat(
-                                    cn.ism.mekck.util.RecipeCache.all(level, ModRecipeTypes.COOKING.get()).stream(),
+                                    cn.ism.mekck.recipe.RecipeCache.all(level, ModRecipeTypes.COOKING.get()).stream(),
                                     cn.ism.mekck.recipe.RecipeInputMatcher.getPotCookingRecipes(level).stream()),
                             KaleidoscopeCompat.isLoaded()
                                     ? KaleidoscopeCompat.getAllKaleidoscopeRecipes(level).stream()
@@ -1271,7 +1271,7 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
         if (allItems.isEmpty()) return available;
 
         // 农夫乐事 COOKING
-        for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, ModRecipeTypes.COOKING.get())) {
+        for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, ModRecipeTypes.COOKING.get())) {
             List<Ingredient> solidIngredients = getSolidIngredients(recipe);
             if (solidIngredients.isEmpty()) continue;
             if (!hasRequiredFluid(recipe)) continue;

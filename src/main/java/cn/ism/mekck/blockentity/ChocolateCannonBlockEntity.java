@@ -421,8 +421,13 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
             return;
         }
         if (tracker.getInstalled() <= 0) return;
-        net.minecraft.world.item.Item item = net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(
-                new net.minecraft.resources.ResourceLocation(itemId));
+        // itemId 是上面的固定字面量，拆成 ns/path 走非空的 fromNamespaceAndPath
+        // （单参 tryParse 返回可空类型，注册表查询不接受 null）。
+        int sep = itemId.indexOf(':');
+        net.minecraft.resources.ResourceLocation upgradeId =
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                        itemId.substring(0, sep), itemId.substring(sep + 1));
+        net.minecraft.world.item.Item item = net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(upgradeId);
         if (item == null || item == net.minecraft.world.item.Items.AIR) return;
         ItemStack give = new ItemStack(item, 1);
         ItemStack inSlot = items.getStackInSlot(slot);
@@ -579,9 +584,9 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
         List<net.minecraft.world.item.crafting.Recipe<?>> out = new ArrayList<>();
         if (level == null) return out;
         net.minecraft.world.item.crafting.RecipeType<?> type =
-                cn.ism.mekck.util.RecipeCache.type(new net.minecraft.resources.ResourceLocation("mekck:ferrero"));
+                cn.ism.mekck.recipe.RecipeCache.type(net.minecraft.resources.ResourceLocation.tryParse("mekck:ferrero"));
         if (type == null) return out;
-        for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+        for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
             if (matchesInput(r)) out.add(r);
         }
         return out;
@@ -646,7 +651,7 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
     public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         if (level == null) return List.of();
         return cn.ism.mekck.ae2.NetworkPullHelper.currentOrUnion(level, items.getStackInSlot(0),
-                new net.minecraft.resources.ResourceLocation("mekck", "ferrero"));
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("mekck", "ferrero"));
     }
 
     public ContainerData getData() {
@@ -1253,9 +1258,13 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
         }
         progress = tag.getInt("Progress");
         if (tag.contains("OrderRecipeId")) {
-            orderRecipeId = new net.minecraft.resources.ResourceLocation(tag.getString("OrderRecipeId"));
-            orderQuantity = tag.getInt("OrderQuantity");
-            orderCompleted = tag.getInt("OrderCompleted");
+            // 存档里的 id 可能是坏数据（旧版、手改、跨模组迁移）：旧构造器在这里抛异常会让整台机器
+            // 加载失败进而丢存档。改成解析失败就当作「无订单」，机器照常工作。
+            orderRecipeId = net.minecraft.resources.ResourceLocation.tryParse(tag.getString("OrderRecipeId"));
+            if (orderRecipeId != null) {
+                orderQuantity = tag.getInt("OrderQuantity");
+                orderCompleted = tag.getInt("OrderCompleted");
+            }
         }
         meOrderEnabled = !tag.contains("MeOrderEnabled") || tag.getBoolean("MeOrderEnabled");
         if (tag.contains("SpeedUpgrade", net.minecraft.nbt.Tag.TAG_COMPOUND)) speedTracker.load(tag.getCompound("SpeedUpgrade"));

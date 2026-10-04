@@ -494,9 +494,9 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
         List<net.minecraft.world.item.crafting.Recipe<?>> out = new ArrayList<>();
         if (level == null) return out;
         net.minecraft.world.item.crafting.RecipeType<?> type =
-                cn.ism.mekck.util.RecipeCache.type(new net.minecraft.resources.ResourceLocation("mekck:nut_roasting"));
+                cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.tryParse("mekck:nut_roasting"));
         if (type == null) return out;
-        for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, type)) {
+        for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
             if (matchesInput(r)) out.add(r);
         }
         return out;
@@ -564,7 +564,7 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
             return List.of(new cn.ism.mekck.ae2.AE2InputSpec(net.minecraft.world.item.crafting.Ingredient.of(slot0.getItem())));
         }
         net.minecraft.world.item.crafting.Ingredient union = cn.ism.mekck.recipe.RecipeInputMatcher.unionFirstIngredients(
-                level, new ResourceLocation("mekck", "nut_roasting"));
+                level, ResourceLocation.fromNamespaceAndPath("mekck", "nut_roasting"));
         return union.isEmpty() ? List.of() : List.of(new cn.ism.mekck.ae2.AE2InputSpec(union));
     }
 
@@ -919,9 +919,13 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
         }
         progress = tag.getInt("Progress");
         if (tag.contains("OrderRecipeId")) {
-            orderRecipeId = new net.minecraft.resources.ResourceLocation(tag.getString("OrderRecipeId"));
-            orderQuantity = tag.getInt("OrderQuantity");
-            orderCompleted = tag.getInt("OrderCompleted");
+            // 存档里的 id 可能是坏数据（旧版、手改、跨模组迁移）：旧构造器在这里抛异常会让整台机器
+            // 加载失败进而丢存档。改成解析失败就当作「无订单」，机器照常工作。
+            orderRecipeId = net.minecraft.resources.ResourceLocation.tryParse(tag.getString("OrderRecipeId"));
+            if (orderRecipeId != null) {
+                orderQuantity = tag.getInt("OrderQuantity");
+                orderCompleted = tag.getInt("OrderCompleted");
+            }
         }
         meOrderEnabled = !tag.contains("MeOrderEnabled") || tag.getBoolean("MeOrderEnabled");
         attackTimer = tag.getInt("AttackTimer");

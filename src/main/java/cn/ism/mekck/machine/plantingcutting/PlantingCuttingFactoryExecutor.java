@@ -10,7 +10,7 @@ import cn.ism.mekck.recipe.PlantingCuttingRecipe;
 import cn.ism.mekck.upgrade.MekCkUpgradeRefs;
 import cn.ism.mekck.upgrade.MekCkUpgradeTypes;
 import cn.ism.mekck.util.CountMath;
-import cn.ism.mekck.util.RecipeCache;
+import cn.ism.mekck.recipe.RecipeCache;
 import cn.ism.mekck.UniversalCuttingMachine;
 import mekanism.api.Upgrade;
 import mekanism.api.inventory.IInventorySlot;

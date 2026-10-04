@@ -41,9 +41,9 @@ public final class SimpleMachineNetworkPull {
 
     /** 简单单输入：槽 0 已放料则取该配方第一个成分；空槽则取所有可处理配方的并集（一次拉任一）。 */
     List<AE2InputSpec> simpleSingleInput(String ns, String path, java.util.function.Predicate<Recipe<?>> filter) {
-        RecipeType<?> rt = be.recipeTypeOf(new ResourceLocation(ns, path));
+        RecipeType<?> rt = be.recipeTypeOf(ResourceLocation.fromNamespaceAndPath(ns, path));
         if (rt == null) return List.of();
-        List<Recipe<?>> recipes = cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt);
+        List<Recipe<?>> recipes = cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt);
         ItemStack slot0 = be.items.getStackInSlot(0);
         if (!slot0.isEmpty()) {
             for (Recipe<?> r : recipes) {
@@ -70,9 +70,9 @@ public final class SimpleMachineNetworkPull {
     }
 
     List<AE2InputSpec> multiIngredient(String ns, String path, java.util.function.Predicate<Recipe<?>> filter) {
-        RecipeType<?> rt = be.recipeTypeOf(new ResourceLocation(ns, path));
+        RecipeType<?> rt = be.recipeTypeOf(ResourceLocation.fromNamespaceAndPath(ns, path));
         if (rt == null) return List.of();
-        List<Recipe<?>> recipes = cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt);
+        List<Recipe<?>> recipes = cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt);
         ItemStack slot0 = be.items.getStackInSlot(0);
         if (slot0.isEmpty()) return List.of();
         for (Recipe<?> r : recipes) {
@@ -97,8 +97,8 @@ public final class SimpleMachineNetworkPull {
         }
         // 空槽：并集候选（凝乳块 + F9 createcafe compacting 输入），ME 可拉任一以起批。
         java.util.List<Ingredient> candidates = new java.util.ArrayList<>();
-        candidates.add(Ingredient.of(ForgeRegistries.ITEMS.getValue(new ResourceLocation("trailandtales_delight", "curd_block"))));
-        candidates.add(Ingredient.of(ForgeRegistries.ITEMS.getValue(new ResourceLocation("trailandtales_delight", "cherry_curd_block"))));
+        candidates.add(Ingredient.of(ForgeRegistries.ITEMS.getValue(ResourceLocation.fromNamespaceAndPath("trailandtales_delight", "curd_block"))));
+        candidates.add(Ingredient.of(ForgeRegistries.ITEMS.getValue(ResourceLocation.fromNamespaceAndPath("trailandtales_delight", "cherry_curd_block"))));
         collectCompactingInputs(candidates);
         return List.of(new AE2InputSpec(Ingredient.merge(candidates)));
     }
@@ -106,9 +106,9 @@ public final class SimpleMachineNetworkPull {
     /** F9：收集 {@code createcafe:} 的 {@code create:compacting} 配方输入（空槽时并入 ME 拉料候选）。 */
     private void collectCompactingInputs(java.util.List<Ingredient> out) {
         if (be.getLevel() == null) return;
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("create", "compacting"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("create", "compacting"));
         if (rt == null) return;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 ResourceLocation rid = r.getId();
                 if (rid == null || !"createcafe".equals(rid.getNamespace())) continue;
@@ -136,13 +136,13 @@ public final class SimpleMachineNetworkPull {
         // 空槽：苹果 / 苹果浆 都可
         return List.of(new AE2InputSpec(Ingredient.merge(java.util.List.of(
                 Ingredient.of(net.minecraft.world.item.Items.APPLE),
-                Ingredient.of(ForgeRegistries.ITEMS.getValue(new ResourceLocation("vinery", "apple_mash")))))));
+                Ingredient.of(ForgeRegistries.ITEMS.getValue(ResourceLocation.fromNamespaceAndPath("vinery", "apple_mash")))))));
     }
 
     List<AE2InputSpec> ricePullInputs() {
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("farmersdelight", "cooking"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("farmersdelight", "cooking"));
         if (rt == null) return List.of();
-        List<Recipe<?>> recipes = cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt);
+        List<Recipe<?>> recipes = cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt);
         ItemStack slot0 = be.items.getStackInSlot(0);
         for (Recipe<?> r : recipes) {
             net.minecraft.resources.ResourceLocation rid = ForgeRegistries.ITEMS.getKey(r.getResultItem(be.getLevel().registryAccess()).getItem());
@@ -175,9 +175,9 @@ public final class SimpleMachineNetworkPull {
         // 已放底材/米饭：返回该配方全部部件
         String[] types = {"cuisine_ordered", "cuisine_mixed", "cuisine_fixed"};
         for (String t : types) {
-            RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("youkaishomecoming", t));
+            RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("youkaishomecoming", t));
             if (rt == null) continue;
-            for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+            for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
                 try {
                     net.minecraft.resources.ResourceLocation base = (ResourceLocation) cn.ism.mekck.util.Reflect.call(r, "base");
                     if (base == null) continue;
@@ -212,7 +212,7 @@ public final class SimpleMachineNetworkPull {
             for (String id : new String[]{"red_grapejuice", "white_grapejuice", "red_jungle_grapejuice",
                     "red_savanna_grapejuice", "red_taiga_grapejuice", "white_jungle_grapejuice",
                     "white_savanna_grapejuice", "white_taiga_grapejuice", "apple_juice"}) {
-                net.minecraft.world.item.Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation("vinery", id));
+                net.minecraft.world.item.Item item = ForgeRegistries.ITEMS.getValue(ResourceLocation.fromNamespaceAndPath("vinery", id));
                 if (item != null && item != net.minecraft.world.item.Items.AIR) {
                     juices.add(Ingredient.of(item));
                 }
@@ -221,14 +221,16 @@ public final class SimpleMachineNetworkPull {
             return List.of(new AE2InputSpec(Ingredient.merge(juices)));
         }
         // 已放果汁：取该果汁对应配方的配料
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("vinery", "wine_fermentation"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("vinery", "wine_fermentation"));
         if (rt == null) return List.of();
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 String type = cn.ism.mekck.util.VineryJuice.recipeJuiceType(r);
                 if (type == null) continue;
                 String juiceId = cn.ism.mekck.util.VineryJuice.itemIdForType(type);
-                net.minecraft.world.item.Item juiceItem = ForgeRegistries.ITEMS.getValue(new ResourceLocation(juiceId));
+                ResourceLocation juiceLoc = ResourceLocation.tryParse(juiceId);
+                if (juiceLoc == null) continue;
+                net.minecraft.world.item.Item juiceItem = ForgeRegistries.ITEMS.getValue(juiceLoc);
                 if (juiceItem != null && juiceItem != net.minecraft.world.item.Items.AIR && slot0.getItem() == juiceItem) {
                     List<Ingredient> ings = r.getIngredients();
                     List<AE2InputSpec> specs = new ArrayList<>();
@@ -247,9 +249,9 @@ public final class SimpleMachineNetworkPull {
         // 发酵机：返回原料 + 输入流体提示（流体拉取暂不支持，仅物品）
         ItemStack slot0 = be.items.getStackInSlot(0);
         if (slot0.isEmpty()) return List.of();
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("youkaishomecoming", "simple_fermentation"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("youkaishomecoming", "simple_fermentation"));
         if (rt == null) return List.of();
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(be.getLevel(), rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(be.getLevel(), rt)) {
             try {
                 @SuppressWarnings("unchecked")
                 List<Ingredient> ings = (List<Ingredient>) r.getClass().getField("ingredients").get(r);

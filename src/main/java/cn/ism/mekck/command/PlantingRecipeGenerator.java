@@ -94,7 +94,7 @@ public final class PlantingRecipeGenerator {
    public static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
    /** BotanyPots 作物配方类型 ID（生成期扫 botanypots:crop 用）。 */
-   public static final ResourceLocation BOTANY_CROP_TYPE_ID = new ResourceLocation("botanypots", "crop");
+   public static final ResourceLocation BOTANY_CROP_TYPE_ID = ResourceLocation.fromNamespaceAndPath("botanypots", "crop");
 
    /** BotanyPots 作物配方的一次掉落条目（运行时反射解析，无编译依赖）。 */
    public record BotanyDrop(Item item, float chance, int minRolls, int maxRolls) { }
@@ -522,7 +522,7 @@ public final class PlantingRecipeGenerator {
       Item item = (Item)ForgeRegistries.ITEMS.getValue(itemId);
       if (item != null && item != Items.AIR) {
          ItemStack itemStack = new ItemStack(item, 1);
-         RecipeType<?> cuttingType = (RecipeType<?>)cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("farmersdelight", "cutting"));
+         RecipeType<?> cuttingType = (RecipeType<?>)cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("farmersdelight", "cutting"));
          if (cuttingType == null) {
             return Collections.emptyList();
          } else {
@@ -566,7 +566,7 @@ public final class PlantingRecipeGenerator {
    }
 
    public static boolean isBotanyPotsInstalled() {
-      return cn.ism.mekck.util.RecipeCache.type(BOTANY_CROP_TYPE_ID) != null;
+      return cn.ism.mekck.recipe.RecipeCache.type(BOTANY_CROP_TYPE_ID) != null;
    }
 
    /**
@@ -586,16 +586,16 @@ public final class PlantingRecipeGenerator {
     * 生成出来的仍是坏配方，所以以「类型真的可用」为准。
     */
    public static boolean isImmersiveEngineeringInstalled() {
-      return cn.ism.mekck.util.RecipeCache.type(IE_CLOCHE_TYPE_ID) != null;
+      return cn.ism.mekck.recipe.RecipeCache.type(IE_CLOCHE_TYPE_ID) != null;
    }
 
    /** 沉浸工程园艺玻璃罩的配方类型 id。 */
    private static final net.minecraft.resources.ResourceLocation IE_CLOCHE_TYPE_ID =
-           new net.minecraft.resources.ResourceLocation("immersiveengineering", "cloche");
+           net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("immersiveengineering", "cloche");
 
    /** 通用机械：更多机器（mekmm）的种植配方类型 id。 */
    private static final net.minecraft.resources.ResourceLocation MEKMM_PLANTING_TYPE_ID =
-           new net.minecraft.resources.ResourceLocation("mekmm", "planting");
+           net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("mekmm", "planting");
 
    /**
     * mekmm（通用机械：更多机器）的种植配方类型是否可用。
@@ -610,6 +610,6 @@ public final class PlantingRecipeGenerator {
     * 以「配方类型真的已注册」为准，而不是 {@code ModList.isLoaded}。</p>
     */
    public static boolean isMekmmInstalled() {
-      return cn.ism.mekck.util.RecipeCache.type(MEKMM_PLANTING_TYPE_ID) != null;
+      return cn.ism.mekck.recipe.RecipeCache.type(MEKMM_PLANTING_TYPE_ID) != null;
    }
 }

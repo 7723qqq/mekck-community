@@ -571,15 +571,15 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
                 && ("rennet".equals(id.getPath()) || id.getPath().contains("milk_bucket"))) {
             return true;
         }
-        return stack.is(net.minecraft.tags.ItemTags.create(new ResourceLocation("meadow", "milk")));
+        return stack.is(net.minecraft.tags.ItemTags.create(ResourceLocation.fromNamespaceAndPath("meadow", "milk")));
     }
 
     /** F9：该物品是否为某条 {@code createcafe:} 的 {@code create:compacting} 配方输入（放行入输入槽）。 */
     private boolean isCompactingInput(ItemStack stack) {
         if (level == null || stack.isEmpty()) return false;
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("create", "compacting"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("create", "compacting"));
         if (rt == null) return false;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, rt)) {
             try {
                 ResourceLocation rid = r.getId();
                 if (rid == null || !"createcafe".equals(rid.getNamespace())) continue;
@@ -670,15 +670,15 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     private net.minecraft.world.item.Item upgradeItemForSlot(int slot) {
         if (slot == SLOT_SPEED_UPGRADE) {
             return net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(
-                    new ResourceLocation("mekanism", "upgrade_speed"));
+                    ResourceLocation.fromNamespaceAndPath("mekanism", "upgrade_speed"));
         }
         if (slot == SLOT_ENERGY_UPGRADE) {
             return net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(
-                    new ResourceLocation("mekanism", "upgrade_energy"));
+                    ResourceLocation.fromNamespaceAndPath("mekanism", "upgrade_energy"));
         }
         if (slot == SLOT_CREATIVE_UPGRADE) {
             return net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(
-                    new ResourceLocation("mekanism", "upgrade_creative"));
+                    ResourceLocation.fromNamespaceAndPath("mekanism", "upgrade_creative"));
         }
         return null;
     }
@@ -910,13 +910,13 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
      * 取配方类型。森罗物语系（酒馆 + 厨房，同一作者）的 RecipeType 是模组用 {@code RecipeType.simple()}
      * 造的**匿名对象**、从不进注册表（javap 两者的 {@code init.ModRecipes} 证实，详见
      * {@link cn.ism.mekck.compat.TavernBarrelCompat#typeById}）⇒ 按 id 查恒为 null，那整条配方路径会静默
-     * 当成「未安装」。该兜底现已内置在 {@link cn.ism.mekck.util.RecipeCache#type} 里，本方法只是保留一个
+     * 当成「未安装」。该兜底现已内置在 {@link cn.ism.mekck.recipe.RecipeCache#type} 里，本方法只是保留一个
      * 可读的调用点写法（行为与直接调 RecipeCache 完全一致）。
      * <p>包级可见：{@code allRecipesOfKind()} 与本类外的 {@link SimpleMachineNetworkPull} 都要用。</p>
      */
     RecipeType<?> recipeTypeOf(ResourceLocation id) {
         RecipeType<?> tavern = cn.ism.mekck.compat.TavernBarrelCompat.typeById(id);
-        return tavern != null ? tavern : cn.ism.mekck.util.RecipeCache.type(id);
+        return tavern != null ? tavern : cn.ism.mekck.recipe.RecipeCache.type(id);
     }
 
     public ContainerData getData() {
@@ -1313,9 +1313,9 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
             case PACKAGING_STATION -> java.util.List.of("mekck:packaging");
         };
         for (String tid : typeIds) {
-            RecipeType<?> rt = recipeTypeOf(new ResourceLocation(tid));
+            RecipeType<?> rt = recipeTypeOf(ResourceLocation.tryParse(tid));
             if (rt != null) {
-                out.addAll(cn.ism.mekck.util.RecipeCache.all(level, rt));
+                out.addAll(cn.ism.mekck.recipe.RecipeCache.all(level, rt));
             }
         }
         // 茶艺机：原版合成配方有数千条，绝不能每 tick 复制+过滤一遍 —— 走按管理器缓存的过滤表
@@ -1335,7 +1335,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
             List<Recipe<?>> cached = TEA_CACHE.get(manager);
             if (cached != null) return cached;
             List<Recipe<?>> filtered = new ArrayList<>();
-            for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, "minecraft", "crafting")) {
+            for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, "minecraft", "crafting")) {
                 if (isSimplyTeaResult(r)) filtered.add(r);
             }
             List<Recipe<?>> immutable = java.util.Collections.unmodifiableList(filtered);
@@ -1469,7 +1469,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
 
 
     static Ingredient riceIngredient() {
-        ItemStack rice = new ItemStack(ForgeRegistries.ITEMS.getValue(new ResourceLocation("farmersdelight", "cooked_rice")));
+        ItemStack rice = new ItemStack(ForgeRegistries.ITEMS.getValue(ResourceLocation.fromNamespaceAndPath("farmersdelight", "cooked_rice")));
         return rice.isEmpty() ? Ingredient.EMPTY : Ingredient.of(rice);
     }
 
@@ -2132,9 +2132,9 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
     /** 本机配方表里是否存在「要求空酒瓶」的 {@code vinery:wine_fermentation} 配方（与榨汁机同口径）。 */
     private boolean wineryHasBottleRequiringRecipe() {
         if (level == null) return false;
-        RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("vinery", "wine_fermentation"));
+        RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("vinery", "wine_fermentation"));
         if (rt == null) return false;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, rt)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, rt)) {
             if (callNoArg(r, "isWineBottleRequired") instanceof Boolean b && b) return true;
         }
         return false;
@@ -2207,9 +2207,9 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
      */
     boolean juicerHasBottleRequiringRecipe() {
         if (level == null) return false;
-        RecipeType<?> fermT = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("vinery", "apple_fermenting"));
+        RecipeType<?> fermT = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("vinery", "apple_fermenting"));
         if (fermT == null) return false;
-        for (Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, fermT)) {
+        for (Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, fermT)) {
             if (fermRequiresBottle(r)) return true;
         }
         return false;
@@ -2226,7 +2226,7 @@ public final class SimpleMachineBlockEntity extends BlockEntity implements MenuP
 
     /** 按注册名取物品并包成 Ingredient；物品不存在（未装对应模组）时返回 null。 */
     static Ingredient itemIng(String namespace, String path) {
-        net.minecraft.world.item.Item it = ForgeRegistries.ITEMS.getValue(new ResourceLocation(namespace, path));
+        net.minecraft.world.item.Item it = ForgeRegistries.ITEMS.getValue(ResourceLocation.fromNamespaceAndPath(namespace, path));
         return it == null || it == net.minecraft.world.item.Items.AIR ? null : Ingredient.of(it);
     }
 

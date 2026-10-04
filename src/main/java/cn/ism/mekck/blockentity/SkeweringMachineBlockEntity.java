@@ -432,8 +432,8 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
     }
 
     private RecipeType<?> getSkeweringRecipeType() {
-        ResourceLocation id = new ResourceLocation("barbequesdelight", "skewering");
-        return cn.ism.mekck.util.RecipeCache.type(id);
+        ResourceLocation id = ResourceLocation.fromNamespaceAndPath("barbequesdelight", "skewering");
+        return cn.ism.mekck.recipe.RecipeCache.type(id);
     }
 
     @SuppressWarnings("unchecked")
@@ -454,7 +454,7 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
 
         // If an order is active, only check the ordered recipe
         if (orderRecipeId != null) {
-            for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, recipeType)) {
+            for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, recipeType)) {
                 if (recipe.getId().equals(orderRecipeId) && matchesSkewering(recipe, inputStacks)) {
                     return Optional.of(recipe);
                 }
@@ -795,11 +795,11 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
     @Override
     public List<cn.ism.mekck.ae2.AE2InputSpec> getNetworkPullInputs() {
         if (level == null) return List.of();
-        net.minecraft.world.item.crafting.RecipeType<?> type = cn.ism.mekck.util.RecipeCache.type(
-                new ResourceLocation("barbequesdelight", "skewering"));
+        net.minecraft.world.item.crafting.RecipeType<?> type = cn.ism.mekck.recipe.RecipeCache.type(
+                ResourceLocation.fromNamespaceAndPath("barbequesdelight", "skewering"));
         if (type == null) return List.of();
         for (net.minecraft.world.item.crafting.Recipe<?> r :
-                cn.ism.mekck.util.RecipeCache.all(level, type)) {
+                cn.ism.mekck.recipe.RecipeCache.all(level, type)) {
             List<net.minecraft.world.item.crafting.Ingredient> ings = r.getIngredients();
             if (ings.isEmpty()) continue;
             if (!ings.get(0).isEmpty() && !ings.get(0).test(items.getStackInSlot(INPUT_SLOT_START))) continue;
@@ -881,7 +881,7 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
             inputStacks[j] = items.getStackInSlot(INPUT_SLOT_START + j);
         }
 
-        for (Recipe<?> recipe : cn.ism.mekck.util.RecipeCache.all(level, recipeType)) {
+        for (Recipe<?> recipe : cn.ism.mekck.recipe.RecipeCache.all(level, recipeType)) {
             if (matchesSkewering(recipe, inputStacks)) {
                 available.add(recipe);
             }

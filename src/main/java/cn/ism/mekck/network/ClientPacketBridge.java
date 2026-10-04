@@ -1,4 +1,4 @@
-package cn.ism.mekck.util;
+package cn.ism.mekck.network;
 
 import net.minecraft.core.BlockPos;
 import org.slf4j.Logger;

@@ -1,6 +1,5 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.util.ClientPacketBridge;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.network.NetworkEvent;
@@ -59,7 +58,7 @@ public class NetworkRecipeListPacket {
         // 本包在 FMLCommonSetupEvent（双端都触发）里统一注册，所以本类在专用服务端
         // 也要被链接，而服务端 classpath 上没有 net.minecraft.client.*。
         // 客户端逻辑全部关在 ClientPacketBridgeImpl（@OnlyIn(CLIENT)，由门面反射加载）。
-        // 背景与同类事故见 util/ClientPacketBridge 的类注释。
+        // 背景与同类事故见 network/ClientPacketBridge 的类注释。
         if (!PacketGuard.fromServer("NetworkRecipeListPacket", ctx)) {
             ctx.setPacketHandled(true);
             return;

@@ -45,7 +45,7 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
         implements MenuProvider, cn.ism.mekck.ae2.INetworkPullable {
 
     public static final String SAR_MODID = "someassemblyrequired";
-    public static final ResourceLocation SAR_SANDWICH_ID = new ResourceLocation(SAR_MODID, "sandwich");
+    public static final ResourceLocation SAR_SANDWICH_ID = ResourceLocation.fromNamespaceAndPath(SAR_MODID, "sandwich");
     /** SAR 中三明治层数上限的默认值（其配置 maximum_sandwich_height 默认 32）。 */
     public static final int MAX_LAYERS = 32;
     /** 每层加工耗时（tick）。 */
@@ -590,9 +590,9 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
     /** 遍历 create:sequenced_assembly 配方，找第一个当前输入（有序格物品 + 流体罐）可完全满足的。 */
     private SequencedPlan matchSequenced(Level level) {
         if (level == null) return null;
-        net.minecraft.world.item.crafting.RecipeType<?> rt = cn.ism.mekck.util.RecipeCache.type(new ResourceLocation("create", "sequenced_assembly"));
+        net.minecraft.world.item.crafting.RecipeType<?> rt = cn.ism.mekck.recipe.RecipeCache.type(ResourceLocation.fromNamespaceAndPath("create", "sequenced_assembly"));
         if (rt == null) return null;
-        for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.util.RecipeCache.all(level, rt)) {
+        for (net.minecraft.world.item.crafting.Recipe<?> r : cn.ism.mekck.recipe.RecipeCache.all(level, rt)) {
             try {
                 net.minecraft.world.item.crafting.Ingredient base =
                         (net.minecraft.world.item.crafting.Ingredient) cn.ism.mekck.util.Reflect.call(r, "getIngredient");

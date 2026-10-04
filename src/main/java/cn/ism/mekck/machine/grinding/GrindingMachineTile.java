@@ -9,7 +9,7 @@ import cn.ism.mekck.menu.slot.MekCkSlots;
 import cn.ism.mekck.menu.slot.SlotDef;
 import cn.ism.mekck.upgrade.UpgradeHelper;
 import cn.ism.mekck.util.PowerSlotUtil;
-import cn.ism.mekck.util.RecipeCache;
+import cn.ism.mekck.recipe.RecipeCache;
 import cn.ism.mekck.recipe.RecipeInputMatcher;
 import mekanism.api.Action;
 import mekanism.api.AutomationType;
@@ -263,7 +263,7 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
     /** 按配方 id 在四类配方中查找（顺序与 {@link #RECIPE_TYPE_IDS} 一致）。 */
     private Optional<Recipe<?>> findRecipeById(Level level, ResourceLocation id) {
         for (String typeId : RECIPE_TYPE_IDS) {
-            RecipeType<?> rt = RecipeCache.type(new ResourceLocation(typeId));
+            RecipeType<?> rt = RecipeCache.type(ResourceLocation.tryParse(typeId));
             if (rt == null) continue;
             Optional<? extends Recipe<?>> found = level.getRecipeManager().byKey(id);
             if (found.isPresent() && found.get().getType() == rt) return Optional.of(found.get());
@@ -272,7 +272,7 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
     }
 
     private Optional<Recipe<?>> findFirstMatching(Level level, String typeId) {
-        RecipeType<?> rt = RecipeCache.type(new ResourceLocation(typeId));
+        RecipeType<?> rt = RecipeCache.type(ResourceLocation.tryParse(typeId));
         if (rt == null) return Optional.empty();
         for (Recipe<?> r : RecipeCache.all(level, rt)) {
             if (matchesInput(r)) return Optional.of(r);
@@ -299,7 +299,7 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
     }
 
     private boolean matchesTypeAny(Level level, String typeId, ItemStack stack) {
-        RecipeType<?> rt = RecipeCache.type(new ResourceLocation(typeId));
+        RecipeType<?> rt = RecipeCache.type(ResourceLocation.tryParse(typeId));
         if (rt == null) return false;
         for (Recipe<?> r : RecipeCache.all(level, rt)) {
             if (matches(r, stack)) return true;
@@ -381,7 +381,7 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
         ItemStack input = inputSlot.getStack();
         if (input.isEmpty()) return out;
         for (String typeId : RECIPE_TYPE_IDS) {
-            RecipeType<?> rt = RecipeCache.type(new ResourceLocation(typeId));
+            RecipeType<?> rt = RecipeCache.type(ResourceLocation.tryParse(typeId));
             if (rt == null) continue;
             for (Recipe<?> r : RecipeCache.all(level, rt)) {
                 if (matchesInput(r)) out.add(r);
