@@ -1,0 +1,198 @@
+package cn.ism.mekck.ae2;
+
+import cn.ism.mekck.TestSourceText;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+/**
+ * AE2 胶水层加固护栏（M27：M7-M5 / M7-M4 / M7-M3 / M7-m2）。
+ *
+ * <h3>守的四件事</h3>
+ * <ol>
+ *   <li><b>M7-M5</b>：{@code pullGenericIngredients} 必须先拒绝忙机器（job 未回收 / 机器订单
+ *       未完成）并校验配方在本机样板里，否则会覆盖进行中的 job；{@code processJob} 必须有
+ *       停滞回收（订单结束后产物连续超时导不出 ⇒ 清掉并记日志），否则 job 永久锁死
+ *       {@code isBusy()}。</li>
+ *   <li><b>M7-M4</b>：{@code getNetworkAvail} 必须走按 host + tick 节流的快照入口，
+ *       不得每次调用都全量扫描网络并新建 HashMap。</li>
+ *   <li><b>M7-M3</b>：勾选自动补料清单必须有硬上限，且落盘读取与上限同源。</li>
+ *   <li><b>M7-m2</b>：AUTO_INDEX 缓存必须存勾选列表的不可变快照，否则
+ *       {@code selected().equals(selected)} 自比恒真、勾选变化要等 TTL 过期才生效。</li>
+ * </ol>
+ *
+ * <p>纯逻辑部分直接调 {@code MekckAe2.Hardening} 的包内静态函数（该嵌套类不引用 AE2 类型，
+ * 普通 JVM 可加载）；结构部分用 {@link TestSourceText} 剥注释后断言源码形态，
+ * 避免注释里的示意代码被当成真代码。</p>
+ */
+public class TestAe2Hardening {
+
+    private static final String AE2 = "src/main/java/cn/ism/mekck/ae2/MekckAe2.java";
+
+    // ================== 一、纯逻辑 ==================
+
+    @Test
+    public void stallPredicateOnlyFiresAfterTimeout() {
+        long timeout = MekckAe2.JOB_STALL_TIMEOUT_TICKS;
+        assertFalse("尚未观察过进展时不得回收（先记时刻）", MekckAe2.Hardening.jobStalled(1000L, -1L, timeout));
+        assertFalse("刚观察到进展时不得回收", MekckAe2.Hardening.jobStalled(1000L, 1000L, timeout));
+        assertFalse("未到超时不得回收", MekckAe2.Hardening.jobStalled(1000L + timeout - 1L, 1000L, timeout));
+        assertTrue("到超时必须回收", MekckAe2.Hardening.jobStalled(1000L + timeout, 1000L, timeout));
+        assertTrue("超过超时必须回收", MekckAe2.Hardening.jobStalled(1000L + timeout * 3L, 1000L, timeout));
+    }
+
+    @Test
+    public void stallPredicateSurvivesClockRewind() {
+        // 存档重载 / 时钟回拨时 now < last，间隔不可比：保守地不回收（宁可晚回收，不可误回收）。
+        assertFalse("时钟回拨时不得误回收",
+                MekckAe2.Hardening.jobStalled(500L, 1000L, MekckAe2.JOB_STALL_TIMEOUT_TICKS));
+    }
+
+    @Test
+    public void stallTimeoutIsGenerousVersusBaseCraftTime() {
+        // 所有家族单批基础耗时都是 200 tick（各 PROCESS_TIME 常量）；超时必须显著大于它，
+        // 否则正常加工会被误回收。
+        assertTrue("停滞超时必须 ≥ 2 倍基础加工耗时（200 tick）",
+                MekckAe2.JOB_STALL_TIMEOUT_TICKS >= 400L);
+        assertTrue("停滞超时必须有限且不夸张（≤ 5 分钟）",
+                MekckAe2.JOB_STALL_TIMEOUT_TICKS <= 6000L);
+    }
+
+    @Test
+    public void autoSelectCapStopsGrowthButStillAllowsRemoval() {
+        int limit = MekckAe2.AUTO_SELECT_LIMIT;
+        List<String> list = new ArrayList<>();
+        for (int i = 0; i < limit; i++) {
+            list = MekckAe2.Hardening.toggledAutoItems(list, "item_" + i, limit);
+        }
+        assertEquals("到上限前必须能加满", limit, list.size());
+
+        List<String> capped = MekckAe2.Hardening.toggledAutoItems(list, "one_more", limit);
+        assertEquals("到上限后不得再增长", limit, capped.size());
+        assertFalse("到上限后新 id 不得进入清单", capped.contains("one_more"));
+
+        List<String> removed = MekckAe2.Hardening.toggledAutoItems(capped, "item_0", limit);
+        assertEquals("到上限后仍必须能取消勾选", limit - 1, removed.size());
+        assertFalse(removed.contains("item_0"));
+
+        List<String> afterRemove = MekckAe2.Hardening.toggledAutoItems(removed, "one_more", limit);
+        assertTrue("腾出空位后必须能再加", afterRemove.contains("one_more"));
+        assertEquals("腾出空位后加回仍是上限内", limit, afterRemove.size());
+    }
+
+    @Test
+    public void autoSelectCapIsBoundedAndAtLeastLegacyPersistence() {
+        assertTrue("上限不得小于旧落盘读取的 32 项", MekckAe2.AUTO_SELECT_LIMIT >= 32);
+        assertTrue("上限必须有限（防客户端无界增长）", MekckAe2.AUTO_SELECT_LIMIT <= 256);
+    }
+
+    @Test
+    public void emptyItemIdNeverEntersSelection() {
+        assertTrue("空 id 不得进入清单",
+                MekckAe2.Hardening.toggledAutoItems(List.of(), "", MekckAe2.AUTO_SELECT_LIMIT).isEmpty());
+        assertTrue("null id 不得进入清单",
+                MekckAe2.Hardening.toggledAutoItems(List.of(), null, MekckAe2.AUTO_SELECT_LIMIT).isEmpty());
+    }
+
+    @Test
+    public void snapshotDetectsSelectionChangeWithinTtl() {
+        // M7-m2 的根因：缓存里存 live list 会自比恒真；存快照才能识别勾选变化。
+        List<String> live = new ArrayList<>(List.of("a"));
+        List<String> snapshot = List.copyOf(live);
+        assertTrue("未变化时快照与 live 相等（缓存可命中）", snapshot.equals(live));
+        List<String> changed = MekckAe2.Hardening.toggledAutoItems(live, "b", MekckAe2.AUTO_SELECT_LIMIT);
+        assertFalse("勾选变化后快照必须不再相等（否则缓存要等 TTL 过期才失效）",
+                snapshot.equals(changed));
+    }
+
+    @Test
+    public void availSnapshotTtlIsThrottleSized() {
+        assertTrue("快照窗口必须 ≥ 1 tick（真的能合并连点）", MekckAe2.AVAIL_SNAPSHOT_TTL >= 1L);
+        assertTrue("快照窗口不得长到面板明显过期（≤ 40 tick）", MekckAe2.AVAIL_SNAPSHOT_TTL <= 40L);
+    }
+
+    // ================== 二、源码形态 ==================
+
+    @Test
+    public void pullGenericIngredientsRejectsBusyMachineAndUnknownRecipe() throws IOException {
+        String src = TestSourceText.read(AE2);
+        String body = TestSourceText.methodBody(src,
+                "boolean pullGenericIngredients(BlockEntity be, String recipeId, int quantity, String seasoningId)");
+        assertFalse("源码里找不到 pullGenericIngredients，判据失效", body.isEmpty());
+        assertTrue("必须先拒绝忙机器（job 未回收 / 机器订单未完成），否则覆盖进行中的任务",
+                body.contains("job != null") && body.contains("ownerBusy()"));
+        assertTrue("必须校验配方在本机样板里，否则机器不认的配方会永久锁死 job",
+                body.contains("isRegisteredRecipe"));
+        int busy = body.indexOf("ownerBusy()");
+        int extract = body.indexOf("extractAll(");
+        assertTrue("忙检查必须发生在抽料之前（先抽料再拒绝会白扣网络材料）",
+                busy >= 0 && extract > busy);
+    }
+
+    @Test
+    public void registeredRecipeCheckReadsPanelEntries() throws IOException {
+        String src = TestSourceText.read(AE2);
+        String body = TestSourceText.methodBody(src, "boolean isRegisteredRecipe(BlockEntity be, ResourceLocation recipeId)");
+        assertFalse("源码里找不到 isRegisteredRecipe，判据失效", body.isEmpty());
+        assertTrue("准入判据必须来自本机注册到终端的样板（panelEntries）", body.contains("panelEntries"));
+        assertTrue("必须按 recipeId 比对", body.contains("entry.recipeId"));
+    }
+
+    @Test
+    public void processJobRecyclesStalledJobWithLog() throws IOException {
+        String src = TestSourceText.read(AE2);
+        String body = TestSourceText.methodBody(src, "void processJob(Level level)");
+        assertFalse("源码里找不到 processJob，判据失效", body.isEmpty());
+        int done = body.indexOf("orderDone()");
+        int stalled = body.indexOf("Hardening.jobStalled(");
+        assertTrue("停滞判定必须在 orderDone() 之后（订单还在跑时不能判停滞）",
+                done >= 0 && stalled > done);
+        assertTrue("停滞回收必须记日志", body.contains("LOGGER.warn"));
+        int cleared = body.indexOf("job = null", stalled);
+        assertTrue("停滞分支必须清掉 job", cleared > stalled);
+    }
+
+    @Test
+    public void getNetworkAvailGoesThroughThrottledSnapshot() throws IOException {
+        String src = TestSourceText.read(AE2);
+        String body = TestSourceText.methodBody(src, "Map<AEKey, Long> getNetworkAvail(BlockEntity be)");
+        assertFalse("源码里找不到 getNetworkAvail，判据失效", body.isEmpty());
+        assertTrue("getNetworkAvail 必须走 host 的节流快照入口", body.contains("networkAvailSnapshot"));
+        assertFalse("getNetworkAvail 不得再无条件全量扫描 + 建 HashMap", body.contains("new HashMap"));
+
+        String snapshot = TestSourceText.methodBody(src, "Map<AEKey, Long> networkAvailSnapshot()");
+        assertFalse("源码里找不到 networkAvailSnapshot，判据失效", snapshot.isEmpty());
+        assertTrue("快照必须按 tick 窗口复用", snapshot.contains("AVAIL_SNAPSHOT_TTL"));
+        assertTrue("快照必须真的扫描网络（否则是空实现）", snapshot.contains("getAvailableStacks"));
+    }
+
+    @Test
+    public void toggleAutoItemUsesHardCapAndPersistenceMatches() throws IOException {
+        String src = TestSourceText.read(AE2);
+        String body = TestSourceText.methodBody(src, "void toggleAutoItem(String itemId)");
+        assertFalse("源码里找不到 toggleAutoItem，判据失效", body.isEmpty());
+        assertTrue("toggleAutoItem 必须走带上限的纯函数", body.contains("Hardening.toggledAutoItems"));
+        assertTrue("上限常量必须存在", src.contains("AUTO_SELECT_LIMIT"));
+        assertTrue("纯函数必须放在不引用 AE2 的静态嵌套类里（测试运行时 AE2 不在 classpath）",
+                src.contains("static final class Hardening"));
+
+        String load = TestSourceText.methodBody(src, "void loadFromNBT(CompoundTag tag)");
+        assertFalse("源码里找不到 loadFromNBT，判据失效", load.isEmpty());
+        assertTrue("落盘读取必须与上限同源（否则 33..64 项读档即丢）",
+                load.contains("AUTO_SELECT_LIMIT"));
+    }
+
+    @Test
+    public void autoIndexStoresImmutableSnapshot() throws IOException {
+        String src = TestSourceText.read(AE2);
+        assertTrue("AUTO_INDEX 缓存必须存勾选列表快照（List.copyOf），"
+                        + "否则 selected().equals(selected) 自比恒真",
+                src.contains("new CachedIndex(List.copyOf(selected)"));
+    }
+}
