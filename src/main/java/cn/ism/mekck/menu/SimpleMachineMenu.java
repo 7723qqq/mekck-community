@@ -121,8 +121,8 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
 
         // 升级槽（仅升级弹窗打开时可用）：构造坐标故意放屏幕外（-1000），避免主界面 AbstractContainerScreen.renderSlots
         // 在真实坐标处画出两个裸露的原版槽框（之前“两个错误的原版格子”即来源于此）。
-        // 升级弹窗内由 GuiUpgradeWindow.selectedSlot.updateVirtualSlot → IVirtualSlot.updatePosition 把 actualX/Y 重定位到窗口内，
-        // 渲染与点击命中均走 actualX/Y（与这里的 x/y 无关），故不影响升级功能。
+        // 升级弹窗内由 GuiUpgradeWindow.selectedSlot.updateVirtualSlot → IVirtualSlot.updatePosition 绑定窗口坐标供给器，
+        // 渲染与点击命中均走 getActualX/Y（与这里的 x/y 无关），故不影响升级功能。
         this.speedSlotIndex = slots.size();
         this.speedUpgradeSlot = new UpgradeSlot(machine.getItems(), SimpleMachineBlockEntity.SLOT_SPEED_UPGRADE, -1000, -1000, this);
         addSlot(this.speedUpgradeSlot);
@@ -504,7 +504,8 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
 
         private final SimpleMachineMenu menu;
         private IGUIWindow linkedWindow;
-        private int actualX, actualY;
+        // 存供给器而非快照：窗口拖拽后 getActualX/Y 必须实时跟随。
+        private IntSupplier xSupplier, ySupplier;
         private ItemStack stackToRender = ItemStack.EMPTY;
         private boolean overlay;
         private String tooltip;
@@ -512,8 +513,6 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
         private UpgradeSlot(ItemStackHandler handler, int slot, int x, int y, SimpleMachineMenu menu) {
             super(handler, slot, x, y);
             this.menu = menu;
-            this.actualX = x;
-            this.actualY = y;
         }
 
         @Override
@@ -525,12 +524,12 @@ public final class SimpleMachineMenu extends AbstractContainerMenu implements IS
         @Override public boolean isActive() { return true; }
 
         @Override public IGUIWindow getLinkedWindow() { return linkedWindow; }
-        @Override public int getActualX() { return linkedWindow == null ? HIDDEN_POS : actualX; }
-        @Override public int getActualY() { return linkedWindow == null ? HIDDEN_POS : actualY; }
+        @Override public int getActualX() { return linkedWindow == null ? HIDDEN_POS : (xSupplier != null ? xSupplier.getAsInt() : x); }
+        @Override public int getActualY() { return linkedWindow == null ? HIDDEN_POS : (ySupplier != null ? ySupplier.getAsInt() : y); }
         @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {
             linkedWindow = window;
-            actualX = xSupplier.getAsInt();
-            actualY = ySupplier.getAsInt();
+            this.xSupplier = xSupplier;
+            this.ySupplier = ySupplier;
         }
         @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {
             this.stackToRender = stack;

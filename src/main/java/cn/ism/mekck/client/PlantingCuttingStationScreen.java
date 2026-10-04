@@ -283,10 +283,14 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
                 : "gui.mekck.ui.growth_status.tier_low").getString(),
                 GROWTH_SLOT_X + 21, GROWTH_SLOT_Y + 5, 0xFFFF5555);
 
-        boolean hovering = mouseX >= GROWTH_SLOT_X && mouseX < GROWTH_SLOT_X + 18
-                && mouseY >= GROWTH_SLOT_Y && mouseY < GROWTH_SLOT_Y + 18;
+        boolean hovering = mouseX - leftPos >= GROWTH_SLOT_X && mouseX - leftPos < GROWTH_SLOT_X + 18
+                && mouseY - topPos >= GROWTH_SLOT_Y && mouseY - topPos < GROWTH_SLOT_Y + 18;
         if (hovering) {
             String tierText = tier.isEmpty() ? "" : (tier + " ");
+            // drawForegroundText 跑在 translate(leftPos, topPos) 之后的 pose 里（Mek renderLabels 只加 z 平移），
+            // 而 renderTooltip 的坐标是绝对屏幕坐标 ⇒ 先抵消 GUI 平移，否则 tooltip 整体偏移 (leftPos, topPos)。
+            guiGraphics.pose().pushPose();
+            guiGraphics.pose().translate(-leftPos, -topPos, 0);
             guiGraphics.renderTooltip(font, java.util.List.of(
                     net.minecraft.network.chat.Component.translatable("gui.mekck.ui.growth_block_slot"),
                     net.minecraft.network.chat.Component.translatable(missing
@@ -294,6 +298,7 @@ public final class PlantingCuttingStationScreen extends GuiMekanism<PlantingCutt
                             : "gui.mekck.ui.growth_need_tier_low", tierText),
                     net.minecraft.network.chat.Component.translatable("gui.mekck.ui.growth_block_slot.note")),
                     java.util.Optional.empty(), mouseX, mouseY);
+            guiGraphics.pose().popPose();
         }
     }
 

@@ -381,7 +381,8 @@ public final class IceMakerMenu extends AbstractContainerMenu implements ISideCo
 
         private final IceMakerMenu menu;
         private IGUIWindow linkedWindow;
-        private int actualX, actualY;
+        // 存供给器而非快照：窗口拖拽后 getActualX/Y 必须实时跟随。
+        private IntSupplier xSupplier, ySupplier;
         private ItemStack stackToRender = ItemStack.EMPTY;
         private boolean overlay;
         private String tooltip;
@@ -389,8 +390,6 @@ public final class IceMakerMenu extends AbstractContainerMenu implements ISideCo
         private UpgradeSlot(ItemStackHandler handler, int slot, int x, int y, IceMakerMenu menu) {
             super(handler, slot, x, y);
             this.menu = menu;
-            this.actualX = x;
-            this.actualY = y;
         }
 
         @Override
@@ -401,12 +400,12 @@ public final class IceMakerMenu extends AbstractContainerMenu implements ISideCo
         @Override public boolean isActive() { return true; }
 
         @Override public IGUIWindow getLinkedWindow() { return linkedWindow; }
-        @Override public int getActualX() { return linkedWindow == null ? HIDDEN_POS : actualX; }
-        @Override public int getActualY() { return linkedWindow == null ? HIDDEN_POS : actualY; }
+        @Override public int getActualX() { return linkedWindow == null ? HIDDEN_POS : (xSupplier != null ? xSupplier.getAsInt() : x); }
+        @Override public int getActualY() { return linkedWindow == null ? HIDDEN_POS : (ySupplier != null ? ySupplier.getAsInt() : y); }
         @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {
             linkedWindow = window;
-            actualX = xSupplier.getAsInt();
-            actualY = ySupplier.getAsInt();
+            this.xSupplier = xSupplier;
+            this.ySupplier = ySupplier;
         }
         @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {
             this.stackToRender = stack;
