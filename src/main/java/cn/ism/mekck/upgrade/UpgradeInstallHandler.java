@@ -37,6 +37,11 @@ import cn.ism.mekck.UniversalCuttingMachine;
  * 而 Mek 的 {@code BlockTile} 走的是 {@code AttributeGui} 而非本类这条 Forge 事件捷径。
  * 留着旧分支只会让包「到达但无事发生」。
  * </p>
+ * <p>
+ * <b>消耗口径（C1）</b>：安装成功（{@code added > 0}）时由本处理器 {@code held.shrink(added)}
+ * 并写回手持槽 —— 这是潜行安装的<b>唯一活路径</b>；9 个方块类 {@code use()} 里的同款 shrink
+ * 永不执行，若在此漏掉消耗，升级物品即可无限复制。
+ * </p>
  */
 @Mod.EventBusSubscriber(modid = UniversalCuttingMachine.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class UpgradeInstallHandler {
@@ -135,7 +140,13 @@ public final class UpgradeInstallHandler {
         event.setCancellationResult(InteractionResult.SUCCESS);
         if (level instanceof ServerLevel && event.getEntity() instanceof ServerPlayer serverPlayer) {
             if (added > 0) {
-                serverPlayer.displayClientMessage(Component.literal("§a已安装升级：§f" + held.getHoverName().getString()), true);
+                // C1：安装成功必须消耗手持物品。本处理器是潜行安装的唯一活路径 ——
+                // 9 个方块类 use() 里的同款 shrink 因原版潜行跳过而永不执行（见类注释），
+                // 漏掉这里 = 升级物品（含创造/冷萃/费列罗）可无限复制。
+                String upgradeName = held.getHoverName().getString();
+                held.shrink(added);
+                serverPlayer.setItemInHand(event.getHand(), held);
+                serverPlayer.displayClientMessage(Component.literal("§a已安装升级：§f" + upgradeName), true);
             } else if (be instanceof cn.ism.mekck.blockentity.SimpleMachineBlockEntity sm
                     && sm.getMachineKind() == cn.ism.mekck.MachineKind.WINERY
                     && sm.getJuiceLevel() > 0) {
