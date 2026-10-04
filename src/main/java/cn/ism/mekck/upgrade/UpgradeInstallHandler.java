@@ -32,10 +32,11 @@ import cn.ism.mekck.UniversalCuttingMachine;
  * {@code addUpgradesFromHand}（冷萃/费列罗等专属升级由各机器内部路由，不支持的升级返回 0 并提示）。
  * </p>
  * <p>
- * <b>已迁到 Mek 原生 tile 的家族不在分发链里</b>（切菜 / 研磨 / 种植切配 / 烧烤，阶段 2~3）：
- * 它们的升级槽由 {@code TileComponentUpgrade} 提供， Mek 升级 tab 直接可用，
- * 而 Mek 的 {@code BlockTile} 走的是 {@code AttributeGui} 而非本类这条 Forge 事件捷径。
- * 留着旧分支只会让包「到达但无事发生」。
+ * <b>已迁到 Mek 原生 tile 的工厂家族不在分发链里</b>（研磨 / 种植切配 / 烧烤 / 切菜 / 烹饪 /
+ * 穿串工厂，阶段 2~3）：它们的升级槽由 {@code TileComponentUpgrade} 提供，Mek 升级 tab
+ * 直接可用，而 Mek 的 {@code BlockTile} 走的是 {@code AttributeGui} 而非本类这条 Forge 事件捷径。
+ * 单机切菜机（{@code UniversalCuttingMachineTile}）是唯一例外：它保留了一条潜行安装分支，
+ * 但走的是类型感知路由（物品进组件升级槽，20 tick 正常安装），不是直接改组件计数。
  * </p>
  * <p>
  * <b>消耗口径（C1）</b>：安装成功（{@code added > 0}）时由本处理器 {@code held.shrink(added)}
@@ -116,8 +117,10 @@ public final class UpgradeInstallHandler {
         } else if (be instanceof NutRoasterBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile m) {
-            added = m.getUpgradeComponent() == null ? 0
-                    : m.getUpgradeComponent().addUpgrades(mekanism.api.Upgrade.SPEED, 1);
+            // 类型感知：路由进组件升级槽（20 tick 正常安装路径），类型不匹配/已满返回 0 → 不消耗。
+            // 旧写法直接 addUpgrades(SPEED, 1)：签名里没有 ItemStack，任意 upgradeLike 物品
+            // 都会被装成速度卡（C1 补 shrink 后 = 错物品被吃掉换速度卡）。
+            added = m.addUpgradesFromHand(held);
         } else if (be instanceof PlantingCuttingStationBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof ElectricGrindingMachineBlockEntity m) {
