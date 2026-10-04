@@ -249,7 +249,11 @@ public class TestWideDataSlot {
      * 4-bit 侧配家族的菜单 {@code getEncodedSideConfig()} 必须走 {@link WideDataSlot#read}。
      *
      * <p>判据沿用 {@link #noMenuReadsEnergyFromASingleSlot()}：只看方法体，避免误伤别处的
-     * {@code data.get}。2-bit 家族（12 bit，装得下 16 位）与未注册方块的菜单可单槽，列入白名单。</p>
+     * {@code data.get}。2-bit 家族（12 bit，装得下 16 位）可单槽，列入白名单。</p>
+     *
+     * <p>{@code IceFactoryMenu} 原先以「方块未注册、不可达」豁免 —— 该理由不成立：
+     * {@code ice_factory.enable_ice_factory} 是普通配置项，翻开即注册（见
+     * {@code TestIceFactoryToggle}），因此它已移出白名单并随 BE 一起拆槽。</p>
      */
     @Test
     public void noFourBitMenuReadsSideConfigFromASingleSlot() throws IOException {
@@ -257,8 +261,7 @@ public class TestWideDataSlot {
                 "SmartCookingPotMenu.java",         // 2-bit 家族
                 "SkeweringMachineMenu.java",        // 2-bit 家族
                 "PlantingCuttingStationMenu.java",  // 2-bit 家族
-                "ElectricGrindingMachineMenu.java", // 2-bit 家族
-                "IceFactoryMenu.java");             // 4-bit 但方块未注册、不可达，其 BE 同批未拆
+                "ElectricGrindingMachineMenu.java"); // 2-bit 家族
         Set<String> offenders = new TreeSet<>();
         int seen = 0;
         for (Path file : javaFiles(MENU_DIR)) {
@@ -282,7 +285,7 @@ public class TestWideDataSlot {
     /**
      * 大罐（容量 &gt; 32767）的菜单流体 getter 必须走 {@link WideDataSlot#read}。
      *
-     * <p>只列容量确定超界的三个菜单；如实测的 8000 罐（ChocolateCannon）等仍可单槽。</p>
+     * <p>只列容量确定超界的菜单；如实测的 8000 罐（ChocolateCannon）等仍可单槽。</p>
      */
     @Test
     public void noWideTankMenuReadsFluidAmountFromASingleSlot() throws IOException {
@@ -290,6 +293,7 @@ public class TestWideDataSlot {
                 {"BioreactorMenu.java", "public FluidStack getFluidStack()"},          // 480,000
                 {"SmartCookingPotMenu.java", "public FluidStack getFluidStack(int tankIndex)"}, // MAX_VALUE
                 {"IceMakerMenu.java", "public FluidStack getWaterStack()"},            // 256,000
+                {"IceFactoryMenu.java", "public FluidStack getWaterStack()"},          // 256,000
         };
         for (String[] t : wideTanks) {
             String body = methodBody(read(MENU_DIR.resolve(t[0])), t[1]);

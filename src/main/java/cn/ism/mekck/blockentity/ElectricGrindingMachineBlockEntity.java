@@ -819,9 +819,18 @@ public final class ElectricGrindingMachineBlockEntity extends BlockEntity implem
         if (!slot0.isEmpty()) {
             return List.of(new cn.ism.mekck.util.AE2InputSpec(net.minecraft.world.item.crafting.Ingredient.of(slot0.getItem())));
         }
-        net.minecraft.world.item.crafting.Ingredient union = cn.ism.mekck.util.RecipeInputMatcher.unionFirstIngredients(
-                level, new ResourceLocation("farmersdelight", "cutting"));
-        return union.isEmpty() ? List.of() : List.of(new cn.ism.mekck.util.AE2InputSpec(union));
+        // 空输入槽时的补料并集必须与本机实际处理的四类配方一致（石磨 / 筛粉 / 绞碎 / mekck 磨粉）：
+        // 原先取 farmersdelight:cutting（切菜板），而插入侧 IntHandlerBulkView 会先查 isItemValid
+        // ⇒ 抽出来的切菜配料全被拒、BigStackDrops 掉在机器旁（物品离开 ME 网络）。
+        java.util.List<net.minecraft.world.item.crafting.Ingredient> unions = new java.util.ArrayList<>();
+        for (String typeId : new String[]{"kaleidoscope_cookery:millstone", "bakeries:flour_sieve",
+                "farm_and_charm:mincer", "mekck:grinding"}) {
+            net.minecraft.world.item.crafting.Ingredient union = cn.ism.mekck.util.RecipeInputMatcher.unionFirstIngredients(
+                    level, new ResourceLocation(typeId));
+            if (!union.isEmpty()) unions.add(union);
+        }
+        if (unions.isEmpty()) return List.of();
+        return List.of(new cn.ism.mekck.util.AE2InputSpec(net.minecraft.world.item.crafting.Ingredient.merge(unions)));
     }
 
     public ContainerData getData() {

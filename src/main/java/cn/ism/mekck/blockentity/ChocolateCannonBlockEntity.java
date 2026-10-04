@@ -778,10 +778,6 @@ public final class ChocolateCannonBlockEntity extends BlockEntity implements Men
 
         BlockState newState = state.setValue(ChocolateCannonBlock.ACTIVE, machine.progress > 0);
         if (newState != state) level.setBlock(pos, newState, 3);
-
-        if (!level.isClientSide) {
-            machine.data.get(DATA_ENERGY);
-        }
     }
 
     private void handleFluidSlot(int slot, FluidTank tank) {

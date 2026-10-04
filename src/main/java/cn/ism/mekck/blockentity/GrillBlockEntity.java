@@ -961,6 +961,9 @@ public final class GrillBlockEntity extends TileEntityConfigurableMachine
         // 缺失键取 true（= 默认开），与旧实现的 !contains || getBoolean 同口径。
         meOrderEnabled = !tag.contains(TAG_ME_ORDER_ENABLED) || tag.getBoolean(TAG_ME_ORDER_ENABLED);
         orderQuantity = tag.getInt(TAG_ORDER_QUANTITY);
+        // 读档同样过 setOrder 的契约闸门：orderRecipeId != null 时数量必须 ≥ 1，
+        // 否则订单门禁（orderQuantity > 0）与完成推进同时失效 ⇒ 机器无限加工、订单永不完成。
+        if (orderRecipeId != null) orderQuantity = Math.max(1, orderQuantity);
         orderCompleted = tag.getInt(TAG_ORDER_COMPLETED);
         progress = Math.max(0, tag.getInt(TAG_PROGRESS));
     }

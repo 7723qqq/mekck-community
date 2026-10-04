@@ -236,7 +236,9 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
 
     /** 从 ContainerData 同步值重建流体（客户端 FluidTank 不进网络同步，直接读会是空罐）。 */
     public FluidStack getWaterStack() {
-        int amount = data.get(IceFactoryBlockEntity.DATA_WATER_AMOUNT);
+        int amount = WideDataSlot.read(data,
+                IceFactoryBlockEntity.DATA_WATER_AMOUNT,
+                IceFactoryBlockEntity.DATA_WATER_AMOUNT_HI);
         if (amount <= 0) return FluidStack.EMPTY;
         int id = data.get(IceFactoryBlockEntity.DATA_WATER_FLUID_ID);
         net.minecraft.world.level.material.Fluid fluid = id >= 0
@@ -250,7 +252,10 @@ public final class IceFactoryMenu extends AbstractContainerMenu implements ISide
     }
 
     public int getEncodedSideConfig() {
-        return data.get(IceFactoryBlockEntity.DATA_SIDE_CONFIG);
+        // 24-bit 侧配拆两槽，裸读低槽会丢 WEST/EAST 两面，见 WideDataSlot。
+        return WideDataSlot.read(data,
+                IceFactoryBlockEntity.DATA_SIDE_CONFIG,
+                IceFactoryBlockEntity.DATA_SIDE_CONFIG_HI);
     }
 
     @Override

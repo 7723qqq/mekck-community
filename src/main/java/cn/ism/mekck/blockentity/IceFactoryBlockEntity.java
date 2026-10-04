@@ -132,7 +132,14 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
      * <p>取值 = 旧 {@code DATA_SIZE}，即<b>追加</b>到槽表末尾：现有下标一律不动。</p>
      */
     public static final int DATA_ENERGY_HI = 18;
-    public static final int DATA_SIZE = 19;
+    /**
+     * 侧配编码（6 面 × 4 bit = 24 bit）的高 16 位，追加到槽表末尾：
+     * 不拆则 WEST/EAST 两面经 16 位有符号通道后恒为 NONE（见 {@link cn.ism.mekck.util.WideDataSlot}）。
+     */
+    public static final int DATA_SIDE_CONFIG_HI = 19;
+    /** 水罐流体量的高 16 位：容量 256,000 &gt; 32767，不拆满罐会被读成负数/空罐。 */
+    public static final int DATA_WATER_AMOUNT_HI = 20;
+    public static final int DATA_SIZE = 21;
 
     public static final int TARGET_HOSTILE = 0;
     public static final int TARGET_ALL = 1;
@@ -213,7 +220,8 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
                 // 能量拆两槽：writeShort 只送低 16 位且会符号扩展，见 WideDataSlot。
                 case DATA_ENERGY -> energy.getEnergyStored() & 0xFFFF;
                 case DATA_ENERGY_HI -> (energy.getEnergyStored() >>> 16) & 0xFFFF;
-                case DATA_SIDE_CONFIG -> encodeSideConfig();
+                case DATA_SIDE_CONFIG -> encodeSideConfig() & 0xFFFF;
+                case DATA_SIDE_CONFIG_HI -> (encodeSideConfig() >>> 16) & 0xFFFF;
                 case DATA_SPEED_UPGRADE -> getSpeedUpgradeCount();
                 case DATA_ENERGY_UPGRADE -> getEnergyUpgradeCount();
                 case DATA_STACK_UPGRADE -> getStackUpgradeCount();
@@ -226,7 +234,8 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
                 case DATA_CB5 -> items.getStackInSlot(CB_SLOT_5).isEmpty() ? 0 : 1;
                 case DATA_TARGET_TYPE -> targetType;
                 case DATA_RADIUS -> radius;
-                case DATA_WATER_AMOUNT -> waterTank.getFluidAmount();
+                case DATA_WATER_AMOUNT -> waterTank.getFluidAmount() & 0xFFFF;
+                case DATA_WATER_AMOUNT_HI -> (waterTank.getFluidAmount() >>> 16) & 0xFFFF;
                 case DATA_WATER_FLUID_ID -> waterTank.getFluid().isEmpty() ? -1
                         : net.minecraft.core.registries.BuiltInRegistries.FLUID.getId(waterTank.getFluid().getFluid());
                 default -> 0;
@@ -248,7 +257,7 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
 
     /** 温度系统：Mekanism 热容量（运行时按电阻型加热器比例产热，并与相邻热力设备传导）。 */
     private cn.ism.mekck.util.MekCkHeatComponent heatComponent;
-    private final net.minecraftforge.common.util.LazyOptional<mekanism.api.heat.IHeatHandler> heatCapability =
+    private net.minecraftforge.common.util.LazyOptional<mekanism.api.heat.IHeatHandler> heatCapability =
             net.minecraftforge.common.util.LazyOptional.of(() -> heatComponent.getHandler());
 
     public IceFactoryBlockEntity(CuttingMachineFactoryTier tier, BlockPos pos, BlockState state) {
@@ -431,7 +440,10 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
     }
 
     public boolean hasCreativeUpgrade() {
-        return CREATIVE_SLOT >= 0 && !items.getStackInSlot(CREATIVE_SLOT).isEmpty();
+        // 与 IceMaker/ChocolateCannon 同口径：读「已安装数量」而非槽内物品数 ——
+        // MekCkUpgradeTracker.tick() 安装时会把槽内堆叠 shrink() 掉，
+        // 读槽位在安装完成后恒为 false（创造升级装完即失效）。
+        return creativeTracker.getInstalled() > 0;
     }
 
     public int addUpgradesFromHand(ItemStack held) {
@@ -1041,6 +1053,8 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
         outputItemCapability.invalidate();
         energyCapability.invalidate();
         fluidCapability.invalidate();
+        // 热能力同样要随方块实体失效/复活收口（对齐 CentralKitchenBlockEntity）。
+        heatCapability.invalidate();
     }
 
     @Override
@@ -1051,6 +1065,7 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
         outputItemCapability = LazyOptional.of(() -> new OutputItemHandler());
         energyCapability = LazyOptional.of(() -> energy);
         fluidCapability = LazyOptional.of(() -> waterTank);
+        heatCapability = LazyOptional.of(() -> heatComponent.getHandler());
     }
 
     private final class InputItemHandler implements IItemHandler {

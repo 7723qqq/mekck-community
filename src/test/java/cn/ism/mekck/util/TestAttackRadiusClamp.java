@@ -133,11 +133,17 @@ public class TestAttackRadiusClamp {
                     src.contains("radius = tag.getInt(\"Radius\")"));
         }
         // 顺带钉死本轮删掉的死语句（读取结果被丢弃的 machine.data.get(DATA_ENERGY)）不得回潮。
-        String iceMaker = java.nio.file.Files.readString(
-                java.nio.file.Path.of("src/main/java/cn/ism/mekck/blockentity/IceMakerBlockEntity.java"),
-                java.nio.charset.StandardCharsets.UTF_8);
-        assertFalse("IceMakerBlockEntity 又出现了被丢弃结果的 machine.data.get(DATA_ENERGY) 死语句",
-                iceMaker.contains("machine.data.get(DATA_ENERGY);"));
+        // 三台同型：IceMaker（第 6 轮删）+ ChocolateCannon / NutRoaster（本轮删）。
+        String[] deadStatementMachines = {
+                "IceMakerBlockEntity", "ChocolateCannonBlockEntity", "NutRoasterBlockEntity"
+        };
+        for (String m : deadStatementMachines) {
+            String dead = java.nio.file.Files.readString(
+                    java.nio.file.Path.of("src/main/java/cn/ism/mekck/blockentity/" + m + ".java"),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            assertFalse(m + " 又出现了被丢弃结果的 machine.data.get(DATA_ENERGY) 死语句",
+                    dead.contains("machine.data.get(DATA_ENERGY);"));
+        }
     }
 
     private static String methodBody(String src, String signature) {
