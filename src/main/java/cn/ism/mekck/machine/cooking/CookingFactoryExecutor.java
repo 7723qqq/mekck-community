@@ -107,7 +107,8 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
      * <p>产物容量判定是补上的：缺了它，产物槽满时本方法仍返回 true，
      * {@code workCycle} 照常扣电、进度条照走，而 {@link #run} 在落槽前直接
      * {@code return} —— 玩家看不到产出、看不到告警，电却一直在掉。旧实现的
-     * {@code canProcess} 里本来就有这一项（{@code canFitAll}），见类注释。</p>
+     * 这道门禁在 {@code SmartCookingPotBlockEntity.serverTick} 的
+     * {@code machine.canFitAll(recipe)}（第 433 行），不在本类。</p>
      */
     @Override
     public boolean canProcess(MekCkMachineTile tile, int index) {

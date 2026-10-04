@@ -559,7 +559,7 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
 
             // Return the tool item (slot 0) goes to return slot
             // 只有真被消耗过才返还：自有配方序列化器写死 toolCount = 0（签子不消耗），
-            // 无条件返还等于每批复制 1 个签子（工厂执行器 SkeweringFactoryExecutor 同样没有返还逻辑）。
+            // 无条件返还等于每批复制 1 个签子（工厂执行器 SkeweringFactoryExecutor 的返还同样受 toolCount > 0 门控）。
             if (tool != null && !tool.isEmpty() && toolCount > 0) {
                 ItemStack toolStack = items.getStackInSlot(INPUT_SLOT_START); // slot 0
                 if (!toolStack.isEmpty()) {
