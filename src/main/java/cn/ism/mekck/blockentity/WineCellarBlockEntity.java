@@ -697,8 +697,11 @@ public final class WineCellarBlockEntity extends TileEntityConfigurableMachine
      *
      * <p><b>先判有没有本机的键再动手</b>：配置卡粘贴时走
      * {@code setConfigurationData → loadGeneralPersistentData → 本方法}，
-     * 那份载荷里不会有 {@code Items}。此时若无条件执行读容器，就会把目标机器的库存
-     * 按一张<b>空表</b>清掉——那是一个本不该有的副作用。</p>
+     * 那份载荷里不会有 {@code Items}。对 {@code Items} 而言守卫<b>不是承重结构</b>：
+     * 实测 {@code DataHandlerUtils.readContents} 按 ListTag 条目数迭代（javap：循环边界是
+     * {@code listTag.size()}），空表零次迭代即无操作；保留它只为与
+     * {@code GrillBlockEntity} 同款、让意图显式。承重的是自有键那一半：载荷缺键时
+     * {@code getInt} 返回 0，速度会被重置为 1。</p>
      */
     @Override
     public void readSustainedData(CompoundTag tag) {

@@ -391,19 +391,25 @@ public class MekCkBlockItem extends BlockItem {
     }
 
     /**
-     * 判断方块物品 NBT（BlockEntityTag -> Items -> Items）中是否存有物品。
+     * 判断方块物品 NBT 中是否存有物品。
+     *
+     * <p>两种格式都要认：旧格式（自研 BE 时代）是
+     * {@code BlockEntityTag.Items.Items}；Mek 迁移后的战利品表把 BE 存档键
+     * {@code copy_nbt} 进 {@code mekData.Items}（{@code DataHandlerUtils.writeContainers}
+     * 的列表）。只认旧格式的话，新掉落物的「存有物品」会显示「否」。</p>
      */
     private boolean hasSustainedItems(ItemStack stack) {
         CompoundTag beTag = stack.getTagElement("BlockEntityTag");
-        if (beTag == null) {
-            return false;
+        if (beTag != null) {
+            CompoundTag itemsCompound = beTag.getCompound("Items");
+            if (itemsCompound.contains("Items", Tag.TAG_LIST)
+                    && !itemsCompound.getList("Items", Tag.TAG_COMPOUND).isEmpty()) {
+                return true;
+            }
         }
-        CompoundTag itemsCompound = beTag.getCompound("Items");
-        if (!itemsCompound.contains("Items", Tag.TAG_LIST)) {
-            return false;
-        }
-        ListTag items = itemsCompound.getList("Items", Tag.TAG_COMPOUND);
-        return !items.isEmpty();
+        CompoundTag mekData = stack.getTagElement("mekData");
+        return mekData != null && mekData.contains("Items", Tag.TAG_LIST)
+                && !mekData.getList("Items", Tag.TAG_COMPOUND).isEmpty();
     }
 
     /**

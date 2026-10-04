@@ -1,5 +1,6 @@
 package cn.ism.mekck.block;
 
+import cn.ism.mekck.TestSourceText;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -12,8 +13,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -26,8 +29,8 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
- * 已迁移到 Mek {@code BlockTile} 的 6 个工厂家族（12 档 × 6 = 72 个方块）的
- * <b>战利品表守恒契约</b>回归测试。
+ * 已迁移到 Mek {@code BlockTile} 的方块（6 个工厂家族 12 档 × 6 = 72 个，
+ * 外加切菜机 / 电力烧烤架 / 陈化窖 3 台单机）的 <b>战利品表守恒契约</b>回归测试。
  *
  * <h3>为什么需要</h3>
  * <p>迁到 Mek 体系后，「破坏方块掉什么」完全交给战利品表：Mek 的
@@ -38,12 +41,20 @@ import static org.junit.Assert.fail;
  * <ul>
  *   <li><b>表不存在</b> → 方块破坏后什么都不掉（烹饪工厂 12 档曾整体缺失）；</li>
  *   <li><b>表存在但没有 copy_nbt</b> → 掉一个裸方块，库存/能量/升级卡全丢；</li>
- *   <li><b>target 不写 {@code mekData.} 前缀</b> → 放下时 {@code setPlacedBy} 读不到，同样全丢。</li>
+ *   <li><b>target 不写 {@code mekData.} 前缀</b> → 放下时 {@code setPlacedBy} 读不到，同样全丢；</li>
+ *   <li><b>表搬了但读侧没人读</b> → {@code setPlacedBy} 的槽位分支要求方块物品实现
+ *       {@code IItemSustainedInventory}（本模组没有），{@code Items} 必须由 tile 的
+ *       {@code readSustainedData} 自己读回；少了这一步库存仍然全丢（M28 复审 P1-1）。</li>
  * </ul>
- * <p>三者都是<b>静默</b>的：编译通过、进游戏不报错，只在玩家挖掉机器时才发作。</p>
+ * <p>四者都是<b>静默</b>的：编译通过、进游戏不报错，只在玩家挖掉机器时才发作。</p>
  *
  * <h3>覆盖范围</h3>
- * <p>只覆盖「已迁移」的 6 个家族。{@code ice_factory} 不在此列：{@code ICE_FACTORY_ENABLED = false}
+ * <p>工厂家族由 {@link #everyMigratedFactoryTierHasALootTable()} 等按档位 × 家族清单覆盖；
+ * 单机迁移方块（切菜机 / 电力烧烤架 / 陈化窖）由
+ * {@link #everyMigratedMekBlockHasALootTableThatCopiesItsSustainData()} 从源码派生扫描面覆盖
+ * —— 后者把「{@code extends BlockTile/BlockMekanism} 的方块必须有表」这条规则显式化，
+ * 切菜机缺表正是从这条缝里漏出去的。</p>
+ * <p>{@code ice_factory} 不在此列：{@code ICE_FACTORY_ENABLED = false}
  * 时方块整段不注册（{@code UniversalCuttingMachine}），没有战利品表也不会有掉落。
  * 14 个自研 {@code BaseEntityBlock} 机器同样不在此列——它们覆写 {@code getDrops} 返空、
  * 由 {@code onRemove} 自掉落，另有 {@link TestBlockDropInvariants} 覆盖。</p>
@@ -86,6 +97,41 @@ public class TestFactoryLootTableSustainData {
 
     /** 写侧源码根目录。 */
     private static final Path MAIN_JAVA = Path.of("src", "main", "java", "cn", "ism", "mekck");
+
+    // ── 已迁移到 Mek BlockTile 的方块（工厂 72 + 单机 3）的扫描面 ──────────
+
+    /** 方块源码目录 —— 与 {@code TestBlockDropInvariants} 同一扫描面。 */
+    private static final Path BLOCK_DIR = Path.of("src", "main", "java", "cn", "ism", "mekck", "block");
+
+    /** 档位枚举源码：工厂注册循环的 id 后缀从它的 getter 解析。 */
+    private static final Path TIER_ENUM = Path.of("src", "main", "java", "cn", "ism", "mekck", "CuttingMachineFactoryTier.java");
+
+    /**
+     * 注册中枢里的方块注册调用，两种写法都收：
+     * {@code XXX_BLOCKS_REG.register("id", () -> new XxxBlock(…)} 与
+     * {@code XXX_BLOCKS_REG.register("id", XxxBlock::new)}。
+     * 组：1=字面量 id，2=变量 id，3=lambda 里的类名，4=方法引用里的类名。
+     */
+    private static final Pattern BLOCK_REGISTER = Pattern.compile(
+            "\\w+_BLOCKS_REG\\.register\\(\\s*(?:\"([a-z0-9_]+)\"|(\\w+))\\s*,\\s*"
+                    + "(?:\\(\\)\\s*->\\s*new\\s+([\\w.]+)\\s*\\(|([\\w.]+)\\s*::\\s*new)");
+
+    /** 方块实体注册调用：{@code XXX_TILES_REG.register(handle, (pos, state) -> new XxxTile(}。 */
+    private static final Pattern TILE_REGISTER = Pattern.compile(
+            "\\w+_TILES_REG\\.register\\(\\s*\\w+\\s*,\\s*\\(pos,\\s*state\\)\\s*->\\s*new\\s+([\\w.]+)\\s*\\(");
+
+    /** 工厂注册循环里的 {@code String id = tier.getXxxBlockId();}。 */
+    private static final Pattern TIER_ID_ASSIGN = Pattern.compile("String\\s+id\\s*=\\s*tier\\.(get\\w+)\\(\\);");
+
+    /** 档位枚举常量行 {@code BASIC("basic", …)} 的第一个字符串参数。 */
+    private static final Pattern TIER_NAME = Pattern.compile("^\\s*[A-Z][A-Z_]*\\(\"([a-z_]+)\",", Pattern.MULTILINE);
+
+    /** 档位 id getter 的后缀：{@code public String getXxxBlockId() { return name + "_xxx"; }}。 */
+    private static final Pattern TIER_ID_SUFFIX = Pattern.compile(
+            "public String (get\\w+)\\(\\)\\s*\\{\\s*return name \\+ \"([^\"]+)\";");
+
+    /** {@code writeSustainedData} 里的字面量键：{@code tag.putXxx("Key", …)}。 */
+    private static final Pattern SUSTAINED_KEY = Pattern.compile("tag\\.put\\w*\\(\\s*\"([^\"]+)\"");
 
     private static String blockId(String tier, String family) {
         return tier + "_" + family;
@@ -318,5 +364,266 @@ public class TestFactoryLootTableSustainData {
         Path ice = LOOT_DIR.resolve("basic_ice_factory.json");
         assertFalse("ice_factory 当前未注册（ICE_FACTORY_ENABLED=false）；若已启用，"
                 + "请补 12 张 ice_factory 战利品表并把 \"ice_factory\" 加进 FAMILIES", Files.exists(ice));
+    }
+
+    // ── 已迁移到 Mek BlockTile 的方块：从源码派生扫描面 ──────────────────
+
+    /**
+     * 已迁移到 Mek {@code BlockTile}/{@code BlockMekanism} 的方块必须有战利品表，
+     * 且表必须把 BE 存档键搬进 {@code mekData.*}。
+     *
+     * <h3>为什么单列一条</h3>
+     * <p>现有两条扫描面都漏掉「单机迁移方块」这一类：
+     * {@link #everyMigratedFactoryTierHasALootTable()} 只扫 6 个家族 × 12 档的硬编码 id；
+     * {@code TestBlockDropInvariants} 只扫覆写 {@code getDrops} 的方块。
+     * 切菜机（{@code universal_cutting_machine}）就这样漏网：迁移时删掉了
+     * {@code onRemove} 自掉落，却从未补表 —— 破坏后机器本体、库存、升级卡全丢。</p>
+     *
+     * <p>扫描面从源码派生：方块类（{@code extends BlockTile/BlockMekanism}）→
+     * 注册中枢里的注册名（工厂循环的 {@code tier.getXxxBlockId()} 也解析）→ 战利品表。
+     * 每个已迁移类都必须解析出至少一个注册名，否则直接失败 —— 防止扫描面静默空转。</p>
+     *
+     * <h3>变异点（应让本测试变红）</h3>
+     * <ol>
+     *   <li>删掉 {@code universal_cutting_machine.json}；</li>
+     *   <li>从该表删掉任一 {@code copy_nbt} op（如 {@code Progress} / {@code Items}）；</li>
+     *   <li>把某个 target 的 {@code mekData.} 前缀去掉。</li>
+     * </ol>
+     */
+    @Test
+    public void everyMigratedMekBlockHasALootTableThatCopiesItsSustainData() throws IOException {
+        if (!Files.isDirectory(BLOCK_DIR) || !Files.isDirectory(LOOT_DIR)) {
+            fail("找不到方块源码或战利品表目录（测试需在项目根目录运行）");
+        }
+
+        // 1) 已迁移方块类（剥注释后再匹配，注释里引用 extends BlockTile 不算数）
+        Set<String> migrated = new LinkedHashSet<>();
+        try (Stream<Path> files = Files.walk(BLOCK_DIR)) {
+            for (Path file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+                String src = TestSourceText.read(file.toString());
+                if (src.contains("extends BlockTile") || src.contains("extends BlockMekanism")) {
+                    String name = file.getFileName().toString();
+                    migrated.add(name.substring(0, name.length() - ".java".length()));
+                }
+            }
+        }
+        assertFalse("扫描面为空：没有找到任何 extends BlockTile/BlockMekanism 的方块类", migrated.isEmpty());
+
+        // 2) 注册中枢：方块类 → 注册名；方块类 → 方块实体类（取注册调用之后最近的一次 tile 注册）
+        String registry = TestSourceText.readRegistryCode();
+        Map<String, List<String>> idsByClass = new LinkedHashMap<>();
+        Map<String, String> tileByClass = new LinkedHashMap<>();
+        Matcher reg = BLOCK_REGISTER.matcher(registry);
+        while (reg.find()) {
+            String className = simpleName(reg.group(3) != null ? reg.group(3) : reg.group(4));
+            List<String> ids = reg.group(1) != null
+                    ? List.of(reg.group(1))
+                    : tierIds(registry, reg.start());
+            idsByClass.computeIfAbsent(className, k -> new ArrayList<>()).addAll(ids);
+            Matcher tile = TILE_REGISTER.matcher(registry);
+            if (tile.find(reg.end())) {
+                tileByClass.put(className, simpleName(tile.group(1)));
+            }
+        }
+
+        // 3) 逐类逐表核对
+        Map<String, Path> javaSources = javaSources();
+        List<String> offenders = new ArrayList<>();
+        for (String className : migrated) {
+            List<String> ids = idsByClass.get(className);
+            if (ids == null || ids.isEmpty()) {
+                offenders.add(className + "：在注册中枢里解析不出注册名 —— 扫描面失效（注册写法变了？）");
+                continue;
+            }
+            Set<String> sustainKeys = writeSustainedKeys(tileByClass.get(className), javaSources);
+            for (String id : ids) {
+                checkMigratedLootTable(id, sustainKeys, offenders);
+            }
+        }
+        assertTrue("以下已迁移到 Mek BlockTile 的方块战利品表缺失或不会保住内容:\n  "
+                + String.join("\n  ", offenders), offenders.isEmpty());
+    }
+
+    private static String simpleName(String qualified) {
+        int dot = qualified.lastIndexOf('.');
+        return dot < 0 ? qualified : qualified.substring(dot + 1);
+    }
+
+    /** 解析工厂注册循环的变量 id：最近的 {@code String id = tier.getXxx();} + 枚举 getter 的后缀。 */
+    private static List<String> tierIds(String registry, int before) throws IOException {
+        Matcher assign = TIER_ID_ASSIGN.matcher(registry);
+        String getter = null;
+        while (assign.find() && assign.start() < before) {
+            getter = assign.group(1);
+        }
+        assertNotNull("注册调用用了变量 id，但前面找不到 `String id = tier.getXxx();`", getter);
+        String suffix = tierIdSuffix(getter);
+        List<String> ids = new ArrayList<>();
+        for (String tier : tierNames()) {
+            ids.add(tier + suffix);
+        }
+        return ids;
+    }
+
+    private static List<String> tierNames() throws IOException {
+        Matcher m = TIER_NAME.matcher(source(TIER_ENUM));
+        List<String> names = new ArrayList<>();
+        while (m.find()) {
+            names.add(m.group(1));
+        }
+        assertFalse("CuttingMachineFactoryTier 里没解析出档位名", names.isEmpty());
+        return names;
+    }
+
+    private static String tierIdSuffix(String getter) throws IOException {
+        Matcher m = TIER_ID_SUFFIX.matcher(source(TIER_ENUM));
+        while (m.find()) {
+            if (getter.equals(m.group(1))) {
+                return m.group(2);
+            }
+        }
+        fail("CuttingMachineFactoryTier 里找不到 " + getter + " 的 id 后缀");
+        return null; // fail 已抛，仅为编译
+    }
+
+    /** 简单类名 → 源码路径（tile 类在注册中枢里可能带全限定名，按简名索引）。 */
+    private static Map<String, Path> javaSources() throws IOException {
+        Map<String, Path> byName = new LinkedHashMap<>();
+        try (Stream<Path> files = Files.walk(MAIN_JAVA)) {
+            for (Path p : files.filter(f -> f.toString().endsWith(".java")).toList()) {
+                String name = p.getFileName().toString();
+                byName.put(name.substring(0, name.length() - ".java".length()), p);
+            }
+        }
+        return byName;
+    }
+
+    /** 方块实体 {@code writeSustainedData} 写出的字面量键；没有该方法（或空实现）时返回空集。 */
+    private static Set<String> writeSustainedKeys(String tileClass, Map<String, Path> javaSources) throws IOException {
+        if (tileClass == null) {
+            return Set.of();
+        }
+        Path file = javaSources.get(tileClass);
+        if (file == null) {
+            return Set.of();
+        }
+        String body = TestSourceText.methodBody(TestSourceText.read(file.toString()), "void writeSustainedData(");
+        if (body.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> keys = new LinkedHashSet<>();
+        Matcher m = SUSTAINED_KEY.matcher(body);
+        while (m.find()) {
+            keys.add(m.group(1));
+        }
+        return keys;
+    }
+
+    /** 单张已迁移方块表的核对：存在 + 掉自己 + copy_name + copy_nbt（mekData. 前缀 + 必需键）。 */
+    private static void checkMigratedLootTable(String id, Set<String> sustainKeys, List<String> offenders) throws IOException {
+        Path p = LOOT_DIR.resolve(id + ".json");
+        if (!Files.exists(p)) {
+            offenders.add(id + "：没有战利品表 —— 破坏后连方块本体都不会掉");
+            return;
+        }
+        JsonObject table = JsonParser.parseString(Files.readString(p, StandardCharsets.UTF_8)).getAsJsonObject();
+        JsonObject first = entry(table);
+
+        String expected = "mekck:" + id;
+        String actual = first.has("name") ? first.get("name").getAsString() : "<无 name>";
+        if (!expected.equals(actual)) {
+            offenders.add(id + "：掉落 " + actual + "，应为 " + expected);
+        }
+
+        JsonObject copyName = function(first, "minecraft:copy_name");
+        if (copyName == null || !"block_entity".equals(copyName.get("source").getAsString())) {
+            offenders.add(id + "：缺少 copy_name(source=block_entity)，自定义名会丢");
+        }
+
+        JsonObject copyNbt = function(first, "minecraft:copy_nbt");
+        if (copyNbt == null) {
+            offenders.add(id + "：缺少 copy_nbt —— 掉落的是裸方块，库存/能量/升级全丢");
+            return;
+        }
+        if (!"block_entity".equals(copyNbt.get("source").getAsString())) {
+            offenders.add(id + "：copy_nbt 的 source 不是 block_entity");
+            return;
+        }
+        JsonArray ops = copyNbt.getAsJsonArray("ops");
+        if (ops == null || ops.size() == 0) {
+            offenders.add(id + "：copy_nbt 没有任何 ops");
+            return;
+        }
+        Set<String> sources = new LinkedHashSet<>();
+        for (JsonElement e : ops) {
+            JsonObject op = e.getAsJsonObject();
+            String src = op.get("source").getAsString();
+            String target = op.get("target").getAsString();
+            sources.add(src);
+            if (!target.startsWith("mekData.")) {
+                offenders.add(id + "：" + src + " 的 target「" + target + "」没有 mekData. 前缀");
+            }
+        }
+        for (String required : VANILLA_MEK_KEYS) {
+            if (!sources.contains(required)) {
+                offenders.add(id + "：缺少 " + required + " 的搬运 op");
+            }
+        }
+        for (String required : sustainKeys) {
+            if (!sources.contains(required)) {
+                offenders.add(id + "：缺少 " + required + " 的搬运 op（writeSustainedData 写了它）");
+            }
+        }
+    }
+
+    // ── 读侧护栏：表搬过去的数据必须有人读回来 ────────────────────────────
+
+    /**
+     * 读侧护栏：切菜机 tile 的 {@code readSustainedData} 必须自己把 {@code Items} 读回来。
+     *
+     * <h3>为什么表侧护栏不够（M28 复审 P1-1 的形态）</h3>
+     * <p>{@code BlockMekanism.setPlacedBy} 的槽位恢复分支要求方块物品实现
+     * {@code IItemSustainedInventory}，而本模组的方块物品是 {@code MekCkBlockItem}，
+     * 没有实现该接口 ⇒ 该分支恒被跳过。战利品表把 {@code Items} 搬进
+     * {@code mekData.Items} 之后，必须由 tile 自己在 {@code readSustainedData} 里
+     * 调 {@code DataHandlerUtils.readContainers} 读回，否则「挖掉再放下」库存仍然全丢。
+     * 表侧护栏（{@link #everyMigratedMekBlockHasALootTableThatCopiesItsSustainData()}）
+     * 只查表、查不到读侧，这正是 P1-1 漏网的原因。</p>
+     *
+     * <h3>变异点</h3>
+     * <p>删掉 {@code readSustainedData} 里的 {@code Items} 读回 → 本测试红。</p>
+     */
+    @Test
+    public void cuttingMachineTileReadsItemsBackFromSustainedData() throws IOException {
+        String src = TestSourceText.read(
+                "src/main/java/cn/ism/mekck/machine/cutting/UniversalCuttingMachineTile.java");
+        String body = TestSourceText.methodBody(src, "void readSustainedData(");
+        assertFalse("UniversalCuttingMachineTile 里找不到 readSustainedData", body.isEmpty());
+        assertTrue("readSustainedData 没有调用 readContainers —— 战利品表的 Items op 是死键，"
+                + "挖掉再放下库存全丢", body.contains("readContainers"));
+        assertTrue("readSustainedData 没有读 \"Items\" 键", body.contains("\"Items\""));
+    }
+
+    /**
+     * 掉落物 tooltip 必须认新格式的 {@code mekData.Items}。
+     *
+     * <p>{@code MekCkBlockItem.hasSustainedItems} 原先只读旧格式
+     * {@code BlockEntityTag.Items.Items}；Mek 迁移后的战利品表把库存写进
+     * {@code mekData.Items}，只认旧格式会让新掉落物的「存有物品」显示「否」。</p>
+     *
+     * <h3>变异点</h3>
+     * <p>删掉 {@code mekData} 分支 → 本测试红。</p>
+     */
+    @Test
+    public void blockItemTooltipRecognizesMekDataItems() throws IOException {
+        String src = TestSourceText.read("src/main/java/cn/ism/mekck/item/MekCkBlockItem.java");
+        String body = TestSourceText.methodBody(src, "boolean hasSustainedItems(");
+        assertFalse("MekCkBlockItem 里找不到 hasSustainedItems", body.isEmpty());
+        assertTrue("hasSustainedItems 没有识别新格式 mekData —— 新掉落物 tooltip「存有物品」会显示「否」",
+                body.contains("\"mekData\""));
+        // 光有 "mekData" 字符串不够（留一个死变量也能过）：必须真的在 mekData 里查 Items。
+        assertTrue("hasSustainedItems 没有在 mekData 里检查 Items",
+                body.contains("mekData.contains(\"Items\""));
+        assertTrue("hasSustainedItems 没有读 \"Items\" 键", body.contains("\"Items\""));
     }
 }
