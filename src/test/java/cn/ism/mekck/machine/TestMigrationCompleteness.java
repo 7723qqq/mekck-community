@@ -94,11 +94,33 @@ public class TestMigrationCompleteness {
                         + "—— 无法判定三件套，请确认它真的走 Mek 注册器");
                 continue;
             }
-            long count = Pattern.compile("(?m)^.*" + Pattern.quote(prefix) + "\\w*_REG\\.register\\(bus\\)")
-                    .matcher(main).results().count();
-            if (count < 3) {
-                missing.add(id + "（前缀 " + prefix + "_）：只找到 " + count
-                        + " 处 register(bus)，三件套应至少 3 处（blocks/items/tiles 或 containers）");
+            // ⚠️ 逐个断言三件套，**不是**「总共有 3 个就行」——
+            // 第一版写成 `count >= 3`，变异测试（删掉 GRINDING_MACHINE_CONTAINERS_REG.register(bus)）
+            // 实测**照旧全绿**：剩下 blocks/items/tiles 正好 3 个，把缺的那个盖住了。
+            // 而漏 container 的后果是实打实的：客户端 MenuScreens.register 一取就抛
+            // Registry Object not present（本仓 planting 工厂当年就是这么炸的）。
+            List<String> pieces = List.of("BLOCKS", "ITEMS", "TILES", "CONTAINERS");
+            List<String> absent = new ArrayList<>();
+            for (String piece : pieces) {
+                boolean present = Pattern.compile("(?m)^.*" + Pattern.quote(prefix) + "\\w*_" + piece
+                                + "_REG\\.register\\(bus\\)")
+                        .matcher(main).find();
+                if (!present) {
+                    absent.add(piece);
+                }
+            }
+            // 允许的例外：某些机器没有独立的 ITEMS 注册器（物品随方块走）。
+            // 但 BLOCKS / TILES / CONTAINERS 三者缺一不可 —— 缺任何一个都会在实机上炸。
+            List<String> required = List.of("BLOCKS", "TILES", "CONTAINERS");
+            List<String> missingRequired = new ArrayList<>();
+            for (String piece : required) {
+                if (absent.contains(piece)) {
+                    missingRequired.add(piece);
+                }
+            }
+            if (!missingRequired.isEmpty()) {
+                missing.add(id + "（前缀 " + prefix + "_）：缺少 " + String.join(" / ", missingRequired)
+                        + " 的 register(bus)");
             }
         }
         assertEquals("这些方块的三件套没有成组 register(bus) —— "
@@ -109,7 +131,7 @@ public class TestMigrationCompleteness {
     /** 从 `XXX_HANDLE = XXX_BLOCKS_REG.register("<id>",` 反推常量前缀（返回 `XXX`）。 */
     private static String registrationPrefixOf(String registry, String id) {
         Matcher m = Pattern.compile(
-                        "(\\w+?)_BLOCKS_REG\\.register\\(\\"" + Pattern.quote(id) + "\\"")
+                        "(\\w+?)_BLOCKS_REG\\.register\\(\"" + Pattern.quote(id) + "\"")
                 .matcher(registry);
         return m.find() ? m.group(1) : null;
     }
@@ -137,20 +159,25 @@ public class TestMigrationCompleteness {
             // 容器常量名的约定：随该机器的 *_CONTAINERS_REG 走，名字与 HANDLE 同前缀；
             // 但这台机器也可能用 MACHINE_CONTAINER 之类，所以两种形态都接受。
             boolean screenBound = Pattern.compile(
-                            "(?m)^.*" + Pattern.quote(prefix) + "\w*_CONTAINER\.get\(\).*MenuScreens\.register")
+                            "(?m)^.*" + Pattern.quote(prefix) + "\\w*_CONTAINER\\.get\\(\\).*MenuScreens\\.register")
                     .matcher(clientEvents).find()
-                    || Pattern.compile("(?m)^.*MenuScreens\.register\(\s*" + Pattern.quote(prefix))
+                    || Pattern.compile("(?m)^.*MenuScreens\\.register\\(\\s*" + Pattern.quote(prefix))
                     .matcher(clientEvents).find();
             if (!screenBound) {
                 missing.add(id + "（前缀 " + prefix + "_）：ClientEvents 里没有 MenuScreens.register 绑定"
                         + "（右键开界面会崩）");
             }
+            // 创造栏有两种历史写法，都接受：新的 `XXX_HANDLE.getItemStack()`（Mek 的
+            // BlockRegistryObject）与旧的 `XXX_ITEM.get()`（本仓早期的 RegistryObject<Item>）。
+            // 只认其中一种会把「用了另一种写法但确实登记了」误报成缺陷（本轮实测撞到：
+            // electric_grill 用 GRILL_ITEM.get()、切菜机用 MACHINE_ITEM.get()）。
             boolean inCreativeTab = Pattern.compile(
-                            "event\.accept\(\s*" + Pattern.quote(prefix) + "\w*_HANDLE\.getItemStack\(\)")
+                            "event\\.accept\\(\\s*" + Pattern.quote(prefix) + "\\w*_(?:HANDLE\\.getItemStack\\(\\)|ITEM\\.get\\(\\))")
                     .matcher(factories).find();
             if (!inCreativeTab) {
                 missing.add(id + "（前缀 " + prefix + "_）：创造模式物品栏里没有 "
-                        + prefix + "_HANDLE.getItemStack()（玩家拿不到这台机器）");
+                        + prefix + "_HANDLE.getItemStack() 或 " + prefix + "_ITEM.get()"
+                        + "（玩家拿不到这台机器）");
             }
         }
         assertEquals("这些机器漏了客户端绑定或创造栏登记：\n  " + String.join("\n  ", missing),
