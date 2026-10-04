@@ -23,6 +23,22 @@
 
 ---
 
+## 模块架构 `architecture/`
+
+模块化重构（2026-10-05 起）的目标架构与现状契约。入口是 [`architecture/README.md`](architecture/README.md)。
+
+| 文档 | 内容 | 状态 |
+|---|---|---|
+| [`architecture/00-module-map.md`](architecture/00-module-map.md) | 模块地图、依赖方向表、跨包 import 实测、循环依赖与破环方案 | 现行 |
+| [`architecture/01-util.md`](architecture/01-util.md) | `util/` 39 类去留分类 + 死代码核验记录 | 现行 |
+| [`architecture/02-machine-core.md`](architecture/02-machine-core.md) | Mek 原生机器内核职责、扩展点、构造期陷阱 | 现行 |
+| [`architecture/03-ae2.md`](architecture/03-ae2.md) | AE2 两条集成路径边界、反射成员名清单、迁移时删分支规则 | 现行 |
+| [`architecture/04-client-menu.md`](architecture/04-client-menu.md) | client/menu 分层、自研件残留清单与删除前置条件 | 现行 |
+| [`architecture/05-god-class-decomposition.md`](architecture/05-god-class-decomposition.md) | 巨型类拆分设计（伴生类表 + 成员区间 + 风险） | 现行 |
+| [`architecture/legacy/`](architecture/legacy/README.md) | 11 台 legacy 机器迁移契约（槽序/NBT/掉落/迁移器）逐台留档 | 现行 |
+
+---
+
 ## 审查报告 `audit/`
 
 | 文档 | 内容 | 状态 |
