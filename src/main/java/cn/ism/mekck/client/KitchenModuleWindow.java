@@ -54,11 +54,14 @@ public class KitchenModuleWindow extends GuiWindow {
             families.add(f);
         }
         // 请求一次过滤器同步（服务端会把全部系列的过滤设置推给客户端）
-        try {
-            cn.ism.mekck.network.ModMessages.sendToServer(
-                    new cn.ism.mekck.network.KitchenFilterPacket(menu.getMachine().getBlockPos(),
-                            0, (byte) 4, 0, net.minecraft.world.item.ItemStack.EMPTY));
-        } catch (Throwable ignored) {
+        var machine = menu.getMachine();
+        if (machine != null) {
+            try {
+                cn.ism.mekck.network.ModMessages.sendToServer(
+                        new cn.ism.mekck.network.KitchenFilterPacket(machine.getBlockPos(),
+                                0, (byte) 4, 0, net.minecraft.world.item.ItemStack.EMPTY));
+            } catch (Throwable ignored) {
+            }
         }
     }
 
@@ -197,10 +200,13 @@ public class KitchenModuleWindow extends GuiWindow {
 
     /** 已安装模块的能力描述（线程 × 并行）。 */
     private String installedStatus(KitchenFamily family) {
-        for (KitchenModule.Ability a : menu.getMachine().installedAbilities()) {
-            if (a.family() == family) {
-                return a.displayName() + "  " + Component.translatable("gui.mekck.ui.module_power",
-                        a.threads(), a.parallel()).getString();
+        var machine = menu.getMachine();
+        if (machine != null) {
+            for (KitchenModule.Ability a : machine.installedAbilities()) {
+                if (a.family() == family) {
+                    return a.displayName() + "  " + Component.translatable("gui.mekck.ui.module_power",
+                            a.threads(), a.parallel()).getString();
+                }
             }
         }
         return Component.translatable("gui.mekck.ui.module_installed").getString();
@@ -281,8 +287,12 @@ public class KitchenModuleWindow extends GuiWindow {
     /** 发送一条过滤设置包。 */
     private void sendFilter(byte action, KitchenFamily family, int index,
                             net.minecraft.world.item.ItemStack stack) {
+        var machine = menu.getMachine();
+        if (machine == null) {
+            return;
+        }
         cn.ism.mekck.network.ModMessages.sendToServer(
-                new cn.ism.mekck.network.KitchenFilterPacket(menu.getMachine().getBlockPos(),
+                new cn.ism.mekck.network.KitchenFilterPacket(machine.getBlockPos(),
                         family.ordinal(), action, index, stack));
     }
 }

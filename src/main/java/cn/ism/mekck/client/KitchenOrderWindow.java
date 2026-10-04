@@ -71,7 +71,9 @@ public class KitchenOrderWindow extends GuiWindow {
         if (mask == familyMaskCache) return;
         familyMaskCache = mask;
         recipeList.clear();
-        var level = menu.getMachine().getLevel();
+        var machine = menu.getMachine();
+        if (machine == null) return;
+        var level = machine.getLevel();
         if (level == null) return;
         for (var family : cn.ism.mekck.kitchen.KitchenFamily.values()) {
             if ((mask & (1 << family.ordinal())) == 0) continue;
@@ -98,7 +100,9 @@ public class KitchenOrderWindow extends GuiWindow {
 
     private String labelOf(Recipe<?> recipe) {
         try {
-            var level = menu.getMachine().getLevel();
+            var machine = menu.getMachine();
+            if (machine == null) return recipe.getId().toString();
+            var level = machine.getLevel();
             if (level == null) return recipe.getId().toString();
             return recipe.getResultItem(level.registryAccess()).getHoverName().getString();
         } catch (Throwable t) {
@@ -109,8 +113,14 @@ public class KitchenOrderWindow extends GuiWindow {
     @Override
     public void renderForeground(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         super.renderForeground(guiGraphics, mouseX, mouseY);
+        var machine = menu.getMachine();
+        if (machine == null) {
+            // 空菜单（BE 缺失）：只画标题，跳过依赖 BE 的 ME 面板与本机列表。
+            drawTitleText(guiGraphics, Component.translatable("gui.mekck.ui.order"), 5);
+            return;
+        }
         // ME 来源：整块换成 AE 终端风格面板（本机"下单"列表原样保留在下面）
-        mePanel.bind(menu.getMachine().getBlockPos());
+        mePanel.bind(machine.getBlockPos());
         // 面板/按钮绘制在 GUI 相对坐标（pose 已在 GUI 原点），悬停判定必须同坐标系：
         // 把绝对鼠标换算成 GUI 相对再交给面板。
         int relX = mouseX - getGuiLeft();
@@ -183,14 +193,21 @@ public class KitchenOrderWindow extends GuiWindow {
 
     private void sendOrder(byte mode) {
         if (selectedRecipe < 0 || selectedRecipe >= recipeList.size()) return;
-        ModMessages.sendToServer(new KitchenOrderPacket(menu.getMachine().getBlockPos(), mode,
+        var machine = menu.getMachine();
+        if (machine == null) return;
+        ModMessages.sendToServer(new KitchenOrderPacket(machine.getBlockPos(), mode,
                 recipeList.get(selectedRecipe).getId().toString(), orderCount));
     }
 
     @Override
     public mekanism.client.gui.element.GuiElement mouseClickedNested(double mouseX, double mouseY, int button) {
+        var machine = menu.getMachine();
+        if (machine == null) {
+            // 空菜单（BE 缺失）：没有可交互的机器，全部点击交回父类。
+            return super.mouseClickedNested(mouseX, mouseY, button);
+        }
         // ME 来源：整块交给共用面板（几何与渲染共用）
-        mePanel.bind(menu.getMachine().getBlockPos());
+        mePanel.bind(machine.getBlockPos());
         // 命中侧统一换算成 GUI 相对坐标（绘制侧用的就是它），否则整体偏移 (leftPos, topPos)。
         double relX = mouseX - getGuiLeft();
         double relY = mouseY - getGuiTop();
@@ -199,7 +216,7 @@ public class KitchenOrderWindow extends GuiWindow {
                     panelX(), panelY(), PANEL_W, PANEL_H)) {
                 mePanel.mouseClicked(relX, relY, button, panelX(), panelY(), PANEL_W, PANEL_H,
                         (recipeId, qty) -> ModMessages.sendToServer(new NetworkOrderPacket(
-                                menu.getMachine().getBlockPos(), recipeId.toString(), qty)));
+                                machine.getBlockPos(), recipeId.toString(), qty)));
                 return this;
             }
             return super.mouseClickedNested(mouseX, mouseY, button);
