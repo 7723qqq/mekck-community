@@ -101,6 +101,14 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
         return 1;
     }
 
+    /**
+     * 第 0 路此刻能不能开工：有订单、有配方、批量算得出来且大于 0、<b>产物装得下</b>。
+     *
+     * <p>产物容量判定是补上的：缺了它，产物槽满时本方法仍返回 true，
+     * {@code workCycle} 照常扣电、进度条照走，而 {@link #run} 在落槽前直接
+     * {@code return} —— 玩家看不到产出、看不到告警，电却一直在掉。旧实现的
+     * {@code canProcess} 里本来就有这一项（{@code canFitAll}），见类注释。</p>
+     */
     @Override
     public boolean canProcess(MekCkMachineTile tile, int index) {
         this.owner = tile instanceof CookingFactoryTile c ? c : null;
@@ -116,7 +124,10 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
         List<IInventorySlot> scan = owner.ingredientSlots();
         int batch = batchSize(recipe, scan);
         batch = order.remainingOrUnlimited(batch);
-        return batch > 0;
+        if (batch <= 0) {
+            return false;
+        }
+        return canFitBatch(owner.productSlots(), recipe.getResultItem(level.registryAccess()), batch);
     }
 
     @Override
@@ -503,23 +514,11 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
 
     private void run(Level level, Recipe<?> recipe, int batch, List<IInventorySlot> scan) {
         List<IInventorySlot> outputs = owner.productSlots();
-        List<IInventorySlot> returns = owner.returnSlots();
-        if (outputs.isEmpty()) {
-            return;
-        }
         ItemStack result = recipe.getResultItem(level.registryAccess());
-        if (result.isEmpty()) {
+        if (!canFitBatch(outputs, result, batch)) {
             return;
         }
-        int resultCount = CountMath.mulClamp(Integer.MAX_VALUE, result.getCount(), batch);
-        if (resultCount <= 0) {
-            return;
-        }
-        ItemStack produced = result.copy();
-        produced.setCount(resultCount);
-        if (!MekCkBatchPacking.canFitAll(outputs, List.of(produced), 1)) {
-            return;
-        }
+        ItemStack produced = batchProduct(result, batch);
 
         // 先扣流体再扣料——旧实现第 590-592 行的次序。
         // 两者都按「已算出的 batch」扣，而 batch 本身已与 drain 的口径一致，
@@ -536,6 +535,44 @@ public final class CookingFactoryExecutor implements MekCkRecipeExecutor {
         if (order.advance(batch)) {
             order.clear();
         }
+    }
+
+    /**
+     * 本批产物预览栈 —— {@link #canFitBatch} 与 {@link #run} 共用的唯一算法。
+     *
+     * <p>不可产出（配方无产物 / 数量溢出）时返回 {@link ItemStack#EMPTY}：
+     * {@code MekCkBatchPacking.canFitAll} 对空栈是<b>跳过</b>（返回 true），
+     * 所以「空产物」必须在这里拦掉，不能指望容量判定。</p>
+     */
+    private static ItemStack batchProduct(ItemStack result, int batch) {
+        if (result == null || result.isEmpty() || batch <= 0) {
+            return ItemStack.EMPTY;
+        }
+        int resultCount = CountMath.mulClamp(Integer.MAX_VALUE, result.getCount(), batch);
+        if (resultCount <= 0) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack produced = result.copy();
+        produced.setCount(resultCount);
+        return produced;
+    }
+
+    /**
+     * 本批产物装不装得下 —— {@link #canProcess} 与 {@link #run} 共用的唯一判据。
+     *
+     * <p>抽成 {@code static} 纯函数是为了能在裸 JVM 里断言（真 tile 造不出来，
+     * 见 {@code TestCookingFactoryEnergyDrain}）。两处共用同一入口，才不会出现
+     * 「预检说能加工、落槽时却装不下」的漂移。</p>
+     */
+    public static boolean canFitBatch(List<IInventorySlot> outputs, ItemStack result, int batch) {
+        if (outputs == null || outputs.isEmpty()) {
+            return false;
+        }
+        ItemStack produced = batchProduct(result, batch);
+        if (produced.isEmpty()) {
+            return false;
+        }
+        return MekCkBatchPacking.canFitAll(outputs, List.of(produced), 1);
     }
 
     /**

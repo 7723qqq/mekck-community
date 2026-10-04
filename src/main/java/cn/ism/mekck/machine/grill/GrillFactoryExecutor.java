@@ -183,6 +183,12 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
      * 但 {@code WorkMode} 与 {@code SeasoningEnabled} 是<b>常驻状态</b>而非订单的一部分，
      * 缺失时按默认值重建，不清空。
      * </p>
+     *
+     * <p><b>调味料的读取必须挂在「订单激活」这一支里</b>：无订单时它会被
+     * {@code currentSeasoningFor()} 用于自由投料（强制调味），还会被 {@code save()}
+     * 持久化。旧写法先清空、随后又无条件从 tag 读回，清空被立刻覆盖 ——
+     * 「无订单清调味料」的守卫形同虚设，存档里残留的 {@code OrderSeasoning}
+     * 会一直赖在机器上。</p>
      */
     @Override
     public void load(CompoundTag tag) {
@@ -190,16 +196,19 @@ public final class GrillFactoryExecutor implements MekCkRecipeExecutor {
         // 键不存在即「无订单」（整体清空）：执行器与方块实体同寿，只在 contains 为真时
         // 赋值会留下无法取消的幽灵订单。
         order.load(tag);
-        if (!order.isActive()) {
-            // 无订单时不得残留调味料：它会在「自由投料」下强制调味，且会被 save 持久化。
-            orderSeasoning = null;
-        }
-        if (tag != null) {
-            orderSeasoning = tag.contains(TAG_ORDER_SEASONING, Tag.TAG_STRING)
+        if (order.isActive()) {
+            orderSeasoning = tag != null && tag.contains(TAG_ORDER_SEASONING, Tag.TAG_STRING)
                     ? tag.getString(TAG_ORDER_SEASONING) : null;
             if (orderSeasoning != null && orderSeasoning.isEmpty()) {
                 orderSeasoning = null;
             }
+        } else {
+            // 无订单时不得残留调味料：它会在「自由投料」下强制调味，且会被 save 持久化。
+            // ⚠️ 读取必须挡在这一支之外：旧写法先清空、随后无条件从 tag 读回，
+            // 于是「无订单 + 存档里残留 OrderSeasoning」时清空被立刻覆盖，守卫形同虚设。
+            orderSeasoning = null;
+        }
+        if (tag != null) {
             workMode = WorkMode.byOrdinal(tag.getInt(TAG_WORK_MODE));
             int flags = tag.getInt(TAG_SEASONING_ENABLED);
             for (int i = 0; i < SEASONING_SLOTS; i++) {
