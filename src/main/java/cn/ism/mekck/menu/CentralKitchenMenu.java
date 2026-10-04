@@ -88,6 +88,11 @@ public class CentralKitchenMenu extends AbstractContainerMenu
     private final net.minecraft.world.inventory.ContainerData data = new net.minecraft.world.inventory.ContainerData() {
         @Override
         public int get(int index) {
+            // 客户端 BE 缺失（空菜单）时全部读 0：屏幕侧会读这些槽，
+            // 不兜底就是「构造器不崩了、第一帧渲染崩」。
+            if (machine == null) {
+                return 0;
+            }
             return switch (index) {
                 case 0 -> machine.installedFamilyMask();
                 case 1 -> machine.orderCount();
@@ -154,7 +159,8 @@ public class CentralKitchenMenu extends AbstractContainerMenu
                 }
                 return mirror[displayIndex];
             }
-            return machineIndex < 0 ? ItemStack.EMPTY : machine.items.getStackInSlot(machineIndex);
+            return machineIndex < 0 || machine == null ? ItemStack.EMPTY
+                    : machine.items.getStackInSlot(machineIndex);
         }
 
         @Override
@@ -162,7 +168,7 @@ public class CentralKitchenMenu extends AbstractContainerMenu
             // 客户端不写：真实变更由服务端执行，快照会覆盖这里的任何本地预测。
             // 旧写法在客户端写的是空桩 BE 的 items，写了也没人看，却会让
             // 「客户端算出的 machine.items 与服务端不一致」这类问题更难查。
-            if (isClientSide()) {
+            if (isClientSide() || machine == null) {
                 return;
             }
             if (machineIndex >= 0) machine.items.setStackInSlot(machineIndex, stack);
@@ -170,7 +176,7 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
         @Override
         public void setChanged() {
-            if (isClientSide()) {
+            if (isClientSide() || machine == null) {
                 return;
             }
             machine.setChanged();
@@ -178,7 +184,7 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
         @Override
         public ItemStack remove(int amount) {
-            if (isClientSide()) {
+            if (isClientSide() || machine == null) {
                 return ItemStack.EMPTY;
             }
             return machineIndex < 0 ? ItemStack.EMPTY
@@ -187,12 +193,12 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
         @Override
         public boolean mayPlace(ItemStack stack) {
-            return !isClientSide() && machineIndex >= 0;
+            return !isClientSide() && machine != null && machineIndex >= 0;
         }
 
         @Override
         public boolean mayPickup(Player player) {
-            return !isClientSide() && machineIndex >= 0;
+            return !isClientSide() && machine != null && machineIndex >= 0;
         }
 
         @Override
@@ -249,9 +255,18 @@ public class CentralKitchenMenu extends AbstractContainerMenu
         refreshDisplay();
     }
 
+    /**
+     * 客户端构造器：方块在 OpenScreen 到达前被破坏/替换、或区块被卸载时，
+     * {@code getBlockEntity} 返回 null。旧写法直接强转后交给主构造器，
+     * {@code refreshDisplay()} 随即读 {@code machine.items} ⇒ NPE 崩客户端。
+     * 这里显式判空（{@code instanceof} 同时挡掉类型不符），null 时构造「空菜单」：
+     * 槽位数量与坐标照旧（客户端/服务端的槽位契约不能变），所有读取走
+     * {@code machine == null} 的兜底分支。
+     */
     public CentralKitchenMenu(int containerId, Inventory playerInventory, FriendlyByteBuf buf) {
         this(containerId, playerInventory,
-                (CentralKitchenBlockEntity) playerInventory.player.level().getBlockEntity(buf.readBlockPos()));
+                playerInventory.player.level().getBlockEntity(buf.readBlockPos())
+                        instanceof CentralKitchenBlockEntity machine ? machine : null);
     }
 
     // ================== 显示序列（搜索 / 排序 / 滚动） ==================
@@ -271,7 +286,11 @@ public class CentralKitchenMenu extends AbstractContainerMenu
         // 算出来的必然是空列表；页面数据一律由 KitchenStorageSyncPacket 下行。
         // 保留这个提前返回而不是删掉调用点，是为了让 quickMoveStack 等
         // 服务端路径仍然只调一个入口。
-        if (isClientSide()) {
+        //
+        // machine == null 是客户端构造器解析不到 BE 的「空菜单」（方块在 OpenScreen
+        // 到达前被破坏/替换、或区块卸载）：此时 isClientSide() 为假，不提前返回就会
+        // 在下面的 machine.items 上 NPE —— 这正是本菜单客户端构造器崩溃的现场。
+        if (machine == null || isClientSide()) {
             return;
         }
         filtered.clear();
@@ -480,6 +499,10 @@ public class CentralKitchenMenu extends AbstractContainerMenu
     }
 
     // ================== 库存包装 ==================
+    //
+    // 三个容器视图都会被渲染/点击路径读到。machine == null 的「空菜单」下：
+    // 读取返回 EMPTY、写入与 setChanged 直接忽略 —— 否则构造器不崩了，
+    // 第一帧渲染槽位时照样 NPE。
 
     /** 模块槽容器视图。 */
     private static final class ModuleContainer extends SimpleContainer {
@@ -494,27 +517,31 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
         @Override
         public ItemStack getItem(int index) {
-            return machine.items.getStackInSlot(CentralKitchenBlockEntity.MODULE_START + offset);
+            return machine == null ? ItemStack.EMPTY
+                    : machine.items.getStackInSlot(CentralKitchenBlockEntity.MODULE_START + offset);
         }
 
         @Override
         public void setItem(int index, ItemStack stack) {
+            if (machine == null) return;
             machine.items.setStackInSlot(CentralKitchenBlockEntity.MODULE_START + offset, stack);
         }
 
         @Override
         public ItemStack removeItem(int index, int amount) {
-            return machine.items.extractItem(CentralKitchenBlockEntity.MODULE_START + offset, amount, false);
+            return machine == null ? ItemStack.EMPTY
+                    : machine.items.extractItem(CentralKitchenBlockEntity.MODULE_START + offset, amount, false);
         }
 
         @Override
         public void setChanged() {
+            if (machine == null) return;
             machine.setChanged();
         }
 
         @Override
         public boolean canPlaceItem(int index, ItemStack stack) {
-            return machine.canInstallModule(CentralKitchenBlockEntity.MODULE_START + offset, stack);
+            return machine != null && machine.canInstallModule(CentralKitchenBlockEntity.MODULE_START + offset, stack);
         }
     }
 
@@ -535,16 +562,19 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
         @Override
         public ItemStack getItem(int index) {
-            return machine.items.getStackInSlot(CentralKitchenBlockEntity.SANDWICH_SAMPLE_SLOT);
+            return machine == null ? ItemStack.EMPTY
+                    : machine.items.getStackInSlot(CentralKitchenBlockEntity.SANDWICH_SAMPLE_SLOT);
         }
 
         @Override
         public void setItem(int index, ItemStack stack) {
+            if (machine == null) return;
             machine.items.setStackInSlot(CentralKitchenBlockEntity.SANDWICH_SAMPLE_SLOT, stack);
         }
 
         @Override
         public void setChanged() {
+            if (machine == null) return;
             machine.setChanged();
         }
     }
@@ -561,21 +591,25 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
         @Override
         public ItemStack getItem(int index) {
-            return machine.items.getStackInSlot(CentralKitchenBlockEntity.OUTPUT_START + offset);
+            return machine == null ? ItemStack.EMPTY
+                    : machine.items.getStackInSlot(CentralKitchenBlockEntity.OUTPUT_START + offset);
         }
 
         @Override
         public void setItem(int index, ItemStack stack) {
+            if (machine == null) return;
             machine.items.setStackInSlot(CentralKitchenBlockEntity.OUTPUT_START + offset, stack);
         }
 
         @Override
         public ItemStack removeItem(int index, int amount) {
-            return machine.items.extractItem(CentralKitchenBlockEntity.OUTPUT_START + offset, amount, false);
+            return machine == null ? ItemStack.EMPTY
+                    : machine.items.extractItem(CentralKitchenBlockEntity.OUTPUT_START + offset, amount, false);
         }
 
         @Override
         public void setChanged() {
+            if (machine == null) return;
             machine.setChanged();
         }
     }
@@ -616,7 +650,8 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
     @Override
     public net.minecraft.core.BlockPos getBlockPos() {
-        return machine.getBlockPos();
+        // 空菜单没有真实坐标，返回 ZERO 而不是 NPE（同 GrillMenu 的 tile == null 写法）。
+        return machine == null ? net.minecraft.core.BlockPos.ZERO : machine.getBlockPos();
     }
 
     @Override
@@ -672,6 +707,8 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
     @Override
     public ItemStack quickMoveStack(Player player, int index) {
+        // 空菜单：槽位读的是空容器，但 canInstallModule 等仍会解引用 machine。
+        if (machine == null) return ItemStack.EMPTY;
         Slot slot = slots.get(index);
         if (slot == null || !slot.hasItem()) return ItemStack.EMPTY;
         ItemStack stack = slot.getItem();
@@ -703,7 +740,8 @@ public class CentralKitchenMenu extends AbstractContainerMenu
 
     @Override
     public boolean stillValid(Player player) {
-        return machine.getLevel() != null
+        // 空菜单一律视为失效：服务端据此关闭窗口，客户端也不再接受交互。
+        return machine != null && machine.getLevel() != null
                 && player.distanceToSqr(machine.getBlockPos().getCenter()) <= 64.0;
     }
 

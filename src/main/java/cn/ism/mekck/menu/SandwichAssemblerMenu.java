@@ -9,6 +9,7 @@ import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.items.IItemHandler;
+import net.minecraftforge.items.ItemStackHandler;
 import net.minecraftforge.items.SlotItemHandler;
 import cn.ism.mekck.registry.MekCkStandaloneMachines;
 import mekanism.common.inventory.container.IGUIWindow;
@@ -34,6 +35,11 @@ public class SandwichAssemblerMenu extends AbstractContainerMenu
     private final ContainerData data = new ContainerData() {
         @Override
         public int get(int index) {
+            // 客户端 BE 缺失（空菜单）时全部读 0：屏幕侧会读这些槽，
+            // 不兜底就是「构造器不崩了、第一帧渲染崩」。
+            if (machine == null) {
+                return 0;
+            }
             return switch (index) {
                 case 0 -> machine.getMode();
                 case 1 -> machine.getTargetCount() & 0xFFFF;
@@ -58,7 +64,11 @@ public class SandwichAssemblerMenu extends AbstractContainerMenu
     public SandwichAssemblerMenu(int containerId, Inventory playerInventory, SandwichAssemblerBlockEntity machine) {
         super(cn.ism.mekck.registry.MekCkStandaloneMachines.SANDWICH_ASSEMBLER_MENU.get(), containerId);
         this.machine = machine;
-        IItemHandler items = machine.items;
+        // 空菜单（客户端 BE 缺失）用等长的空 handler 兜底：槽位数量与坐标必须照旧，
+        // 否则客户端与服务端的槽位契约不一致；读取路径全部走 machine == null 分支。
+        IItemHandler items = machine == null
+                ? new ItemStackHandler(SandwichAssemblerBlockEntity.TOTAL_SLOTS)
+                : machine.items;
 
         // 有序输入格 8×4
         for (int i = 0; i < SandwichAssemblerBlockEntity.ORDERED_SLOTS; i++) {
@@ -97,9 +107,17 @@ public class SandwichAssemblerMenu extends AbstractContainerMenu
         addDataSlots(data);
     }
 
+    /**
+     * 客户端构造器：方块在 OpenScreen 到达前被破坏/替换、或区块被卸载时，
+     * {@code getBlockEntity} 返回 null。旧写法直接强转后交给主构造器，
+     * 主构造器第一行 {@code machine.items} 就 NPE 崩客户端。这里显式判空
+     * （{@code instanceof} 同时挡掉类型不符），null 时构造「空菜单」：
+     * 槽位数量与坐标照旧，所有读取走 {@code machine == null} 的兜底分支。
+     */
     public SandwichAssemblerMenu(int containerId, Inventory playerInventory, FriendlyByteBuf buf) {
         this(containerId, playerInventory,
-                (SandwichAssemblerBlockEntity) playerInventory.player.level().getBlockEntity(buf.readBlockPos()));
+                playerInventory.player.level().getBlockEntity(buf.readBlockPos())
+                        instanceof SandwichAssemblerBlockEntity machine ? machine : null);
     }
 
     private static cn.ism.mekck.SideMode decodeSide(int encoded, net.minecraft.core.Direction dir) {
@@ -125,7 +143,8 @@ public class SandwichAssemblerMenu extends AbstractContainerMenu
 
     @Override
     public net.minecraft.core.BlockPos getBlockPos() {
-        return machine.getBlockPos();
+        // 空菜单没有真实坐标，返回 ZERO 而不是 NPE（同 GrillMenu 的 tile == null 写法）。
+        return machine == null ? net.minecraft.core.BlockPos.ZERO : machine.getBlockPos();
     }
 
     @Override
@@ -192,7 +211,8 @@ public class SandwichAssemblerMenu extends AbstractContainerMenu
 
     @Override
     public boolean stillValid(Player player) {
-        return machine.getLevel() != null
+        // 空菜单一律视为失效：服务端据此关闭窗口，客户端也不再接受交互。
+        return machine != null && machine.getLevel() != null
                 && player.distanceToSqr(machine.getBlockPos().getCenter()) <= 64.0;
     }
 

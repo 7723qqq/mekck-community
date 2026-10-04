@@ -1,5 +1,6 @@
 package cn.ism.mekck.network;
 
+import cn.ism.mekck.blockentity.CentralKitchenBlockEntity;
 import cn.ism.mekck.menu.CentralKitchenMenu;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -35,6 +36,14 @@ import java.util.function.Supplier;
  * {@code getSortMode()}——这三样在客户端都算不出来（{@code filtered} 是空的），
  * 所以必须随快照一起下行，否则页面会显示「1/0 页」「共 0 条」。
  *
+ * <h3>计数为什么单独走 VarInt</h3>
+ * 原版 {@code FriendlyByteBuf.writeItem} 内部是 {@code writeByte(getCount())}，
+ * 而存储槽上限是 {@code BIG_STACK = Integer.MAX_VALUE - 1}：300 会被截成 44、
+ * 200 会被截成 -56（{@code isEmpty()} 为真 ⇒ 整格画成空）。
+ * 所以每个 stack 先写 {@code writeVarInt(count)}，再写一个计数为 1 的 stack
+ * （物品与 NBT 照旧），解码时用读到的计数 {@code setCount} —— 与
+ * {@code BigStackItemHandler} 的 {@code McCount} 同思路。
+ *
  * <h3>安全</h3>
  * 走 {@link PacketGuard#fromServer}（拒绝非服务端来源）。
  * 解码侧用 {@link PacketGuard#clampCount} 限制数量，
@@ -67,7 +76,14 @@ public final class KitchenStorageSyncPacket {
         int n = buffer.readVarInt();
         List<ItemStack> list = new ArrayList<>(PacketGuard.clampCount(n));
         for (int i = 0; i < n; i++) {
-            list.add(buffer.readItem());
+            int count = buffer.readVarInt();
+            ItemStack stack = buffer.readItem();
+            if (stack.isEmpty() || count <= 0) {
+                list.add(ItemStack.EMPTY);
+            } else {
+                stack.setCount(Math.min(count, CentralKitchenBlockEntity.BIG_STACK));
+                list.add(stack);
+            }
         }
         this.visible = list;
     }
@@ -83,8 +99,14 @@ public final class KitchenStorageSyncPacket {
         buffer.writeVarInt(filteredCount);
         buffer.writeVarInt(visible.size());
         for (ItemStack stack : visible) {
-            buffer.writeItem(stack);
+            buffer.writeVarInt(stack.getCount());
+            buffer.writeItem(stack.copyWithCount(1));
         }
+    }
+
+    /** 解码后的可见页（往返护栏断言用；落地路径经 {@link #handle} 直接消费）。 */
+    List<ItemStack> visible() {
+        return visible;
     }
 
     public void handle(Supplier<NetworkEvent.Context> contextSupplier) {
