@@ -279,7 +279,7 @@ public final class NutRoasterBlockEntity extends BlockEntity implements MenuProv
 
     /** 温度系统：Mekanism 热容量（运行时按电阻型加热器比例产热，并与相邻热力设备传导）。 */
     private cn.ism.mekck.util.MekCkHeatComponent heatComponent;
-    private final net.minecraftforge.common.util.LazyOptional<mekanism.api.heat.IHeatHandler> heatCapability =
+    private net.minecraftforge.common.util.LazyOptional<mekanism.api.heat.IHeatHandler> heatCapability =
             net.minecraftforge.common.util.LazyOptional.of(() -> heatComponent.getHandler());
 
         /** 当前机身温度（开尔文）。 */
@@ -680,10 +680,6 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
 
         BlockState newState = state.setValue(NutRoasterBlock.ACTIVE, machine.progress > 0);
         if (newState != state) level.setBlock(pos, newState, 3);
-
-        if (!level.isClientSide) {
-            machine.data.get(DATA_ENERGY);
-        }
     }
 
     /** 复用的配方包装器（原先每次配方查找都 new 一个）。 */
@@ -968,6 +964,8 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
         inputItemCapability.invalidate();
         outputItemCapability.invalidate();
         energyCapability.invalidate();
+        // 热能力同样要随方块实体失效/复活收口（对齐 CentralKitchenBlockEntity）。
+        heatCapability.invalidate();
     }
 
     @Override
@@ -977,6 +975,7 @@ public NutRoasterBlockEntity(BlockPos pos, BlockState state) {
         inputItemCapability = LazyOptional.of(() -> new InputItemHandler());
         outputItemCapability = LazyOptional.of(() -> new OutputItemHandler());
         energyCapability = LazyOptional.of(() -> energy);
+        heatCapability = LazyOptional.of(() -> heatComponent.getHandler());
     }
 
     private final class InputItemHandler implements IItemHandler {

@@ -101,7 +101,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     /** 自身制冷最大功率（FE/t）：按需调节，不超过该值。 */
     public static final int COOLING_MAX_ENERGY_PER_TICK = 4000;
     private cn.ism.mekck.util.MekCkHeatComponent heatComponent;
-    private final net.minecraftforge.common.util.LazyOptional<mekanism.api.heat.IHeatHandler> heatCapability =
+    private net.minecraftforge.common.util.LazyOptional<mekanism.api.heat.IHeatHandler> heatCapability =
             net.minecraftforge.common.util.LazyOptional.of(() -> heatComponent.getHandler());
     public static final int MAX_RECEIVE = 5_000;
     public static final int WATER_CAPACITY = 256_000;
@@ -385,8 +385,16 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
 
     /** 设定温度（单位 0.01 ℃）：本机只降温，钳制在 -27315 至 0 之间（服务端兜底，防越界包）。 */
     public void setTargetTemperature(int milliCelsius) {
-        this.targetTemperature = Math.max(-27315, Math.min(0, milliCelsius));
+        this.targetTemperature = clampTargetTemperature(milliCelsius);
         setChanged();
+    }
+
+    /**
+     * 设定温度的唯一钳制闸门：setter 与读档共用 —— 存档里的旧值/被改过的值同样不能绕过
+     * （与 radius/targetType 的读档夹紧同型，见 {@code TestIceCombatGuards}）。
+     */
+    private static int clampTargetTemperature(int milliCelsius) {
+        return Math.max(-27315, Math.min(0, milliCelsius));
     }
 
     /** 调整设定温度（增量，单位 0.01 ℃）。 */
@@ -1208,7 +1216,8 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
             orderCompleted = tag.getInt("OrderCompleted");
         }
         meOrderEnabled = !tag.contains("MeOrderEnabled") || tag.getBoolean("MeOrderEnabled");
-        targetTemperature = tag.contains("TargetTemperature") ? tag.getInt("TargetTemperature") : -27315;
+        targetTemperature = tag.contains("TargetTemperature")
+                ? clampTargetTemperature(tag.getInt("TargetTemperature")) : -27315;
         if (tag.contains("EnergyUpgradeTracker", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
             energyTracker.load(tag.getCompound("EnergyUpgradeTracker"));
         }
@@ -1342,6 +1351,8 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
         outputItemCapability.invalidate();
         energyCapability.invalidate();
         fluidCapability.invalidate();
+        // 热能力同样要随方块实体失效/复活收口（对齐 CentralKitchenBlockEntity）。
+        heatCapability.invalidate();
     }
 
     @Override
@@ -1352,6 +1363,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
         outputItemCapability = LazyOptional.of(() -> new OutputItemHandler());
         energyCapability = LazyOptional.of(() -> energy);
         fluidCapability = LazyOptional.of(() -> waterTank);
+        heatCapability = LazyOptional.of(() -> heatComponent.getHandler());
     }
 
     private final class InputItemHandler implements IItemHandler {

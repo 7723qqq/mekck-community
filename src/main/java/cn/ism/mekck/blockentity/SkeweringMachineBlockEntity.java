@@ -558,7 +558,9 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
             }
 
             // Return the tool item (slot 0) goes to return slot
-            if (tool != null && !tool.isEmpty()) {
+            // 只有真被消耗过才返还：自有配方序列化器写死 toolCount = 0（签子不消耗），
+            // 无条件返还等于每批复制 1 个签子（工厂执行器 SkeweringFactoryExecutor 同样没有返还逻辑）。
+            if (tool != null && !tool.isEmpty() && toolCount > 0) {
                 ItemStack toolStack = items.getStackInSlot(INPUT_SLOT_START); // slot 0
                 if (!toolStack.isEmpty()) {
                     // The tool is consumed/returned - put one back in return slot
@@ -885,7 +887,9 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
             // Find matching items for each ingredient
             int minCount = Integer.MAX_VALUE;
 
-            if (tool != null && !tool.isEmpty()) {
+            // toolCount <= 0（自有配方：签子不消耗）时该项不参与限制：
+            // 原实现 toolAvailable / 0 抛 ArithmeticException，被外层 catch 吞成「Max 恒 0」。
+            if (tool != null && !tool.isEmpty() && toolCount > 0) {
                 int toolAvailable = 0;
                 for (ItemStack stack : availableItems) {
                     if (tool.test(stack)) {
@@ -1002,6 +1006,9 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
         }
         meOrderEnabled = !tag.contains("MeOrderEnabled") || tag.getBoolean("MeOrderEnabled");
         orderQuantity = tag.getInt("OrderQuantity");
+        // 读档同样过 setOrder 的契约闸门：orderRecipeId != null 时数量必须 ≥ 1，
+        // 否则订单门禁与完成推进同时失效（机器无限加工、订单永不完成）。
+        if (orderRecipeId != null) orderQuantity = Math.max(1, orderQuantity);
         orderCompleted = tag.getInt("OrderCompleted");
     }
 
