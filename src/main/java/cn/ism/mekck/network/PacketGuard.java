@@ -165,10 +165,28 @@ public final class PacketGuard {
     }
 
     /**
+     * 纯函数：由槽位快照与本次请求推出三态结论（只读槽位，不落账）。
+     *
+     * <p>{@code slot == null} 表示该玩家还没有节流记录（首次请求）。落账（刷新槽位）
+     * 由 {@link #expensiveRequest} 负责，本方法只回答「该怎么处理」。</p>
+     *
+     * <p>抽成纯函数是为了可测：{@link #expensiveRequestState} 需要 {@code ServerPlayer}
+     * 才能跑，裸 JVM 造不出来；而「冷却期内的同指纹重复必须回 ALLOW_CACHED」这条
+     * 正是 M7-M2 的核心，必须能被单测直接钉住。</p>
+     */
+    public static ExpensiveRequest decideExpensiveRequest(long[] slot, long nowTick, long fingerprint) {
+        if (slot == null) {
+            return ExpensiveRequest.ALLOW_COMPUTE;
+        }
+        return classifyExpensiveRequest(slot[1] == fingerprint,
+                nowTick - slot[0] < EXPENSIVE_COOLDOWN_TICKS);
+    }
+
+    /**
      * 三态版节流闸：调用方据此决定「重算 / 回缓存 / 忽略」。
      *
-     * <p>与 {@link #expensiveRequest} 共用同一张判定表与同一份槽位。本方法先按当前槽位
-     * 判一次「这是不是冷却期内的同指纹重复」，再让布尔闸门落账，最后把结果映射成三态 ——
+     * <p>判定由纯函数 {@link #decideExpensiveRequest} 给出；本方法只负责读槽位、
+     * 让布尔闸门 {@link #expensiveRequest} 落账、并把判定原样返回 ——
      * 布尔闸门只回 true/false，分不出 ALLOW_COMPUTE 与 ALLOW_CACHED。</p>
      */
     public static ExpensiveRequest expensiveRequestState(ServerPlayer player, long fingerprint) {
@@ -177,12 +195,11 @@ public final class PacketGuard {
         }
         long now = player.level() == null ? 0 : player.level().getGameTime();
         long[] slot = EXPENSIVE_COOLDOWN.get(player.getUUID());
-        boolean cached = slot != null && classifyExpensiveRequest(slot[1] == fingerprint,
-                now - slot[0] < EXPENSIVE_COOLDOWN_TICKS) == ExpensiveRequest.ALLOW_CACHED;
+        ExpensiveRequest decision = decideExpensiveRequest(slot, now, fingerprint);
         if (!expensiveRequest(player, fingerprint)) {
             return ExpensiveRequest.DENY;
         }
-        return cached ? ExpensiveRequest.ALLOW_CACHED : ExpensiveRequest.ALLOW_COMPUTE;
+        return decision;
     }
 
     /** 记录一次真实计算的结果，供同指纹的 {@link ExpensiveRequest#ALLOW_CACHED} 复用。 */

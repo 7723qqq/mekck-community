@@ -109,6 +109,31 @@ public class TestPacketHardening {
     }
 
     @Test
+    public void decideExpensiveRequestCoversEverySlotState() {
+        // 这是 expensiveRequestState 的判定核心（纯函数，槽位快照 → 三态）。
+        // 直接测它才能钉住「冷却期内的同指纹重复必须回 ALLOW_CACHED」——
+        // 只测 classifyExpensiveRequest 挡不住「把 cached 算成 false」这类胶水回归。
+        assertEquals("无槽位（首次请求）必须重算",
+                PacketGuard.ExpensiveRequest.ALLOW_COMPUTE,
+                PacketGuard.decideExpensiveRequest(null, 100L, 7L));
+        assertEquals("同指纹 + 冷却期内必须回缓存",
+                PacketGuard.ExpensiveRequest.ALLOW_CACHED,
+                PacketGuard.decideExpensiveRequest(new long[]{100L, 7L}, 100L, 7L));
+        assertEquals("同指纹 + 冷却期内（边界内 4 tick）必须回缓存",
+                PacketGuard.ExpensiveRequest.ALLOW_CACHED,
+                PacketGuard.decideExpensiveRequest(new long[]{100L, 7L}, 104L, 7L));
+        assertEquals("同指纹 + 冷却期外（边界 5 tick）必须重算",
+                PacketGuard.ExpensiveRequest.ALLOW_COMPUTE,
+                PacketGuard.decideExpensiveRequest(new long[]{100L, 7L}, 105L, 7L));
+        assertEquals("不同指纹 + 冷却期内必须拒绝",
+                PacketGuard.ExpensiveRequest.DENY,
+                PacketGuard.decideExpensiveRequest(new long[]{100L, 7L}, 100L, 8L));
+        assertEquals("不同指纹 + 冷却期外必须重算",
+                PacketGuard.ExpensiveRequest.ALLOW_COMPUTE,
+                PacketGuard.decideExpensiveRequest(new long[]{100L, 7L}, 105L, 8L));
+    }
+
+    @Test
     public void fingerprintIsOrderSensitiveAndStable() {
         assertEquals("同一组分量必须稳定", PacketGuard.fingerprint(7L, 8L, 9L),
                 PacketGuard.fingerprint(7L, 8L, 9L));
@@ -128,6 +153,28 @@ public class TestPacketHardening {
 
     // ================== 二、源码形态：闸门被用上 ==================
 
+    /**
+     * 三态入口本身必须被钉住：四个调用方都走 {@code expensiveRequestState}，
+     * 但它的方法体此前没有任何断言 —— 把判定胶水改成 {@code cached = false}
+     * 会让每个放行都变成 ALLOW_COMPUTE（重复请求照常重算，M7-M2 静默回归），
+     * 而纯函数测试与调用方源码形态测试都不会变红。
+     */
+    @Test
+    public void threeStateEntryPointMapsDecisionFaithfully() throws IOException {
+        String guard = TestSourceText.read(NETWORK + "PacketGuard.java");
+        String state = TestSourceText.methodBody(guard,
+                "public static ExpensiveRequest expensiveRequestState(");
+        assertFalse("找不到 expensiveRequestState，判据失效", state.isEmpty());
+        assertTrue("三态入口必须用纯函数 decideExpensiveRequest 判定（判定逻辑必须可单测）",
+                state.contains("decideExpensiveRequest("));
+        assertTrue("三态入口必须原样返回判定结果（不得再映射成别的状态）",
+                state.contains("return decision;"));
+        assertTrue("三态入口必须真的调用布尔闸门落账（否则槽位永不更新，节流失效）",
+                state.contains("if (!expensiveRequest(player, fingerprint))"));
+        assertTrue("三态入口必须挡住 null 玩家（客户端侧 getSender() 恒为 null）",
+                state.contains("player == null"));
+    }
+
     @Test
     public void kitchenOrderPacketHandlesCachedBranch() throws IOException {
         String src = TestSourceText.read(NETWORK + "KitchenOrderPacket.java");
@@ -141,6 +188,8 @@ public class TestPacketHardening {
                 src.contains("PacketGuard.rememberResult"));
         assertTrue("KitchenOrderPacket 的指纹必须含机器坐标（否则两台机器的同参数请求会被误判为重复）",
                 src.contains("pos.asLong()"));
+        assertGatePrecedes(src, "kitchen.previewOrder", "KitchenOrderPacket");
+        assertGatePrecedes(src, "kitchen.placeOrder", "KitchenOrderPacket");
     }
 
     @Test
@@ -152,6 +201,7 @@ public class TestPacketHardening {
                 src.contains("!= PacketGuard.ExpensiveRequest.ALLOW_COMPUTE"));
         assertTrue("OrderRecipePacket 的指纹必须含机器坐标",
                 src.contains("packet.pos.asLong()"));
+        assertGatePrecedes(src, "kitchen.placeOrder", "OrderRecipePacket");
     }
 
     @Test
@@ -163,6 +213,7 @@ public class TestPacketHardening {
                 src.contains("!= PacketGuard.ExpensiveRequest.ALLOW_COMPUTE"));
         assertTrue("NetworkOrderPacket 的指纹必须含机器坐标",
                 src.contains("packet.pos.asLong()"));
+        assertGatePrecedes(src, "AE2Compat.pullNetworkIngredients", "NetworkOrderPacket");
     }
 
     @Test
@@ -177,6 +228,7 @@ public class TestPacketHardening {
                         && src.contains("ForgeRegistries.ITEMS.containsKey"));
         assertTrue("校验必须真的用在 toggle 分支上",
                 src.contains("isRegisteredItem(packet.itemId)"));
+        assertGatePrecedes(src, "AE2Compat.pullNetworkInputs", "NetworkPullPacket");
     }
 
     @Test
@@ -199,6 +251,19 @@ public class TestPacketHardening {
         assertFalse("找不到 KitchenFilter.add，判据失效", add.isEmpty());
         assertTrue("add 必须剥掉 NBT（readItem 允许 2MB NBT，原样落盘会把单厨房存档放大到 ~18MB）",
                 add.contains("setTag(null)"));
+    }
+
+    /**
+     * 闸门必须排在昂贵调用<b>之前</b>：只断言「闸门存在」挡不住「把闸门挪到昂贵调用之后」——
+     * 那样昂贵扫描先执行，节流形同虚设，而所有 presence 断言照样全绿。
+     */
+    private static void assertGatePrecedes(String src, String expensiveCall, String where) {
+        int gate = src.indexOf("PacketGuard.expensiveRequestState");
+        int call = src.indexOf(expensiveCall);
+        assertTrue(where + "：找不到闸门调用", gate >= 0);
+        assertTrue(where + "：找不到昂贵调用 " + expensiveCall, call >= 0);
+        assertTrue(where + "：闸门必须排在 " + expensiveCall + " 之前"
+                + "（否则昂贵扫描先执行，节流形同虚设）", gate < call);
     }
 
     // ================== 三、KitchenFilter：NBT 剥离（行为） ==================
