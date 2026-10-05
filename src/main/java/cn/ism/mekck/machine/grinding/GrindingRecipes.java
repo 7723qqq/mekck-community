@@ -12,6 +12,7 @@ import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -180,14 +181,75 @@ public final class GrindingRecipes {
     // ── 产出 ────────────────────────────────────────────────────────────
 
     /**
-     * 最坏情况容量判定：石磨产出带概率，所以按「<b>每一项都命中</b>」算。
+     * 研磨类机器取产出的<b>唯一入口</b>：石磨 = 随机产出（每项各带 chance）；
+     * 筛粉 / 绞碎 / mekck 磨粉 = <b>固定单产出</b>（chance 1.0，必出）。
+     *
+     * <p><b>为什么必须分这两支</b>：石磨配方的产出是 {@code List<MillstoneOutput>}、
+     * 不是单一产物，{@code getResultItem()} 对它返回<b>空栈</b>；反过来，后三类配方
+     * 只走 {@link KaleidoscopeCompat#getMillstoneOutputs} 会得到空表。任一支取错，
+     * 症状都是「机器照常扣电扣料、什么都不出」，而编译与其余测试全绿。</p>
+     *
+     * <p>容量判定（{@link #canFitWorstCase}）、真掷骰（{@link #rollOutputs}）、
+     * 「本批次产不产得出东西」的判断都从本方法取表，三处口径因此不可能各自漂移。</p>
+     *
+     * @param level 仅用于取 {@code RegistryAccess}；为 {@code null} 时按无注册表上下文取值
+     */
+    public static List<KaleidoscopeCompat.MillstoneOutput> outputsOf(Recipe<?> recipe, Level level) {
+        if (recipe == null) {
+            return List.of();
+        }
+        if (!isFixedOutputRecipe(recipe)) {
+            return KaleidoscopeCompat.getMillstoneOutputs(recipe);
+        }
+        ItemStack out = fixedResultOf(recipe, level);
+        return out.isEmpty() ? List.of() : List.of(new KaleidoscopeCompat.MillstoneOutput(out.copy(), 1.0F));
+    }
+
+    /**
+     * 三类「固定单产出」配方的判定 —— 按<b>配方类型 id</b>，既不按类名也不 {@code instanceof}。
+     *
+     * <p>这三类分属烘焙坊 / 沉浸农艺 / 本模组。直接引用它们的类会在对应模组未安装时炸
+     * {@code NoClassDefFoundError}，与 {@link KaleidoscopeCompat} 全程走反射是同一个理由。</p>
+     */
+    public static boolean isFixedOutputRecipe(Recipe<?> recipe) {
+        if (recipe == null) {
+            return false;
+        }
+        try {
+            ResourceLocation id = ForgeRegistries.RECIPE_TYPES.getKey(recipe.getType());
+            if (id == null) {
+                return false;
+            }
+            String namespace = id.getNamespace();
+            String path = id.getPath();
+            return ("bakeries".equals(namespace) && "flour_sieve".equals(path))
+                    || ("farm_and_charm".equals(namespace) && "mincer".equals(path))
+                    || ("mekck".equals(namespace) && "grinding".equals(path));
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /** 固定产出配方的产物；取不到时返回空栈（调用方按「无产出」处理）。 */
+    private static ItemStack fixedResultOf(Recipe<?> recipe, Level level) {
+        try {
+            ItemStack out = recipe.getResultItem(level == null ? null : level.registryAccess());
+            return out == null ? ItemStack.EMPTY : out;
+        } catch (Throwable ignored) {
+            return ItemStack.EMPTY;
+        }
+    }
+
+    /**
+     * 最坏情况容量判定：产出带概率时按「<b>每一项都命中</b>」算。
      *
      * <p>它之所以正确：判定只是用来决定「这一槽本批次动不动手」，真掷骰之后落不下的
      * 部分在 {@link #rollOutputs} 里自然少掉 —— 少掉的是<b>掷骰没命中的份额</b>，
      * 而不是凭空消失的物品。</p>
      */
-    public static boolean canFitWorstCase(List<IInventorySlot> outputs, Recipe<?> recipe, int multiplier) {
-        List<KaleidoscopeCompat.MillstoneOutput> rolls = KaleidoscopeCompat.getMillstoneOutputs(recipe);
+    public static boolean canFitWorstCase(List<IInventorySlot> outputs, Recipe<?> recipe,
+                                          int multiplier, Level level) {
+        List<KaleidoscopeCompat.MillstoneOutput> rolls = outputsOf(recipe, level);
         List<ItemStack> worst = new ArrayList<>(rolls.size());
         for (KaleidoscopeCompat.MillstoneOutput out : rolls) {
             worst.add(out.stack());
@@ -204,8 +266,8 @@ public final class GrindingRecipes {
      * 那一 tick 会把服务器线程卡住几分钟。</p>
      */
     public static void rollOutputs(List<IInventorySlot> outputs, Recipe<?> recipe,
-                                   int consumeCount, RandomSource random) {
-        List<KaleidoscopeCompat.MillstoneOutput> rolls = KaleidoscopeCompat.getMillstoneOutputs(recipe);
+                                   int consumeCount, RandomSource random, Level level) {
+        List<KaleidoscopeCompat.MillstoneOutput> rolls = outputsOf(recipe, level);
         if (rolls.isEmpty()) {
             return;
         }

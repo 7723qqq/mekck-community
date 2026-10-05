@@ -383,7 +383,7 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
      * 用 getResultItem 会把手里的石磨配方判成「无产物」。</p>
      */
     private boolean canFitWorstCase(Recipe<?> recipe) {
-        return GrindingRecipes.canFitWorstCase(List.of(outputSlot), recipe, 1);
+        return GrindingRecipes.canFitWorstCase(List.of(outputSlot), recipe, 1, getLevel());
     }
 
     /**
@@ -391,11 +391,12 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
      * {@code WarningType.INPUT_DOESNT_PRODUCE_OUTPUT} 供给器。
      *
      * <p>判据与 {@link #canFitWorstCase} / {@link GrindingRecipes#rollOutputs} 取的是
-     * <b>同一份产出表</b>：没有产出表 ⇒ 加工完只会白白吃掉输入。用同一个取值入口是必须的，
-     * 否则「告警说产得出、实际产不出」这种自相矛盾的状态就不会被发现。</p>
+     * <b>同一份产出表</b>（{@link GrindingRecipes#outputsOf}）：没有产出表 ⇒ 加工完只会
+     * 白白吃掉输入。用同一个取值入口是必须的，否则「告警说产得出、实际产不出」这种
+     * 自相矛盾的状态就不会被发现。</p>
      */
-    private static boolean producesNothing(Recipe<?> recipe) {
-        return KaleidoscopeCompat.getMillstoneOutputs(recipe).isEmpty();
+    private boolean producesNothing(Recipe<?> recipe) {
+        return GrindingRecipes.outputsOf(recipe, getLevel()).isEmpty();
     }
 
     /**
@@ -408,7 +409,7 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
         if (consumed <= 0) {
             return;
         }
-        GrindingRecipes.rollOutputs(List.of(outputSlot), recipe, consumed, level.random);
+        GrindingRecipes.rollOutputs(List.of(outputSlot), recipe, consumed, level.random, level);
         setChanged();
     }
 

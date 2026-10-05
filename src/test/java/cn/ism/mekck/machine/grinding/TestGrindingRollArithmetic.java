@@ -327,4 +327,42 @@ public class TestGrindingRollArithmetic {
         }
         assertTrue("一台研磨机器都没扫到，判据已失效", scanned >= 2);
     }
+
+    /**
+     * 「固定单产出」三类配方必须真的产得出东西。
+     *
+     * <h3>守的是哪一类缺陷</h3>
+     * 迁移第一版把产出表收成了一支：{@code GrindingRecipes.rollOutputs} 直接调
+     * {@code KaleidoscopeCompat.getMillstoneOutputs}，而它对 <b>筛粉 / 绞碎 / mekck 磨粉</b>
+     * 返回空表 ⇒ 这三类配方照常扣电、扣料、推进进度条，<b>一件都不出</b>。
+     * 迁移前的 {@code ElectricGrindingMachineBlockEntity.grindingOutputs} 有这条分支，
+     * 收拢进共享类时丢了 —— 编译通过、其余测试全绿，只有玩家发现材料没了。
+     *
+     * <p>判据钉两件事：① {@code GrindingRecipes} 按<b>配方类型 id</b> 认这三类
+     * （不能按类名 / {@code instanceof}：对应模组没装时会炸 {@code NoClassDefFoundError}）；
+     * ② 两个机器文件都从 {@code GrindingRecipes.outputsOf} 取表，而不是各自再调一次石磨表 ——
+     * 那样下一处改动又会只改一边。</p>
+     */
+    @Test
+    public void fixedOutputRecipesActuallyProduceSomething() throws java.io.IOException {
+        String recipes = cn.ism.mekck.TestSourceText.read(
+                "src/main/java/cn/ism/mekck/machine/grinding/GrindingRecipes.java");
+        assertTrue("GrindingRecipes 必须存在「固定单产出」判定入口 isFixedOutputRecipe",
+                recipes.contains("isFixedOutputRecipe"));
+        for (String type : new String[]{"flour_sieve", "mincer", "grinding"}) {
+            assertTrue("GrindingRecipes 少认了一类固定产出配方（" + type + "）："
+                    + "少了它，该类配方扣料后什么都不出", recipes.contains("\"" + type + "\""));
+        }
+        int scanned = 0;
+        for (String path : new String[]{
+                "src/main/java/cn/ism/mekck/machine/grinding/GrindingMachineTile.java",
+                "src/main/java/cn/ism/mekck/machine/grinding/GrindingFactoryExecutor.java"}) {
+            String src = cn.ism.mekck.TestSourceText.read(path);
+            scanned++;
+            assertTrue(path + "：取产出必须走 GrindingRecipes.outputsOf（单机与工厂同一份表）——"
+                            + "退回「各自只认石磨表」就是那三类配方扣料不出货的旧形态",
+                    src.contains("GrindingRecipes.outputsOf"));
+        }
+        assertTrue("一台研磨机器都没扫到，判据已失效", scanned >= 2);
+    }
 }

@@ -301,7 +301,8 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
      */
     private boolean canFitWorstCase(Recipe<?> recipe, int multiplier) {
         // 与单机研磨机共用同一份最坏情况判定（见 GrindingRecipes）。
-        return GrindingRecipes.canFitWorstCase(tile.getOutputSlots(), recipe, multiplier);
+        Level level = tile == null ? null : tile.getLevel();
+        return GrindingRecipes.canFitWorstCase(tile.getOutputSlots(), recipe, multiplier, level);
     }
 
     private void completeRecipe(List<IInventorySlot> inputs, List<IInventorySlot> outputs,
@@ -320,8 +321,10 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
             return;
         }
 
-        List<KaleidoscopeCompat.MillstoneOutput> rolls = KaleidoscopeCompat.getMillstoneOutputs(recipe);
-        if (rolls.isEmpty()) {
+        // 「有没有产出」由 GrindingRecipes 一处判定：石磨是概率表，筛粉 / 绞碎 / 磨粉是固定单产出。
+        // 原先这里只查石磨表 ⇒ 后三类配方在扣料之前就 return，机器表现为完全惰性。
+        Level level = tile == null ? null : tile.getLevel();
+        if (GrindingRecipes.outputsOf(recipe, level).isEmpty()) {
             return;
         }
         if (!canFitWorstCase(recipe, consumeCount)) {
@@ -336,8 +339,8 @@ public final class GrindingFactoryExecutor implements MekCkRecipeExecutor {
             inputSlotRef.setStack(remaining);
         }
         // 掷骰与订单推进都走共享实现（单机与工厂同一份）。
-        RandomSource random = tile == null || tile.getLevel() == null ? null : tile.getLevel().random;
-        GrindingRecipes.rollOutputs(outputs, recipe, consumeCount, random);
+        RandomSource random = level == null ? null : level.random;
+        GrindingRecipes.rollOutputs(outputs, recipe, consumeCount, random, level);
         if (order.isActive() && order.advance(1)) {
             // 推进与「是否已满」都由 MekCkOrderState 一处判定。
             // 修复前这里是 `orderCompleted++; if (advanceOrder(...))`：

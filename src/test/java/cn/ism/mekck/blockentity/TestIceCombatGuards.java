@@ -153,6 +153,27 @@ public class TestIceCombatGuards {
     }
 
     /**
+     * 配方声明了 side 时，槽 2 为空必须判<b>不匹配</b>。
+     *
+     * <p>原实现的 side 分支比 tool / ingredient 少一支：只在「槽 2 有东西」时才校验，
+     * 槽 2 为空则整段跳过 ⇒ {@code matchesSkewering} 返回 true，而
+     * {@code completeRecipe} 对空槽只能扣 0 个 side ⇒ <b>不放辅料也能出货</b>（物品复制）。
+     * 工厂侧 {@code SkeweringFactoryExecutor.batchForMaterial} 一向按「配方要就得有」算，
+     * 本机必须与它同口径。</p>
+     */
+    @Test
+    public void skeweringSideIsRequiredWhenTheRecipeDeclaresIt() throws IOException {
+        String src = be("SkeweringMachineBlockEntity");
+        String m = body(src, "private boolean matchesSkewering(Recipe<?> recipe, ItemStack[] inputStacks) {",
+                "SkeweringMachineBlockEntity");
+        int at = m.indexOf("else if (side != null && !side.isEmpty() && inputStacks[2].isEmpty()) {");
+        assertTrue("配方声明了 side 而槽 2 为空时必须判不匹配 —— 少了这一支就能不放辅料出货"
+                        + "（completeRecipe 对空槽扣 0 个 side，产出照给）", at >= 0);
+        assertTrue("那一支必须真的 return false，不能只是空语句",
+                m.substring(at, Math.min(m.length(), at + 120)).contains("return false;"));
+    }
+
+    /**
      * 行为：返还预览 = 本次实际会扣掉的签子，且预演零改动。
      *
      * <p>{@code returnPreview} 是包级可见的静态纯函数（只用到 {@link ItemStackHandler} 与

@@ -490,9 +490,15 @@ public final class SkeweringMachineBlockEntity extends MekCkLegacyMachine implem
                 return false;
             }
 
-            // Check side (optional, slot 2 may be empty)
+            // slot 2 must match side —— 与上面 tool / ingredient 同款三分支。
+            // 修复前这里少了「配方要求 side、槽 2 为空 ⇒ 不匹配」这一支：匹配照过，
+            // 而 completeRecipe 对空槽只能扣 0 个 side，于是照常产出 —— 不放辅料也能
+            // 出货，属物品复制。工厂侧（SkeweringFactoryExecutor.batchForMaterial）
+            // 一向按「配方要就得有」算，本机必须与它同口径。
             if (side != null && !side.isEmpty() && !inputStacks[2].isEmpty()) {
                 if (!side.test(inputStacks[2])) return false;
+            } else if (side != null && !side.isEmpty() && inputStacks[2].isEmpty()) {
+                return false;
             }
 
             return true;
