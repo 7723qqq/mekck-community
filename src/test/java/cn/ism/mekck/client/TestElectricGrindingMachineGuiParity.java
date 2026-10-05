@@ -149,7 +149,9 @@ public class TestElectricGrindingMachineGuiParity {
      */
     @Test
     public void theFourWarningFlagsRideTheContainerSyncChannel() throws IOException {
-        String tile = flat(TILE);
+        // flat() 只把换行压成单空格，而 create( 后面可能折行（本类 javadoc 举的正是这个例子），
+        // 于是再去掉全部空白：判据只认 token 序列，不认折行位置。
+        String tile = flat(TILE).replace(" ", "");
         List<String> missing = new ArrayList<>();
         for (String getter : List.of("isNoMatchingRecipe", "isNoSpaceInOutput",
                 "isNotEnoughEnergy", "isInputDoesntProduceOutput")) {
