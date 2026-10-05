@@ -60,10 +60,15 @@ public class TestScreenNullGuards {
 
     @Test
     public void centralKitchenScreenGuardsEveryGetMachine() throws IOException {
+        // 登记表 6 → 5（2026-10-06）：drawForegroundText 已不再访问 BE ——
+        // 温度与线程数改读菜单的**同步槽**（menu.getHeatTemperatureDeci / getRunningThreads /
+        // getTotalThreads），那几个读的是 data slot、空菜单时返回 0，本就不需要判空。
+        // 该方法的 menu.getMachine() 调用点归零后，assertGuarded 的「至少一处调用点」
+        // 判据会红；这里按「判据对象随改动消失」收缩登记表，**不是**放宽判据 ——
+        // 其余 5 个方法仍逐个断言提取形态 + 判空，文件级的「不得链式解引用」也照旧。
         assertGuarded(CENTRAL_SCREEN,
                 "private mekanism.client.gui.element.button.MekanismButton sortButton(String modeKey)",
                 "protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY)",
-                "protected void drawForegroundText(GuiGraphics guiGraphics, int mouseX, int mouseY)",
                 "public boolean mouseScrolled(double mouseX, double mouseY, double delta)",
                 "private void openSideConfigWindow()",
                 "private void pushSearch()");

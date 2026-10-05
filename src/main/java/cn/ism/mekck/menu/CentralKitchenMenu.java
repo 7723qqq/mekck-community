@@ -84,14 +84,33 @@ public class CentralKitchenMenu extends AbstractContainerMenu
     private long lastPushGameTime = Long.MIN_VALUE;
     private static final long PUSH_INTERVAL_TICKS = 4L;
 
-    /** 数据槽：0=系列掩码，1=订单数，2=运行线程数，3=总线程数，4/5/6=物品/流体/气体侧配编码。 */
+    /**
+     * 数据槽：0=系列掩码，1=订单数，2=运行线程数，3=总线程数，4/5/6=物品/流体/气体侧配编码，
+     * 7=首单进度，8=发热侧温度（单位 0.1 ℃，见 {@link #getHeatTemperatureDeci()}）。
+     */
     private final net.minecraft.world.inventory.ContainerData data = new net.minecraft.world.inventory.ContainerData() {
+        /**
+         * 客户端镜像：{@code set} 写、客户端 {@code get} 读。
+         *
+         * <p>本仓的既定形态见 {@code SmartCookingPotBlockEntity} 的 {@code ContainerData}。
+         * 这份镜像**不能省**：{@code ClientboundContainerSetDataPacket} 在客户端走的正是
+         * {@code set}，而 {@code CentralKitchenBlockEntity} 没有覆写 {@code getUpdateTag} /
+         * {@code getUpdatePacket}（自研 {@code BaseEntityBlock}，客户端 ticker 为空）
+         * ⇒ 直接读客户端 BE 的字段就是「整屏冻结在进区块那一刻」——
+         * 温度恒显示环境温度、线程恒 0/0。此前本机正是如此。</p>
+         */
+        private final int[] stored = new int[9];
+
         @Override
         public int get(int index) {
             // 客户端 BE 缺失（空菜单）时全部读 0：屏幕侧会读这些槽，
             // 不兜底就是「构造器不崩了、第一帧渲染崩」。
             if (machine == null) {
                 return 0;
+            }
+            net.minecraft.world.level.Level level = machine.getLevel();
+            if (level != null && level.isClientSide) {
+                return index >= 0 && index < stored.length ? stored[index] : 0;
             }
             return switch (index) {
                 case 0 -> machine.installedFamilyMask();
@@ -102,17 +121,25 @@ public class CentralKitchenMenu extends AbstractContainerMenu
                 case 5 -> encodeSide(machine::getFluidSideMode);
                 case 6 -> encodeSide(machine::getGasSideMode);
                 case 7 -> machine.firstOrderProgressMilli();
+                // 0.1 ℃ 一单位：16 位有符号的上限 32767 折合 3276.7 ℃，够用且不截断。
+                // （烹饪锅那边用的是 0.01 ℃ 一单位，量程只有 ±327 ℃ —— 那台是既有口径，
+                //  这里刻意不复刻它的量程。）
+                case 8 -> (int) Math.round((machine.getHeatTemperature() - 273.15) * 10.0);
                 default -> 0;
             };
         }
 
         @Override
         public void set(int index, int value) {
+            // 同步包在客户端走这里。服务端不调它，写进 stored 无副作用。
+            if (index >= 0 && index < stored.length) {
+                stored[index] = value;
+            }
         }
 
         @Override
         public int getCount() {
-            return 8;
+            return 9;
         }
     };
 
@@ -662,6 +689,17 @@ public class CentralKitchenMenu extends AbstractContainerMenu
     /** 首个订单的当前步骤进度（0~1000）。 */
     public int getOrderProgressMilli() {
         return data.get(7);
+    }
+
+    /**
+     * 发热侧温度，单位 <b>0.1 ℃</b>（客户端读镜像）。
+     *
+     * <p>屏幕必须读这里而不是 {@code machine.getHeatTemperature()}：本机的客户端 BE 没有
+     * {@code getUpdateTag} / {@code getUpdatePacket}，那个字段停在构造时的环境温度
+     * ⇒ 读数恒为室温。制冷侧温度未上屏（BE 侧有该读数，UI 未画）。</p>
+     */
+    public int getHeatTemperatureDeci() {
+        return data.get(8);
     }
 
     /** 已安装系列掩码（客户端可读）。 */

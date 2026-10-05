@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -200,13 +201,39 @@ public class TestClientValueSync {
      */
     @Test
     public void menuDataSlotsMustMirrorServerValuesOnTheClient() throws IOException {
+        String[] menus = {
+                "src/main/java/cn/ism/mekck/menu/SandwichAssemblerMenu.java",
+                "src/main/java/cn/ism/mekck/menu/CentralKitchenMenu.java",
+        };
+        for (String path : menus) {
+            String src = Files.readString(Path.of(path), StandardCharsets.UTF_8);
+            assertTrue(path + "：data.set 必须把值写进镜像 —— 空实现会让同步包下发的值被整个丢掉，"
+                            + "客户端读到的永远是区块加载快照（整屏冻结）",
+                    src.contains("stored[index] = value;"));
+            assertTrue(path + "：data.get 必须在客户端读镜像，而不是读客户端 BE",
+                    src.contains("level.isClientSide") && src.contains("stored[index]"));
+        }
+    }
+
+    /**
+     * 中央厨房屏幕的温度与线程数必须读<b>菜单同步槽</b>，不得读客户端 BE。
+     *
+     * <p>该 BE 没有 {@code getUpdateTag} / {@code getUpdatePacket}、客户端 ticker 也是空的
+     * ⇒ 读 machine 拿到的是「进区块那一刻的快照」：温度恒显示环境温度、线程恒 0/0。
+     * 菜单其实早就同步了线程数（data slot 2/3），温度则是本轮新加的 slot 8。</p>
+     */
+    @Test
+    public void centralKitchenScreenReadsSyncedSlotsNotTheClientBlockEntity() throws IOException {
         String src = Files.readString(
-                Path.of("src/main/java/cn/ism/mekck/menu/SandwichAssemblerMenu.java"),
+                Path.of("src/main/java/cn/ism/mekck/client/CentralKitchenScreen.java"),
                 StandardCharsets.UTF_8);
-        assertTrue("data.set 必须把值写进镜像 —— 空实现会让同步包下发的值被整个丢掉，"
-                        + "客户端读到的永远是区块加载快照（整屏冻结）",
-                src.contains("stored[index] = value;"));
-        assertTrue("data.get 必须在客户端读镜像，而不是读客户端 BE",
-                src.contains("level.isClientSide") && src.contains("stored[index]"));
+        assertFalse("温度必须读菜单同步槽 —— 读 machine.getHeatTemperature() 拿到的是环境温度",
+                src.contains("machine.getHeatTemperature()"));
+        assertFalse("线程数必须读菜单同步槽 —— 读 machine.runningThreads()/totalThreads() 恒为 0/0",
+                src.contains("machine.runningThreads()") || src.contains("machine.totalThreads()"));
+        assertTrue("温度读数出口必须存在（menu.getHeatTemperatureDeci）",
+                src.contains("menu.getHeatTemperatureDeci()"));
+        assertTrue("线程数读数出口必须存在（menu.getRunningThreads）",
+                src.contains("menu.getRunningThreads()"));
     }
 }

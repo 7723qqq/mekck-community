@@ -397,4 +397,44 @@ public class TestIceCombatGuards {
                         + "否则这批存档重载后同样卸不下冷萃",
                 read.contains("installDirect(1)"));
     }
+
+    // ================== 8. 自有配方的材料表必须走 RecipeRequiredInputs ==================
+
+    /**
+     * 三类自有配方（{@code FerreroRecipe} / {@code IceMakeRecipe} / {@code NutRoastingRecipe}）
+     * 都<b>不覆写</b> {@code getIngredients()}，而那个默认实现返回<b>空表</b>。
+     *
+     * <p>任何按它遍历的通用逻辑都会退化成空循环，且编译与其余测试全绿：</p>
+     * <ul>
+     *   <li>{@code matchesInput} ⇒ 变成「输入槽非空就算匹配」；</li>
+     *   <li>{@code getMaxConsumableCountForOrder} ⇒ {@code max} 停在
+     *       {@code Integer.MAX_VALUE}，函数按约定返回 0 ⇒ 面板上的 Max 按钮<b>只会填 1</b>。</li>
+     * </ul>
+     */
+    @Test
+    public void ownRecipeIngredientTablesGoThroughRecipeRequiredInputs() throws IOException {
+        String[] machines = {"ChocolateCannonBlockEntity", "IceMakerBlockEntity", "NutRoasterBlockEntity"};
+        for (String m : machines) {
+            String src = be(m);
+            String matches = body(src,
+                    "private boolean matchesInput(net.minecraft.world.item.crafting.Recipe<?> recipe) {", m);
+            assertFalse(m + ".matchesInput 不得直接遍历 recipe.getIngredients() —— "
+                            + "三类自有配方不覆写它、默认返回空表 ⇒ 判据退化成「输入槽非空就算匹配」",
+                    matches.contains(": recipe.getIngredients()"));
+            assertTrue(m + ".matchesInput 必须走 RecipeRequiredInputs.of(recipe)",
+                    matches.contains("RecipeRequiredInputs.of(recipe)"));
+            String max = body(src,
+                    "public int getMaxConsumableCountForOrder(net.minecraft.world.item.crafting.Recipe<?> recipe) {", m);
+            assertTrue(m + ".getMaxConsumableCountForOrder 必须与匹配走同一份材料表",
+                    max.contains("RecipeRequiredInputs.of(recipe)") && !max.contains(": recipe.getIngredients()"));
+        }
+        // 判据不许空转：材料表本身必须覆盖三类自有配方。
+        String helper = TestSourceText.read(
+                "src/main/java/cn/ism/mekck/recipe/RecipeRequiredInputs.java");
+        for (String type : new String[]{"FerreroRecipe", "IceMakeRecipe", "NutRoastingRecipe"}) {
+            assertTrue("RecipeRequiredInputs 少认了一类自有配方：" + type
+                    + "（新增自有配方类型时必须来这里补一支，否则那台机器的 Max 与匹配会静默失效）",
+                    helper.contains(type));
+        }
+    }
 }

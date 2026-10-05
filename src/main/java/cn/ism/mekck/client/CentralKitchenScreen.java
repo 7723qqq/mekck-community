@@ -262,14 +262,14 @@ public class CentralKitchenScreen extends mekanism.client.gui.GuiMekanism<Centra
     protected void drawForegroundText(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         renderTitleText(guiGraphics);
         drawString(guiGraphics, playerInventoryTitle, 39, inventoryLabelY, titleTextColor());
-        var machine = menu.getMachine();
-        if (machine != null) {
-            guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.heat_side", machine.getHeatTemperature() - 273.15).getString(),
-                    12, 6, 0xFFFF5555);
-            // 排序模式的「键 → 文案」显示已由排序按钮的 label 承担（MekCkButtons.text，按模式切换显示）。
-            guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.threads", machine.runningThreads(), machine.totalThreads()).getString(),
-                    12, 84, 0xFF006000);
-        }
+        // 温度与线程数一律走**菜单的同步槽**，不读 machine：本机的客户端 BE 既没有
+        // getUpdateTag / getUpdatePacket、客户端 ticker 也是空的，读 machine 拿到的是
+        // 「进区块那一刻的快照」——温度恒显示室温、线程恒 0/0。
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.heat_side", menu.getHeatTemperatureDeci() / 10.0).getString(),
+                12, 6, 0xFFFF5555);
+        // 排序模式的「键 → 文案」显示已由排序按钮的 label 承担（MekCkButtons.text，按模式切换显示）。
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.threads", menu.getRunningThreads(), menu.getTotalThreads()).getString(),
+                12, 84, 0xFF006000);
         int milli = menu.getOrderProgressMilli();
         if (milli > 0) {
             guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.order_progress", milli / 10).getString(), 12, 138, 0xFF604000, false);

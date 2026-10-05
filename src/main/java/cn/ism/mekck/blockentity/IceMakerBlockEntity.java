@@ -761,7 +761,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
         if (recipe == null || !matchesInput(recipe)) return 0;
         try {
             int max = Integer.MAX_VALUE;
-            for (net.minecraft.world.item.crafting.Ingredient ing : recipe.getIngredients()) {
+            for (net.minecraft.world.item.crafting.Ingredient ing : cn.ism.mekck.recipe.RecipeRequiredInputs.of(recipe)) {
                 if (ing == null || ing.isEmpty()) continue;
                 int have = 0;
                 for (int s : orderInputSlots()) {
@@ -778,6 +778,13 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
     }
 
     /** 配方需求是否都能被 {@link #orderInputSlots()} 里的材料满足。 */
+    /**
+     * 输入槽里能否凑齐这张配方要的材料。
+     *
+     * <p>材料表走 {@link cn.ism.mekck.recipe.RecipeRequiredInputs} 而<b>不是</b>
+     * {@code recipe.getIngredients()}：本机这三类自有配方都不覆写后者，而那个默认实现
+     * 返回空表 ⇒ 判据会退化成「输入槽非空就算匹配」。同一份材料表也供 Max 计数使用。</p>
+     */
     private boolean matchesInput(net.minecraft.world.item.crafting.Recipe<?> recipe) {
         if (recipe == null) return false;
         try {
@@ -786,7 +793,7 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
                 if (!items.getStackInSlot(s).isEmpty()) { any = true; break; }
             }
             if (!any) return false;
-            for (net.minecraft.world.item.crafting.Ingredient ing : recipe.getIngredients()) {
+            for (net.minecraft.world.item.crafting.Ingredient ing : cn.ism.mekck.recipe.RecipeRequiredInputs.of(recipe)) {
                 if (ing == null || ing.isEmpty()) continue;
                 boolean ok = false;
                 for (int s : orderInputSlots()) {
