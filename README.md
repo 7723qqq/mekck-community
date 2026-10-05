@@ -7,6 +7,9 @@
 A Minecraft 1.20.1 / Forge kitchen-automation mod that rebuilds **Farmer's Delight** cooking
 into a **Mekanism-style factory system** — and lets you burn the leftovers for power.
 
+> **Personal Edition** — this repository hosts the personal edition of MekCK;
+> the official edition has not been released yet.
+
 > **中文说明见 [README.zh_CN.md](README.zh_CN.md)**
 
 ---
@@ -131,6 +134,9 @@ src/main/java/cn/ism/mekck/     Java sources
 src/main/resources/             assets, data, lang, in-game guide
   assets/mekck/mekckguide/      GuideME pages (Markdown)
   assets/mekck/textures/block/vendor/   textures redistributed under MIT (see THIRD-PARTY.md)
+docs/                           design notes, architecture contracts, review reports
+                                (index: docs/README.md; current status: docs/STATUS.md)
+tools/                          asset generators and audit scripts (Blender, Python)
 ```
 
 ## License

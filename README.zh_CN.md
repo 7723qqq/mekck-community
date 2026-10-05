@@ -7,6 +7,8 @@
 把**农夫乐事**的厨房操作改造成**通用机械风格的工厂流水线**的 Minecraft 1.20.1 / Forge 模组，
 并且能把吃不完的食物拿去发电。
 
+> **个人版** —— 本仓库发布的是 MekCK 的个人版；官方版尚未发布。
+
 > **English: [README.md](README.md)**
 
 ---
@@ -120,6 +122,9 @@ src/main/java/cn/ism/mekck/     Java 源码
 src/main/resources/             资源、数据、语言文件、游戏内指南
   assets/mekck/mekckguide/      GuideME 指南页（Markdown）
   assets/mekck/textures/block/vendor/   以 MIT 许可再分发的纹理（详见 THIRD-PARTY.md）
+docs/                           设计笔记、架构契约、评审报告
+                                （索引见 docs/README.md，当前状态见 docs/STATUS.md）
+tools/                          资源生成与审计脚本（Blender、Python）
 ```
 
 ## 许可证
