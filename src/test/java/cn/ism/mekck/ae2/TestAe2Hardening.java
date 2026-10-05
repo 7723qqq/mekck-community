@@ -335,8 +335,17 @@ public class TestAe2Hardening {
      * </ul>
      * 三者都编译通过、其余测试全绿。
      *
-     * <p>扫描面是「源码里出现过 {@code AE2Compat.} 的机器类」——只写了 {@code onRemoved}
-     * 的机器同样落入扫描面，而那正是这条要抓的形态。</p>
+     * <p>判据分两步，缺一不可：</p>
+     * <ol>
+     *   <li>{@link #ae2BaseClassesWireAllFourHooks}：两个收口基类<b>真的</b>写全了四件套 ——
+     *       否则下一条的「继承即满足」对整条继承链假绿；</li>
+     *   <li>本方法：每台「用了 AE2 的」机器，要么自己四件套齐全，要么继承那两个基类。</li>
+     * </ol>
+     *
+     * <p><b>为什么扫描面不能只看「源码里出现 {@code AE2Compat.}」</b>：接线收口进基类之后，
+     * 子类源码里根本不再出现那个名字，那种写法会让收口后的机器整个逃出扫描面。判据必须
+     * 显式承认「继承」这一条路径 —— 与 {@code networkPullableBaseActuallyDeclaresTheInterface}
+     * 把「继承即满足」钉在基类上是同一个套路。</p>
      */
     @Test
     public void ae2MachinesWireAllFourLifecycleHooks() throws IOException {
@@ -352,10 +361,17 @@ public class TestAe2Hardening {
                     continue;
                 }
                 String src = TestSourceText.read(file.toString());
-                if (!src.contains("AE2Compat.")) {
+                String decl = src.substring(0, Math.min(src.length(), 4000));
+                boolean inheritsWiredBase = decl.contains("extends MekCkMachineTile")
+                        || decl.contains("extends MekCkNetworkPullableTile");
+                if (!src.contains("AE2Compat.") && !inheritsWiredBase) {
                     continue;
                 }
                 scanned++;
+                // 继承收口基类 ⇒ 四件套由基类提供，子类不必自己再写一遍。
+                if (inheritsWiredBase) {
+                    continue;
+                }
                 List<String> missing = new ArrayList<>();
                 for (String hook : new String[]{"serverTick", "saveAdditional", "load", "onRemoved"}) {
                     if (!src.contains("AE2Compat." + hook)) {
@@ -368,9 +384,36 @@ public class TestAe2Hardening {
             }
         }
         assertTrue("一台用了 AE2 的机器都没扫到，判据已失效（扫描面变了？）", scanned >= 12);
-        assertEquals("这些机器的 AE2 生命周期四件套不齐 —— 缺 serverTick 就永远接不上 ME 网络、"
-                        + "缺 save/load 就每次重载丢频道、缺 onRemoved 就留幽灵节点：\n  "
+        assertEquals("这些机器的 AE2 生命周期四件套不齐，且没有继承收口基类 —— "
+                        + "缺 serverTick 就永远接不上 ME 网络、缺 save/load 就每次重载丢频道、"
+                        + "缺 onRemoved 就留幽灵节点：\n  "
                         + String.join("\n  ", offenders),
                 List.of(), offenders);
+    }
+
+    /**
+     * 两个收口基类必须<b>真的</b>把四件套写全。
+     *
+     * <p>上一条把「继承 {@code MekCkMachineTile} / {@code MekCkNetworkPullableTile}」
+     * 当作四件套齐全的依据；基类里少一行，那条判据就会对整个继承链恒绿。两个基类必须
+     * 各查一遍 —— 只查一个正是本轮之前的实际状态（工厂基类收口了、单机基类没有，
+     * 于是电力研磨机漏掉 load 与 onRemoved）。</p>
+     */
+    @Test
+    public void ae2BaseClassesWireAllFourHooks() throws IOException {
+        String[][] bases = {
+                {"machine/MekCkMachineTile",
+                        "src/main/java/cn/ism/mekck/machine/MekCkMachineTile.java"},
+                {"machine/MekCkNetworkPullableTile",
+                        "src/main/java/cn/ism/mekck/machine/MekCkNetworkPullableTile.java"},
+        };
+        for (String[] base : bases) {
+            String src = TestSourceText.read(base[1]);
+            for (String hook : new String[]{"serverTick", "saveAdditional", "load", "onRemoved"}) {
+                assertTrue(base[0] + " 缺 `AE2Compat." + hook + "` —— 上一条把「继承它」当作"
+                                + "四件套齐全的依据，基类漏一行那条判据就会对整条继承链假绿",
+                        src.contains("AE2Compat." + hook));
+            }
+        }
     }
 }

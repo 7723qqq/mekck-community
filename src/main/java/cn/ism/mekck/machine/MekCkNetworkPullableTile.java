@@ -149,4 +149,46 @@ public abstract class MekCkNetworkPullableTile extends TileEntityConfigurableMac
         }
         return List.of(new AE2InputSpec(Ingredient.merge(unions)));
     }
+
+    // ── AE2 网格节点生命周期（四件套）────────────────────────────────────
+    //
+    // 为什么必须收在基类里，而不是指望每台单机自己记得写：漏掉任何一行的症状都是
+    // **静默**的 —— 没有异常、没有日志、编译通过、其余用例全绿。
+    //
+    //   · 漏 serverTick ⇒ FactoryGridHost 的节点永远建不起来（节点只在 serverTick 里
+    //     初始化），机器**永远接不上 ME 网络**；
+    //   · 漏 save / load ⇒ 节点 NBT（频道占用 + 已勾选的自动处理材料）每次重载都丢；
+    //   · 漏 onRemoved ⇒ 拆机时网格节点不 destroy，在 AE2 网格里留下幽灵节点
+    //     （HOSTS 只挂在 WeakHashMap 上）。
+    //
+    // 实证：电力研磨机的样板迁移漏掉的是 load 与 onRemoved；中央厨房与三明治组装机
+    // （无基类）漏掉的是 serverTick。工厂家族因 MekCkMachineTile 早已收口而幸免 ——
+    // 这里补齐单机那一半。未装 AE2 时 AE2Compat 的每个方法都是空操作。
+    //
+    // 订正形态：把这几行删回子类去，TestAe2Hardening 的两条断言（基类四件套齐全 +
+    // 每台机器要么自己齐全、要么继承收口基类）会同时变红。
+
+    @Override
+    protected void onUpdateServer() {
+        super.onUpdateServer();
+        cn.ism.mekck.compat.AE2Compat.serverTick(this, getLevel(), getBlockPos());
+    }
+
+    @Override
+    public void saveAdditional(net.minecraft.nbt.CompoundTag tag) {
+        super.saveAdditional(tag);
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
+    }
+
+    @Override
+    public void load(net.minecraft.nbt.CompoundTag tag) {
+        super.load(tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
+    }
+
+    @Override
+    public void setRemoved() {
+        super.setRemoved();
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
+    }
 }

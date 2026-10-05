@@ -225,7 +225,8 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
         Level level = getLevel();
         if (level == null) return;
 
-        cn.ism.mekck.compat.AE2Compat.serverTick(this, level, getBlockPos());
+        // AE2 网格节点的四件套生命周期由基类 MekCkNetworkPullableTile 统一收口，
+        // 本机不再自己调 —— 单机各自手写正是样板迁移漏掉 load / onRemoved 的原因。
 
         if (energySlot != null) {
             drainPowerSlot();
@@ -486,7 +487,6 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
     @Override
     public void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
-        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
         tag.putInt("Progress", progress);
         order.save(tag);
         tag.putBoolean("MeOrderEnabled", meOrderEnabled);
@@ -509,16 +509,6 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
         if (tag.contains("CustomName")) {
             customName = Component.Serializer.fromJson(tag.getString("CustomName"));
         }
-        // 网格节点的 NBT 与节点同生共死（频道占用 + 已勾选的自动处理材料）。
-        cn.ism.mekck.compat.AE2Compat.load(this, tag);
-    }
-
-    @Override
-    public void setRemoved() {
-        super.setRemoved();
-        // 拆机时必须显式移除网格节点：FactoryGridHost 只挂在 WeakHashMap 上，
-        // 不主动 destroy 会在 AE2 网格里留下幽灵节点（见 MekckAe2 的 HOSTS 注释）。
-        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     /** 新格式的槽位总数 —— 供旧存档迁移器换算下标。 */
