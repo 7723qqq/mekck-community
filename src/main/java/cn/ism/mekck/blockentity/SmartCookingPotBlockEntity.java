@@ -517,8 +517,8 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
             if (stack.isEmpty()) {
                 items.setStackInSlot(i, ItemStack.EMPTY);
             }
-            // 退回空容器到 RETURN_SLOT
-            ItemStack remainder = items.insertItem(RETURN_SLOT, info.emptyContainer(), false);
+            // 退回空容器到 RETURN_SLOT（直写槽，不走 insertItem —— 理由见 insertReturn）
+            ItemStack remainder = insertReturn(info.emptyContainer());
             if (!remainder.isEmpty() && level != null && !level.isClientSide) {
                 Containers.dropItemStack(level, worldPosition.getX() + 0.5,
                         worldPosition.getY() + 1.0, worldPosition.getZ() + 0.5, remainder);
@@ -526,6 +526,43 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
             setChanged();
             break; // 每 tick 只转换 1 个
         }
+    }
+
+    /**
+     * 把返还物写进 {@link #RETURN_SLOT}，返回放不下的剩余（空栈 = 全部放下）。
+     *
+     * <p><b>不能用 {@code items.insertItem}</b>：Forge 的 {@code ItemStackHandler.insertItem}
+     * 第一件事就是查 {@code isItemValid}，而本机对 {@code OUTPUT_SLOT} / {@code RETURN_SLOT}
+     * 都返回 {@code false}（那两个槽对玩家禁入）⇒ <b>机器自己的返还物被一并拒掉</b>，
+     * 剩余永不为空 ⇒ 每个空桶 / 空瓶都掉在机器上方，GUI 里的返还槽永远是空的。
+     * 本仓在 {@code IceFactoryBlockEntity} 的注释里已把这条机制写死。</p>
+     *
+     * <p>形态与 {@code SkeweringMachineBlockEntity.insertOutput} 逐字同款（同类先并入、
+     * 再找空槽），与切菜机 / 种植切配站 / 三明治组装机的产出与返还同口径。</p>
+     */
+    private ItemStack insertReturn(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack remainder = stack.copy();
+        ItemStack existing = items.getStackInSlot(RETURN_SLOT);
+        if (existing.isEmpty()) {
+            int moved = Math.min(remainder.getCount(), items.getSlotLimit(RETURN_SLOT));
+            ItemStack inserted = remainder.copy();
+            inserted.setCount(moved);
+            items.setStackInSlot(RETURN_SLOT, inserted);
+            remainder.shrink(moved);
+        } else if (ItemStack.isSameItemSameTags(existing, remainder)) {
+            int moved = Math.min(remainder.getCount(),
+                    items.getSlotLimit(RETURN_SLOT) - existing.getCount());
+            if (moved > 0) {
+                ItemStack merged = existing.copy();
+                merged.grow(moved);
+                items.setStackInSlot(RETURN_SLOT, merged);
+                remainder.shrink(moved);
+            }
+        }
+        return remainder;
     }
 
     private final AutoIO autoIO = new AutoIO(this,
@@ -964,9 +1001,9 @@ public SmartCookingPotBlockEntity(BlockPos pos, BlockState state) {
             deferredReturns.add(() -> {
                 // Prefer RETURN_SLOT. If the slot is full and cannot merge,
                 // fall back to dropping on top of the block so the item is not
-                // silently destroyed. Merging is done with the ItemStackHandler
-                // directly (via insertItem).
-                ItemStack remainder = items.insertItem(RETURN_SLOT, ret, false);
+                // silently destroyed. 直写槽，不走 insertItem —— insertItem 会先查
+                // isItemValid，而本机对 RETURN_SLOT 返回 false（理由见 insertReturn）。
+                ItemStack remainder = insertReturn(ret);
                 if (!remainder.isEmpty() && level != null && !level.isClientSide) {
                     Containers.dropItemStack(level, worldPosition.getX() + 0.5,
                             worldPosition.getY() + 1.0, worldPosition.getZ() + 0.5, remainder);

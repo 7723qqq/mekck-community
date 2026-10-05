@@ -185,4 +185,28 @@ public class TestClientValueSync {
         }
         return null;
     }
+
+    /**
+     * 菜单的 {@code ContainerData} 必须在客户端读<b>镜像</b>，不能读客户端 BE。
+     *
+     * <p>{@code ClientboundContainerSetDataPacket} 在客户端走的正是 {@code data.set}。
+     * 若 {@code set} 是空实现、{@code get} 又直接问客户端 BE，同步下发的值就被整个丢弃；
+     * 而该 BE 在客户端不注册 ticker、也没有 {@code getUpdatePacket}，那几个字段只在
+     * 区块加载时被 {@code getUpdateTag} 写过一次 ⇒ <b>整屏读数冻结在进区块那一刻</b>
+     * （进度条不动、模式按钮点了没反应），且编译通过、其余测试全绿。</p>
+     *
+     * <p>本仓的既定形态见 {@code SmartCookingPotBlockEntity} 的 {@code ContainerData}：
+     * 自带 {@code stored[]}，{@code set} 写、{@code get} 在客户端读。</p>
+     */
+    @Test
+    public void menuDataSlotsMustMirrorServerValuesOnTheClient() throws IOException {
+        String src = Files.readString(
+                Path.of("src/main/java/cn/ism/mekck/menu/SandwichAssemblerMenu.java"),
+                StandardCharsets.UTF_8);
+        assertTrue("data.set 必须把值写进镜像 —— 空实现会让同步包下发的值被整个丢掉，"
+                        + "客户端读到的永远是区块加载快照（整屏冻结）",
+                src.contains("stored[index] = value;"));
+        assertTrue("data.get 必须在客户端读镜像，而不是读客户端 BE",
+                src.contains("level.isClientSide") && src.contains("stored[index]"));
+    }
 }

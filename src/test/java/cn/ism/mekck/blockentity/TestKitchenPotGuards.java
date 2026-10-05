@@ -311,4 +311,23 @@ public class TestKitchenPotGuards {
         assertTrue("匹配后必须记入账本",
                 find.contains("used[i]++") && find.contains("used[storageBase + j]++"));
     }
+
+    /**
+     * 返还槽必须<b>直写</b>，不得走 {@code items.insertItem}。
+     *
+     * <p>{@code ItemStackHandler.insertItem} 第一步就查 {@code isItemValid}，而本机对
+     * {@code OUTPUT_SLOT} / {@code RETURN_SLOT} 返回 {@code false}（那两个槽对玩家禁入）
+     * ⇒ <b>机器自己的返还物被一并拒掉</b>，剩余永不为空 ⇒ 每个空桶 / 空瓶都掉在机器上方，
+     * GUI 里的返还槽<b>永远是空的</b>。本仓在 {@code IceFactoryBlockEntity} 的注释里已把
+     * 这条机制写死；切菜机 / 种植切配站 / 三明治组装机的产出与返还也都走直写。</p>
+     */
+    @Test
+    public void returnSlotIsWrittenDirectlyNotThroughInsertItem() throws IOException {
+        String src = read(POT);
+        assertFalse("返还物不得走 items.insertItem —— isItemValid 对 RETURN_SLOT 返回 false，"
+                        + "机器自己的返还物会被拒掉并掉在地上",
+                src.contains("items.insertItem(RETURN_SLOT"));
+        assertTrue("两个返还点都必须走 insertReturn（直写槽 + 同类合并）",
+                src.contains("insertReturn(info.emptyContainer())") && src.contains("insertReturn(ret)"));
+    }
 }

@@ -1166,11 +1166,15 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
         tag.putInt("TargetTemperature", targetTemperature);
         tag.put("EnergyUpgradeTracker", energyTracker.save());
         tag.put("CreativeUpgradeTracker", creativeTracker.save());
-        // 冷萃已安装等级
+        // 冷萃已安装等级 —— 必须**同时**写读条器的 Installed：
+        // 只写等级的话，重载后 coldBrewTrackers[i].getInstalled() 回到 0，
+        // 而 uninstallUpgrade 的第一道门就是它 ⇒ 冷萃升级**卸不下来**（静默、无日志）。
+        // 对照 energyTracker / creativeTracker：那两个一直是成对写的。
         for (int i = 0; i < installedColdBrew.length; i++) {
             if (installedColdBrew[i] != null) {
                 tag.putString("ColdBrew" + i, installedColdBrew[i].name());
             }
+            tag.put("ColdBrewUpgradeTracker" + i, coldBrewTrackers[i].save());
         }
         tag.putBoolean("TemperatureControl", temperatureControlEnabled);
         if (heatComponent != null) tag.put("HeatCapacitor", heatComponent.save());
@@ -1239,6 +1243,14 @@ public final class IceMakerBlockEntity extends BlockEntity implements MenuProvid
                     installedColdBrew[i] = cn.ism.mekck.item.ColdBrewTier.valueOf(tag.getString("ColdBrew" + i));
                 } catch (IllegalArgumentException ignored) {
                 }
+            }
+            String trackerKey = "ColdBrewUpgradeTracker" + i;
+            if (tag.contains(trackerKey, Tag.TAG_COMPOUND)) {
+                coldBrewTrackers[i].load(tag.getCompound(trackerKey));
+            } else if (installedColdBrew[i] != null) {
+                // 旧存档：只写了 ColdBrew{i}、没有读条器。按「已装 1 件」补回 ——
+                // 否则这批存档重载后同样卸不下冷萃（installDirect 的 javadoc 写的就是此用途）。
+                coldBrewTrackers[i].installDirect(1);
             }
         }
         temperatureControlEnabled = !tag.contains("TemperatureControl") || tag.getBoolean("TemperatureControl");

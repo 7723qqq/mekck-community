@@ -33,12 +33,27 @@ public class SandwichAssemblerMenu extends AbstractContainerMenu
 
     /** 数据槽：0=模式，1=目标数量低 16 位，2=目标数量高 16 位，3=进度，4=总时长，5=侧面配置编码。 */
     private final ContainerData data = new ContainerData() {
+        /**
+         * 客户端镜像：{@code set} 写、{@code get} 读。
+         *
+         * <p>本仓的既定形态见 {@code SmartCookingPotBlockEntity} 的同名字段。这里必须有一份
+         * 独立镜像，不能直接读客户端 BE：{@code ClientboundContainerSetDataPacket} 在客户端
+         * 走的正是 {@code set}，而本方块在客户端<b>不注册 ticker、也没有 getUpdatePacket</b>
+         * （{@code SandwichAssemblerBlock.getTicker} 客户端返回 null），BE 上那几个字段只在
+         * 区块加载时被 {@code getUpdateTag} 写一次 —— 直接读它就是「整屏冻结在进区块那一刻」。</p>
+         */
+        private final int[] stored = new int[6];
+
         @Override
         public int get(int index) {
             // 客户端 BE 缺失（空菜单）时全部读 0：屏幕侧会读这些槽，
             // 不兜底就是「构造器不崩了、第一帧渲染崩」。
             if (machine == null) {
                 return 0;
+            }
+            var level = machine.getLevel();
+            if (level != null && level.isClientSide) {
+                return index >= 0 && index < stored.length ? stored[index] : 0;
             }
             return switch (index) {
                 case 0 -> machine.getMode();
@@ -53,6 +68,10 @@ public class SandwichAssemblerMenu extends AbstractContainerMenu
 
         @Override
         public void set(int index, int value) {
+            // 同步包在客户端走这里。服务端不调它，写进 stored 无副作用。
+            if (index >= 0 && index < stored.length) {
+                stored[index] = value;
+            }
         }
 
         @Override

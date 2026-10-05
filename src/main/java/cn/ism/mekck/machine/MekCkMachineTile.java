@@ -965,9 +965,17 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine
     // 而菜单本来就调 tile 的同名方法（CookingFactoryMenu / SkeweringFactoryMenu 同款），
     // 所以**菜单一行都不用改**。服务端由 clientMirroring()==false 走权威值兜住。
 
-    /** 本机是否有一张单在跑（GUI 与 AE2 共用口径）。 */
+    /**
+     * 本机是否有一张单在跑（GUI 与 AE2 共用口径）。<b>按端分流</b>。
+     *
+     * <p>⚠️ 这一条是「订单读数唯一公共出口」的<b>第四位，此前被漏掉了</b>：它直接
+     * {@code return executor().hasOrder()}，于是客户端拿到的仍是<b>区块加载快照</b> ——
+     * 症状是「ME 下单后『当前订单 x/y』那一行不出现，直到离开再进区块」，
+     * 与上方注释描述的那次事故完全同形。另外三条（quantity / completed / familyExtraBits）
+     * 早已走镜像，只有这一条漏网，而护栏的断言恰好把它钉死在了错误形态上。</p>
+     */
     public boolean hasOrder() {
-        return executor().hasOrder();
+        return syncOrderActiveFlag() != 0;
     }
 
     /** 订单总份数（无订单为 0）。按端分流。 */
@@ -1028,12 +1036,13 @@ public abstract class MekCkMachineTile extends TileEntityConfigurableMachine
         return level == null || level.isClientSide;
     }
 
-    /** 客户端镜像值：订单是否激活。GUI 读数用。 */
-    public int getClientOrderActive() {
-        return clientMirroring() ? clientOrderActive : syncOrderActiveFlag();
-    }
-
-    /** 客户端镜像值：家族自定义位。 */
+    /**
+     * 客户端镜像值：家族自定义位。
+     *
+     * <p>原有一个同形的 {@code getClientOrderActive()}（订单激活位）已删除 —— 它是
+     * {@code syncOrderActiveFlag()} 的重复实现，且<b>全仓零调用方</b>；订单激活位的
+     * 读取侧出口是 {@link #hasOrder()}。</p>
+     */
     public int getClientFamilyExtraBits() {
         return clientMirroring() ? clientFamilyExtraBits : syncFamilyExtraBits();
     }

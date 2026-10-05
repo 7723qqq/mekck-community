@@ -192,10 +192,17 @@ public class TestFactoryGuiSyncSurface {
             assertTrue("MekCkMachineTile 必须提供 " + sig + " 作为读取侧的唯一出口",
                     tile.contains(sig));
         }
-        // getClientOrderActive 至少要被 hasOrder 用上（上一轮它是零调用方）。
-        assertTrue("hasOrder() 必须用 getClientOrderActive()，否则那条 SyncableInt 是只写不读",
-                methodBody(tile, "public boolean hasOrder() {").contains("executor().hasOrder()")
-                        && tile.contains("clientOrderActive = value"));
+        // hasOrder() 是读取侧出口的**第四位** —— 上一轮它被漏掉了：直接 return executor().hasOrder()，
+        // 于是客户端读的仍是区块加载快照（「当前订单 x/y」那一行下单后不出现）。
+        // ⚠️ 本断言此前的**消息与判据相反**：消息要求「必须用镜像」，判据却在要求
+        // contains("executor().hasOrder()") —— 把缺陷形态钉成了通过条件，所以它一直是假绿。
+        String activeBody = methodBody(tile, "public boolean hasOrder() {");
+        assertFalse("hasOrder() 不得绕过镜像直接读执行器 —— 那样订单激活位那条同步通道就是只写不读",
+                activeBody.contains("executor().hasOrder()"));
+        assertTrue("hasOrder() 必须走 syncOrderActiveFlag()（按端分流的唯一出口）",
+                activeBody.contains("syncOrderActiveFlag()"));
+        assertTrue("SyncableInt 的写入侧必须仍在（clientOrderActive 由它回填）",
+                tile.contains("clientOrderActive = value"));
     }
 
     /**

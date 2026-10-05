@@ -371,4 +371,30 @@ public class TestIceCombatGuards {
                     revive.contains("heatCapability = LazyOptional.of("));
         }
     }
+
+    // ================== 7. 冷萃读条器必须与已装等级一同落盘 ==================
+
+    /**
+     * {@code ColdBrew{i}}（等级）与读条器的 {@code Installed} 必须成对写、成对读。
+     *
+     * <p>只写等级不写读条器会怎样：读档后 {@code coldBrewTrackers[i].getInstalled()} 回到 0，
+     * 而 {@code uninstallUpgrade} 的第一道门正是它 ⇒ <b>冷萃升级卸不下来</b>。攻击档案读的是
+     * {@code installedColdBrew}，所以攻击照常工作 —— 只有卸载坏掉，静默、无日志。
+     * {@code TestNbtWriteReadSymmetry} 也抓不到：它检的是「写过的键有没有读回」，
+     * 而这里的问题是<b>少写了一个键</b>，不在它的判据面内。</p>
+     */
+    @Test
+    public void iceMakerColdBrewTrackerIsPersistedWithItsTier() throws IOException {
+        String src = be("IceMakerBlockEntity");
+        String write = body(src, "protected void saveAdditional(CompoundTag tag) {", "IceMakerBlockEntity");
+        assertTrue("冷萃读条器的 Installed 必须随 ColdBrew{i} 一起写出 —— "
+                        + "只写等级的话，重载后 getInstalled() 回到 0，冷萃升级卸不下来",
+                write.contains("\"ColdBrewUpgradeTracker\" + i"));
+        String read = body(src, "public void load(CompoundTag tag) {", "IceMakerBlockEntity");
+        assertTrue("读档必须把读条器的 Installed 读回（与写出用同一个键）",
+                read.contains("\"ColdBrewUpgradeTracker\" + i"));
+        assertTrue("旧存档（只有 ColdBrew{i}、没有读条器）必须按「已装 1 件」补回 —— "
+                        + "否则这批存档重载后同样卸不下冷萃",
+                read.contains("installDirect(1)"));
+    }
 }
