@@ -1,9 +1,9 @@
 # mekck 当前状态汇总
 
-- 最后更新：**2026-10-06**（**阶段 3 单机迁移第二台：坚果爆炒机**，详见下方「本轮」§〇）
-- 审查基线：`673deaf`（上一轮末）之后的工作区（坚果爆炒机迁移，未提交）
+- 最后更新：**2026-10-06**（**阶段 3 单机迁移第三台：急冻制冰机**，详见下方「本轮」§〇）
+- 审查基线：`5528f81`（上一轮末）之后的工作区（急冻制冰机迁移，**未提交** —— 提交号待补）
 - 验收口径：`gradlew build`（Windows 侧 JDK 17，`.logs/build-jdk17.bat`）
-  **本轮实测：751 用例 / 0 失败 / 0 错误 / 0 跳过 + `BUILD SUCCESSFUL`**
+  **本轮实测：102 套件 / 761 用例 / 0 失败 / 0 错误 / 0 跳过 + `BUILD SUCCESSFUL`**
 
 > ⚠️ **前一轮（同日）的基数更正**（详见下方「前一轮」§〇）：
 > - 记「62 套件 / 457 用例」——**实测 99 / 729**；
@@ -28,7 +28,111 @@
 
 ---
 
-## 〇、本轮（2026-10-06）—— 阶段 3 单机迁移：坚果爆炒机（`mekck:nut_roaster`）
+## 〇、本轮（2026-10-06）—— 阶段 3 单机迁移：急冻制冰机（`mekck:ice_maker`）
+
+**结论：编译 + 761 用例 0 失败 + `gradlew build` 成功。本轮不含实机结论**
+（放置 / GUI / 投料 / 加工 / 制冷 / 冷萃升级 / 拆放 / 重启 / 索敌 / ME 拉料仍**需用户实机验收**）。
+
+| 项 | 迁移前 | 迁移后 |
+|---|---|---|
+| 方块实体 | `blockentity/IceMakerBlockEntity`（自研 `BlockEntity`，1459 行） | `machine/icemaker/IceMakerTile extends MekCkNetworkPullableTile`（→ `TileEntityConfigurableMachine`，1543 行） |
+| 方块 | `BaseEntityBlock` + 手写朝向/掉落/开界面 | `BlockTile` + `BlockTypeTile.blockTypeFor`（143 → 112 行，8 个属性齐全） |
+| 注册 | 普通 `DeferredRegister`（BLOCKS/ITEMS/BLOCK_ENTITIES/MENUS） | Mek 三件套 `ICE_MAKER_{BLOCKS,TILES,CONTAINERS}_REG` + 构造器成组 `register(bus)` |
+| 战利品表 | 无（`getDrops` 返空 + `onRemove` 自掉落） | 新建 `ice_maker.json`（Mek 原生 6 键 + 本机 20 键 + AE2 节点 9 键 + 放置者） |
+| 菜单 | 手写 11 槽 + 5 个 `IVirtualSlot` 私有类 + `ContainerData`(23 槽，含 3 个拆位槽) | `MekanismTileContainer`（444 → 144 行；槽由 tile 装配、读数走同步通道、shift-click 交 Mek） |
+| 屏幕 | `GuiMekanism` + 4 枚自摆 tab + 手绘侧配/升级窗 | `MekCkContainerScreenBase`（531 → 438 行；Mek 自动挂侧配/传输/升级/红石/安全 tab） |
+| 槽序（新存档契约） | `[输入 0, 输出 1, 速度 2, 能量 3, 创造 4, 冷萃 5..9, 能源 10]` | `[输入 0, 输出 1, 创造 2, 冷萃①~⑤ 3..7, 能源 8]`（速度/能量卡由 `TileComponentUpgrade` 持有） |
+| 热系统 | 自研 `MekCkHeatComponent`（环境回归 1%/tick + 双向相邻传导） | `BasicHeatCapacitor` + 每 tick 显式驱动：**相邻传导用 Mek 原生 `simulateAdjacent()`**、**环境回归保留旧的 1%/tick 速率**（见下「刻意偏离（二）」） |
+| 水罐 | 自研 `FluidTank` + `ContainerData` 拆高低位 | Mek 的 `BasicFluidTank`（`SyncableFluidStack` 自动同步，拆位槽整套作废） |
+| 能源槽 | 自研 `PowerSlotUtil.drain` | Mek 的 `EnergyInventorySlot.fillOrConvert` |
+
+**保留的功能面**：水→冰块（`mekck:ice_make`，输入作催化剂不消耗）、温度系统
+（设定温度 / 自动制冷 / 温度越低越快 1×~30×、机身温度 < 0 ℃ 才加工、
+涡流管式定向热交换）、冷萃升级链（5 槽、每槽读条 20 tick、链式准入、
+**等级与读条器成对落盘**）、攻击（弹药=产物格 / 每轮按档案目标数 / 集火 / 逐 tick 上限 8 /
+龙霜冰冻 / 女王去 AI / 失温）、索敌（`TargetType` / `Radius`，两个 setter 与**读档**都过
+`IceTargetSearch` 的唯一钳制闸门）、F10 增益归属与连线、创造升级（免电 / 1 tick / 无限弹药 /
+每 tick 一轮）、订单（`MekCkOrderState`）、网络拉料（基类收口）、ME 终端样板、
+面板本机/ME 下单、大堆叠显示。
+
+### ⚠️ 与口径 §12.4 第 8 条的一处**刻意偏离**（已回写进口径 §12.4.1 续记）
+
+本次**保留了 7 条活分支**，只删了 1 条：
+
+| 落点 | 处置 | 理由 |
+|---|---|---|
+| `MekckAe2` × 4（`refreshPatterns` / `startOrder` / `getItems` / `getOutputSlots`） | **改指 `IceMakerTile`** | 删掉 = ME 终端样板与面板「ME」列表静默消失（电力研磨机的前车之鉴） |
+| `IceAttackConfigPacket` | **改指** | 索敌 + 控温是**唯一写入路径**，删掉 = 界面上所有控制失效 |
+| `UpgradeUninstallPacket` | **改指** | 冷萃不是 Mek 的 `Upgrade`，Mek 的升级界面碰不到它；删掉 = 冷萃永远卸不下来 |
+| `UpgradeInstallHandler` | **改指** | 潜行右键装冷萃卡是唯一安装入口 |
+| `SideConfigPacket` | **删除** | 侧配已交给 `TileComponentConfig` —— 唯一「功能真的搬走了」的那条 |
+
+护栏边界不变：`TestMigrationCompleteness` 禁的是**已删除的旧类名**（`IceMakerBlockEntity`
+已加入 `LEGACY_TYPES`），不是「还有人引用这台机器」。
+
+**冷萃卸载入口的补齐**：原实现的卸载按钮在自研升级窗里，那个窗随迁移删除 ⇒ 冷萃就再也卸不下来。
+本轮把入口挪进机器自己的屏幕：**冷萃槽空着但读条器里装着某一级时，该级物品图标画在槽位上，
+点一下即卸回槽里**（与 Mek 自己的升级窗「点已安装的升级 → 卸下」同款）。
+
+### ⚠️ 第二处刻意偏离：热系统的「环境回归」没有换成 Mek 的 `simulateEnvironment()`
+
+换到 `BasicHeatCapacitor` 之后有个静默陷阱：基类只为**热力线缆**（`HeatNetwork`）与**多方块**调
+`ITileHeatHandler.simulateEnvironment / simulateAdjacent`，**单机不自己走一遍，机身温度永远贴着初始值**
+—— 既不制冷也不回温、温度倍率恒 1×，而编译通过、护栏全绿。
+
+但速率那半边不能照搬。两条公式摊开算：
+
+| 口径 | 公式 | 时间常数 |
+|---|---|---|
+| Mek `simulateEnvironment()` | `invConduction = AIR_INVERSE_COEFFICIENT(10000) + 逆绝缘(100) + 逆传导(5)`，六方向合计 `ΔT ≈ −(T−T环境)·0.00059` | ≈ **1700 tick（84 秒）** |
+| 旧 `MekCkHeatComponent.tick` | `ΔH = −(T−T环境)·100·0.01` ⇒ `ΔT = −(T−T环境)·0.01` | **100 tick（5 秒）** |
+
+差 **17 倍**。机身温度是本机**唯一的调速手段**（0 ℃ 1× → 绝对零度 30×）——换成原生速率等于把
+「持续制冷」的电费压到近乎零、把 30× 速度白送出去，那是**玩法变更**，不是架构迁移该带的东西。
+⇒ `IceMakerTile.tickHeatExchange()` 保留旧速率（`AMBIENT_LOSS_RATE = 0.01`），
+**只把相邻传导交给 Mek 的原生模拟**（公式与旧组件逐字同源）。理由同时写进了方法注释与口径 §八。
+
+护栏：`TestIceCombatGuards.iceMakerDrivesTheHeatSimulationEveryTick`（新增）——
+钉「驱动必须在」+「相邻传导走原生」+「环境回归不得改用 `simulateEnvironment()`」。
+**已做变异测试**：删 `tickHeatExchange()` 调用 → 红；环境回归换成 `simulateEnvironment()` → 红；
+删 `simulateAdjacent()` → 红；复位 → 绿。
+
+### 护栏处置（分三类，**没有一条靠放宽判据通过**）
+
+| 类 | 条目 |
+|---|---|
+| 判据对象随迁移消失 → 改落点（断言内容不变） | `TestAttackRadiusClamp`（`blockentity/IceMakerBlockEntity` → `machine/icemaker/IceMakerTile`，两条表 + 两条落点注释）；`TestIceCombatGuards.iceMakerTargetTemperatureIsClampedOnLoad` 与 `ownRecipeIngredientTables…`（同上换路径）；`TestIceCombatGuards.iceMakerColdBrewTrackerIsPersistedWithItsTier`（**落点再挪一格**：新 tile 把自有状态抽成 `readOwnState`，改为断言 `load → readOwnState` 且 `readOwnState` 里成对读 —— 比原来更严，不是更松）；`TestIceCombatGuards.heatCapability…`（2 → 1：自研 `heatCapability` 字段消失）；`TestScreenNullGuards`（4 → 3）、`TestMenuNullGuards`（5 → 4）、`TestUpgradeSlotHitTest`（5 → 4）、`TestMenuQuickMoveSlotRanges`（IceMakerMenu 不再手写 `quickMoveStack`）、`TestWideDataSlot.noWideTankMenuReads…`（IceMakerMenu 不再有 `getWaterStack()`） |
+| 登记表/阈值随迁移收缩（每处都写了 `N → N-1` 与原因） | `TestBlockDropInvariants` `checked >= 6 → 5`；`TestWideDataSlot` `seen >= 8 → 7`、`seen >= 7 → 6`；`TestNoHardcodedUiText` `KNOWN_MIGRATION_DEBT` 15 → 14；`TestMenuNullGuards` `menus.length >= 5 → 4`；`TestOrderQuantityLowerBound` `seen >= 10 → 9` ×2（新 `setOrder` 改成委托 `MekCkOrderState` 的形态，被那道 `!body.contains("=")` 前置过滤按「不处理份数」跳过 —— 与 NutRoasterTile 迁完时的结果一样）；`TestMigrationCompleteness.MIGRATED` +1（`IceMakerTile`）、`LEGACY_TYPES` +1（`IceMakerBlockEntity`） |
+| 真缺陷被引入 → 改代码 | 无 |
+
+**新增断言（本轮）**：
+1. `machine/icemaker/TestIceMakerColdBrewPersistence`（新文件，6 条）——专守
+   「`installedColdBrew` 与读条器**成对**落盘」：写出侧/读回侧都在**同一个循环体**内
+   （按花括号配对切片判定，不是全文子串匹配）、三张冷萃表同长、两个状态入口都走
+   `readOwnState`、卸载同时读读条器与等级；外加读条器 `save → load` 往返、
+   `Installed` 读档夹紧、等级枚举可往返三条**行为**断言（纯逻辑，裸 JVM 可跑）。
+   **已做变异测试**（注入 → 红，复位 → 绿，实测记录写在类注释里）：
+   删等级写出 / 删读条器写出 / 把读条器写出挪到循环外 / 删 `installDirect(1)` /
+   把读条器表长度改成别的常量 / 删 `load → readOwnState` 调用 —— 6 条全部变红，复位后绿。
+2. `TestSlotTableContract.iceMakerTableIsConsistent` + `iceMakerTableOrderMatchesItsSlotIndices`
+   （2 条）——`MekCkSlots.IceMaker` 的 9 个槽坐标唯一、槽序与 tile 常量一一对应。
+   （此前该表的 `validate` 只在「有人真的碰过这个嵌套类」时才跑，单测里没有用例引用它。）
+3. `TestIceCombatGuards.iceMakerDrivesTheHeatSimulationEveryTick`（1 条）——见上「第二处刻意偏离」，含变异测试。
+4. `TestIceMakerColdBrewPersistence.slotFieldsHaveNoInitializer`（1 条）——槽对象字段不得带初始化式。
+   **这条是实战抓到的**：本轮初稿把 `private final MekCkSlot[] coldBrewSlots = new MekCkSlot[5];`
+   写在字段上，而 `getInitialInventory` 在**父类构造器内部**被回调 —— 那一刻字段初始化器还没跑，
+   方法里对 `null` 赋值 ⇒ **方块放下去建不出方块实体**，而编译通过、当时全部 757 个用例全绿
+   （没有任何用例真的 new 出一个 tile）。变异测试：给该字段加回初始化式 → 红，复位 → 绿。
+
+**未做**：实机验证（放置/开屏/投料/制冷/冷萃升级与卸载/拆放/重启）、旧存档迁移器
+（用户口径：不管旧存档，NBT 键可以改）。
+
+**遗留**：屏幕的两行自定义控件（索敌行 / 控温行）仍是手绘 —— 与坚果爆炒机同款遗留，
+迁移清掉的是架构债（BE/菜单/屏幕基类），控件债是下一步。
+
+---
+
+## 〇、前一轮（2026-10-06）—— 阶段 3 单机迁移第二台：坚果爆炒机（`mekck:nut_roaster`）
 
 **结论：编译 + 751 用例 0 失败 + `gradlew build` 成功。本轮不含实机结论**
 （放置 / GUI / 投料 / 加工 / 升级卡 / 拆放 / 重启 / 索敌 / ME 拉料仍**需用户实机验收**）。

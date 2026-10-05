@@ -10,7 +10,6 @@ import cn.ism.mekck.block.SmartCookingPotBlock;
 import cn.ism.mekck.block.WineCellarBlock;
 import cn.ism.mekck.blockentity.BioreactorBlockEntity;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
-import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
 import cn.ism.mekck.blockentity.SmartCookingPotBlockEntity;
 import cn.ism.mekck.blockentity.WineCellarBlockEntity;
@@ -61,17 +60,67 @@ public final class MekCkStandaloneMachines {
     public static void init() {
     }
 
-    public static final RegistryObject<Block> ICE_MAKER_BLOCK = BLOCKS.register("ice_maker", IceMakerBlock::new);
+    // Ice Maker (急冻制冰机：水 → 冰块加工 + 冷萃升级链 → 自动炮台)
+    //
+    // 2026-10-06 迁到 Mek 体系：方块/物品/方块实体/容器全部走 Mek 的注册器
+    // （与陈化窖 `WINE_CELLAR_*` / 坚果爆炒机 `NUT_ROASTER_*` 同款），
+    // **注册名一字不改**（仍是 mekck:ice_maker）。
+    //
+    // 迁移的原因见 {IceMakerTile} 类注释：旧实现是自研 BlockEntity +
+    // BigStackItemHandler + ContainerData（23 条槽 + 3 个 16 位拆位槽）+ SideMode +
+    // EnergyStorage + FluidTank + MekCkHeatComponent，侧配/升级/红石/热容/GUI 全要自己造。
 
-    public static final RegistryObject<Item> ICE_MAKER_ITEM = ITEMS.register("ice_maker",
-            () -> new MekCkBlockItem(ICE_MAKER_BLOCK.get(), new Item.Properties(),
-                    1, IceMakerBlockEntity.ENERGY_PER_TICK, IceMakerBlockEntity.ENERGY_CAPACITY));
+    public static final mekanism.common.registration.impl.ContainerTypeDeferredRegister ICE_MAKER_CONTAINERS_REG =
+            new mekanism.common.registration.impl.ContainerTypeDeferredRegister(MOD_ID);
 
-    public static final RegistryObject<BlockEntityType<IceMakerBlockEntity>> ICE_MAKER_BLOCK_ENTITY = BLOCK_ENTITIES.register(
-            "ice_maker", () -> BlockEntityType.Builder.of(IceMakerBlockEntity::new, ICE_MAKER_BLOCK.get()).build(null));
+    public static final mekanism.common.registration.impl.ContainerTypeRegistryObject<IceMakerMenu> ICE_MAKER_CONTAINER;
 
-    public static final RegistryObject<MenuType<IceMakerMenu>> ICE_MAKER_MENU = MENUS.register(
-            "ice_maker", () -> IForgeMenuType.create(IceMakerMenu::new));
+    public static final mekanism.common.registration.impl.BlockDeferredRegister ICE_MAKER_BLOCKS_REG =
+            new mekanism.common.registration.impl.BlockDeferredRegister(MOD_ID);
+
+    public static final mekanism.common.registration.impl.TileEntityTypeDeferredRegister ICE_MAKER_TILES_REG =
+            new mekanism.common.registration.impl.TileEntityTypeDeferredRegister(MOD_ID);
+
+    /** 方块与物品的注册句柄（{@code BlockRegistryObject} 自带 block+item，一次注册两样）。 */
+    public static final mekanism.common.registration.impl.BlockRegistryObject<IceMakerBlock, MekCkBlockItem> ICE_MAKER_HANDLE;
+
+    /** 方块实体类型 —— 由 Mek 的注册器建，{@code BlockTile} 与 ticker 都认它。 */
+    public static final mekanism.common.registration.impl.TileEntityTypeRegistryObject<
+            cn.ism.mekck.machine.icemaker.IceMakerTile> ICE_MAKER_TILE;
+
+    static {
+        // ⚠️ 顺序陷阱：BlockType 的 withGui / tileRef 参数是**延迟 Supplier**，
+        // 但 Java 的**明确赋值**规则不允许在静态块里前向引用尚未赋值的 final 字段。
+        // 解法与陈化窖 / 坚果爆炒机同款：先用局部变量串起依赖，最后统一赋给 final 字段。
+        mekanism.common.registration.impl.ContainerTypeRegistryObject<IceMakerMenu> container =
+                ICE_MAKER_CONTAINERS_REG.register(
+                        "ice_maker", cn.ism.mekck.machine.icemaker.IceMakerTile.class, IceMakerMenu::new);
+
+        java.util.concurrent.atomic.AtomicReference<mekanism.common.registration.impl.TileEntityTypeRegistryObject<
+                cn.ism.mekck.machine.icemaker.IceMakerTile>> tileRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.icemaker.IceMakerTile> blockType =
+                IceMakerBlock.blockTypeFor(() -> container, tileRef::get);
+
+        ICE_MAKER_HANDLE = ICE_MAKER_BLOCKS_REG.register("ice_maker",
+                () -> new IceMakerBlock(blockType,
+                        p -> p.strength(3.5F).sound(net.minecraft.world.level.block.SoundType.METAL)
+                                .requiresCorrectToolForDrops()),
+                block -> new MekCkBlockItem(block, new Item.Properties(), 1,
+                        cn.ism.mekck.machine.icemaker.IceMakerTile.ENERGY_PER_TICK,
+                        cn.ism.mekck.machine.icemaker.IceMakerTile.ENERGY_CAPACITY));
+
+        // 两个 ticker 都必须显式给：getTicker(boolean) 只是原样返回存进去的那个、没有任何兜底。
+        // 且必须传 Mek 自己的 {@code TileEntityMekanism.tickServer/tickClient}
+        // —— 自己写一个「只做加工」的 ticker 会静默跳过升级组件、红石、热容落账与 setActive 那几段。
+        ICE_MAKER_TILE = ICE_MAKER_TILES_REG.register(ICE_MAKER_HANDLE,
+                (pos, state) -> new cn.ism.mekck.machine.icemaker.IceMakerTile(ICE_MAKER_HANDLE, pos, state),
+                (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickClient(level, pos, state, tile),
+                (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickServer(level, pos, state, tile));
+
+        ICE_MAKER_CONTAINER = container;
+        tileRef.set(ICE_MAKER_TILE);
+    }
 
     // Wine Cellar (陈化窖/时间悖论产生器，F20：独立容器方块)
     //
@@ -351,7 +400,7 @@ public final class MekCkStandaloneMachines {
         event.accept(COOKING_POT_ITEM.get());
         event.accept(SKEWERING_MACHINE_ITEM.get());
         event.accept(BIOREACTOR_ITEM.get());
-        event.accept(ICE_MAKER_ITEM.get());
+        event.accept(ICE_MAKER_HANDLE.getItemStack());
         event.accept(WINE_CELLAR_HANDLE.getItemStack());
         event.accept(CENTRAL_KITCHEN_ITEM.get());
         event.accept(SANDWICH_ASSEMBLER_ITEM.get());

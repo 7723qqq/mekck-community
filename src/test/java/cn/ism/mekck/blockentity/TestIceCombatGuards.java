@@ -49,6 +49,16 @@ public class TestIceCombatGuards {
         return TestSourceText.read(BE_DIR + name + ".java");
     }
 
+    /**
+     * 已迁出 {@code blockentity/} 的机器（新落的包）—— 判据的落点表。
+     *
+     * <p>2026-10-06：急冻制冰机的 tile 落在 {@code machine/icemaker/}（同坚果爆炒机）后加了这条；
+     * 断言的内容一个字没变，只是「去哪个文件里读」跟着迁移走。</p>
+     */
+    private static String tile(String name) throws IOException {
+        return TestSourceText.read("src/main/java/cn/ism/mekck/machine/icemaker/" + name + ".java");
+    }
+
     private static String menu(String name) throws IOException {
         return TestSourceText.read(MENU_DIR + name + ".java");
     }
@@ -312,12 +322,15 @@ public class TestIceCombatGuards {
      */
     @Test
     public void iceMakerTargetTemperatureIsClampedOnLoad() throws IOException {
-        String src = be("IceMakerBlockEntity");
+        // 2026-10-06：急冻制冰机迁到 Mek 原生体系，类名与路径都变了
+        // （blockentity/IceMakerBlockEntity → machine/icemaker/IceMakerTile）。
+        // 判据的**落点**跟着改，断言的东西一个字没动。
+        String src = tile("IceMakerTile");
         assertTrue("IceMaker 读档的 targetTemperature 必须过 clampTargetTemperature（与 radius/targetType 同型）",
                 src.contains("clampTargetTemperature(tag.getInt(\"TargetTemperature\"))"));
         assertFalse("IceMaker 读档仍有绕过闸门的裸读 targetTemperature = tag.getInt(\"TargetTemperature\")",
                 src.contains("targetTemperature = tag.getInt(\"TargetTemperature\")"));
-        String setter = body(src, "public void setTargetTemperature(int milliCelsius) {", "IceMakerBlockEntity");
+        String setter = body(src, "public void setTargetTemperature(int milliCelsius) {", "IceMakerTile");
         assertTrue("setter 与读档必须共用同一道钳制闸门（否则两处会各自漂移）",
                 setter.contains("clampTargetTemperature(milliCelsius)"));
     }
@@ -367,7 +380,11 @@ public class TestIceCombatGuards {
      */
     @Test
     public void heatCapabilityFollowsInvalidateAndRevive() throws IOException {
-        String[] machines = {"IceMakerBlockEntity", "IceFactoryBlockEntity"};
+        // 登记表 2 → 1（2026-10-06）：急冻制冰机迁到 Mek 原生 tile 后，自研的热能力字段
+        // （heatCapability 这个 LazyOptional）整个消失 —— 热容改由 Mek 的 BasicHeatCapacitor 承载，
+        // 失效/复活由 TileEntityMekanism 的 HeatHandlerManager 自己收口（与坚果爆炒机同型）。
+        // 判据的对象（自研 LazyOptional）随迁移不存在了，不是放宽：同型的 IceFactory 仍逐个断言。
+        String[] machines = {"IceFactoryBlockEntity"};
         for (String m : machines) {
             String src = be(m);
             String invalidate = body(src, "public void invalidateCaps() {", m);
@@ -392,12 +409,22 @@ public class TestIceCombatGuards {
      */
     @Test
     public void iceMakerColdBrewTrackerIsPersistedWithItsTier() throws IOException {
-        String src = be("IceMakerBlockEntity");
-        String write = body(src, "protected void saveAdditional(CompoundTag tag) {", "IceMakerBlockEntity");
+        // 2026-10-06：落点随迁移改为 machine/icemaker/IceMakerTile.java（旧 BE 已删除），
+        // 三条断言一个字没动 —— 这正是本条要守的东西，迁移后必须仍然成立。
+        String src = tile("IceMakerTile");
+        // 签名落点：新 tile 的 saveAdditional 是 public（旧 BE 是 protected）——
+        // 判据看的是**方法体里有没有成对写**，可见性不参与断言。
+        String write = body(src, "void saveAdditional(CompoundTag tag) {", "IceMakerTile");
         assertTrue("冷萃读条器的 Installed 必须随 ColdBrew{i} 一起写出 —— "
                         + "只写等级的话，重载后 getInstalled() 回到 0，冷萃升级卸不下来",
                 write.contains("\"ColdBrewUpgradeTracker\" + i"));
-        String read = body(src, "public void load(CompoundTag tag) {", "IceMakerBlockEntity");
+        // 落点再挪一格：新 tile 把自有状态抽成了 readOwnState（load 与 readSustainedData 共用，
+        // 挖掉再放下才与留在世界里等价）。断言要求 load **真的**走到它，再看它读了什么 ——
+        // 只挪落点不看链路的话，「load 不再调 readOwnState」这种改法会静默逃过本条。
+        String load = body(src, "void load(CompoundTag tag) {", "IceMakerTile");
+        assertTrue("load 必须走 readOwnState（掉落物恢复 readSustainedData 走的是同一条）",
+                load.contains("readOwnState(tag)"));
+        String read = body(src, "void readOwnState(CompoundTag tag) {", "IceMakerTile");
         assertTrue("读档必须把读条器的 Installed 读回（与写出用同一个键）",
                 read.contains("\"ColdBrewUpgradeTracker\" + i"));
         assertTrue("旧存档（只有 ColdBrew{i}、没有读条器）必须按「已装 1 件」补回 —— "
@@ -406,6 +433,42 @@ public class TestIceCombatGuards {
     }
 
     // ================== 8. 自有配方的材料表必须走 RecipeRequiredInputs ==================
+
+    /**
+     * 急冻制冰机必须<b>每 tick 自己驱动热模拟</b>，且环境回归保留本机速率。
+     *
+     * <h3>为什么这条必须钉</h3>
+     * 换到 {@code BasicHeatCapacitor} 之后有个静默陷阱：基类只为<b>热力线缆</b>（{@code HeatNetwork}）
+     * 与<b>多方块</b>调 {@code ITileHeatHandler.simulateEnvironment / simulateAdjacent}，
+     * <b>单机不自己走一遍，机身温度永远贴着初始值</b> —— 既不制冷也不回温、
+     * 温度倍率恒为 1×，而编译通过、其余护栏全绿。
+     *
+     * <p>速率那一半同理：Mek 的 {@code simulateEnvironment} 里
+     * {@code AIR_INVERSE_COEFFICIENT = 10000} 压倒一切（本机逆绝缘 100 + 逆传导 5），
+     * 时间常数 ≈ 1700 tick；迁移前的 {@code MekCkHeatComponent.tick} 是每 tick 回归 1%，
+     * 时间常数 100 tick —— 差 17 倍。温度是本机唯一的调速手段（0 ℃ 1× → 绝对零度 30×），
+     * 直接换过去等于把持续制冷的电费压到零、把 30× 白送出去。</p>
+     *
+     * <p>所以本条同时钉两件事：<b>驱动必须在</b>、<b>环境回归不得换成 {@code simulateEnvironment()}</b>。
+     * 相邻传导用原生 {@code simulateAdjacent()} 是刻意的（公式与旧组件逐字同源）。</p>
+     */
+    @Test
+    public void iceMakerDrivesTheHeatSimulationEveryTick() throws IOException {
+        String src = tile("IceMakerTile");
+        String tick = body(src, "protected void onUpdateServer() {", "IceMakerTile");
+        assertTrue("onUpdateServer 必须每 tick 驱动热模拟（tickHeatExchange）—— "
+                        + "基类只替热力线缆与多方块调 simulate*，单机不走一遍机身温度就永远不动",
+                tick.contains("tickHeatExchange()"));
+        String heat = body(src, "private void tickHeatExchange() {", "IceMakerTile");
+        assertTrue("tickHeatExchange 必须调 Mek 原生 simulateAdjacent()（相邻热容器交换）",
+                heat.contains("simulateAdjacent()"));
+        assertTrue("环境回归必须走本机速率常量 AMBIENT_LOSS_RATE（与迁移前的 MekCkHeatComponent 同值）："
+                        + "换成 Mek 的 simulateEnvironment() 会把回归速率放慢 17 倍，"
+                        + "等于白送 30× 加工速度",
+                heat.contains("AMBIENT_LOSS_RATE"));
+        assertFalse("tickHeatExchange 不得改用 simulateEnvironment()（速率差 17 倍 = 玩法变更）",
+                heat.contains("simulateEnvironment()"));
+    }
 
     /**
      * 三类自有配方（{@code FerreroRecipe} / {@code IceMakeRecipe} / {@code NutRoastingRecipe}）
@@ -425,8 +488,8 @@ public class TestIceCombatGuards {
         String[][] machines = {
                 {"ChocolateCannonBlockEntity",
                         "src/main/java/cn/ism/mekck/blockentity/ChocolateCannonBlockEntity.java"},
-                {"IceMakerBlockEntity",
-                        "src/main/java/cn/ism/mekck/blockentity/IceMakerBlockEntity.java"},
+                {"IceMakerTile",
+                        "src/main/java/cn/ism/mekck/machine/icemaker/IceMakerTile.java"},
                 {"NutRoasterTile",
                         "src/main/java/cn/ism/mekck/machine/roasting/NutRoasterTile.java"},
         };

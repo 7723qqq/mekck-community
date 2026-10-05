@@ -30,13 +30,14 @@ public class TestMekCkHeatIntegration {
 
     @GameTest(template = TEMPLATE, timeoutTicks = 100)
     public static void iceMakerIsMekanismHeatHandler(GameTestHelper helper) {
-        helper.setBlock(POS, cn.ism.mekck.registry.MekCkStandaloneMachines.ICE_MAKER_BLOCK.get());
+        helper.setBlock(POS, cn.ism.mekck.registry.MekCkStandaloneMachines.ICE_MAKER_HANDLE.getBlock());
         BlockEntity be = helper.getBlockEntity(POS);
-        helper.assertTrue(be instanceof IceMakerBlockEntity, "ice_maker 方块实体类型不符: " + be);
+        helper.assertTrue(be instanceof cn.ism.mekck.machine.icemaker.IceMakerTile,
+                "ice_maker 方块实体类型不符: " + be);
 
         // 1) PNC 的判定条件
         helper.assertTrue(be instanceof IMekanismHeatHandler,
-                "IceMakerBlockEntity 未实现 IMekanismHeatHandler，PNC 不会挂载热适配器");
+                "IceMakerTile 未实现 IMekanismHeatHandler，PNC 不会挂载热适配器");
 
         // 2) 能力解析
         var resolved = be.getCapability(Capabilities.HEAT_HANDLER, null).resolve().orElse(null);
@@ -55,9 +56,21 @@ public class TestMekCkHeatIntegration {
                 "初始温度应等于环境温度 " + ambient + "，实际: " + before);
 
         resolved.handleHeat(0, 1000.0);
+        // Mek 的热模型是「本 tick 累积、tick 末尾统一落账」：BasicHeatCapacitor.handleHeat
+        // 只把量累进 heatToHandle，真正改 storedHeat 的是 update()。
+        // 旧的 MekCkHeatComponent.handleHeat 是自己立刻 update 的，迁到 TileEntityMekanism
+        // 之后这一句就是替代品（生产路径上是基类 tickServer 末尾的 updateHeatCapacitors(null)）。
+        updateHeatCapacitors(be);
         helper.assertTrue(Math.abs(resolved.getTemperature(0) - (before + 10.0)) < 1.0e-6,
                 "注入 1000 J 后温度应升高 10 K（热容量 100 J/K），实际: " + resolved.getTemperature(0));
         helper.succeed();
+    }
+
+    /** 让累积的热量落账（见 {@code iceMakerIsMekanismHeatHandler} 里的说明）。 */
+    private static void updateHeatCapacitors(BlockEntity be) {
+        if (be instanceof mekanism.common.capabilities.heat.ITileHeatHandler heat) {
+            heat.updateHeatCapacitors(null);
+        }
     }
 
     /** 加热类机器（坚果爆炒机）走同一条路径。 */

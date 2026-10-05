@@ -3,7 +3,6 @@ package cn.ism.mekck.upgrade;
 import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
-import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
 import cn.ism.mekck.blockentity.SmartCookingPotBlockEntity;
@@ -106,7 +105,9 @@ public final class UpgradeInstallHandler {
         }
 
         int added;
-        if (be instanceof IceMakerBlockEntity m) {
+        // 急冻制冰机分支改指新 tile，**不删**：冷萃 / 创造升级不是 Mek 的 Upgrade，
+        // Mek 的升级 tab 碰不到它们，本处理器是「潜行右键装卡」的唯一活路径（口径 §12.4.1 同型）。
+        if (be instanceof cn.ism.mekck.machine.icemaker.IceMakerTile m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof IceFactoryBlockEntity m) {
             added = m.addUpgradesFromHand(held);

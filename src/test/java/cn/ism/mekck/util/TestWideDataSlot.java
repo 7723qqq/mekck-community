@@ -214,9 +214,11 @@ public class TestWideDataSlot {
         // 电力研磨机于阶段 3 样板迁移中离开本扫描：10 → 9；
         // 坚果爆炒机于 2026-10-06 迁移中离开本扫描：9 → 8
         // （NutRoasterTile 的能量走 MachineEnergyContainer，没有 DATA_ENERGY 槽）。
+        // 急冻制冰机同日同型再离开一台：8 → 7（IceMakerTile 同款，能量走
+        // SyncableFloatingLong，连 ContainerData 都没有了）。
         // **这不是放宽判据**：下面那条 missing 断言对扫到的每一台逐条生效，
         // 「塞进 16 位通道却不拆高位」这条规则一个字没改。
-        assertTrue("一个同步能量的 BE 都没扫到，判据失效了", seen >= 8);
+        assertTrue("一个同步能量的 BE 都没扫到，判据失效了", seen >= 7);
         assertEquals("这些 BE 把能量塞进了 16 位通道却没拆高位 —— 客户端拿到的仍是被截断的负数：\n",
                 Set.of(), missing);
     }
@@ -289,8 +291,9 @@ public class TestWideDataSlot {
         }
         // 阈值 = 仍在自研侧配上的菜单数。坚果爆炒机 2026-10-06 迁到 Mek 原生体系后，
         // 侧配由 Mek 的 configComponent 承担、菜单不再有 getEncodedSideConfig()：8 → 7。
+        // 急冻制冰机同日同型再少一个：7 → 6（IceMakerMenu 同样只有 Mek 的 configComponent）。
         // **不是放宽**：下面那条 offenders 断言对扫到的每个菜单逐条生效。
-        assertTrue("一个 getEncodedSideConfig() 都没扫到，判据失效了", seen >= 7);
+        assertTrue("一个 getEncodedSideConfig() 都没扫到，判据失效了", seen >= 6);
         assertEquals("这些菜单的 getEncodedSideConfig() 仍在单槽裸读（24-bit 编码会丢 WEST/EAST 两面）：\n",
                 Set.of(), offenders);
     }
@@ -299,13 +302,18 @@ public class TestWideDataSlot {
      * 大罐（容量 &gt; 32767）的菜单流体 getter 必须走 {@link WideDataSlot#read}。
      *
      * <p>只列容量确定超界的菜单；如实测的 8000 罐（ChocolateCannon）等仍可单槽。</p>
+     *
+     * <p>IceMakerMenu 于 2026-10-06 移出本清单（3 → 2 之外的独立表项）：它的水罐换成了 Mek 的
+     * {@code BasicFluidTank}，菜单不再有 {@code getWaterStack()}，读侧改由 Mek 的
+     * {@code SyncableFluidStack} 同步整个 FluidStack —— 16 位通道问题在这台机器上不存在了。
+     * 同批的 NutRoasterMenu 本来就是同型处置。**判据本身（大罐不许单槽裸读）一个字没改**，
+     * 清单里其余两台仍逐个断言。</p>
      */
     @Test
     public void noWideTankMenuReadsFluidAmountFromASingleSlot() throws IOException {
         String[][] wideTanks = {
                 {"BioreactorMenu.java", "public FluidStack getFluidStack()"},          // 480,000
                 {"SmartCookingPotMenu.java", "public FluidStack getFluidStack(int tankIndex)"}, // MAX_VALUE
-                {"IceMakerMenu.java", "public FluidStack getWaterStack()"},            // 256,000
                 {"IceFactoryMenu.java", "public FluidStack getWaterStack()"},          // 256,000
         };
         for (String[] t : wideTanks) {

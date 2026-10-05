@@ -90,7 +90,8 @@ public class TestAttackRadiusClamp {
      *
      * <p>2026-10-06：坚果爆炒机迁到 Mek 原生体系，类名与路径都变了
      * （{@code blockentity/NutRoasterBlockEntity} → {@code machine/roasting/NutRoasterTile}）。
-     * 判据的<b>落点</b>跟着改，断言的东西一个字没动。</p>
+     * 急冻制冰机同日同型迁移（{@code blockentity/IceMakerBlockEntity} →
+     * {@code machine/icemaker/IceMakerTile}）。判据的<b>落点</b>跟着改，断言的东西一个字没动。</p>
      */
     @Test
     public void everyAttackMachineRoutesBothSettersThroughTheSharedClamp() throws java.io.IOException {
@@ -131,10 +132,11 @@ public class TestAttackRadiusClamp {
         // 顺带钉死本轮删掉的死语句（读取结果被丢弃的 machine.data.get(DATA_ENERGY)）不得回潮。
         // 四台同型：IceMaker（第 6 轮删）+ ChocolateCannon / NutRoaster（M13 删）
         // + SimpleMachineBlockEntity（M17 删）。
-        // 2026-10-06：坚果爆炒机的落点随迁移改为 machine/roasting/NutRoasterTile.java ——
-        // 新 tile 没有 data 字段，但这条断言（同一条被丢弃结果的死语句不得回潮）照旧适用。
+        // 2026-10-06：坚果爆炒机 / 急冻制冰机的落点随迁移分别改为
+        // machine/roasting/NutRoasterTile.java 与 machine/icemaker/IceMakerTile.java ——
+        // 新 tile 都没有 data 字段，但这条断言（同一条被丢弃结果的死语句不得回潮）照旧适用。
         String[][] deadStatementMachines = {
-                {"IceMakerBlockEntity", "src/main/java/cn/ism/mekck/blockentity/IceMakerBlockEntity.java"},
+                {"IceMakerTile", "src/main/java/cn/ism/mekck/machine/icemaker/IceMakerTile.java"},
                 {"ChocolateCannonBlockEntity", "src/main/java/cn/ism/mekck/blockentity/ChocolateCannonBlockEntity.java"},
                 {"NutRoasterTile", "src/main/java/cn/ism/mekck/machine/roasting/NutRoasterTile.java"},
                 {"SimpleMachineBlockEntity", "src/main/java/cn/ism/mekck/blockentity/SimpleMachineBlockEntity.java"},
@@ -155,7 +157,7 @@ public class TestAttackRadiusClamp {
      */
     private static String[][] attackMachines() {
         return new String[][]{
-                {"IceMakerBlockEntity", "src/main/java/cn/ism/mekck/blockentity/IceMakerBlockEntity.java"},
+                {"IceMakerTile", "src/main/java/cn/ism/mekck/machine/icemaker/IceMakerTile.java"},
                 {"IceFactoryBlockEntity", "src/main/java/cn/ism/mekck/blockentity/IceFactoryBlockEntity.java"},
                 {"ChocolateCannonBlockEntity", "src/main/java/cn/ism/mekck/blockentity/ChocolateCannonBlockEntity.java"},
                 {"NutRoasterTile", "src/main/java/cn/ism/mekck/machine/roasting/NutRoasterTile.java"},

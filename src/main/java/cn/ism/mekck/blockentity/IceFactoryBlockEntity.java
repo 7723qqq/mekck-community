@@ -717,7 +717,7 @@ public final class IceFactoryBlockEntity extends BlockEntity implements MenuProv
      * {@code serverTick} 里 {@code for (i < processes)} 的循环体，而奇点档 {@code processes = 81}
      * ⇒ <b>每 tick 每机器 162 次分配 + 81 次 getRecipeFor</b>。
      * {@code SingleSlotHandler} 每次都从 {@code items} 实时读该槽（不缓存内容），
-     * 因此按槽缓存一个实例与每次新建<b>行为等价</b>。同 {@code IceMakerBlockEntity#recipeWrapper}。</p>
+     * 因此按槽缓存一个实例与每次新建<b>行为等价</b>。同 {@code IceMakerTile#recipeWrapper}。</p>
      */
     private final java.util.Map<Integer, net.minecraftforge.items.wrapper.RecipeWrapper> slotProbeCache =
             new java.util.HashMap<>();

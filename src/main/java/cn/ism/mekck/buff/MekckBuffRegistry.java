@@ -39,7 +39,7 @@ public final class MekckBuffRegistry {
     /** 被糕点烘焙机 {@code bakery_oven} buff 的散点射攻击型（当前仅 ice_maker）。 */
     public static Set<Block> bakeryTargets() {
         if (bakeryTargets == null) {
-            bakeryTargets = Set.of(MekCkStandaloneMachines.ICE_MAKER_BLOCK.get());
+            bakeryTargets = Set.of(MekCkStandaloneMachines.ICE_MAKER_HANDLE.getBlock());
         }
         return bakeryTargets;
     }

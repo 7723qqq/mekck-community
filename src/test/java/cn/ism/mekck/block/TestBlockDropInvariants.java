@@ -177,10 +177,12 @@ public class TestBlockDropInvariants {
         // （不再覆写 getDrops，改由战利品表接管）时就离开这份名单。
         // 第四轮切菜机 10→9，2026-10-03 陈化窖 9→8，2026-10-05 电力研磨机 8→7，
         // 2026-10-06 坚果爆炒机 7→6（旧 NutRoasterBlock 的 getDrops 覆写随迁移删除，
-        // 掉落改由 data/mekck/loot_tables/blocks/nut_roaster.json 承担）。
+        // 掉落改由 data/mekck/loot_tables/blocks/nut_roaster.json 承担），
+        // 同日急冻制冰机 6→5（旧 IceMakerBlock 同型：getDrops 覆写删除，掉落改由
+        // data/mekck/loot_tables/blocks/ice_maker.json 承担）。
         // **这不是把判据放宽**：下面那条 offenders 断言对名单里每一台逐条生效，
         // 而且「抑制战利品表的方块不许再带一张死表」这条规则本身一个字没改。
-        assertTrue("护栏空转了：一张表都没检查到（checked=" + checked + "）", checked >= 6);
+        assertTrue("护栏空转了：一张表都没检查到（checked=" + checked + "）", checked >= 5);
         assertTrue("以下方块抑制战利品表却又带着一张死表：\n  " + String.join("\n  ", offenders),
                 offenders.isEmpty());
     }

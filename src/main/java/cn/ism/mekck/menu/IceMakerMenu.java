@@ -1,444 +1,144 @@
 package cn.ism.mekck.menu;
 
-import cn.ism.mekck.SideMode;
-import cn.ism.mekck.UniversalCuttingMachine;
-import cn.ism.mekck.blockentity.IceMakerBlockEntity;
-import cn.ism.mekck.config.MekckConfig;
-import cn.ism.mekck.item.ColdBrewTier;
-import cn.ism.mekck.item.ColdBrewUpgradeItem;
-import cn.ism.mekck.util.WideDataSlot;
-import mekanism.common.inventory.container.IGUIWindow;
-import mekanism.common.inventory.container.slot.IVirtualSlot;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ContainerData;
-import net.minecraft.world.inventory.SimpleContainerData;
-import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.Level;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.items.ItemStackHandler;
-import net.minecraftforge.items.SlotItemHandler;
-
-import java.util.function.IntSupplier;
+import cn.ism.mekck.machine.icemaker.IceMakerTile;
 import cn.ism.mekck.registry.MekCkStandaloneMachines;
+import mekanism.common.inventory.container.tile.MekanismTileContainer;
+import mekanism.common.registration.impl.ContainerTypeRegistryObject;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.player.Inventory;
 
-public final class IceMakerMenu extends AbstractContainerMenu implements ISideConfigurableMenu, IUpgradeMenu {
-    // Mekanism 风格布局常量（与 IceMakerScreen 保持一致）
-    public static final int INPUT_X = 40;
-    public static final int INPUT_Y = 40;
-    public static final int OUTPUT_X = 108;
-    public static final int OUTPUT_Y = 40;
-    public static final int CB_ROW_Y = 68;
+/**
+ * 急冻制冰机菜单 —— Mek 体系版。
+ *
+ * <h3>本类为什么只剩这么点</h3>
+ * 迁移前它有 444 行：<b>五个</b>手写的 {@code SlotItemHandler implements IVirtualSlot}
+ * 私有类（Input / Output / Power / ColdBrew / Upgrade），每个都要把 {@code IVirtualSlot}
+ * 的 8 个方法重写一遍（因为 Mek 的 {@code GuiMekanism.addSlots()} 只认
+ * {@code InventoryContainerSlot}），外加 {@code ContainerData} 的 23 条下标常量、
+ * 三个 16 位拆位槽（{@code WideDataSlot}）与一套自研升级槽的隐藏坐标技巧。
+ *
+ * <p>换 {@link MekanismTileContainer} 后：</p>
+ * <ul>
+ *   <li><b>槽位</b>由 {@code addSlots()} 遍历 {@code tile.getInventorySlots(null)} 自动装配，
+ *       坐标取 tile 建槽时写进去的那一份（{@link cn.ism.mekck.menu.slot.MekCkSlots.IceMaker}）；</li>
+ *   <li><b>升级槽与升级输出槽</b>由 Mek 的 {@code getUpgradeSlot()/getUpgradeOutputSlot()}
+ *       承担，不需要 {@code IUpgradeMenu}；</li>
+ *   <li><b>读数</b>走 {@code addContainerTrackers} 的同步通道（不再有 16 位截断，
+ *       {@code WideDataSlot} 那套随之作废）—— 能量、流体量、机身温度都由 Mek 的
+ *       {@code SyncableFloatingLong} / {@code SyncableFluidStack} / {@code SyncableDouble}
+ *       自动同步，不需要在这里再拆高低位；</li>
+ *   <li><b>shift-click 路由</b>交给 {@code MekanismContainer} 的默认实现
+ *       （旧的 quickMoveStack 连同 6 个槽位分支一并删除）。</li>
+ * </ul>
+ *
+ * <h3>背包几何：两行自定义控件</h3>
+ * 本机比 Mek 基础机器多两行自定义控件（索敌目标 / 半径，控温开关 / 目标温度，
+ * 见 {@code IceMakerScreen}），因此玩家背包整体下移 {@code 2 × EXTRA_ROW_HEIGHT}，
+ * 标签仍留在背包首行之上 {@code LABEL_ABOVE_INVENTORY} px —— 与
+ * {@code MekCkFactoryLayout.INVENTORY_LABEL_Y} 的间距口径一致。
+ */
+public final class IceMakerMenu extends MekanismTileContainer<IceMakerTile> {
+
+    /** 自定义控件每行多占的高度（一行 16px + 8px 间距）。 */
+    private static final int EXTRA_ROW_HEIGHT = 24;
+
+    /** 自定义控件行数：索敌行 + 控温行。 */
+    private static final int EXTRA_ROWS = 2;
+
+    /** 玩家背包首行 y —— Mek 默认 84，本机多两行控件后下移 48。 */
+    public static final int INV_TOP = 84 + EXTRA_ROWS * EXTRA_ROW_HEIGHT;
+
+    /** 标签到背包首行的间距 —— 与 {@code MekCkFactoryLayout.LABEL_ABOVE_INVENTORY} 同值。 */
+    public static final int LABEL_ABOVE_INVENTORY = 10;
+
+    /** 面板宽度 —— 与 Mek 基础电力机器一致（{@code GuiElectricMachine} 不覆写默认值）。 */
+    public static final int IMAGE_WIDTH = 176;
+
+    /** 面板高度 = 背包首行 + 3 行背包 + 1 行快捷栏 + 底部留白（Mek 的 6px）。 */
+    public static final int IMAGE_HEIGHT = INV_TOP + 58 + 18 + 6;
+
+    /** 索敌控件行相对面板顶的 y（屏幕侧同一常量）。 */
     public static final int ATTACK_ROW_Y = 92;
-    /** 温度控制行（攻击控制行下方）。 */
+
+    /** 控温控件行相对面板顶的 y（索敌行下方 20px）。 */
     public static final int TEMP_ROW_Y = ATTACK_ROW_Y + 20;
-    public static final int INV_TOP = TEMP_ROW_Y + 24;
-    public static final int IMAGE_WIDTH = 220;
-    public static final int IMAGE_HEIGHT = INV_TOP + 83;
 
-    private final IceMakerBlockEntity machine;
-    private final ContainerData data;
-    private boolean upgradePageActive = false;
+    /** 控件行高度。 */
+    public static final int CONTROL_ROW_HEIGHT = 16;
 
-    private final UpgradeSlot speedUpgradeSlot;
-    private final UpgradeSlot energyUpgradeSlot;
+    public IceMakerMenu(int containerId, Inventory inventory, IceMakerTile tile) {
+        super(resolveContainer(tile), containerId, inventory, tile);
+    }
 
     /**
-     * 客户端构造器：方块在 OpenScreen 到达前被破坏/替换、或区块被卸载时，
-     * {@code getBlockEntity} 返回 null。旧写法直接强转后交给主构造器，
-     * 主构造器第一行 {@code machine.getItems()} 就 NPE 崩客户端。这里显式判空
-     * （{@code instanceof} 同时挡掉类型不符），null 时构造「空菜单」：
-     * 槽位数量与坐标照旧，所有读取走 {@code machine == null} 的兜底分支。
+     * 容器类型从注册表取回。
+     *
+     * <p>父类要求非空（{@code MekanismContainer} 用它做 {@code IContainerTracker} 的身份标识）。
+     * 拿不到就抛出<b>指明根因</b>的异常，而不是把 null 传给父类。</p>
      */
-    public IceMakerMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
-        this(containerId, inventory,
-                inventory.player.level().getBlockEntity(buffer.readBlockPos())
-                        instanceof IceMakerBlockEntity machine ? machine : null,
-                new SimpleContainerData(IceMakerBlockEntity.DATA_SIZE));
-    }
-
-    public IceMakerMenu(int containerId, Inventory inventory, IceMakerBlockEntity machine, ContainerData data) {
-        super(MekCkStandaloneMachines.ICE_MAKER_MENU.get(), containerId);
-        this.machine = machine;
-        this.data = data;
-
-        // 空菜单（客户端 BE 缺失）用等长的空 handler 兜底：槽位数量与坐标必须照旧，
-        // 否则客户端与服务端的槽位契约不一致；读取路径全部走 machine == null 分支。
-        ItemStackHandler items = machine == null
-                ? new ItemStackHandler(IceMakerBlockEntity.TOTAL_SLOTS)
-                : machine.getItems();
-
-        // 容器槽顺序与 handler 索引一致：input, output, speed, energy, creative, cb1-4, power
-        addSlot(new InputSlot(items, IceMakerBlockEntity.INPUT_SLOT, INPUT_X, INPUT_Y));
-        addSlot(new OutputSlot(items, IceMakerBlockEntity.OUTPUT_SLOT, OUTPUT_X, OUTPUT_Y));
-
-        // 升级槽（仅升级弹窗打开时可用）
-        this.speedUpgradeSlot = new UpgradeSlot(items, IceMakerBlockEntity.SLOT_SPEED_UPGRADE, 40, 46, this);
-        addSlot(this.speedUpgradeSlot);
-        this.energyUpgradeSlot = new UpgradeSlot(items, IceMakerBlockEntity.SLOT_ENERGY_UPGRADE, 40, 72, this);
-        addSlot(this.energyUpgradeSlot);
-
-        // 创造升级槽 + 冷萃升级槽（主界面常显；冷萃 ①~⑤ 一排 5 格）
-        addSlot(new ColdBrewSlot(items, IceMakerBlockEntity.SLOT_CREATIVE_UPGRADE, INPUT_X + 5 * 18 + 8, CB_ROW_Y));
-        for (int i = 0; i < 5; i++) {
-            addSlot(new ColdBrewSlot(items, IceMakerBlockEntity.CB_SLOT_1 + i, INPUT_X + i * 18, CB_ROW_Y));
+    private static ContainerTypeRegistryObject<IceMakerMenu> resolveContainer(IceMakerTile tile) {
+        if (tile == null) {
+            // 走到这里说明方块的 BlockType 描述没绑对 tile（Mek 的容器工厂会先在客户端
+            // 按坐标取 biome 实体，取不到时抛「Missing tile」）。
+            throw new IllegalStateException(
+                    "急冻制冰机容器拿不到 tile：BlockTypeTile 的 tile Supplier 被过早求值，"
+                            + "或方块与 tile 类型不匹配。");
         }
-
-        // 能源槽（能量物品），Mekanism 风格位置
-        addSlot(new PowerSlot(items, IceMakerBlockEntity.SLOT_POWER, 7, 13));
-
-        // 玩家物品栏（居中）
-        int invLeft = (IMAGE_WIDTH - 162) / 2;
-        for (int row = 0; row < 3; row++) {
-            for (int column = 0; column < 9; column++) {
-                addSlot(new Slot(inventory, column + row * 9 + 9, invLeft + column * 18, INV_TOP + row * 18));
-            }
+        ContainerTypeRegistryObject<IceMakerMenu> container = MekCkStandaloneMachines.ICE_MAKER_CONTAINER;
+        if (container == null) {
+            throw new IllegalStateException("急冻制冰机容器尚未注册（ICE_MAKER_CONTAINER == null）");
         }
-        for (int column = 0; column < 9; column++) {
-            addSlot(new Slot(inventory, column, invLeft + column * 18, INV_TOP + 58));
-        }
-
-        addDataSlots(data);
-    }
-
-    /** 机器实例（客户端也持有，槽位内容由菜单同步 ⇒ 可用于「本机下单」列表）；空菜单（客户端 BE 缺失）时为 null。 */
-    public cn.ism.mekck.blockentity.IceMakerBlockEntity getMachine() {
-        return machine;
+        return container;
     }
 
     @Override
-    public boolean stillValid(Player player) {
-        // 空菜单一律视为失效：服务端据此关闭窗口，客户端也不再接受交互。
-        if (machine == null) {
-            return false;
-        }
-        Level level = player.level();
-        return level.getBlockEntity(machine.getBlockPos()) == machine
-                && player.distanceToSqr(machine.getBlockPos().getX() + 0.5D, machine.getBlockPos().getY() + 0.5D,
-                machine.getBlockPos().getZ() + 0.5D) <= 64.0D;
+    protected int getInventoryYOffset() {
+        return INV_TOP;
     }
 
-    @Override
-    public ItemStack quickMoveStack(Player player, int index) {
-        Slot slot = slots.get(index);
-        if (!slot.hasItem()) return ItemStack.EMPTY;
-        ItemStack stack = slot.getItem();
-        ItemStack copy = stack.copy();
-        int machineSlotCount = IceMakerBlockEntity.TOTAL_SLOTS;
-        if (index < machineSlotCount) {
-            if (!moveItemStackTo(stack, machineSlotCount, slots.size(), true)) return ItemStack.EMPTY;
-        } else {
-            if (IceMakerBlockEntity.isUsablePowerItem(stack)) {
-                if (!moveItemStackTo(stack, IceMakerBlockEntity.SLOT_POWER, IceMakerBlockEntity.SLOT_POWER + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isSpeedUpgrade(stack)) {
-                if (!moveItemStackTo(stack, IceMakerBlockEntity.SLOT_SPEED_UPGRADE, IceMakerBlockEntity.SLOT_SPEED_UPGRADE + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isEnergyUpgrade(stack)) {
-                if (!moveItemStackTo(stack, IceMakerBlockEntity.SLOT_ENERGY_UPGRADE, IceMakerBlockEntity.SLOT_ENERGY_UPGRADE + 1, false)) return ItemStack.EMPTY;
-            } else if (cn.ism.mekck.upgrade.UpgradeHelper.isCreativeUpgrade(stack)) {
-                if (!moveItemStackTo(stack, IceMakerBlockEntity.SLOT_CREATIVE_UPGRADE, IceMakerBlockEntity.SLOT_CREATIVE_UPGRADE + 1, false)) return ItemStack.EMPTY;
-            } else {
-                ColdBrewTier cb = ColdBrewUpgradeItem.getTier(stack);
-                if (cb != null) {
-                    int target = switch (cb) {
-                        case COLD -> IceMakerBlockEntity.CB_SLOT_1;
-                        case LOW_TEMP -> IceMakerBlockEntity.CB_SLOT_2;
-                        case FROST -> IceMakerBlockEntity.CB_SLOT_3;
-                        case DRAGON_FROST, QUEEN -> IceMakerBlockEntity.CB_SLOT_4;
-                        case HYPOTHERMIA -> IceMakerBlockEntity.CB_SLOT_5;
-                    };
-                    if (!moveItemStackTo(stack, target, target + 1, false)) return ItemStack.EMPTY;
-                } else if (!cn.ism.mekck.util.MekCkTransfer.moveItemStackTo(stack, slots,
-                        IceMakerBlockEntity.INPUT_SLOT, IceMakerBlockEntity.INPUT_SLOT + 1, false)) {
-                    // 输入格上限是 Integer.MAX_VALUE：走原版会被物品自身的 64 钳制，
-                    // 已堆到 64 的那一格 shift 就再也并不进去（与陈酿机同一病灶）。
-                    return ItemStack.EMPTY;
-                }
-            }
-        }
-        if (stack.isEmpty()) slot.set(ItemStack.EMPTY);
-        else slot.setChanged();
-        return copy;
+    // ================== 读数：全部问 tile（两侧同一入口） ==================
+
+    /** 进度百分比（0..100），屏幕画进度条用。 */
+    public int getProgressPercent() {
+        int total = getTileEntity().getProcessTime();
+        return total == 0 ? 0 : getTileEntity().getProgress() * 100 / total;
     }
 
-    // ================== 数据访问 ==================
-    public int getProgress() {
-        int maximum = data.get(IceMakerBlockEntity.DATA_PROCESS_TIME);
-        return maximum == 0 ? 0 : data.get(IceMakerBlockEntity.DATA_PROGRESS) * 24 / maximum;
-    }
-
-    public int getEnergy() {
-        return WideDataSlot.read(data,
-                IceMakerBlockEntity.DATA_ENERGY,
-                IceMakerBlockEntity.DATA_ENERGY_HI);
-    }
-
-    public int getEnergyCapacity() {
-        return IceMakerBlockEntity.ENERGY_CAPACITY;
-    }
-
-    /** 从 ContainerData 同步值重建流体（客户端 FluidTank 不进网络同步，直接读会是空罐）。 */
-    public FluidStack getWaterStack() {
-        int amount = WideDataSlot.read(data,
-                IceMakerBlockEntity.DATA_WATER_AMOUNT,
-                IceMakerBlockEntity.DATA_WATER_AMOUNT_HI);
-        if (amount <= 0) return FluidStack.EMPTY;
-        int id = data.get(IceMakerBlockEntity.DATA_WATER_FLUID_ID);
-        net.minecraft.world.level.material.Fluid fluid = id >= 0
-                ? net.minecraft.core.registries.BuiltInRegistries.FLUID.byId(id) : null;
-        if (fluid == null || fluid == net.minecraft.world.level.material.Fluids.EMPTY) return FluidStack.EMPTY;
-        return new FluidStack(fluid, amount);
-    }
-
-    public int getWaterCapacity() {
-        // 空菜单没有机器可读：容量按 0（流体条对 capacity <= 0 直接不画）。
-        return machine == null ? 0 : machine.getWaterTank().getCapacity();
-    }
-
-    public int getEncodedSideConfig() {
-        // 24-bit 侧配拆两槽，裸读低槽会丢 WEST/EAST 两面，见 WideDataSlot。
-        return WideDataSlot.read(data,
-                IceMakerBlockEntity.DATA_SIDE_CONFIG,
-                IceMakerBlockEntity.DATA_SIDE_CONFIG_HI);
-    }
-
-    @Override
-    public SideMode getSideMode(Direction direction) {
-        int encoded = getEncodedSideConfig();
-        int ordinal = (encoded >> (direction.ordinal() * 4)) & 0xF;
-        SideMode[] values = SideMode.values();
-        return (ordinal >= 0 && ordinal < values.length) ? values[ordinal] : SideMode.NONE;
-    }
-
-    public int getRedstoneControl() {
-        return data.get(IceMakerBlockEntity.DATA_REDSTONE_CONTROL);
-    }
-
-    public int getTargetType() {
-        return data.get(IceMakerBlockEntity.DATA_TARGET_TYPE);
-    }
-
-    public int getRadius() {
-        return data.get(IceMakerBlockEntity.DATA_RADIUS);
-    }
-
-    /** 当前机身温度（单位 0.01 ℃）。 */
+    /** 机身温度（单位 0.01 ℃）—— 屏幕侧除以 100.0。 */
     public int getCurrentTemperature() {
-        return data.get(IceMakerBlockEntity.DATA_CURRENT_TEMP);
+        return getTileEntity().getTemperatureDeciCelsius();
     }
 
     /** 设定温度（单位 0.01 ℃）。 */
     public int getTargetTemperature() {
-        return data.get(IceMakerBlockEntity.DATA_TARGET_TEMP);
+        return getTileEntity().getTargetTemperature();
     }
 
     /** 设定温度功能是否开启。 */
     public boolean isTemperatureControlEnabled() {
-        return data.get(IceMakerBlockEntity.DATA_TEMP_CONTROL) != 0;
+        return getTileEntity().isTemperatureControlEnabled();
     }
 
-    @Override
+    public int getTargetType() {
+        return getTileEntity().getTargetType();
+    }
+
+    public int getRadius() {
+        return getTileEntity().getRadius();
+    }
+
+    /**
+     * 第 index 格冷萃已安装的等级序号 + 1（0 = 未安装）。
+     *
+     * <p>屏幕据此在冷萃槽上画「已安装」徽标 —— 那是冷萃<b>卸载</b>的唯一入口
+     * （冷萃不是 Mek 的 {@code Upgrade}，Mek 的升级界面碰不到它）。</p>
+     */
+    public int getInstalledColdBrewCode(int index) {
+        return getTileEntity().getInstalledColdBrewCode(index);
+    }
+
+    /** 方块坐标 —— 屏幕发网络包时要用。 */
     public BlockPos getBlockPos() {
-        // 空菜单没有真实坐标，返回 ZERO 而不是 NPE（同 GrillMenu 的 tile == null 写法）。
-        return machine == null ? BlockPos.ZERO : machine.getBlockPos();
-    }
-
-    // ================== IUpgradeMenu ==================
-    /** 卸载升级（升级界面卸载按钮）。 */
-    @Override
-    public void uninstallUpgrade(byte mode, int slot) {
-        // 空菜单没有机器可卸载：不发包。
-        if (machine == null) {
-            return;
-        }
-        cn.ism.mekck.network.ModMessages.sendToServer(
-                new cn.ism.mekck.network.UpgradeUninstallPacket(machine.getBlockPos(), mode, slot));
-    }
-
-    @Override
-    public boolean supportsUpgradeUninstall() {
-        return true;
-    }
-
-    public boolean supportsSpeedUpgrade() {
-        return false;
-    }
-
-    public int getSpeedUpgradeCount() {
-        return data.get(IceMakerBlockEntity.DATA_SPEED_UPGRADE);
-    }
-
-    public int getEnergyUpgradeCount() {
-        return data.get(IceMakerBlockEntity.DATA_ENERGY_UPGRADE);
-    }
-
-    @Override
-    public int getSpeedUpgradeMax() {
-        return MekckConfig.getBasicSpeedUpgradeMax();
-    }
-
-    @Override
-    public int getEnergyUpgradeMax() {
-        return MekckConfig.getBasicEnergyUpgradeMax();
-    }
-
-    @Override
-    public Slot getSpeedUpgradeSlot() {
-        return speedUpgradeSlot;
-    }
-
-    @Override
-    public Slot getEnergyUpgradeSlot() {
-        return energyUpgradeSlot;
-    }
-
-    @Override
-    public void setUpgradePageActive(boolean active) {
-        this.upgradePageActive = active;
-    }
-
-    @Override
-    public boolean isUpgradePageActive() {
-        return this.upgradePageActive;
-    }
-
-    // ================== 槽位类型 ==================
-    private static final class PowerSlot extends SlotItemHandler implements IVirtualSlot {
-        private PowerSlot(ItemStackHandler handler, int slot, int x, int y) {
-            super(handler, slot, x, y);
-        }
-
-        @Override
-        public boolean mayPlace(ItemStack stack) {
-            return IceMakerBlockEntity.isUsablePowerItem(stack);
-        }
-
-        @Override public boolean isActive() { return true; }
-        @Override public IGUIWindow getLinkedWindow() { return null; }
-        @Override public int getActualX() { return x; }
-        @Override public int getActualY() { return y; }
-        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
-        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
-        @Override public ItemStack getStackToRender() { return getItem(); }
-        @Override public boolean shouldDrawOverlay() { return false; }
-        @Override public String getTooltipOverride() { return null; }
-        @Override public Slot getSlot() { return this; }
-    }
-
-    private static final class InputSlot extends SlotItemHandler implements IVirtualSlot {
-        private final int slotIndex;
-
-        private InputSlot(ItemStackHandler handler, int slot, int x, int y) {
-            super(handler, slot, x, y);
-            this.slotIndex = slot;
-        }
-
-        @Override
-        public int getMaxStackSize(ItemStack stack) {
-            return getItemHandler().getSlotLimit(slotIndex);
-        }
-
-        @Override public IGUIWindow getLinkedWindow() { return null; }
-        @Override public int getActualX() { return x; }
-        @Override public int getActualY() { return y; }
-        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
-        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
-        @Override public ItemStack getStackToRender() { return getItem(); }
-        @Override public boolean shouldDrawOverlay() { return false; }
-        @Override public String getTooltipOverride() { return null; }
-        @Override public Slot getSlot() { return this; }
-    }
-
-    private static final class OutputSlot extends SlotItemHandler implements IVirtualSlot {
-        private OutputSlot(ItemStackHandler handler, int slot, int x, int y) {
-            super(handler, slot, x, y);
-        }
-
-        @Override
-        public boolean mayPlace(ItemStack stack) {
-            return false;
-        }
-
-        @Override public IGUIWindow getLinkedWindow() { return null; }
-        @Override public int getActualX() { return x; }
-        @Override public int getActualY() { return y; }
-        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
-        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
-        @Override public ItemStack getStackToRender() { return getItem(); }
-        @Override public boolean shouldDrawOverlay() { return false; }
-        @Override public String getTooltipOverride() { return null; }
-        @Override public Slot getSlot() { return this; }
-    }
-
-    /** 冷萃/创造升级槽（主界面常显）。 */
-    private static final class ColdBrewSlot extends SlotItemHandler implements IVirtualSlot {
-        private ColdBrewSlot(ItemStackHandler handler, int slot, int x, int y) {
-            super(handler, slot, x, y);
-        }
-
-        @Override
-        public int getMaxStackSize(ItemStack stack) {
-            return 1;
-        }
-
-        @Override public IGUIWindow getLinkedWindow() { return null; }
-        @Override public int getActualX() { return x; }
-        @Override public int getActualY() { return y; }
-        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {}
-        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {}
-        @Override public ItemStack getStackToRender() { return getItem(); }
-        @Override public boolean shouldDrawOverlay() { return false; }
-        @Override public String getTooltipOverride() { return null; }
-        @Override public Slot getSlot() { return this; }
-    }
-
-    private static final class UpgradeSlot extends SlotItemHandler implements IVirtualSlot {
-        /** 升级窗口未打开时把渲染位置移出屏幕：主屏便既不绘制、也命中不到它
-         *  （Mek 的 VirtualSlotContainerScreen 渲染与 isMouseOverSlot 都走 getActualX/Y）。
-         *  刻意<b>不改 isActive()</b> —— 那是槽的语义标志（服务端 mayPlace/转移逻辑依赖它），
-         *  为了纯视觉的布局问题去改写它风险过大。 */
-        private static final int HIDDEN_POS = -9999;
-
-        private final IceMakerMenu menu;
-        private IGUIWindow linkedWindow;
-        // 存供给器而非快照：窗口拖拽后 getActualX/Y 必须实时跟随。
-        private IntSupplier xSupplier, ySupplier;
-        private ItemStack stackToRender = ItemStack.EMPTY;
-        private boolean overlay;
-        private String tooltip;
-
-        private UpgradeSlot(ItemStackHandler handler, int slot, int x, int y, IceMakerMenu menu) {
-            super(handler, slot, x, y);
-            this.menu = menu;
-        }
-
-        @Override
-        public boolean mayPickup(Player player) {
-            return false;
-        }
-
-        @Override public boolean isActive() { return true; }
-
-        @Override public IGUIWindow getLinkedWindow() { return linkedWindow; }
-        @Override public int getActualX() { return linkedWindow == null ? HIDDEN_POS : (xSupplier != null ? xSupplier.getAsInt() : x); }
-        @Override public int getActualY() { return linkedWindow == null ? HIDDEN_POS : (ySupplier != null ? ySupplier.getAsInt() : y); }
-        @Override public void updatePosition(IGUIWindow window, IntSupplier xSupplier, IntSupplier ySupplier) {
-            linkedWindow = window;
-            this.xSupplier = xSupplier;
-            this.ySupplier = ySupplier;
-        }
-        @Override public void updateRenderInfo(ItemStack stack, boolean overlay, String tooltip) {
-            this.stackToRender = stack;
-            this.overlay = overlay;
-            this.tooltip = tooltip;
-        }
-        @Override public ItemStack getStackToRender() { return stackToRender; }
-        @Override public boolean shouldDrawOverlay() { return overlay; }
-        @Override public String getTooltipOverride() { return tooltip; }
-        @Override public Slot getSlot() { return this; }
+        return getTileEntity().getBlockPos();
     }
 }

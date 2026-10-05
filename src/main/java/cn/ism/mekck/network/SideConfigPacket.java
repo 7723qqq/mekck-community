@@ -6,7 +6,6 @@ import cn.ism.mekck.blockentity.SimpleMachineBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
 import cn.ism.mekck.blockentity.SmartCookingPotBlockEntity;
-import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -106,8 +105,9 @@ public final class SideConfigPacket {
                 machine.setSideMode(dir, mode);
             } else if (be instanceof PlantingCuttingStationBlockEntity machine) {
                 machine.setSideMode(dir, mode);
-            } else if (be instanceof IceMakerBlockEntity machine) {
-                machine.setSideMode(dir, mode);
+            // 急冻制冰机分支在 2026-10-06 迁移中删除：新的 IceMakerTile 是
+            // TileEntityConfigurableMachine（经 MekCkNetworkPullableTile），物品侧配
+            // 由 Mek 自己的 configComponent 持有、由 Mek 自己的侧配界面写入（同坚果爆炒机）。
             } else if (be instanceof IceFactoryBlockEntity machine) {
                 machine.setSideMode(dir, mode);
             // 电力研磨机分支在阶段 3 样板迁移中删除：新的 GrindingMachineTile 是

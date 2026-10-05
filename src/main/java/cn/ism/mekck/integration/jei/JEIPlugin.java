@@ -350,7 +350,7 @@ public class JEIPlugin implements IModPlugin {
         registration.addRecipeCategories(new IceMakeRecipeCategory(
                 helper,
                 ICE_MAKE_TYPE,
-                new ItemStack(MekCkStandaloneMachines.ICE_MAKER_BLOCK.get())
+                new ItemStack(MekCkStandaloneMachines.ICE_MAKER_HANDLE.getBlock())
         ));
 
         // Register the Ferrero recipe category (巧克力大炮)
@@ -672,7 +672,7 @@ public class JEIPlugin implements IModPlugin {
 
         // 急冻制冰机及所有制冰工厂作为 mekck:ice_make 配方分类的催化剂
         registration.addRecipeCatalyst(
-                new ItemStack(MekCkStandaloneMachines.ICE_MAKER_BLOCK.get()),
+                new ItemStack(MekCkStandaloneMachines.ICE_MAKER_HANDLE.getBlock()),
                 ICE_MAKE_TYPE
         );
         for (var entry : MekCkFactories.ICE_FACTORY_BLOCKS.entrySet()) {

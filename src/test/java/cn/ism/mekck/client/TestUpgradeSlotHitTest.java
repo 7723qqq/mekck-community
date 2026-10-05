@@ -48,12 +48,18 @@ public class TestUpgradeSlotHitTest {
      * Mek 原生体系后，菜单里那四个手写槽类（含 {@code UpgradeSlot}）与自研升级窗
      * 一并删除，升级槽改由 {@code MekanismTileContainer.getUpgradeSlot()} 承担。
      * 断言的落点（自研 UpgradeSlot 的 getActualX/Y）随迁移消失，不是放宽判据。</p>
+     *
+     * <p><b>IceMakerMenu 于 2026-10-06 同型收缩（5 → 4）</b>：急冻制冰机迁到 Mek 原生体系后，
+     * 菜单里那五个手写槽类（含 {@code UpgradeSlot}）与自研升级窗一并删除，
+     * 升级槽改由 {@code MekanismTileContainer.getUpgradeSlot()} 承担。
+     * 冷萃那五格是<b>额外槽</b>（不是自研 UpgradeSlot），它们在容器里由
+     * {@code InventoryContainerSlot} 承担、屏幕侧按槽对象定位（见 IceMakerScreen），
+     * 与这条断言的落点（自研 UpgradeSlot 的 getActualX/Y）无关。</p>
      */
     private static final List<String> MENUS = List.of(
             "cn.ism.mekck.menu.SimpleMachineMenu",
             "cn.ism.mekck.menu.SkeweringMachineMenu",
             "cn.ism.mekck.menu.SmartCookingPotMenu",
-            "cn.ism.mekck.menu.IceMakerMenu",
             "cn.ism.mekck.menu.ChocolateCannonMenu");
 
     /**

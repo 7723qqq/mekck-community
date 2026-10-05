@@ -1,6 +1,5 @@
 package cn.ism.mekck.network;
 
-import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -49,7 +48,10 @@ public final class IceAttackConfigPacket {
             ServerPlayer player = context.getSender();
             BlockEntity be = PacketGuard.target(player, pos);
             if (be == null) return;
-            if (be instanceof IceMakerBlockEntity machine) {
+            // 急冻制冰机（2026-10-06 迁到 Mek 原生 tile）：分支改指 IceMakerTile，**不删** ——
+            // 索敌（目标类型 / 半径）与控温（设定温度 / 开关）都是活功能，本包是它们唯一的写入路径，
+            // 删掉就是「GUI 上的控制全部静默失效」（口径 §12.4.1 同型）。
+            if (be instanceof cn.ism.mekck.machine.icemaker.IceMakerTile machine) {
                 switch (mode) {
                     case 0 -> machine.setTargetType(value);
                     case 2 -> machine.setRadius(value);

@@ -1656,7 +1656,13 @@ public final class MekckAe2 {
             // 而不是「清掉一条已经不用的旧类型分支」。分支指向的是在用的新 tile。
             } else if (owner instanceof cn.ism.mekck.machine.roasting.NutRoasterTile) {
                 entries = buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("mekck", "nut_roasting"), avail);
-            } else if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity) {
+            } else if (owner instanceof cn.ism.mekck.machine.icemaker.IceMakerTile) {
+                // 急冻制冰机（2026-10-06 迁到 Mek 原生 tile）：类型换成 IceMakerTile，
+                // 样板来源（buildSimpleSingleOutputPatterns + mekck:ice_make）一字未改。
+                // ⚠️ 本机的分支**刻意保留**（与电力研磨机不同）：删掉它，本机在 ME 终端就再也
+                // 注册不出样板，面板的「ME」列表也随之恒空 —— 那是玩家可见的功能消失，
+                // 而不是「清掉一条已经不用的旧类型分支」。分支指向的是在用的新 tile（口径 §12.4.1）。
+                // 与制冰工厂那条分支不冲突：两者都用 ice_make，但工厂是另一个类、另一套材料来源。
                 entries = buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("mekck", "ice_make"), avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity) {
                 entries = buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("mekck", "ferrero"), avail);
@@ -1892,7 +1898,8 @@ public final class MekckAe2 {
             // 坚果爆炒机分支改为指向新 tile（同上：分支是活的，订单必须有人设）。
             } else if (owner instanceof cn.ism.mekck.machine.roasting.NutRoasterTile roaster) {
                 roaster.setOrder(entry.recipeId, 1);
-            } else if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity ice) {
+            } else if (owner instanceof cn.ism.mekck.machine.icemaker.IceMakerTile ice) {
+                // 急冻制冰机分支改指新 tile（同坚果爆炒机：分支是活的，订单必须有人设）。
                 ice.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity cannon) {
                 cannon.setOrder(entry.recipeId, 1);
@@ -1919,7 +1926,7 @@ public final class MekckAe2 {
             // 坚果爆炒机：新 tile 提供 ae2View（输入 0 / 输出 1 的只读适配视图），
             // 下标与迁移前的 ItemStackHandler 一致（见 NutRoasterTile#getItems）。
             if (owner instanceof cn.ism.mekck.machine.roasting.NutRoasterTile roaster) return roaster.getItems();
-            if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity ice) return ice.getItems();
+            if (owner instanceof cn.ism.mekck.machine.icemaker.IceMakerTile ice) return ice.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity cannon) return cannon.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity kitchen) return kitchen.items;
             if (owner instanceof cn.ism.mekck.blockentity.SandwichAssemblerBlockEntity asm) return asm.items;
@@ -1949,8 +1956,9 @@ public final class MekckAe2 {
             if (owner instanceof cn.ism.mekck.machine.roasting.NutRoasterTile) {
                 return new int[]{cn.ism.mekck.machine.roasting.NutRoasterTile.OUTPUT_SLOT};
             }
-            if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity) {
-                return new int[]{cn.ism.mekck.blockentity.IceMakerBlockEntity.OUTPUT_SLOT};
+            if (owner instanceof cn.ism.mekck.machine.icemaker.IceMakerTile) {
+                // 急冻制冰机：输出槽在 ae2View 里是下标 1（INPUT_SLOT 0 / OUTPUT_SLOT 1）。
+                return new int[]{cn.ism.mekck.machine.icemaker.IceMakerTile.OUTPUT_SLOT};
             }
             if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity) {
                 return new int[]{cn.ism.mekck.blockentity.ChocolateCannonBlockEntity.OUTPUT_SLOT};

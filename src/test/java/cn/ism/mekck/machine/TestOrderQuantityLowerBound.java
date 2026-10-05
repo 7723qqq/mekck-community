@@ -113,7 +113,16 @@ public class TestOrderQuantityLowerBound {
             }
         }
 
-        assertTrue("一条 setOrder 都没扫到，护栏空转了（seen=" + seen + "）", seen >= 10);
+        // 阈值 10 → 9（2026-10-06）：急冻制冰机的 setOrder 随迁移从
+        // `orderQuantity = recipeId == null ? 0 : Math.max(1, quantity)` 改成
+        // `order.setOrder(recipeId, quantity)`（委托 MekCkOrderState，与同批的
+        // NutRoasterTile 逐字同款）。委托形态的方法体里没有 `=`，
+        // 被上面那道 `!body.contains("=")` 的前置过滤按「不是处理份数的实现」跳过 ——
+        // 与 NutRoasterTile 迁移时的结果一样（它也不计入）。
+        // **这不是放宽判据**：下面那条 offenders 断言对**扫到的每一条**逐条生效，
+        // 「setOrder 必须自己夹紧数量下界」这条规则一个字没改；
+        // 委托形态的口径由 theContractItselfStillClearsOnCancel 反向锚在 MekCkOrderState 上。
+        assertTrue("一条 setOrder 都没扫到，护栏空转了（seen=" + seen + "）", seen >= 9);
         assertEquals("这些 setOrder 未夹数量下界：\n  " + String.join("\n  ", offenders),
                 List.of(), offenders);
     }
@@ -195,7 +204,11 @@ public class TestOrderQuantityLowerBound {
             }
         }
 
-        assertTrue("一条 setOrder 都没扫到，护栏空转了（seen=" + seen + "）", seen >= 10);
+        // 阈值 10 → 9（2026-10-06）：同上一条，急冻制冰机的 setOrder 改成委托
+        // MekCkOrderState 的形态后被 `!body.contains("=")` 的前置过滤跳过。
+        // **这不是放宽判据**：取消侧清零的口径在 MekCkOrderState 里由
+        // theContractItselfStillClearsOnCancel 反向锚定，规则一个字没改。
+        assertTrue("一条 setOrder 都没扫到，护栏空转了（seen=" + seen + "）", seen >= 9);
         assertEquals("这些 setOrder 取消订单后会留下 quantity 的残留"
                         + "（应写成 recipeId == null ? 0 : Math.max(1, quantity)，"
                         + "或前置 if (recipeId == null) { clearOrder(); return; }）：\n  "

@@ -40,7 +40,7 @@ import static cn.ism.mekck.registry.MekCkFactories.GRILL_FACTORY_CONTAINER;
 import static cn.ism.mekck.registry.MekCkFactories.GRINDING_MACHINE_CONTAINER;
 import static cn.ism.mekck.registry.MekCkEntities.ICE_CUBE_ENTITY;
 import static cn.ism.mekck.registry.MekCkFactories.ICE_FACTORY_MENU;
-import static cn.ism.mekck.registry.MekCkStandaloneMachines.ICE_MAKER_MENU;
+import static cn.ism.mekck.registry.MekCkStandaloneMachines.ICE_MAKER_CONTAINER;
 import static cn.ism.mekck.registry.MekCkFactories.MACHINE_CONTAINER;
 import static cn.ism.mekck.registry.MekCkStandaloneMachines.NUT_ROASTER_CONTAINER;
 import static cn.ism.mekck.registry.MekCkFactories.PLANTING_CUTTING_CONTAINER;
@@ -83,7 +83,7 @@ public final class ClientEvents {
             MenuScreens.register(PLANTING_CUTTING_CONTAINER.get(), PlantingCuttingFactoryScreen::new);
             MenuScreens.register(PLANTING_CUTTING_STATION_MENU.get(), PlantingCuttingStationScreen::new);
             MenuScreens.register(BIOREACTOR_MENU.get(), BioreactorScreen::new);
-            MenuScreens.register(ICE_MAKER_MENU.get(), IceMakerScreen::new);
+            MenuScreens.register(ICE_MAKER_CONTAINER.get(), IceMakerScreen::new);
             MenuScreens.register(WINE_CELLAR_CONTAINER.get(), WineCellarScreen::new);
             MenuScreens.register(CENTRAL_KITCHEN_MENU.get(), cn.ism.mekck.client.CentralKitchenScreen::new);
             MenuScreens.register(SANDWICH_ASSEMBLER_MENU.get(), cn.ism.mekck.client.SandwichAssemblerScreen::new);

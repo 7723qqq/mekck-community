@@ -23,7 +23,6 @@ import cn.ism.mekck.blockentity.SmartCookingPotBlockEntity;
 import cn.ism.mekck.block.IceMakerBlock;
 import cn.ism.mekck.block.IceFactoryBlock;
 import cn.ism.mekck.block.WineCellarBlock;
-import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import cn.ism.mekck.blockentity.WineCellarBlockEntity;
 import cn.ism.mekck.menu.IceMakerMenu;
@@ -217,6 +216,10 @@ public final class UniversalCuttingMachine {
         MekCkStandaloneMachines.NUT_ROASTER_BLOCKS_REG.register(bus);
         MekCkStandaloneMachines.NUT_ROASTER_TILES_REG.register(bus);
         MekCkStandaloneMachines.NUT_ROASTER_CONTAINERS_REG.register(bus);
+        // 急冻制冰机（2026-10-06 迁到 Mek 体系）：同上，三件套必须成组出现。
+        MekCkStandaloneMachines.ICE_MAKER_BLOCKS_REG.register(bus);
+        MekCkStandaloneMachines.ICE_MAKER_TILES_REG.register(bus);
+        MekCkStandaloneMachines.ICE_MAKER_CONTAINERS_REG.register(bus);
         bus.addListener(this::addCreativeTabContents);
         bus.addListener(this::onCommonSetup);
         // 配置文件生成到 config/mekck/mekck-common.toml（与 planting 等配置文件同目录）

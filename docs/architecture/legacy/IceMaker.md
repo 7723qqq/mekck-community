@@ -1,6 +1,19 @@
 # IceMaker（制冰机）迁移契约
 
-**迁移阶段：未迁**（仍是普通 `BlockEntity`）
+**迁移阶段：已迁（2026-10-06）** —— 本文保留为**迁移前契约的快照**（槽序 / NBT 键），
+迁移后的落点见下表；迁移当时的动作清单与护栏处置见 `docs/STATUS.md` 本轮 §〇。
+
+| 迁移后 | 位置 |
+|---|---|
+| 方块实体 | `machine/icemaker/IceMakerTile`（`extends MekCkNetworkPullableTile`） |
+| 方块 | `block/IceMakerBlock`（`BlockTile` + `BlockTypeTile.blockTypeFor`） |
+| 菜单 / 屏幕 | `menu/IceMakerMenu`（`MekanismTileContainer`）/ `client/IceMakerScreen`（`MekCkContainerScreenBase`） |
+| 注册 | `registry/MekCkStandaloneMachines` 的 `ICE_MAKER_{CONTAINERS,BLOCKS,TILES}_REG`（注册名不变） |
+| 战利品表 | `data/mekck/loot_tables/blocks/ice_maker.json`（已补） |
+| **新槽序** | `[输入 0, 输出 1, 创造升级 2, 冷萃①~⑤ 3..7, 能源 8]`（速度/能量卡改由 `TileComponentUpgrade` 持有） |
+| 旧存档 | **不迁**（用户口径：模组尚未正式发布，NBT 键可以改） |
+| 冷萃读条器 | 与 `installedColdBrew` **成对落盘**；护栏见 `machine/icemaker/TestIceMakerColdBrewPersistence`（含变异测试记录） |
+| 保留的活分支 | `MekckAe2` 四条 + `IceAttackConfigPacket` / `UpgradeUninstallPacket` / `UpgradeInstallHandler` 三条（口径 §12.4.1 续记）；只有 `SideConfigPacket` 那条删 |
 
 ## 一、定位
 

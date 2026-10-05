@@ -46,8 +46,6 @@ public class TestScreenNullGuards {
     // M32 扩展：5 个独立机器屏幕（BioreactorScreen 不访问 machine，无需纳入）。
     private static final String CHOCOLATE_SCREEN =
             "src/main/java/cn/ism/mekck/client/ChocolateCannonScreen.java";
-    private static final String ICE_MAKER_SCREEN =
-            "src/main/java/cn/ism/mekck/client/IceMakerScreen.java";
     private static final String COOKING_POT_SCREEN =
             "src/main/java/cn/ism/mekck/client/SmartCookingPotScreen.java";
     private static final String SKEWERING_SCREEN =
@@ -62,6 +60,15 @@ public class TestScreenNullGuards {
     // 「Missing tile」，根本不构造容器 —— 判据的对象（可能为 null 的 menu.getMachine()）
     // 在这台机器上不存在了，与 TestUpgradeSlotHitTest 里研磨机移出清单同型。
     // 其余 4 个屏仍逐个断言提取形态 + 判空。
+    //
+    // 登记表 4 → 3（2026-10-06，急冻制冰机同批迁移）：IceMakerScreen 现在 `extends
+    // MekCkContainerScreenBase`（GuiConfigurableTile 家族），面板数据源直接问
+    // `menu.getTileEntity()`（MekanismTileContainer 的字段 @NotNull，容器工厂取不到 BE 时
+    // 直接抛「Missing tile」）；侧配交给 Mek，`getMachineFacing()` 那条也随自研侧配窗删除。
+    // 判据的对象（可能为 null 的 menu.getMachine()）在这台机器上不存在了 ——
+    // 与本文件里坚果爆炒机那次的处置逐字同型，**不是**为了让红灯变绿而放宽：
+    // 其余 3 个屏仍逐个断言提取形态 + 判空，且 assertGuarded 的文件级
+    // 「不得链式解引用 menu.getMachine().xxx」对新屏照常生效。
 
     /** 提取形态：所有调用点都必须先落到这个局部变量，再判空。 */
     private static final String EXTRACTION = "var machine = menu.getMachine();";
@@ -118,13 +125,6 @@ public class TestScreenNullGuards {
     @Test
     public void chocolateCannonScreenGuardsEveryGetMachine() throws IOException {
         assertGuarded(CHOCOLATE_SCREEN,
-                "private NetworkOrderPanel.LocalSource localOrderSource()",
-                "private Direction getMachineFacing()");
-    }
-
-    @Test
-    public void iceMakerScreenGuardsEveryGetMachine() throws IOException {
-        assertGuarded(ICE_MAKER_SCREEN,
                 "private NetworkOrderPanel.LocalSource localOrderSource()",
                 "private Direction getMachineFacing()");
     }

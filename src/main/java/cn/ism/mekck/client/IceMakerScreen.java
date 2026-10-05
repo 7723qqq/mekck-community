@@ -1,52 +1,98 @@
 package cn.ism.mekck.client;
 
-import cn.ism.mekck.RedstoneControl;
-import cn.ism.mekck.blockentity.IceMakerBlockEntity;
-import cn.ism.mekck.menu.ISideConfigurableMenu;
-import cn.ism.mekck.menu.IUpgradeMenu;
+import cn.ism.mekck.item.ColdBrewTier;
+import cn.ism.mekck.item.ColdBrewUpgradeItem;
+import cn.ism.mekck.machine.icemaker.IceMakerTile;
 import cn.ism.mekck.menu.IceMakerMenu;
 import cn.ism.mekck.network.IceAttackConfigPacket;
 import cn.ism.mekck.network.ModMessages;
-import net.minecraft.world.item.crafting.Recipe;
-import cn.ism.mekck.network.RedstoneControlPacket;
-import java.util.List;
-import java.util.function.BooleanSupplier;
-import mekanism.client.SpecialColors;
-import mekanism.client.gui.GuiMekanism;
-import mekanism.client.gui.element.bar.GuiBar.IBarInfoHandler;
-import mekanism.client.gui.element.bar.GuiVerticalPowerBar;
+import cn.ism.mekck.network.UpgradeUninstallPacket;
+import mekanism.client.gui.element.GuiUpArrow;
 import mekanism.client.gui.element.progress.GuiProgress;
 import mekanism.client.gui.element.progress.IProgressInfoHandler;
 import mekanism.client.gui.element.progress.ProgressType;
-import mekanism.client.gui.element.slot.GuiVirtualSlot;
-import mekanism.client.gui.element.slot.SlotType;
-import mekanism.common.inventory.container.slot.SlotOverlay;
-import mekanism.common.inventory.container.slot.IVirtualSlot;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
 import mekanism.client.gui.element.text.GuiTextField;
-import mekanism.common.util.text.InputValidator;
-import mekanism.client.render.MekanismRenderer;
-import mekanism.client.render.lib.ColorAtlas.ColorRegistryObject;
+import mekanism.common.inventory.container.slot.InventoryContainerSlot;
 import mekanism.common.util.MekanismUtils;
 import mekanism.common.util.MekanismUtils.ResourceType;
+import mekanism.common.util.text.InputValidator;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.Recipe;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 /**
- * 急冻制冰机屏幕（Mekanism 风格）：
- * 输入/输出槽 + 进度箭头 + 水流体条 + 能量条 + 冷萃/创造升级槽 + 攻击控制行，
- * 左侧配置 tab、右上升级 tab、右下红石控制 tab，与其他基础机器保持一致。
+ * 急冻制冰机屏幕（Mek 体系版）。
+ *
+ * <h3>画风口径：与 Mek 基础电力机器逐项对齐</h3>
+ * 面板 176 是 Mek 的默认宽度，但本机比基础机器多两行自定义控件
+ * （索敌目标 / 半径，控温开关 / 目标温度，Mek 无对应物），因此整体高度加两行 48px
+ * （{@link IceMakerMenu#IMAGE_HEIGHT}），玩家背包与标签一起下移。
+ * 其余逐条对齐 {@code GuiElectricMachine}：上箭头 {@code (68,38)}、进度条
+ * {@code ProgressType.BAR (86,38)}、能源条 {@code (imageWidth-12, 16)}、
+ * 能源 tab 传 {@code tile::getActive}。
+ *
+ * <h3>从 {@code GuiMekanism} 换成 {@link MekCkContainerScreenBase} 后删掉的三块</h3>
+ * <ul>
+ *   <li><b>自摆的侧配 / 升级 / 红石 tab</b>（{@code MekCkTabElement} + 手绘
+ *       {@code GuiMekCkSideConfiguration} / {@code GuiUpgradeWindow}）：由
+ *       {@code GuiConfigurableTile} 与 Mek 的组件自动提供，留着就是两套 tab 叠在一起；</li>
+ *   <li><b>手绘槽位</b>（{@code GuiVirtualSlot} + {@code IVirtualSlot}）：
+ *       {@code dynamicSlots} 让 {@code addSlots()} 按容器槽的 {@code ContainerSlotType}
+ *       自动建 widget，坐标取自 tile 建槽时写进 {@code MekCkSlots.IceMaker} 的那一份；</li>
+ *   <li><b>23 条 {@code ContainerData} 下标与 3 个 16 位拆位槽</b>：读数改问菜单
+ *       （菜单再问 tile 的同步通道，Mek 自己就把能量 / 流体 / 温度送到了客户端）。</li>
+ * </ul>
+ *
+ * <h3>保留的只有四样</h3>
+ * 索敌控件行、控温控件行、机身温度读数（{@code drawForegroundText} 右端）、
+ * ME 下单 tab（Mek 没有 AE2 集成），外加 {@link BigStackHud} 大堆叠数量显示。
+ *
+ * <h3>冷萃槽的「已安装」徽标与点击卸载</h3>
+ * 冷萃升级<b>不是 Mek 的 {@code Upgrade}</b>（它由本机的额外槽 + 20 tick 读条承担，
+ * 见 {@code IceMakerTile}），所以 Mek 的升级界面碰不到它。原实现的卸载按钮在自研升级窗里，
+ * 那个窗随迁移删除 ⇒ 本屏把「点已安装的冷萃槽 ⇒ 卸回槽里」补回来，手法与 Mek 自己的
+ * 升级窗（点已安装的升级即卸下）同款。
  */
-public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements NetworkOrderHost {
-    private final cn.ism.mekck.client.BigStackHud bigStackHud = new cn.ism.mekck.client.BigStackHud();
-    /** 下单 tab 的 y —— 侧配 tab 下方 28px（与其它屏一致）。 */
+public final class IceMakerScreen
+        extends MekCkContainerScreenBase<IceMakerTile, IceMakerMenu>
+        implements NetworkOrderHost {
+
+    private final BigStackHud bigStackHud = new BigStackHud();
+
+    /** 「下单」tab 的 y —— 放在右列（左列 6/34/62/90/137 已被 Mek 的 tab 占满）。 */
     private static final int ORDER_TAB_Y = 34;
+
+    /** Mek 的通用按钮贴图（两行自定义控件沿用迁移前的画法）。 */
+    private static final ResourceLocation BUTTON_TEXTURE =
+            MekanismUtils.getResource(ResourceType.GUI, "button.png");
+
+    // ── 索敌控件行几何（面板内坐标）──────────────────────────────────────
+    private static final int TARGET_X = 8;
+    private static final int TARGET_W = 70;
+    private static final int CONTROL_H = IceMakerMenu.CONTROL_ROW_HEIGHT;
+    private static final int RADIUS_LABEL_X = TARGET_X + TARGET_W + 6;
+    private static final int RADIUS_FIELD_X = 110;
+    private static final int RADIUS_FIELD_W = IceMakerMenu.IMAGE_WIDTH - 8 - RADIUS_FIELD_X;
+
+    // ── 控温控件行几何 ──────────────────────────────────────────────────
+    private static final int TEMP_TOGGLE_W = 46;
+    private static final int TEMP_LABEL_X = TARGET_X + TEMP_TOGGLE_W + 4;
+    private static final int TEMP_FIELD_X = 92;
+    private static final int TEMP_FIELD_W = IceMakerMenu.IMAGE_WIDTH - 8 - TEMP_FIELD_X;
+
+    /** 索敌半径输入框（Mek 的数字输入框，回车提交绝对值）。 */
+    private GuiTextField radiusField;
+    /** 目标温度输入框（DECIMAL 允许负号，回车提交）。 */
+    private GuiTextField tempField;
+
     /**
      * 「下单」标签页 —— 点开 {@link NetworkOrderWindow}。
      *
@@ -54,331 +100,195 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
      * 把同一实例重新激活，宿主屏幕也靠它取「正在显示的那一个」面板。</p>
      */
     private NetworkOrderTab orderTab;
-    // Mekanism 风格 tab 布局（与其他机器一致）
-    private static final int TAB_X = -26;
-    private static final int CONFIG_TAB_Y = 6;
-    private static final int UPGRADE_TAB_Y = 6;
 
-    private static final int REDSTONE_TAB_SIZE = 26;
-    private static final int REDSTONE_TAB_INNER = 18;
-
-    // Redstone control icon textures (Mekanism)
-    private static final ResourceLocation REDSTONE_DISABLED = MekanismUtils.getResource(ResourceType.GUI, "redstone_control_disabled.png");
-    private static final ResourceLocation REDSTONE_HIGH = MekanismUtils.getResource(ResourceType.GUI, "redstone_control_high.png");
-    private static final ResourceLocation REDSTONE_LOW = MekanismUtils.getResource(ResourceType.GUI, "redstone_control_low.png");
-
-    // Mekanism textures
-    private static final ResourceLocation CONFIG_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "configuration.png");
-    private static final ResourceLocation UPGRADE_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "upgrade.png");
-    /** 攻击控制行 / 温度控制行的按钮仍走这张 Mekanism button.png（非 tab 部分，勿删）。 */
-    private static final ResourceLocation BUTTON_TEXTURE = MekanismUtils.getResource(ResourceType.GUI, "button.png");
-
-    // 攻击控制行布局
-    private static final int TARGET_X = IceMakerMenu.INPUT_X;
-    private static final int TARGET_W = 70;
-    private static final int ATTACK_BTN_H = 16;
-    private static final int MINUS_X = TARGET_X + TARGET_W + 6;
-    private static final int PLUS_X = 178;
-    private static final int SMALL_BTN = 16;
-    private static final int RADIUS_TEXT_X = MINUS_X + SMALL_BTN + 4;
-
-    // 温度控制行（位于攻击控制行下方）
-    private static final int TEMP_ROW_Y = IceMakerMenu.TEMP_ROW_Y;
-    private static final int TEMP_TOGGLE_W = 46;
-    private static final int TEMP_MINUS_X = TARGET_X + TEMP_TOGGLE_W + 4;
-    private static final int TEMP_TEXT_X = TEMP_MINUS_X + SMALL_BTN + 4;
-    private static final int TEMP_PLUS_X = 178;
-    /** 索敌半径 / 目标温度输入框（Mekanism GuiTextField，统一数字输入）。 */
-    private GuiTextField radiusField;
-    private GuiTextField tempField;
-
-    // 两个输入框的布局（替换掉旧的 DIY 输入态与 -/+ 步进按钮）
-    private static final int RADIUS_FIELD_X = 140;
-    private static final int RADIUS_FIELD_W = 54;
-    private static final int TEMP_FIELD_X = 116;
-    private static final int TEMP_FIELD_W = 54;
+    /** 五个冷萃槽在容器里的 {@code Slot} 对象（画徽标 + 命中卸载都要用）。 */
+    private final Slot[] coldBrewSlotWidgets = new Slot[IceMakerTile.COLD_BREW_SLOTS];
 
     public IceMakerScreen(IceMakerMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
         imageWidth = IceMakerMenu.IMAGE_WIDTH;
         imageHeight = IceMakerMenu.IMAGE_HEIGHT;
-        inventoryLabelY = IceMakerMenu.INV_TOP - 12;
-        dynamicSlots = true;
+        // 标签留在玩家背包首行之上 10px（与 MekCkFactoryLayout 的口径一致）。
+        inventoryLabelY = IceMakerMenu.INV_TOP - 10;
+        // dynamicSlots 由基类设；尺寸与标签位置之外刻意不写别的（写了就与上游漂移）。
     }
 
     @Override
     protected void addGuiElements() {
+        // 侧配 / 传输配置 / 升级 / 红石 / 安全 + 全部槽位 widget —— 一句 super 全排好。
         super.addGuiElements();
 
-        // 输入槽
-        GuiVirtualSlot inputVs = new GuiVirtualSlot(SlotType.INPUT, this, IceMakerMenu.INPUT_X - 1, IceMakerMenu.INPUT_Y - 1);
-        if (menu.slots.get(IceMakerBlockEntity.INPUT_SLOT) instanceof IVirtualSlot ivs) {
-            inputVs.updateVirtualSlot(null, ivs);
-        }
-        addRenderableWidget(inputVs);
+        // 上箭头 —— 上游 GuiElectricMachine(68,38)。
+        addRenderableWidget(new GuiUpArrow(this, 68, 38));
 
-        // 输出槽
-        GuiVirtualSlot outputVs = new GuiVirtualSlot(SlotType.OUTPUT, this, IceMakerMenu.OUTPUT_X, IceMakerMenu.OUTPUT_Y - 1);
-        if (menu.slots.get(IceMakerBlockEntity.OUTPUT_SLOT) instanceof IVirtualSlot ivs) {
-            outputVs.updateVirtualSlot(null, ivs);
-        }
-        addRenderableWidget(outputVs);
+        // 能源条 —— 上游 GuiElectricMachine 的 (imageWidth-12, 16)，直接吃 tile 的能量容器。
+        addEnergyBar(tile.getEnergyContainer(), null);
 
-        // 进度条（Mekanism SMALL_RIGHT 箭头，位于输入与输出之间）
-        int progressX = IceMakerMenu.INPUT_X + 18 + (IceMakerMenu.OUTPUT_X - IceMakerMenu.INPUT_X - 18 - 28) / 2;
+        // 能量信息 tab —— 上游传的是 tile::getActive（是否正在工作），不是 getLastUsage。
+        addRenderableWidget(new GuiEnergyTab(this, tile.getEnergyContainer(), tile::getActive));
+
+        // 进度条 —— 上游 GuiElectricMachine 用 ProgressType.BAR 且位于 (86,38)。
         addRenderableWidget(new GuiProgress(new IProgressInfoHandler() {
             @Override
             public double getProgress() {
-                return menu.getProgress() / 24.0;
+                return menu.getProgressPercent() / 100.0;
             }
 
             @Override
             public boolean isActive() {
-                return menu.getProgress() > 0;
+                return menu.getProgressPercent() > 0;
             }
-        }, ProgressType.SMALL_RIGHT, this, progressX, IceMakerMenu.INPUT_Y + 5));
+        }, ProgressType.BAR, this, 86, 38));
 
-        // 水流体条（左侧，Mekanism 标准流体条）
-        addRenderableWidget(new GuiCkFluidGauge(this, 6, 34,
-                () -> menu.getWaterStack(), () -> menu.getWaterCapacity()));
+        // 水位流体条：数据直接吃 tile 的水罐 —— Mek 的容器同步通道（SyncableFluidStack）
+        // 已经把整个 FluidStack 送到客户端，不再需要 ContainerData 拆高低位。
+        addRenderableWidget(new GuiCkFluidGauge(this, 6, 17,
+                () -> tile.getWaterTank().getFluid(),
+                () -> tile.getWaterTank().getCapacity()));
 
-        // 能量条（右侧）
-        addRenderableWidget(new GuiVerticalPowerBar(this, new IBarInfoHandler() {
-            @Override
-            public Component getTooltip() {
-                return Component.translatable("gui.mekck.energy",
-                        menu.getEnergy(), IceMakerBlockEntity.ENERGY_CAPACITY);
-            }
-
-            @Override
-            public double getLevel() {
-                return (double) menu.getEnergy() / IceMakerBlockEntity.ENERGY_CAPACITY;
-            }
-        }, imageWidth - 12, 22));
-
-        // 能量信息标签（左下角）
-        addRenderableWidget(new GuiEnergyTab(this, () -> List.of(
-                Component.translatable("gui.mekck.energy_stored",
-                        menu.getEnergy(), IceMakerBlockEntity.ENERGY_CAPACITY),
-                Component.translatable("gui.mekck.energy_per_tick",
-                        IceMakerBlockEntity.ENERGY_PER_TICK)
-        )));
-
-        // 能源槽（能量物品）
-        GuiVirtualSlot powerVs = new GuiVirtualSlot(SlotType.POWER, this, 6, 12);
-        powerVs.with(SlotOverlay.POWER);
-        if (menu.slots.get(IceMakerBlockEntity.SLOT_POWER) instanceof IVirtualSlot ivs) {
-            powerVs.updateVirtualSlot(null, ivs);
-        }
-        addRenderableWidget(powerVs);
-
-        // 冷萃升级槽（主界面，输入槽下方一排，①~⑤ 共 5 格）
-        for (int i = 0; i < 5; i++) {
-            GuiVirtualSlot cbVs = new GuiVirtualSlot(SlotType.NORMAL, this, IceMakerMenu.INPUT_X + i * 18, IceMakerMenu.CB_ROW_Y);
-            if (menu.slots.get(IceMakerBlockEntity.CB_SLOT_1 + i) instanceof IVirtualSlot ivs) {
-                cbVs.updateVirtualSlot(null, ivs);
-            }
-            addRenderableWidget(cbVs);
-        }
-
-        // 创造升级槽（冷萃槽右侧）
-        GuiVirtualSlot creativeVs = new GuiVirtualSlot(SlotType.NORMAL, this, IceMakerMenu.INPUT_X + 5 * 18 + 8, IceMakerMenu.CB_ROW_Y);
-        if (menu.slots.get(IceMakerBlockEntity.SLOT_CREATIVE_UPGRADE) instanceof IVirtualSlot ivs) {
-            creativeVs.updateVirtualSlot(null, ivs);
-        }
-        addRenderableWidget(creativeVs);
-
-        // 索敌半径：Mekanism 数字输入框（DIGIT，回车提交绝对值），替换旧的 DIY 输入框与 -/+ 步进按钮。
-        // §F43（用户口径：我们的输入框缺了 Mekanism 那块黑色背景）：取证据 Mekanism 字节码——
-        // configureDigitalInput 把背景设为 NONE（只改绿色屏字），带黑底的是 configureDigitalBorderInput
-        // （BackgroundType.DIGITAL：灰外框+内层 0xFF000000），两者签名相同⇒全仓 8 处调用换后者。
-        radiusField = new GuiTextField(this, RADIUS_FIELD_X, IceMakerMenu.ATTACK_ROW_Y, RADIUS_FIELD_W, ATTACK_BTN_H)
+        // 索敌半径：Mek 的数字输入框（DIGIT，回车提交绝对值）。
+        radiusField = new GuiTextField(this, RADIUS_FIELD_X, IceMakerMenu.ATTACK_ROW_Y,
+                RADIUS_FIELD_W, CONTROL_H)
                 .setInputValidator(InputValidator.DIGIT)
                 .configureDigitalBorderInput(this::commitRadiusInput);
         radiusField.setMaxLength(10);
         radiusField.setText(String.valueOf(menu.getRadius()));
         addRenderableWidget(radiusField);
 
-        // 目标温度：Mekanism 数字输入框（DECIMAL 允许负号，回车提交），本机只降温、值恒 ≤0
-        tempField = new GuiTextField(this, TEMP_FIELD_X, TEMP_ROW_Y, TEMP_FIELD_W, ATTACK_BTN_H)
+        // 目标温度：Mek 的数字输入框（DECIMAL 允许负号，回车提交），本机只降温、值恒 ≤0。
+        tempField = new GuiTextField(this, TEMP_FIELD_X, IceMakerMenu.TEMP_ROW_Y,
+                TEMP_FIELD_W, CONTROL_H)
                 .setInputValidator(InputValidator.DECIMAL.or(InputValidator.from('-')))
                 .configureDigitalBorderInput(this::commitTempInput);
         tempField.setMaxLength(8);
         tempField.setText(String.format("%.2f", menu.getTargetTemperature() / 100.0));
         addRenderableWidget(tempField);
 
-        // 侧栏 tab **最后注册**：Mek 的 GuiMekanism#mouseClicked 对 children() 倒序遍历、
-        // 命中即返回，即越晚注册命中优先。tab 全部在面板之外（x=-26~-2 / x=imageWidth~+24），
-        // 与攻击/温度控制行、虚拟槽都不重叠，故不会抢掉它们的点击。
-        addTabElements();
-    }
-
-    /**
-     * 侧栏 4 个 tab 统一走 Mek {@link MekCkTabElement}（继承 {@code GuiInsetElement}）：
-     * 三层绘制与旧手绘逐参数一致，tooltip 改走 {@code GuiMekanism#renderLabels} 的元素通道
-     * —— 那是渲染管线最后一层，结构上不会再被槽位盖住。
-     * 旧实现在 {@code renderBg()} 里直绘 tooltip + 在 {@code mouseClicked} 里手算命中矩形，现已一并移除。
-     */
-    private void addTabElements() {
-        // ── 左列（2 个）──
-        addTab(CONFIG_TEXTURE, TAB_X, CONFIG_TAB_Y, true,
-                () -> false, SpecialColors.TAB_CONFIGURATION,
-                "gui.mekck.ui.side_config_short", this::openSideConfigWindow);
-
-        // ME 下单在 Mek 里无对应图标：保留本模组自绘的「清单 + 向下箭头」图标，只取官方染色。
-        // 面板本体已从「屏幕手绘覆盖层」迁进 Mek 虚拟窗口（NetworkOrderWindow），
-        // 本机数据源在窗口创建时注入（见 localOrderSource()）。
-        orderTab = addRenderableWidget(new NetworkOrderTab(this, menu.getBlockPos(),
-                TAB_X, ORDER_TAB_Y, true, localOrderSource(), () -> orderTab));
-
-        // ── 右列（2 个）──
-        addTab(UPGRADE_TEXTURE, imageWidth, UPGRADE_TAB_Y, false,
-                () -> false, SpecialColors.TAB_UPGRADE,
-                "tooltip.mekck.upgrade", this::openUpgradeWindow);
-
-        redstoneTab();
-
-        // 侧栏 tab 必须最后注册：Mek 的 GuiMekanism#mouseClicked 对 children() 倒序遍历、
-        // 命中即返回，越晚注册命中优先。
-        if (cn.ism.mekck.client.NetworkPullButton.isVisible()) {
-            for (var tab : cn.ism.mekck.client.NetworkPullButton.register(this, menu.getBlockPos())) {
-                addRenderableWidget(tab);
+        // 冷萃槽的 Slot 对象：Mek 的 InventoryContainerSlot 的 Slot.index 恒为 0
+        // （它的父构造传的是空容器），所以只能按「底层 IInventorySlot 是不是本机那一格」认。
+        for (int i = 0; i < coldBrewSlotWidgets.length; i++) {
+            var want = tile.getColdBrewSlot(i);
+            for (Slot slot : menu.slots) {
+                if (slot instanceof InventoryContainerSlot container
+                        && container.getInventorySlot() == want) {
+                    coldBrewSlotWidgets[i] = slot;
+                    break;
+                }
             }
         }
+
+        // ME 下单：Mek 无对应物，保留自绘 tab + 虚拟窗口（右列 y=34）。
+        orderTab = addRenderableWidget(new NetworkOrderTab(this, menu.getBlockPos(),
+                imageWidth, ORDER_TAB_Y, false, localOrderSource(), () -> orderTab));
+
+        // 自动补料 / 网络拉料两枚 tab **最后注册**：Mek 的 mouseClicked 对 children()
+        // 倒序遍历、命中即返回，越晚注册命中越优先（tab 才能压过同区域的控件）。
+        addNetworkPullTabs(menu.getBlockPos());
     }
 
-    /** 注册一个侧栏 tab（几何 26/18，MekCkTabElement 常量）。 */
-    private MekCkTabElement addTab(ResourceLocation icon, int relX, int relY, boolean left,
-            BooleanSupplier selected, ColorRegistryObject tint, String tooltipKey, Runnable action) {
-        MekCkTabElement tab = new MekCkTabElement(this, icon, relX, relY, left,
-                MekCkTabElement.OUTER, MekCkTabElement.INNER,
-                selected, tint, () -> List.of(Component.translatable(tooltipKey)), action, null);
-        addRenderableWidget(tab);
-        return tab;
-    }
-
-    /**
-     * 红石控制 tab：Mek 原生 26×26/18×18 规格、+3/+4 偏移、holder 染红、图标随三态切换，
-     * PULSE 态额外叠一层脉冲动画。左键下一档 / 右键上一档。
-     */
-    private MekCkTabElement redstoneTab() {
-        MekCkTabElement tab = new MekCkTabElement(this, REDSTONE_DISABLED,
-                imageWidth, imageHeight - REDSTONE_TAB_SIZE, false,
-                REDSTONE_TAB_SIZE, REDSTONE_TAB_INNER,
-                () -> false,
-                SpecialColors.TAB_REDSTONE_CONTROL,
-                () -> List.of(Component.translatable(
-                        "gui.mekck.redstone_control."
-                                + RedstoneControl.byOrdinal(menu.getRedstoneControl()).name().toLowerCase())),
-                () -> {
-                },
-                null) {
-            /** 右键 = 上一档（Mek 的 GuiRedstoneControlTab 同样覆写此项以放行右键）。 */
-            @Override
-            public boolean isValidClickButton(int button) {
-                return button == 0 || button == 1;
-            }
-
-            @Override
-            public void onClick(double mouseX, double mouseY, int button) {
-                ModMessages.sendToServer(new RedstoneControlPacket(menu.getBlockPos(), button == 0 ? 1 : -1));
-            }
-        };
-        // 匿名类体必须紧跟构造括号；引用 tab 自身的 lambda 只能在实例化之后挂上去
-        tab.buttonOffset(3, 4);
-        tab.dynamicOverlay(() -> switch (RedstoneControl.byOrdinal(menu.getRedstoneControl())) {
-            case HIGH -> REDSTONE_HIGH;
-            case LOW -> REDSTONE_LOW;
-            default -> REDSTONE_DISABLED;
-        });
-        tab.overlayLayer(gg -> {
-            if (RedstoneControl.byOrdinal(menu.getRedstoneControl()) == RedstoneControl.PULSE) {
-                tab.drawInnerOverlay(gg, MekanismRenderer.redstonePulse);
-            }
-        });
-        addRenderableWidget(tab);
-        return tab;
-    }
-
-    private static String formatItemCount(int count) {
-        // 统一走 CountFormat（含十亿档；21 亿不再显示成 2147.5M）
-        return cn.ism.mekck.client.CountFormat.compact(count);
-    }
-
-    @Override
-    protected void drawForegroundText(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        renderTitleText(guiGraphics);
-        drawString(guiGraphics, playerInventoryTitle, (imageWidth - 162) / 2, inventoryLabelY, titleTextColor());
-        super.drawForegroundText(guiGraphics, mouseX, mouseY);
-    }
+    // ================== 两行自定义控件 ==================
 
     @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
         super.renderBg(guiGraphics, partialTick, mouseX, mouseY);
-
-        int x = leftPos;
-        int y = topPos;
-
-        // 侧栏 4 个 tab（侧配 / 下单 / 升级 / 红石）已全部迁到 addTabElements()（MekCkTabElement），renderBg 不再手绘。
-
-        renderAttackControls(guiGraphics, mouseX, mouseY, x, y);
-        renderTemperatureControls(guiGraphics, mouseX, mouseY, x, y);
+        renderAttackControls(guiGraphics, mouseX, mouseY, leftPos, topPos);
+        renderTemperatureControls(guiGraphics, mouseX, mouseY, leftPos, topPos);
+        renderInstalledColdBrew(guiGraphics);
     }
 
-    /** 攻击控制行：目标类型按钮 + 半径标签（数值输入交给 Mekanism GuiTextField，见 addGuiElements）。 */
+    /** 攻击控制行：目标类型按钮 + 半径标签（数值输入交给 Mekanism GuiTextField）。 */
     private void renderAttackControls(GuiGraphics guiGraphics, int mouseX, int mouseY, int x, int y) {
         int attackY = y + IceMakerMenu.ATTACK_ROW_Y;
 
-        // 目标类型按钮
         int t = menu.getTargetType();
         String targetName = Component.translatable("gui.mekck.ui.target_type."
                 + (t == 0 ? "hostile" : t == 1 ? "all" : "animal")).getString();
         int color = t == 0 ? 0xFFE33B32 : t == 1 ? 0xFF4488FF : 0xFF66CC66;
         int tX = x + TARGET_X;
-        boolean tHovered = mouseX >= tX && mouseX < tX + TARGET_W && mouseY >= attackY && mouseY < attackY + ATTACK_BTN_H;
-        guiGraphics.blit(BUTTON_TEXTURE, tX, attackY, 0, tHovered ? 20 : 0, TARGET_W, ATTACK_BTN_H, 200, 60);
-        guiGraphics.fill(tX + 1, attackY + 1, tX + TARGET_W - 1, attackY + ATTACK_BTN_H - 1, color);
+        boolean tHovered = mouseX >= tX && mouseX < tX + TARGET_W
+                && mouseY >= attackY && mouseY < attackY + CONTROL_H;
+        guiGraphics.blit(BUTTON_TEXTURE, tX, attackY, 0, tHovered ? 20 : 0, TARGET_W, CONTROL_H, 200, 60);
+        guiGraphics.fill(tX + 1, attackY + 1, tX + TARGET_W - 1, attackY + CONTROL_H - 1, color);
         String label = Component.translatable("gui.mekck.ui.target", targetName).getString();
         guiGraphics.drawString(font, label, tX + (TARGET_W - font.width(label)) / 2, attackY + 4, 0xFFFFFFFF);
 
-        // 半径标签（数值编辑交给右侧 Mekanism 输入框）
-        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.radius").getString(), x + MINUS_X - 4, attackY + 4, 0xFFFFFFFF);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.radius").getString(),
+                x + RADIUS_LABEL_X, attackY + 4, 0xFFFFFFFF);
     }
 
-    /** 温度控制行：控温开关按钮 + 目标温度输入标签 + 当前温度读数（目标值编辑交给 Mekanism GuiTextField）。 */
+    /** 控温控制行：控温开关按钮 + 目标温度标签（数值编辑交给 Mekanism GuiTextField）。 */
     private void renderTemperatureControls(GuiGraphics guiGraphics, int mouseX, int mouseY, int x, int y) {
-        int rowY = y + TEMP_ROW_Y;
-        // 开关按钮
+        int rowY = y + IceMakerMenu.TEMP_ROW_Y;
         boolean enabled = menu.isTemperatureControlEnabled();
         int toggleX = x + TARGET_X;
         boolean toggleHovered = mouseX >= toggleX && mouseX < toggleX + TEMP_TOGGLE_W
-                && mouseY >= rowY && mouseY < rowY + ATTACK_BTN_H;
-        guiGraphics.blit(BUTTON_TEXTURE, toggleX, rowY, 0, toggleHovered ? 20 : 0, TEMP_TOGGLE_W, ATTACK_BTN_H, 200, 60);
-        guiGraphics.fill(toggleX + 1, rowY + 1, toggleX + TEMP_TOGGLE_W - 1, rowY + ATTACK_BTN_H - 1,
+                && mouseY >= rowY && mouseY < rowY + CONTROL_H;
+        guiGraphics.blit(BUTTON_TEXTURE, toggleX, rowY, 0, toggleHovered ? 20 : 0,
+                TEMP_TOGGLE_W, CONTROL_H, 200, 60);
+        guiGraphics.fill(toggleX + 1, rowY + 1, toggleX + TEMP_TOGGLE_W - 1, rowY + CONTROL_H - 1,
                 enabled ? 0xFF33AA55 : 0xFF777777);
         String toggleLabel = Component.translatable("gui.mekck.ui.temp_control",
                 Component.translatable(enabled ? "gui.mekck.ui.on" : "gui.mekck.ui.off")).getString();
         guiGraphics.drawString(font, toggleLabel,
                 toggleX + (TEMP_TOGGLE_W - font.width(toggleLabel)) / 2, rowY + 4, 0xFFFFFFFF);
-        // 目标输入标签 + 当前温度读数（目标值本身显示/编辑在中间输入框内）
-        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.target").getString(), toggleX + TEMP_TOGGLE_W + 2, rowY + 4, 0xFFFFFFFF);
-        String curText = String.format("%.1f℃", menu.getCurrentTemperature() / 100.0);
-        guiGraphics.drawString(font, curText, x + TEMP_FIELD_X + TEMP_FIELD_W + 2, rowY + 4, 0xFFAAAAAA);
+        guiGraphics.drawString(font, Component.translatable("gui.mekck.ui.target").getString(),
+                x + TEMP_LABEL_X, rowY + 4, 0xFFFFFFFF);
+    }
+
+    /**
+     * 已安装冷萃的徽标 —— 槽空但读条器里装着某一级时，把该级的物品图标画在槽位上。
+     *
+     * <p>它同时是<b>卸载入口</b>：点一下即把该级卸回槽里（见 {@link #mouseClicked}）。
+     * 与 Mek 自己的升级窗「点已安装的升级 → 卸下」同款。</p>
+     */
+    private void renderInstalledColdBrew(GuiGraphics guiGraphics) {
+        for (int i = 0; i < coldBrewSlotWidgets.length; i++) {
+            Slot slot = coldBrewSlotWidgets[i];
+            if (slot == null || slot.hasItem()) {
+                continue;
+            }
+            ItemStack badge = installedBadge(i);
+            if (badge.isEmpty()) {
+                continue;
+            }
+            guiGraphics.renderItem(badge, leftPos + slot.x, topPos + slot.y);
+        }
+    }
+
+    /** 第 i 格已安装的冷萃对应的物品（未安装返回空栈）。 */
+    private ItemStack installedBadge(int index) {
+        int code = menu.getInstalledColdBrewCode(index);
+        ColdBrewTier[] tiers = ColdBrewTier.values();
+        if (code <= 0 || code > tiers.length) {
+            return ItemStack.EMPTY;
+        }
+        var registered = ColdBrewUpgradeItem.REGISTRY.get(tiers[code - 1]);
+        return registered == null ? ItemStack.EMPTY : new ItemStack(registered.get());
+    }
+
+    @Override
+    protected void drawForegroundText(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        // 机器名 + 「Inventory」标签由基类画（Mek 的 renderLabels 不调 super）。
+        super.drawForegroundText(guiGraphics, mouseX, mouseY);
+        // 温度系统：显示机身温度（摄氏度），摆在「Inventory」同一行的右端。
+        String temperature = Component.translatable("gui.mekck.ui.temperature",
+                menu.getCurrentTemperature() / 100.0).getString();
+        guiGraphics.drawString(font, temperature,
+                imageWidth - 8 - font.width(temperature), inventoryLabelY, 0xFFFF5555);
     }
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // 大堆叠数量压制为 1 渲染，随后以缩放字体绘制格式化数量（与其他机器一致）
         bigStackHud.shrink(menu.slots);
 
         super.render(guiGraphics, mouseX, mouseY, partialTick);
 
         bigStackHud.restore();
 
+        // 大堆叠数量：原版只画到 64，这里把真实数量（可到 21 亿）画在槽位右下角。
         for (Slot slot : menu.slots) {
             if (slot.isActive() && slot.hasItem()) {
-                int count = slot.getItem().getCount();
-                String formatted = formatItemCount(count);
+                String formatted = CountFormat.compact(slot.getItem().getCount());
                 if (formatted != null) {
                     int sx = this.leftPos + slot.x;
                     int sy = this.topPos + slot.y;
@@ -391,9 +301,26 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
                 }
             }
         }
+    }
 
-        // 侧栏 4 个 tab 的 tooltip 已迁到 MekCkTabElement#renderToolTip，
-        // 由 GuiMekanism#renderLabels 在渲染管线最后一层统一派发。
+    // ================== 自定义控件的输入 ==================
+
+    /** 点击已安装的冷萃槽 → 卸载；返回该槽（未点中返回 null）。 */
+    @Nullable
+    private Slot coldBrewSlotAt(double mouseX, double mouseY) {
+        for (int i = 0; i < coldBrewSlotWidgets.length; i++) {
+            Slot slot = coldBrewSlotWidgets[i];
+            if (slot == null || slot.hasItem()) {
+                continue;
+            }
+            if (installedBadge(i).isEmpty()) {
+                continue; // 未安装：槽只是个空框，不抢点击
+            }
+            if (isHovering(slot.x, slot.y, 16, 16, mouseX, mouseY)) {
+                return slot;
+            }
+        }
+        return null;
     }
 
     private void cycleTarget() {
@@ -401,35 +328,80 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
         ModMessages.sendToServer(new IceAttackConfigPacket(menu.getBlockPos(), (byte) 0, t));
     }
 
-    /** 提交半径输入：从 Mekanism 输入框取值、钳制到 ≥4（上限不限）后以绝对值 type2 发送。 */
+    /** 提交半径输入：钳制到 ≥4 后以绝对值发送（上限由服务端的唯一钳制闸门兜底）。 */
     private void commitRadiusInput() {
         String text = radiusField.getText();
-        if (!text.isEmpty()) {
-            try {
-                int v = (int) Math.max(4L, Math.min((long) Integer.MAX_VALUE, Long.parseLong(text)));
-                if (v != menu.getRadius()) {
-                    ModMessages.sendToServer(new IceAttackConfigPacket(menu.getBlockPos(), (byte) 2, v));
-                }
-            } catch (NumberFormatException ignored) {
+        if (text.isEmpty()) {
+            return;
+        }
+        try {
+            int v = (int) Math.max(4L, Math.min((long) Integer.MAX_VALUE, Long.parseLong(text)));
+            if (v != menu.getRadius()) {
+                ModMessages.sendToServer(new IceAttackConfigPacket(menu.getBlockPos(), (byte) 2, v));
             }
+        } catch (NumberFormatException ignored) {
+            // 输入框的 DIGIT 校验器已经挡住非数字；真出现解析不了的内容就当作没提交。
         }
     }
 
     /** 提交目标温度：本机只降温，取 -|输入| 钳制到 [-273.15, 0]，×100 四舍五入后以 type3 发送。 */
     private void commitTempInput() {
         String text = tempField.getText();
-        if (!text.isEmpty()) {
-            try {
-                double celsius = -Math.abs(Double.parseDouble(text));
-                celsius = Math.max(-273.15, Math.min(0.0, celsius));
-                int milli = (int) Math.round(celsius * 100.0);
-                if (milli != menu.getTargetTemperature()) {
-                    ModMessages.sendToServer(new IceAttackConfigPacket(menu.getBlockPos(), (byte) 3, milli));
-                }
-            } catch (NumberFormatException ignored) {
+        if (text.isEmpty()) {
+            return;
+        }
+        try {
+            double celsius = -Math.abs(Double.parseDouble(text));
+            celsius = Math.max(-273.15, Math.min(0.0, celsius));
+            int milli = (int) Math.round(celsius * 100.0);
+            if (milli != menu.getTargetTemperature()) {
+                ModMessages.sendToServer(new IceAttackConfigPacket(menu.getBlockPos(), (byte) 3, milli));
             }
+        } catch (NumberFormatException ignored) {
+            // 同上：解析不了就当作没提交。
         }
     }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0) {
+            int x = leftPos;
+            int y = topPos;
+
+            // 已安装的冷萃槽：点一下即卸载（Mek 的升级界面碰不到冷萃，这是唯一入口）。
+            Slot coldBrew = coldBrewSlotAt(mouseX, mouseY);
+            if (coldBrew != null) {
+                for (int i = 0; i < coldBrewSlotWidgets.length; i++) {
+                    if (coldBrewSlotWidgets[i] == coldBrew) {
+                        ModMessages.sendToServer(new UpgradeUninstallPacket(
+                                menu.getBlockPos(), (byte) 2, IceMakerTile.CB_SLOT_1 + i));
+                        return true;
+                    }
+                }
+            }
+
+            // 索敌：目标类型按钮（半径数值走右侧输入框）。
+            int attackY = y + IceMakerMenu.ATTACK_ROW_Y;
+            int tX = x + TARGET_X;
+            if (mouseX >= tX && mouseX < tX + TARGET_W
+                    && mouseY >= attackY && mouseY < attackY + CONTROL_H) {
+                cycleTarget();
+                return true;
+            }
+
+            // 控温：开关按钮（目标温度走右侧输入框）。
+            int tempY = y + IceMakerMenu.TEMP_ROW_Y;
+            if (mouseX >= tX && mouseX < tX + TEMP_TOGGLE_W
+                    && mouseY >= tempY && mouseY < tempY + CONTROL_H) {
+                ModMessages.sendToServer(new IceAttackConfigPacket(menu.getBlockPos(), (byte) 5,
+                        menu.isTemperatureControlEnabled() ? 0 : 1));
+                return true;
+            }
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    // ================== ME 下单 ==================
 
     @Override
     public NetworkOrderPanel networkOrderPanel() {
@@ -440,92 +412,27 @@ public final class IceMakerScreen extends GuiMekanism<IceMakerMenu> implements N
     /**
      * 本机一侧：配方 / 可做份数按机器输入槽里的材料算，下单走通用订单包。
      *
-     * <p>迁到窗口创建时注入（{@link NetworkOrderTab#createWindow()} → {@code setLocalSource}）：
-     * 面板随窗口每次打开重建，数据源必须跟着重建，否则新面板的本机模式是空的。</p>
+     * <p>面板随窗口每次打开重建，数据源必须跟着重建，否则新面板的本机模式是空的。</p>
      */
     private NetworkOrderPanel.LocalSource localOrderSource() {
         return new NetworkOrderPanel.LocalSource() {
             @Override
             public List<Recipe<?>> recipes() {
-                // 空菜单（BE 缺失）：没有机器可读，按空列表处理。
-                var machine = menu.getMachine();
-                return machine == null ? List.of() : machine.getAvailableRecipes();
+                // 面板数据直接问 tile：Mek 的容器工厂在取不到 BE 时直接抛「Missing tile」，
+                // 根本构造不出「空菜单」，所以这里不需要（也不该有）machine == null 兜底。
+                return tile.getAvailableRecipes();
             }
 
             @Override
             public int maxCraftable(Recipe<?> recipe) {
-                // 空菜单（BE 缺失）：没有机器可读，按 0 处理。
-                var machine = menu.getMachine();
-                return machine == null ? 0 : machine.getMaxConsumableCountForOrder(recipe);
+                return tile.getMaxConsumableCountForOrder(recipe);
             }
 
             @Override
             public void order(Recipe<?> recipe, int quantity) {
-                // 空菜单（BE 缺失）：没有机器可下单，跳过发包。
-                var machine = menu.getMachine();
-                if (machine == null) {
-                    return;
-                }
                 ModMessages.sendToServer(new cn.ism.mekck.network.OrderRecipePacket(
-                        machine.getBlockPos(), recipe.getId(), quantity));
+                        menu.getBlockPos(), recipe.getId(), quantity));
             }
         };
-    }
-
-    private void openSideConfigWindow() {
-        if (getWindows().stream().noneMatch(w -> w instanceof GuiMekCkSideConfiguration)) {
-            addWindow(new GuiMekCkSideConfiguration(this, (ISideConfigurableMenu) menu, this::getMachineFacing));
-        }
-    }
-
-    private void openUpgradeWindow() {
-        if (getWindows().stream().noneMatch(w -> w instanceof GuiUpgradeWindow)) {
-            addWindow(new GuiUpgradeWindow(this, (IUpgradeMenu) menu));
-        }
-    }
-
-    private Direction getMachineFacing() {
-        // 空菜单（BE 缺失）：没有方块状态可读，朝向按 NORTH 兜底。
-        var machine = menu.getMachine();
-        if (machine == null) {
-            return Direction.NORTH;
-        }
-        if (minecraft != null && minecraft.level != null) {
-            BlockState state = minecraft.level.getBlockState(machine.getBlockPos());
-            if (state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
-                return state.getValue(BlockStateProperties.HORIZONTAL_FACING);
-            }
-        }
-        return Direction.NORTH;
-    }
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0) {
-            int x = leftPos;
-            int y = topPos;
-
-            // 攻击控制行
-            int attackY = y + IceMakerMenu.ATTACK_ROW_Y;
-            int tX = x + TARGET_X;
-            if (mouseX >= tX && mouseX < tX + TARGET_W && mouseY >= attackY && mouseY < attackY + ATTACK_BTN_H) {
-                cycleTarget();
-                return true;
-            }
-            // 温度控制行：仅保留控温开关（type5），-/+ 步进与 DIY 输入已移除
-            int tempY = y + TEMP_ROW_Y;
-            int toggleX = x + TARGET_X;
-            if (mouseX >= toggleX && mouseX < toggleX + TEMP_TOGGLE_W
-                    && mouseY >= tempY && mouseY < tempY + ATTACK_BTN_H) {
-                ModMessages.sendToServer(new IceAttackConfigPacket(menu.getBlockPos(), (byte) 5,
-                        menu.isTemperatureControlEnabled() ? 0 : 1));
-                return true;
-            }
-        }
-        // 侧栏 4 个 tab（侧配 / 下单 / 升级 / 红石）的点击交给 MekCkTabElement#onClick —— 它们是
-        // renderable widget，由框架在 super.mouseClicked(...) 里统一派发（含红石 tab 的右键上一档）。
-        // 「下单」tab 开的是 Mek 窗口，窗口内的点击由 GuiMekanism#mouseClicked 先遍历 windows 派发
-        // （窗口在 children() 之前），所以旧版那份「面板开着时先定向派发 tab」的补丁已随面板一起删除。
-        return super.mouseClicked(mouseX, mouseY, button);
     }
 }

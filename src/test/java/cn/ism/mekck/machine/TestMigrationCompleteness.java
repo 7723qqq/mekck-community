@@ -67,6 +67,8 @@ public class TestMigrationCompleteness {
         MIGRATED.put("UniversalCuttingMachineTile", "universal_cutting_machine");
         // 2026-10-06：坚果爆炒机（旧 NutRoasterBlockEntity → 新 NutRoasterTile）。
         MIGRATED.put("NutRoasterTile", "nut_roaster");
+        // 2026-10-06：急冻制冰机（旧 IceMakerBlockEntity → 新 IceMakerTile）。
+        MIGRATED.put("IceMakerTile", "ice_maker");
     }
 
     // ── 1. 注册三件套 ────────────────────────────────────────────────────
@@ -261,7 +263,8 @@ public class TestMigrationCompleteness {
     }
 
     /** 已删除的旧 BE 类简名。新迁一台时把它的旧类名加进来。
-     *  <p>2026-10-06：坚果爆炒机迁移时加入 {@code NutRoasterBlockEntity}（新类 {@code NutRoasterTile}）。
+     *  <p>2026-10-06：坚果爆炒机迁移时加入 {@code NutRoasterBlockEntity}（新类 {@code NutRoasterTile}）；
+     *  同日急冻制冰机加入 {@code IceMakerBlockEntity}（新类 {@code machine/icemaker/IceMakerTile}）。
      *  ⚠️ 本表的判据是「派发点不得再引用**已删除的**旧类名」——指向新 tile 类型的分支
      * 不属于本表范围（例如 {@code MekckAe2} 里坚果爆炒机那几条已改指 NutRoasterTile
      * 的活分支，见该文件相应位置的注释）。</p> */
@@ -275,6 +278,8 @@ public class TestMigrationCompleteness {
             "SkeweringFactoryBlockEntity",
             "PlantingCuttingFactoryBlockEntity",
             "NutRoasterBlockEntity",
+            // 2026-10-06：急冻制冰机（新类 machine/icemaker/IceMakerTile）。
+            "IceMakerBlockEntity",
     };
 
     // ── 判据不许空转 ────────────────────────────────────────────────────

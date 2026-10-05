@@ -357,9 +357,6 @@ public class TestMenuQuickMoveSlotRanges {
                             "target", "int target = switch (cb) {"),
                     "槽数随 processes 变化；boundary=powerSlotIndex+1，speedIdx=processes*2 等 "
                             + "全部由现场量/档位推导（四个推导式都必须在源码里原样出现）"),
-            new Menu("IceMakerMenu.java", 11, set(),
-                    map("target", "int target = switch (cb) {"),
-                    "输入/输出/速度/能量/创造 + 冷萃5 + 能源 = 11；target 取自冷萃档位 switch（CB_SLOT_1..5 = 5..9）"),
             new Menu("PlantingCuttingStationMenu.java", 9, set(), map(),
                     "输入/营养液/输出 + 速度/能量/创造/气体 + 能源 + 生长 = 9"),
             new Menu("SandwichAssemblerMenu.java", 68, set(), map(),
@@ -404,6 +401,11 @@ public class TestMenuQuickMoveSlotRanges {
     // NutRoasterMenu：2026-10-06 坚果爆炒机迁到 MekanismTileContainer 体系时整段删除
     // （槽由 Mek 自动装配、shift-click 由 Mek 的默认实现承担），本类的四条断言对它已无对象
     // —— 表里那条 6 槽的登记随之删除（A0 的全等比较会逼着删，见下）。
+    //
+    // IceMakerMenu：2026-10-06 急冻制冰机同批迁移，处置逐字同型 —— 手写的
+    // quickMoveStack 连同 6 个槽位分支整段删除（含那条把 ColdBrewTier 映射到
+    // CB_SLOT_i 的分支），槽序由 MekCkSlots.IceMaker 决定、路由由 Mek 承担。
+    // 表里那条 11 槽的登记随之删除（同样是被 A0 的全等比较逼出来的）。
 
     private static List<String> menuFilesWithQuickMove() throws IOException {
         List<String> files = new ArrayList<>();

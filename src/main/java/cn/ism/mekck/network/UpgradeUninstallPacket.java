@@ -1,7 +1,6 @@
 package cn.ism.mekck.network;
 
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
-import cn.ism.mekck.blockentity.IceMakerBlockEntity;
 import cn.ism.mekck.blockentity.SimpleMachineBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -57,7 +56,10 @@ public final class UpgradeUninstallPacket {
             if (be == null) return;
             if (be instanceof SimpleMachineBlockEntity machine) {
                 machine.uninstallUpgrade(mode, slot);
-            } else if (be instanceof IceMakerBlockEntity machine) {
+            } else if (be instanceof cn.ism.mekck.machine.icemaker.IceMakerTile machine) {
+                // 急冻制冰机分支改指新 tile，**不删**：冷萃升级不是 Mek 的 Upgrade
+                // （它由本机的额外槽 + 20 tick 读条承担），Mek 的升级界面碰不到它，
+                // 本包是该能力唯一的卸载路径（口径 §12.4.1 同型）。
                 machine.uninstallUpgrade(mode, slot);
             } else if (be instanceof ChocolateCannonBlockEntity machine) {
                 machine.uninstallUpgrade(mode, slot);

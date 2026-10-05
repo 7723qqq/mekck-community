@@ -112,6 +112,45 @@ public class TestSlotTableContract {
         assertEquals(36, s.get(3).y());
     }
 
+    /**
+     * 急冻制冰机的槽位表必须自洽，且槽序与 {@code IceMakerTile} 的槽下标常量一一对应。
+     *
+     * <p>2026-10-06 迁移时新增。上面那条陈酿机的断言只覆盖了 {@code MekCkSlots.WineCellar}——
+     * 而 {@code MekCkSlots.IceMaker} 的静态块里的 {@code validate} 只有在「有人真的碰过这个嵌套类」
+     * 时才会跑，单测里若没有任何用例引用它，坐标写重了也**只在实机开界面时才暴露**。
+     * 这条把它钉住。</p>
+     */
+    @Test
+    public void iceMakerTableIsConsistent() {
+        List<SlotDef> all = MekCkSlots.IceMaker.ALL;
+        assertEquals("急冻制冰机应有 输入 + 输出 + 创造升级 + 冷萃5 + 能源 = 9 个槽",
+                9, all.size());
+        assertEquals("冷萃槽应为 5 个（冷萃①~⑤）", 5, MekCkSlots.IceMaker.COLD_BREW.size());
+
+        List<String> positions = new ArrayList<>();
+        for (SlotDef d : all) {
+            String pos = d.x() + "," + d.y();
+            assertFalse("槽位坐标重复：" + pos + "（涉及 " + d.key() + "）", positions.contains(pos));
+            positions.add(pos);
+        }
+    }
+
+    /**
+     * 槽序必须与 tile 的常量一致 —— 表里的顺序 = {@code getInitialInventory} 的 addSlot 顺序 = 存档槽下标。
+     *
+     * <p>顺序错了的表现是静默的：产物落进创造槽、冷萃进能源槽之类。</p>
+     */
+    @Test
+    public void iceMakerTableOrderMatchesItsSlotIndices() {
+        List<SlotDef> all = MekCkSlots.IceMaker.ALL;
+        String[] expected = {"input", "output", "creative",
+                "cold_brew_1", "cold_brew_2", "cold_brew_3", "cold_brew_4", "cold_brew_5", "power"};
+        for (int i = 0; i < expected.length; i++) {
+            assertEquals("槽下标 " + i + " 的槽位定义与 IceMakerTile 的常量顺序不一致",
+                    expected[i], all.get(i).key());
+        }
+    }
+
     // ── 2. 表被真正使用（已迁移的菜单不得再写死坐标）──────────────────
 
     /**

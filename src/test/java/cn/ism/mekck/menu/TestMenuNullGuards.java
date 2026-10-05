@@ -29,7 +29,6 @@ import static org.junit.Assert.assertTrue;
 public class TestMenuNullGuards {
 
     private static final String CHOCOLATE = "src/main/java/cn/ism/mekck/menu/ChocolateCannonMenu.java";
-    private static final String ICE_MAKER = "src/main/java/cn/ism/mekck/menu/IceMakerMenu.java";
     private static final String COOKING_POT = "src/main/java/cn/ism/mekck/menu/SmartCookingPotMenu.java";
     private static final String SKEWERING = "src/main/java/cn/ism/mekck/menu/SkeweringMachineMenu.java";
     private static final String BIOREACTOR = "src/main/java/cn/ism/mekck/menu/BioreactorMenu.java";
@@ -42,6 +41,9 @@ public class TestMenuNullGuards {
     // 与 ElectricGrindingMachineMenu / WineCellarMenu / GrillMenu 迁走时同型，
     // **不是**为了让红灯变绿而放宽：其余 5 个菜单仍逐个断言两条判据，
     // 且 criteriaStillMatchSomething 的清单同步收缩并保留「至少一项」的防空转检查。
+    //
+    // 登记表 5 → 4（2026-10-06，急冻制冰机同批迁移）：IceMakerMenu 同型迁到
+    // `MekanismTileContainer`，本文件对它的两条断言随之移出，理由与上段逐字相同。
 
     // ================== 客户端构造器：instanceof 判空 ==================
 
@@ -50,13 +52,6 @@ public class TestMenuNullGuards {
         assertClientCtorGuards(CHOCOLATE,
                 "public ChocolateCannonMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer)",
                 "ChocolateCannonBlockEntity");
-    }
-
-    @Test
-    public void iceMakerClientConstructorNullChecksTheBlockEntity() throws IOException {
-        assertClientCtorGuards(ICE_MAKER,
-                "public IceMakerMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer)",
-                "IceMakerBlockEntity");
     }
 
     @Test
@@ -89,18 +84,6 @@ public class TestMenuNullGuards {
                         + " ChocolateCannonBlockEntity machine, ContainerData data)",
                 "ChocolateCannonBlockEntity.TOTAL_SLOTS",
                 "public boolean stillValid(Player player)",
-                "public BlockPos getBlockPos()",
-                "public void uninstallUpgrade(byte mode, int slot)");
-    }
-
-    @Test
-    public void iceMakerReadPathsAreNullSafe() throws IOException {
-        assertReadPathsGuarded(ICE_MAKER,
-                "public IceMakerMenu(int containerId, Inventory inventory,"
-                        + " IceMakerBlockEntity machine, ContainerData data)",
-                "IceMakerBlockEntity.TOTAL_SLOTS",
-                "public boolean stillValid(Player player)",
-                "public int getWaterCapacity()",
                 "public BlockPos getBlockPos()",
                 "public void uninstallUpgrade(byte mode, int slot)");
     }
@@ -165,12 +148,17 @@ public class TestMenuNullGuards {
     public void criteriaStillMatchSomething() throws IOException {
         String[][] menus = {
                 {CHOCOLATE, "ChocolateCannonBlockEntity"},
-                {ICE_MAKER, "IceMakerBlockEntity"},
                 {COOKING_POT, "SmartCookingPotBlockEntity"},
                 {SKEWERING, "SkeweringMachineBlockEntity"},
                 {BIOREACTOR, "BioreactorBlockEntity"},
         };
-        assertTrue("清单被清空了，本类断言全部空转", menus.length >= 5);
+        // 阈值 5 → 4（2026-10-06）：急冻制冰机菜单随整机迁到 Mek 原生体系 ——
+        // IceMakerMenu 不再有自研的「客户端构造器 + 空菜单兜底 handler」这一对，
+        // 而是 `extends MekanismTileContainer`（客户端构造由 Mek 的容器工厂承担：
+        // 取不到 BE 时工厂直接抛「Missing tile」，不会构造出 machine == null 的空菜单）。
+        // 判据的对象（可能为 null 的 machine 字段）在这台机器上不存在了 —— 与坚果爆炒机同型，
+        // **不是**为了让红灯变绿而放宽：其余 4 个菜单仍逐个断言两条判据。
+        assertTrue("清单被清空了，本类断言全部空转", menus.length >= 4);
         for (String[] menu : menus) {
             String src = TestSourceText.read(menu[0]);
             assertTrue("判据失效：" + menu[0] + " 里已找不到 machine == null",

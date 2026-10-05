@@ -35,7 +35,7 @@
 | [`architecture/03-ae2.md`](architecture/03-ae2.md) | AE2 两条集成路径边界、反射成员名清单、迁移时删分支规则 | 现行 |
 | [`architecture/04-client-menu.md`](architecture/04-client-menu.md) | client/menu 分层、自研件残留清单与删除前置条件 | 现行 |
 | [`architecture/05-god-class-decomposition.md`](architecture/05-god-class-decomposition.md) | 巨型类拆分设计（伴生类表 + 成员区间 + 风险） | 现行 |
-| [`architecture/legacy/`](architecture/legacy/README.md) | 11 台 legacy 机器迁移契约（槽序/NBT/掉落/迁移器）逐台留档 | 现行 |
+| [`architecture/legacy/`](architecture/legacy/README.md) | legacy 机器迁移契约（槽序/NBT/掉落/迁移器）逐台留档；2026-10-06 迁完坚果爆炒机与急冻制冰机后剩 **9 台**未迁 | 现行 |
 
 ---
 
