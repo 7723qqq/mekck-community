@@ -9,7 +9,6 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Set;
 import cn.ism.mekck.registry.MekCkLegacyMachines;
 import cn.ism.mekck.registry.MekCkStandaloneMachines;
-import static cn.ism.mekck.registry.MekCkStandaloneMachines.NUT_ROASTER_BLOCK;
 
 /**
  * F10 攻击增益白名单（拍板 Q8a）：集中定义「哪个 buff 源覆盖哪些攻击型目标」，
@@ -31,8 +30,8 @@ public final class MekckBuffRegistry {
     /** 被鲜果榨汁机 {@code juicer} buff 的喷射攻击型（当前仅 nut_roaster；未来 +coffee_cannon）。 */
     public static Set<Block> juicerTargets() {
         if (juicerTargets == null) {
-            juicerTargets = Set.of(MekCkStandaloneMachines.NUT_ROASTER_BLOCK.get());
-            // 未来：Set.of(NUT_ROASTER_BLOCK.get(), COFFEE_CANNON_BLOCK.get())
+            juicerTargets = Set.of(MekCkStandaloneMachines.NUT_ROASTER_HANDLE.getBlock());
+            // 未来：Set.of(NUT_ROASTER_HANDLE.getBlock(), COFFEE_CANNON_BLOCK.get())
         }
         return juicerTargets;
     }

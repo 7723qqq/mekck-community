@@ -413,7 +413,7 @@ public class TestGuiInventoryLabels {
     // ── 6. 不许重复实现共享基类已有的东西 ──────────────────────────────
 
     /**
-     * <b>继承 {@code MekCkContainerScreenBase} 的屏，不得再自己实现基类已有的部分。</b>
+     * <b>继承 {@code MekCkContainerScreenBase} 的屏，不得再自己实现基类已有的那两行字。</b>
      *
      * <h3>缺陷形态（本仓的结构性问题）</h3>
      * 此前那套基类绑死在 {@code MekCkMachineTile}（工厂）上，13 台无档位单机继承不了，
@@ -423,6 +423,22 @@ public class TestGuiInventoryLabels {
      * <p>本类把通用部分上移到 {@code MekCkContainerScreenBase} 之后，
      * 「继承它又自己再写一遍」就是纯重复，且会让两处实现再次漂移。
      * 本条守的就是这件事：<b>复用的入口开了，就不许再绕过去。</b></p>
+     *
+     * <h3>判据在 2026-10-06 从「一律不许覆写」改成「覆写必须只做追加」（落点变更）</h3>
+     * <p>坚果爆炒机屏幕要在「Inventory」同一行的右端画机身温度 ——
+     * 而 {@code MekCkContainerScreenBase.drawForegroundText} 的 javadoc 与
+     * 本条原判据的报错文案<b>都</b>写着「若确需追加读数，覆写并先调 super」。
+     * 原来的实现（一律不许覆写）比它自己声明与基类文档都严，把文档允许的扩展点判成了违规。</p>
+     *
+     * <p>改后的判据仍然钉住原缺陷：</p>
+     * <ol>
+     *   <li>覆写的方法体<b>必须先调</b> {@code super.drawForegroundText(...)}
+     *       —— 漏了它机器名与「Inventory」两行一个都不画（Mek 的 renderLabels 不调 super）；</li>
+     *   <li>覆写里<b>不得</b>再出现 {@code renderTitleText(} 或 {@code playerInventoryTitle}
+     *       —— 那就是「把基类那两行又抄了一遍」，正是本条要防的重复实现。</li>
+     * </ol>
+     * <p>对不覆写的屏（其余全部）判据与从前逐字一致，所以这不是放宽：它把
+     * 「文档允许的追加」从不许变成本条从来没检查过的两种坏形态（漏 super / 抄一遍）。</p>
      */
     @Test
     public void screensExtendingTheSharedBaseDoNotReimplementIt() throws IOException {
@@ -436,8 +452,19 @@ public class TestGuiInventoryLabels {
             scanned++;
             String name = file.getFileName().toString();
             if (source.contains("protected void drawForegroundText")) {
-                offenders.add(name + "：基类已提供 drawForegroundText（机器名 + 背包标签），"
-                        + "不要重写；若确需追加读数，覆写并先调 super");
+                String body = TestSourceText.methodBody(source, "protected void drawForegroundText");
+                if (body.isEmpty()) {
+                    offenders.add(name + "：找不到 drawForegroundText 方法体（判据失配）");
+                    continue;
+                }
+                if (!body.contains("super.drawForegroundText(")) {
+                    offenders.add(name + "：覆写了 drawForegroundText 却没先调 super —— "
+                            + "机器名与「Inventory」标签会一个都不画");
+                }
+                if (body.contains("renderTitleText(") || body.contains("playerInventoryTitle")) {
+                    offenders.add(name + "：把基类的「机器名 + 背包标签」又抄了一遍 —— "
+                            + "两处实现会各自漂移，这两行只该由基类画");
+                }
             }
             // 刻意**不**在这里查 addSlots()：javadoc 里解释「槽位由 addSlots 自动装配」
             // 是很正常的事，全文字符串匹配会把注释当代码 —— 本仓在这上面栽过四次。

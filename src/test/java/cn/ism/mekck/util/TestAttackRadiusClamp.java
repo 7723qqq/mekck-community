@@ -87,26 +87,26 @@ public class TestAttackRadiusClamp {
      *
      * <p>逐个文件检查，而不是相信「我改过」—— 这正是该缺陷的成因：
      * 四份各写一遍「只有下限」的钳制，改的时候很容易只改到其中几个。</p>
+     *
+     * <p>2026-10-06：坚果爆炒机迁到 Mek 原生体系，类名与路径都变了
+     * （{@code blockentity/NutRoasterBlockEntity} → {@code machine/roasting/NutRoasterTile}）。
+     * 判据的<b>落点</b>跟着改，断言的东西一个字没动。</p>
      */
     @Test
     public void everyAttackMachineRoutesBothSettersThroughTheSharedClamp() throws java.io.IOException {
-        String[] machines = {
-                "IceMakerBlockEntity", "NutRoasterBlockEntity",
-                "IceFactoryBlockEntity", "ChocolateCannonBlockEntity"
-        };
-        for (String m : machines) {
-            String path = "src/main/java/cn/ism/mekck/blockentity/" + m + ".java";
+        for (String[] machine : attackMachines()) {
+            String name = machine[0];
             String src = java.nio.file.Files.readString(
-                    java.nio.file.Path.of(path), java.nio.charset.StandardCharsets.UTF_8);
-            assertTrue(m + ".setRadius 必须走 IceTargetSearch.clampAttackRadius"
+                    java.nio.file.Path.of(machine[1]), java.nio.charset.StandardCharsets.UTF_8);
+            assertTrue(name + ".setRadius 必须走 IceTargetSearch.clampAttackRadius"
                             + "（无上限的半径来自网络包，配合大半径分支 = 每 tick 全服实体遍历）",
                     methodBody(src, "public void setRadius(int r) {")
                             .contains("IceTargetSearch.clampAttackRadius"));
-            assertTrue(m + ".adjustRadius 必须走 IceTargetSearch.clampAttackRadius",
+            assertTrue(name + ".adjustRadius 必须走 IceTargetSearch.clampAttackRadius",
                     methodBody(src, "public void adjustRadius(int delta) {")
                             .contains("IceTargetSearch.clampAttackRadius"));
             // 反向断言：旧的「上限不限」写法必须已经消失。
-            assertTrue(m + " 仍残留「上限不限」的旧钳制写法",
+            assertTrue(name + " 仍残留「上限不限」的旧钳制写法",
                     !src.contains("Math.min((long) Integer.MAX_VALUE, (long) this.radius + delta)"));
         }
     }
@@ -119,33 +119,47 @@ public class TestAttackRadiusClamp {
      */
     @Test
     public void radiusReadFromNbtRoutesThroughTheSharedClamp() throws java.io.IOException {
-        String[] machines = {
-                "IceMakerBlockEntity", "IceFactoryBlockEntity",
-                "NutRoasterBlockEntity", "ChocolateCannonBlockEntity"
-        };
-        for (String m : machines) {
-            String path = "src/main/java/cn/ism/mekck/blockentity/" + m + ".java";
+        for (String[] machine : attackMachines()) {
+            String name = machine[0];
             String src = java.nio.file.Files.readString(
-                    java.nio.file.Path.of(path), java.nio.charset.StandardCharsets.UTF_8);
-            assertTrue(m + " 读档 radius 必须走 IceTargetSearch.clampAttackRadius",
+                    java.nio.file.Path.of(machine[1]), java.nio.charset.StandardCharsets.UTF_8);
+            assertTrue(name + " 读档 radius 必须走 IceTargetSearch.clampAttackRadius",
                     src.contains("radius = IceTargetSearch.clampAttackRadius(tag.getInt(\"Radius\"))"));
-            assertFalse(m + " 仍有绕过闸门的裸读 radius = tag.getInt(\"Radius\")",
+            assertFalse(name + " 仍有绕过闸门的裸读 radius = tag.getInt(\"Radius\")",
                     src.contains("radius = tag.getInt(\"Radius\")"));
         }
         // 顺带钉死本轮删掉的死语句（读取结果被丢弃的 machine.data.get(DATA_ENERGY)）不得回潮。
         // 四台同型：IceMaker（第 6 轮删）+ ChocolateCannon / NutRoaster（M13 删）
         // + SimpleMachineBlockEntity（M17 删）。
-        String[] deadStatementMachines = {
-                "IceMakerBlockEntity", "ChocolateCannonBlockEntity", "NutRoasterBlockEntity",
-                "SimpleMachineBlockEntity"
+        // 2026-10-06：坚果爆炒机的落点随迁移改为 machine/roasting/NutRoasterTile.java ——
+        // 新 tile 没有 data 字段，但这条断言（同一条被丢弃结果的死语句不得回潮）照旧适用。
+        String[][] deadStatementMachines = {
+                {"IceMakerBlockEntity", "src/main/java/cn/ism/mekck/blockentity/IceMakerBlockEntity.java"},
+                {"ChocolateCannonBlockEntity", "src/main/java/cn/ism/mekck/blockentity/ChocolateCannonBlockEntity.java"},
+                {"NutRoasterTile", "src/main/java/cn/ism/mekck/machine/roasting/NutRoasterTile.java"},
+                {"SimpleMachineBlockEntity", "src/main/java/cn/ism/mekck/blockentity/SimpleMachineBlockEntity.java"},
         };
-        for (String m : deadStatementMachines) {
+        for (String[] m : deadStatementMachines) {
             String dead = java.nio.file.Files.readString(
-                    java.nio.file.Path.of("src/main/java/cn/ism/mekck/blockentity/" + m + ".java"),
-                    java.nio.charset.StandardCharsets.UTF_8);
-            assertFalse(m + " 又出现了被丢弃结果的 machine.data.get(DATA_ENERGY) 死语句",
+                    java.nio.file.Path.of(m[1]), java.nio.charset.StandardCharsets.UTF_8);
+            assertFalse(m[0] + " 又出现了被丢弃结果的 machine.data.get(DATA_ENERGY) 死语句",
                     dead.contains("machine.data.get(DATA_ENERGY);"));
         }
+    }
+
+    /**
+     * 四台攻击型机器的「类简名 → 源文件路径」。
+     *
+     * <p>2026-10-06：坚果爆炒机迁到 Mek 原生体系后落在 {@code machine/roasting/}，
+     * 不再位于 {@code blockentity/}。判据的落点因此改为显式路径表 —— 断言的内容不变。</p>
+     */
+    private static String[][] attackMachines() {
+        return new String[][]{
+                {"IceMakerBlockEntity", "src/main/java/cn/ism/mekck/blockentity/IceMakerBlockEntity.java"},
+                {"IceFactoryBlockEntity", "src/main/java/cn/ism/mekck/blockentity/IceFactoryBlockEntity.java"},
+                {"ChocolateCannonBlockEntity", "src/main/java/cn/ism/mekck/blockentity/ChocolateCannonBlockEntity.java"},
+                {"NutRoasterTile", "src/main/java/cn/ism/mekck/machine/roasting/NutRoasterTile.java"},
+        };
     }
 
     private static String methodBody(String src, String signature) {

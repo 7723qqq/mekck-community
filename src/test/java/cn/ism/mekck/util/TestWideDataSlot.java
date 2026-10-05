@@ -211,10 +211,12 @@ public class TestWideDataSlot {
         }
         // 阈值跟着「仍在旧 BE 形态上的机器数」走：每台迁到 Mek 原生体系就少一台
         // （能量改走 Mek 的能量容器通道，不再经 ContainerData 拆位）。
-        // 电力研磨机于阶段 3 样板迁移中离开本扫描：10 → 9。
+        // 电力研磨机于阶段 3 样板迁移中离开本扫描：10 → 9；
+        // 坚果爆炒机于 2026-10-06 迁移中离开本扫描：9 → 8
+        // （NutRoasterTile 的能量走 MachineEnergyContainer，没有 DATA_ENERGY 槽）。
         // **这不是放宽判据**：下面那条 missing 断言对扫到的每一台逐条生效，
         // 「塞进 16 位通道却不拆高位」这条规则一个字没改。
-        assertTrue("一个同步能量的 BE 都没扫到，判据失效了", seen >= 9);
+        assertTrue("一个同步能量的 BE 都没扫到，判据失效了", seen >= 8);
         assertEquals("这些 BE 把能量塞进了 16 位通道却没拆高位 —— 客户端拿到的仍是被截断的负数：\n",
                 Set.of(), missing);
     }
@@ -265,6 +267,7 @@ public class TestWideDataSlot {
         // ElectricGrindingMachineMenu 已于阶段 3 样板迁移中移出：
         // 它随整机迁到 Mek 的 MekanismTileContainer，不再有 getEncodedSideConfig()（侧配由
         // Mek 的 configComponent 承担），因此它不再进本扫描 —— 白名单留着会变成「陈旧豁免」。
+        // NutRoasterMenu 于 2026-10-06 同型移出（见下），阈值同步 8 → 7。
         Set<String> allowedSingleRead = Set.of(
                 "SmartCookingPotMenu.java",         // 2-bit 家族
                 "SkeweringMachineMenu.java",        // 2-bit 家族
@@ -284,7 +287,10 @@ public class TestWideDataSlot {
                 offenders.add(name);
             }
         }
-        assertTrue("一个 getEncodedSideConfig() 都没扫到，判据失效了", seen >= 8);
+        // 阈值 = 仍在自研侧配上的菜单数。坚果爆炒机 2026-10-06 迁到 Mek 原生体系后，
+        // 侧配由 Mek 的 configComponent 承担、菜单不再有 getEncodedSideConfig()：8 → 7。
+        // **不是放宽**：下面那条 offenders 断言对扫到的每个菜单逐条生效。
+        assertTrue("一个 getEncodedSideConfig() 都没扫到，判据失效了", seen >= 7);
         assertEquals("这些菜单的 getEncodedSideConfig() 仍在单槽裸读（24-bit 编码会丢 WEST/EAST 两面）：\n",
                 Set.of(), offenders);
     }

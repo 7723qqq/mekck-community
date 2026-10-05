@@ -146,7 +146,9 @@ public class TestNoHardcodedUiText {
             //      「已安装升级 / 无法安装升级」随之消失。护栏的陈旧条目自检正是为此存在。
             "cn/ism/mekck/block/IceFactoryBlock.java",
             "cn/ism/mekck/block/IceMakerBlock.java",
-            "cn/ism/mekck/block/NutRoasterBlock.java",
+            //    坚果爆炒机方块已在 2026-10-06 迁移中移出本清单（16 → 15）：迁到 Mek 的
+            //      BlockTile 后它不再覆写 use()（右键开界面交给 AttributeGui），那两条
+            //      硬编码中文「已安装升级 / 无法安装升级」随之消失 —— 与电力研磨机同型。
             "cn/ism/mekck/block/PlantingCuttingStationBlock.java",
             "cn/ism/mekck/block/SimpleMachineBlock.java",
             "cn/ism/mekck/block/SkeweringMachineBlock.java",

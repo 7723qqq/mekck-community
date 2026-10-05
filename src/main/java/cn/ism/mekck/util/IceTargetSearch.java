@@ -96,7 +96,7 @@ public final class IceTargetSearch {
      * 一台机器的索敌缓存。
      *
      * <p>四个攻击型 BE 里原本只有 {@code ChocolateCannonBlockEntity} 有这份缓存，
-     * 而 {@code IceMakerBlockEntity} / {@code NutRoasterBlockEntity} 装上创造升级后
+     * 而 {@code IceMakerBlockEntity} / {@code NutRoasterTile} 装上创造升级后
      * {@code attackTimer = 1} ⇒ <b>每 tick 攻击一次</b>，再叠上半径 &gt; 64 走
      * {@code getEntities().getAll()} 的全服实体遍历分支，两三台就能吃掉 TPS。
      * 抽到这里是为了让四台机器共用同一份实现，而不是各写一份。</p>

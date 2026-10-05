@@ -1649,7 +1649,12 @@ public final class MekckAe2 {
                 entries = buildCookingPotPatterns(level, avail);
             // 电力研磨机分支在阶段 3 样板迁移中删除：新 GrindingMachineTile 走
             // MekCkMachineTile 端口声明那条路（同切菜/烧烤/各工厂家族）。
-            } else if (owner instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity) {
+            // 坚果爆炒机（2026-10-06 迁到 Mek 原生 tile）：类型换成 NutRoasterTile，
+            // 样板来源（buildSimpleSingleOutputPatterns + mekck:nut_roasting）一字未改。
+            // ⚠️ 本机的分支**刻意保留**（与电力研磨机不同）：删掉它，本机在 ME 终端就再也
+            // 注册不出样板，面板的「ME」列表也随之恒空 —— 那是玩家可见的功能消失，
+            // 而不是「清掉一条已经不用的旧类型分支」。分支指向的是在用的新 tile。
+            } else if (owner instanceof cn.ism.mekck.machine.roasting.NutRoasterTile) {
                 entries = buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("mekck", "nut_roasting"), avail);
             } else if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity) {
                 entries = buildSimpleSingleOutputPatterns(level, ResourceLocation.fromNamespaceAndPath("mekck", "ice_make"), avail);
@@ -1884,7 +1889,8 @@ public final class MekckAe2 {
             } else if (owner instanceof cn.ism.mekck.blockentity.SmartCookingPotBlockEntity pot) {
                 pot.setOrder(entry.recipeId, 1);
             // 电力研磨机分支同上删除（订单走 tile 的 setOrder，经端口声明路径调用）。
-            } else if (owner instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity roaster) {
+            // 坚果爆炒机分支改为指向新 tile（同上：分支是活的，订单必须有人设）。
+            } else if (owner instanceof cn.ism.mekck.machine.roasting.NutRoasterTile roaster) {
                 roaster.setOrder(entry.recipeId, 1);
             } else if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity ice) {
                 ice.setOrder(entry.recipeId, 1);
@@ -1910,7 +1916,9 @@ public final class MekckAe2 {
             if (owner instanceof cn.ism.mekck.blockentity.GrillBlockEntity g) return g.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.SmartCookingPotBlockEntity pot) return pot.getItems();
             // 电力研磨机迁到 Mek 原生 tile：没有 ItemStackHandler，槽位由 portWindow() 提供。
-            if (owner instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity roaster) return roaster.getItems();
+            // 坚果爆炒机：新 tile 提供 ae2View（输入 0 / 输出 1 的只读适配视图），
+            // 下标与迁移前的 ItemStackHandler 一致（见 NutRoasterTile#getItems）。
+            if (owner instanceof cn.ism.mekck.machine.roasting.NutRoasterTile roaster) return roaster.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity ice) return ice.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.ChocolateCannonBlockEntity cannon) return cannon.getItems();
             if (owner instanceof cn.ism.mekck.blockentity.CentralKitchenBlockEntity kitchen) return kitchen.items;
@@ -1937,8 +1945,9 @@ public final class MekckAe2 {
                 return new int[]{cn.ism.mekck.blockentity.SmartCookingPotBlockEntity.OUTPUT_SLOT};
             }
             // 电力研磨机分支同上（输出槽由 portWindow() 提供）。
-            if (owner instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity) {
-                return new int[]{cn.ism.mekck.blockentity.NutRoasterBlockEntity.OUTPUT_SLOT};
+            // 坚果爆炒机：输出槽在 ae2View 里是下标 1（INPUT_SLOT 0 / OUTPUT_SLOT 1）。
+            if (owner instanceof cn.ism.mekck.machine.roasting.NutRoasterTile) {
+                return new int[]{cn.ism.mekck.machine.roasting.NutRoasterTile.OUTPUT_SLOT};
             }
             if (owner instanceof cn.ism.mekck.blockentity.IceMakerBlockEntity) {
                 return new int[]{cn.ism.mekck.blockentity.IceMakerBlockEntity.OUTPUT_SLOT};

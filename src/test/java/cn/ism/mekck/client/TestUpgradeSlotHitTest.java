@@ -43,13 +43,17 @@ public class TestUpgradeSlotHitTest {
      * （私有静态内部类 {@code UpgradeSlot} 整个删除），而是由 Mek 的
      * {@code TileComponentUpgrade} 承担 —— 「栏位跟随位置供给器」这条断言对它已无对象。
      * 本测试的类注释说明了这条清单会随迁移收缩，本行就是第一次收缩。</p>
+     *
+     * <p><b>NutRoasterMenu 于 2026-10-06 同型收缩（6 → 5）</b>：坚果爆炒机迁到
+     * Mek 原生体系后，菜单里那四个手写槽类（含 {@code UpgradeSlot}）与自研升级窗
+     * 一并删除，升级槽改由 {@code MekanismTileContainer.getUpgradeSlot()} 承担。
+     * 断言的落点（自研 UpgradeSlot 的 getActualX/Y）随迁移消失，不是放宽判据。</p>
      */
     private static final List<String> MENUS = List.of(
             "cn.ism.mekck.menu.SimpleMachineMenu",
             "cn.ism.mekck.menu.SkeweringMachineMenu",
             "cn.ism.mekck.menu.SmartCookingPotMenu",
             "cn.ism.mekck.menu.IceMakerMenu",
-            "cn.ism.mekck.menu.NutRoasterMenu",
             "cn.ism.mekck.menu.ChocolateCannonMenu");
 
     /**

@@ -63,10 +63,11 @@ public class TestMekCkHeatIntegration {
     /** 加热类机器（坚果爆炒机）走同一条路径。 */
     @GameTest(template = TEMPLATE, timeoutTicks = 100)
     public static void nutRoasterIsMekanismHeatHandler(GameTestHelper helper) {
-        helper.setBlock(POS, cn.ism.mekck.registry.MekCkStandaloneMachines.NUT_ROASTER_BLOCK.get());
+        helper.setBlock(POS, cn.ism.mekck.registry.MekCkStandaloneMachines.NUT_ROASTER_HANDLE.getBlock());
         BlockEntity be = helper.getBlockEntity(POS);
-        helper.assertTrue(be instanceof NutRoasterBlockEntity, "nut_roaster 方块实体类型不符: " + be);
-        helper.assertTrue(be instanceof IMekanismHeatHandler, "NutRoasterBlockEntity 未实现 IMekanismHeatHandler");
+        helper.assertTrue(be instanceof cn.ism.mekck.machine.roasting.NutRoasterTile,
+                "nut_roaster 方块实体类型不符: " + be);
+        helper.assertTrue(be instanceof IMekanismHeatHandler, "NutRoasterTile 未实现 IMekanismHeatHandler");
         var resolved = be.getCapability(Capabilities.HEAT_HANDLER, null).resolve().orElse(null);
         helper.assertTrue(resolved instanceof IMekanismHeatHandler, "坚果爆炒机热能力不可解析或类型不符");
         helper.succeed();

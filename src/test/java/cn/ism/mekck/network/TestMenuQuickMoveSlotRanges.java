@@ -360,8 +360,6 @@ public class TestMenuQuickMoveSlotRanges {
             new Menu("IceMakerMenu.java", 11, set(),
                     map("target", "int target = switch (cb) {"),
                     "输入/输出/速度/能量/创造 + 冷萃5 + 能源 = 11；target 取自冷萃档位 switch（CB_SLOT_1..5 = 5..9）"),
-            new Menu("NutRoasterMenu.java", 6, set(), map(),
-                    "输入/输出/速度/能量/创造/能源"),
             new Menu("PlantingCuttingStationMenu.java", 9, set(), map(),
                     "输入/营养液/输出 + 速度/能量/创造/气体 + 能源 + 生长 = 9"),
             new Menu("SandwichAssemblerMenu.java", 68, set(), map(),
@@ -402,6 +400,10 @@ public class TestMenuQuickMoveSlotRanges {
     // mekContainer=true 登记进表 —— 只登记、跳过 A1–A4（Mek 容器菜单的槽由
     // MekanismContainer.addSlots() 建，源码里没有槽构造器，四条槽序断言的输入不存在）。
     // **A0 完整性检查没有被削弱**：menu/ 下任何出现 quickMoveStack 的文件仍必须登记。
+    //
+    // NutRoasterMenu：2026-10-06 坚果爆炒机迁到 MekanismTileContainer 体系时整段删除
+    // （槽由 Mek 自动装配、shift-click 由 Mek 的默认实现承担），本类的四条断言对它已无对象
+    // —— 表里那条 6 槽的登记随之删除（A0 的全等比较会逼着删，见下）。
 
     private static List<String> menuFilesWithQuickMove() throws IOException {
         List<String> files = new ArrayList<>();

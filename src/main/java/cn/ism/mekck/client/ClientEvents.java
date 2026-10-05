@@ -42,7 +42,7 @@ import static cn.ism.mekck.registry.MekCkEntities.ICE_CUBE_ENTITY;
 import static cn.ism.mekck.registry.MekCkFactories.ICE_FACTORY_MENU;
 import static cn.ism.mekck.registry.MekCkStandaloneMachines.ICE_MAKER_MENU;
 import static cn.ism.mekck.registry.MekCkFactories.MACHINE_CONTAINER;
-import static cn.ism.mekck.registry.MekCkStandaloneMachines.NUT_ROASTER_MENU;
+import static cn.ism.mekck.registry.MekCkStandaloneMachines.NUT_ROASTER_CONTAINER;
 import static cn.ism.mekck.registry.MekCkFactories.PLANTING_CUTTING_CONTAINER;
 import static cn.ism.mekck.registry.MekCkFactories.PLANTING_CUTTING_STATION_MENU;
 import static cn.ism.mekck.registry.MekCkEntities.ROASTED_HAZELNUT_ENTITY;
@@ -91,7 +91,7 @@ public final class ClientEvents {
                 MenuScreens.register(ICE_FACTORY_MENU.get(), IceFactoryScreen::new);
             }
             MenuScreens.register(CHOCOLATE_CANNON_MENU.get(), ChocolateCannonScreen::new);
-            MenuScreens.register(NUT_ROASTER_MENU.get(), NutRoasterScreen::new);
+            MenuScreens.register(NUT_ROASTER_CONTAINER.get(), NutRoasterScreen::new);
             MenuScreens.register(SIMPLE_MACHINE_MENU.get(), cn.ism.mekck.client.SimpleMachineScreen::new);
             net.minecraft.client.renderer.entity.EntityRenderers.register(ICE_CUBE_ENTITY.get(),
                     cn.ism.mekck.client.IceCubeRenderer::new);

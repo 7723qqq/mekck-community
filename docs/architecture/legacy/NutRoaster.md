@@ -1,6 +1,17 @@
 # NutRoaster（坚果烘焙机）迁移契约
 
-**迁移阶段：未迁**（仍是普通 `BlockEntity`）
+**迁移阶段：已迁（2026-10-06）** —— 本文保留为**迁移前契约的快照**（槽序 / NBT 键），
+迁移后的落点见下表；迁移当时的动作清单与护栏处置见 `docs/STATUS.md` 本轮 §〇。
+
+| 迁移后 | 位置 |
+|---|---|
+| 方块实体 | `machine/roasting/NutRoasterTile`（`extends MekCkNetworkPullableTile`） |
+| 方块 | `block/NutRoasterBlock`（`BlockTile` + `BlockTypeTile.blockTypeFor`） |
+| 菜单 / 屏幕 | `menu/NutRoasterMenu`（`MekanismTileContainer`）/ `client/NutRoasterScreen`（`MekCkContainerScreenBase`） |
+| 注册 | `registry/MekCkStandaloneMachines` 的 `NUT_ROASTER_{CONTAINERS,BLOCKS,TILES}_REG`（注册名不变） |
+| 战利品表 | `data/mekck/loot_tables/blocks/nut_roaster.json`（已补） |
+| **新槽序** | `[输入 0, 输出 1, 创造升级 2, 能源 3]`（速度/能量卡改由 `TileComponentUpgrade` 持有） |
+| 旧存档 | **不迁**（用户口径：模组尚未正式发布，NBT 键可以改） |
 
 ## 一、定位
 

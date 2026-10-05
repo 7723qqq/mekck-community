@@ -364,7 +364,7 @@ public class JEIPlugin implements IModPlugin {
         registration.addRecipeCategories(new NutRoastingRecipeCategory(
                 helper,
                 NUT_ROASTING_TYPE,
-                new ItemStack(MekCkStandaloneMachines.NUT_ROASTER_BLOCK.get())
+                new ItemStack(MekCkStandaloneMachines.NUT_ROASTER_HANDLE.getBlock())
         ));
 
         // §F19：磨粉分类（电力研磨机）与萃取分类（智能萃取机）
@@ -687,7 +687,7 @@ public class JEIPlugin implements IModPlugin {
 
         // 坚果爆炒机作为 mekck:nut_roasting 配方分类的催化剂
         registration.addRecipeCatalyst(
-                new ItemStack(MekCkStandaloneMachines.NUT_ROASTER_BLOCK.get()),
+                new ItemStack(MekCkStandaloneMachines.NUT_ROASTER_HANDLE.getBlock()),
                 NUT_ROASTING_TYPE
         );
 

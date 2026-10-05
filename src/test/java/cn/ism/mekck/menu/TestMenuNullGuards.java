@@ -30,10 +30,18 @@ public class TestMenuNullGuards {
 
     private static final String CHOCOLATE = "src/main/java/cn/ism/mekck/menu/ChocolateCannonMenu.java";
     private static final String ICE_MAKER = "src/main/java/cn/ism/mekck/menu/IceMakerMenu.java";
-    private static final String NUT_ROASTER = "src/main/java/cn/ism/mekck/menu/NutRoasterMenu.java";
     private static final String COOKING_POT = "src/main/java/cn/ism/mekck/menu/SmartCookingPotMenu.java";
     private static final String SKEWERING = "src/main/java/cn/ism/mekck/menu/SkeweringMachineMenu.java";
     private static final String BIOREACTOR = "src/main/java/cn/ism/mekck/menu/BioreactorMenu.java";
+
+    // 登记表 6 → 5（2026-10-06）：坚果爆炒机菜单随整机迁到 Mek 原生体系 ——
+    // NutRoasterMenu 不再有自研的「客户端构造器 + 空菜单兜底 handler」这一对，
+    // 而是 `extends MekanismTileContainer`（客户端构造由 Mek 的容器工厂承担：
+    // 取不到 BE 时工厂直接抛「Missing tile」，不会构造出 machine == null 的空菜单）。
+    // 判据的对象（可能为 null 的 machine 字段）在这台机器上不存在了 ——
+    // 与 ElectricGrindingMachineMenu / WineCellarMenu / GrillMenu 迁走时同型，
+    // **不是**为了让红灯变绿而放宽：其余 5 个菜单仍逐个断言两条判据，
+    // 且 criteriaStillMatchSomething 的清单同步收缩并保留「至少一项」的防空转检查。
 
     // ================== 客户端构造器：instanceof 判空 ==================
 
@@ -49,13 +57,6 @@ public class TestMenuNullGuards {
         assertClientCtorGuards(ICE_MAKER,
                 "public IceMakerMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer)",
                 "IceMakerBlockEntity");
-    }
-
-    @Test
-    public void nutRoasterClientConstructorNullChecksTheBlockEntity() throws IOException {
-        assertClientCtorGuards(NUT_ROASTER,
-                "public NutRoasterMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer)",
-                "NutRoasterBlockEntity");
     }
 
     @Test
@@ -102,16 +103,6 @@ public class TestMenuNullGuards {
                 "public int getWaterCapacity()",
                 "public BlockPos getBlockPos()",
                 "public void uninstallUpgrade(byte mode, int slot)");
-    }
-
-    @Test
-    public void nutRoasterReadPathsAreNullSafe() throws IOException {
-        assertReadPathsGuarded(NUT_ROASTER,
-                "public NutRoasterMenu(int containerId, Inventory inventory,"
-                        + " NutRoasterBlockEntity machine, ContainerData data)",
-                "NutRoasterBlockEntity.TOTAL_SLOTS",
-                "public boolean stillValid(Player player)",
-                "public BlockPos getBlockPos()");
     }
 
     @Test
@@ -175,11 +166,11 @@ public class TestMenuNullGuards {
         String[][] menus = {
                 {CHOCOLATE, "ChocolateCannonBlockEntity"},
                 {ICE_MAKER, "IceMakerBlockEntity"},
-                {NUT_ROASTER, "NutRoasterBlockEntity"},
                 {COOKING_POT, "SmartCookingPotBlockEntity"},
                 {SKEWERING, "SkeweringMachineBlockEntity"},
                 {BIOREACTOR, "BioreactorBlockEntity"},
         };
+        assertTrue("清单被清空了，本类断言全部空转", menus.length >= 5);
         for (String[] menu : menus) {
             String src = TestSourceText.read(menu[0]);
             assertTrue("判据失效：" + menu[0] + " 里已找不到 machine == null",

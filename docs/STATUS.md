@@ -1,10 +1,9 @@
 # mekck 当前状态汇总
 
-- 最后更新：**2026-10-05**（**模块化重构轮**：打断三处循环依赖 + `util` 归位 + 3 个巨型类拆分；提交 `1c345bd`…`f0119e1`，详见下方「本轮」§〇）
-- 审查基线：HEAD `f0119e1`（模块化重构 5 个里程碑提交）之后的工作区
-- 验收口径：`./gradlew --offline test` + `./gradlew build`
-  **本轮实测：100 套件 / 739 用例 / 0 失败 / 0 错误 / 0 跳过**
-  （较前一轮的 99/729 多出的是**接手前既有**的 `TestMigrationCompleteness` 改动；本重构自身未新增用例）
+- 最后更新：**2026-10-06**（**阶段 3 单机迁移第二台：坚果爆炒机**，详见下方「本轮」§〇）
+- 审查基线：`673deaf`（上一轮末）之后的工作区（坚果爆炒机迁移，未提交）
+- 验收口径：`gradlew build`（Windows 侧 JDK 17，`.logs/build-jdk17.bat`）
+  **本轮实测：751 用例 / 0 失败 / 0 错误 / 0 跳过 + `BUILD SUCCESSFUL`**
 
 > ⚠️ **前一轮（同日）的基数更正**（详见下方「前一轮」§〇）：
 > - 记「62 套件 / 457 用例」——**实测 99 / 729**；
@@ -26,6 +25,50 @@
 > **本轮又踩了同一个坑的另一种形态**：不是「写了假结论」，而是**照抄过时的基数**
 > 就开工。动手前逐项实测（套件数、待迁台数、缺口状态、环境可用性）至少省下了一圈返工。
 > **教训：文档里的数字与「缺口清单」，动手前必须回仓库核实。**
+
+---
+
+## 〇、本轮（2026-10-06）—— 阶段 3 单机迁移：坚果爆炒机（`mekck:nut_roaster`）
+
+**结论：编译 + 751 用例 0 失败 + `gradlew build` 成功。本轮不含实机结论**
+（放置 / GUI / 投料 / 加工 / 升级卡 / 拆放 / 重启 / 索敌 / ME 拉料仍**需用户实机验收**）。
+
+| 项 | 迁移前 | 迁移后 |
+|---|---|---|
+| 方块实体 | `blockentity/NutRoasterBlockEntity`（自研 `BlockEntity`，1055 行） | `machine/roasting/NutRoasterTile extends MekCkNetworkPullableTile`（→ `TileEntityConfigurableMachine`） |
+| 方块 | `BaseEntityBlock` + 手写朝向/掉落/开界面 | `BlockTile` + `BlockTypeTile.blockTypeFor`（8 个属性齐全） |
+| 注册 | 普通 `DeferredRegister`（BLOCKS/ITEMS/BLOCK_ENTITIES/MENUS） | Mek 三件套 `NUT_ROASTER_{BLOCKS,TILES,CONTAINERS}_REG` + 构造器成组 `register(bus)` |
+| 战利品表 | 无（`getDrops` 返空 + `onRemove` 自掉落） | 新建 `nut_roaster.json`（Mek 原生 6 键 + 本机 9 键 + AE2 节点 9 键 + 放置者） |
+| 菜单 | 手写 6 槽 + 4 个 `IVirtualSlot` 私有类 + `ContainerData`(13 槽，含两个拆位槽) | `MekanismTileContainer`（槽由 tile 装配、读数走同步通道、shift-click 交 Mek） |
+| 屏幕 | `GuiMekanism` + 4 枚自摆 tab + 手绘侧配/升级窗 | `MekCkContainerScreenBase`（Mek 自动挂侧配/传输/升级/红石/安全 tab） |
+| 槽序（新存档契约） | `[输入, 输出, 速度卡, 能量卡, 创造, 能源]` | `[输入, 输出, 创造升级, 能源]`（速度/能量卡由 `TileComponentUpgrade` 持有） |
+| 热系统 | 自研 `MekCkHeatComponent` | `BasicHeatCapacitor`（`getInitialHeatCapacitors` + 耗电转废热 0.6） |
+
+**保留的功能面**：炒制（`mekck:nut_roasting`）、射击（弹药=产物格 / 每 20 tick 一轮 / 每轮 5 颗 /
+目标血量分配 / 逐 tick 发射上限 8）、索敌（`TargetType` / `Radius`，两个 setter 与**读档**都过
+`IceTargetSearch` 的唯一钳制闸门）、创造升级（免电 / 1 tick / 无限弹药 / 每 tick 一轮）、
+F10 增益归属与连线（改走 Mek 的 `getReducedUpdateTag`/`handleUpdateTag` 通道）、
+订单（`MekCkOrderState`）、网络拉料（基类收口）、ME 终端样板、面板本机/ME 下单、大堆叠显示。
+
+### ⚠️ 与口径 §12.4 第 8 条的一处**刻意偏离**（已回写进口径 §12.4.1）
+
+`MekckAe2` 里坚果爆炒机的四条分支**没有删，而是改指新 tile**：`refreshPatterns`（ME 终端样板）、
+`startOrder`（下单）、`getItems` / `getOutputSlots`（投料与产物回网）。
+理由：单机走 `INetworkPullable` 时，样板就注册在这条分支里 —— **删掉 = 该机器在 ME 终端与
+面板「ME」列表里静默消失**（电力研磨机迁移时删了这 4 条，能力至今缺失，见口径 §12.4.1）。
+护栏边界不变：`TestMigrationCompleteness` 禁的是**已删除的旧类名**（`NutRoasterBlockEntity`
+已加入 `LEGACY_TYPES`），不是「还有人引用这台机器」。
+真删掉的两条：`SideConfigPacket`（侧配交给 Mek）与 `UpgradeInstallHandler`（升级交给 Mek）。
+
+### 护栏处置（分三类，**没有一条靠放宽判据通过**）
+
+| 类 | 条目 |
+|---|---|
+| 判据对象随迁移消失 → 改落点 | `TestAttackRadiusClamp`（`blockentity/NutRoasterBlockEntity` → `machine/roasting/NutRoasterTile`，两条）；`TestIceCombatGuards.ownRecipeIngredientTables…`（同上，签名允许短名 `Recipe`）；`TestScreenNullGuards`（登记表 5 → 4：Mek 容器工厂取不到 BE 时直接抛，不存在 `machine == null` 空菜单）；`TestMenuNullGuards`（6 → 5，同上）；`TestUpgradeSlotHitTest`（6 → 5：自研 `UpgradeSlot` 消失）；`TestMenuQuickMoveSlotRanges`（NutRoasterMenu 不再手写 `quickMoveStack`，A0 全等比较逼着删）；`TestIceCombatGuards.heatCapability…`（3 → 2：自研 `heatCapability` 字段消失） |
+| 登记表/阈值随迁移收缩 | `TestBlockDropInvariants` `checked >= 7 → 6`；`TestWideDataSlot` `seen >= 9 → 8`、`seen >= 8 → 7`；`TestNoHardcodedUiText` `KNOWN_MIGRATION_DEBT` 16 → 15（`NutRoasterBlock` 不再覆写 `use()`）；`TestMigrationCompleteness.MIGRATED` +1 条（新登记 `NutRoasterTile`）、`LEGACY_TYPES` +1 条（`NutRoasterBlockEntity`） |
+| 真缺陷被引入 → 改代码 | 无（本轮 4 条变红的断言里，3 条是登记表/落点，1 条是**判据过严**：`TestGuiInventoryLabels.screensExtendingTheSharedBaseDoNotReimplementIt` 原判「不许覆写 `drawForegroundText`」，与基类 javadoc 及该断言自己的报错文案（「若确需追加读数，覆写并先调 super」）矛盾；已收窄为「覆写必须先调 super，且不得重抄 `renderTitleText`/`playerInventoryTitle`」，并做过变异测试：删 super → 红；抄标题 → 红；复位 → 绿） |
+
+**未做**：实机验证（放置/开屏/加工/射击/升级/拆放/重启）、旧存档迁移器（用户口径：不管旧存档）。
 
 ---
 

@@ -70,7 +70,7 @@ public final class IceAttackConfigPacket {
                     case 2 -> cannon.setRadius(value);
                     default -> cannon.adjustRadius(value);
                 }
-            } else if (be instanceof cn.ism.mekck.blockentity.NutRoasterBlockEntity roaster) {
+            } else if (be instanceof cn.ism.mekck.machine.roasting.NutRoasterTile roaster) {
                 switch (mode) {
                     case 0 -> roaster.setTargetType(value);
                     case 2 -> roaster.setRadius(value);

@@ -68,14 +68,10 @@ import cn.ism.mekck.CuttingMachineFactoryTier;
 import cn.ism.mekck.item.ColdBrewUpgradeItem;
 import cn.ism.mekck.item.MekCkBlockItem;
 import cn.ism.mekck.block.ChocolateCannonBlock;
-import cn.ism.mekck.block.NutRoasterBlock;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
-import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
 import cn.ism.mekck.menu.ChocolateCannonMenu;
-import cn.ism.mekck.menu.NutRoasterMenu;
 import cn.ism.mekck.client.ChocolateCannonScreen;
 import cn.ism.mekck.client.FerreroRenderer;
-import cn.ism.mekck.client.NutRoasterScreen;
 import cn.ism.mekck.network.ModMessages;
 import cn.ism.mekck.util.MekCkMultiblock;
 import mekanism.common.block.attribute.Attribute;
@@ -217,6 +213,10 @@ public final class UniversalCuttingMachine {
         MekCkFactories.GRINDING_MACHINE_ITEMS_REG.register(bus);
         MekCkFactories.GRINDING_MACHINE_TILES_REG.register(bus);
         MekCkFactories.GRINDING_MACHINE_CONTAINERS_REG.register(bus);
+        // 坚果爆炒机（2026-10-06 迁到 Mek 体系）：同上，三件套必须成组出现。
+        MekCkStandaloneMachines.NUT_ROASTER_BLOCKS_REG.register(bus);
+        MekCkStandaloneMachines.NUT_ROASTER_TILES_REG.register(bus);
+        MekCkStandaloneMachines.NUT_ROASTER_CONTAINERS_REG.register(bus);
         bus.addListener(this::addCreativeTabContents);
         bus.addListener(this::onCommonSetup);
         // 配置文件生成到 config/mekck/mekck-common.toml（与 planting 等配置文件同目录）

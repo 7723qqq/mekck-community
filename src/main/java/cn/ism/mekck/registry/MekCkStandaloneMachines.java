@@ -11,7 +11,6 @@ import cn.ism.mekck.block.WineCellarBlock;
 import cn.ism.mekck.blockentity.BioreactorBlockEntity;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
 import cn.ism.mekck.blockentity.IceMakerBlockEntity;
-import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
 import cn.ism.mekck.blockentity.SmartCookingPotBlockEntity;
 import cn.ism.mekck.blockentity.WineCellarBlockEntity;
@@ -232,18 +231,63 @@ public final class MekCkStandaloneMachines {
             "chocolate_cannon", () -> IForgeMenuType.create(ChocolateCannonMenu::new));
 
     // Nut Roaster (坚果爆炒机：炒坚果加工 + 发射炒榛子攻击)
+    //
+    // 2026-10-06 迁到 Mek 体系：方块/物品/方块实体/容器全部走 Mek 的注册器
+    // （与陈化窖 `WINE_CELLAR_*` 同款），**注册名一字不改**（仍是 mekck:nut_roaster）。
+    //
+    // 迁移的原因见 {NutRoasterTile} 类注释：旧实现是自研 BlockEntity +
+    // ItemStackHandler + ContainerData + SideMode，侧配/升级/红石/GUI 全要自己造；
+    // 换 Mek 三件套后这些能力由基类与方块属性提供，GUI 由 Mek 自己的 tab 体系排布。
 
-    public static final RegistryObject<Block> NUT_ROASTER_BLOCK = BLOCKS.register("nut_roaster", NutRoasterBlock::new);
+    public static final mekanism.common.registration.impl.ContainerTypeDeferredRegister NUT_ROASTER_CONTAINERS_REG =
+            new mekanism.common.registration.impl.ContainerTypeDeferredRegister(MOD_ID);
 
-    public static final RegistryObject<Item> NUT_ROASTER_ITEM = ITEMS.register("nut_roaster",
-            () -> new MekCkBlockItem(NUT_ROASTER_BLOCK.get(), new Item.Properties(),
-                    1, NutRoasterBlockEntity.ENERGY_PER_TICK, NutRoasterBlockEntity.ENERGY_CAPACITY));
+    public static final mekanism.common.registration.impl.ContainerTypeRegistryObject<NutRoasterMenu> NUT_ROASTER_CONTAINER;
 
-    public static final RegistryObject<BlockEntityType<NutRoasterBlockEntity>> NUT_ROASTER_BLOCK_ENTITY = BLOCK_ENTITIES.register(
-            "nut_roaster", () -> BlockEntityType.Builder.of(NutRoasterBlockEntity::new, NUT_ROASTER_BLOCK.get()).build(null));
+    public static final mekanism.common.registration.impl.BlockDeferredRegister NUT_ROASTER_BLOCKS_REG =
+            new mekanism.common.registration.impl.BlockDeferredRegister(MOD_ID);
 
-    public static final RegistryObject<MenuType<NutRoasterMenu>> NUT_ROASTER_MENU = MENUS.register(
-            "nut_roaster", () -> IForgeMenuType.create(NutRoasterMenu::new));
+    public static final mekanism.common.registration.impl.TileEntityTypeDeferredRegister NUT_ROASTER_TILES_REG =
+            new mekanism.common.registration.impl.TileEntityTypeDeferredRegister(MOD_ID);
+
+    /** 方块与物品的注册句柄（{@code BlockRegistryObject} 自带 block+item，一次注册两样）。 */
+    public static final mekanism.common.registration.impl.BlockRegistryObject<NutRoasterBlock, MekCkBlockItem> NUT_ROASTER_HANDLE;
+
+    /** 方块实体类型 —— 由 Mek 的注册器建，{@code BlockTile} 与 ticker 都认它。 */
+    public static final mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.roasting.NutRoasterTile> NUT_ROASTER_TILE;
+
+    static {
+        // ⚠️ 顺序陷阱：BlockType 的 withGui / tileRef 参数是**延迟 Supplier**，
+        // 但 Java 的**明确赋值**规则不允许在静态块里前向引用尚未赋值的 final 字段。
+        // 解法与陈化窖 / GrillBlock 同款：先用局部变量串起依赖，最后统一赋给 final 字段。
+        mekanism.common.registration.impl.ContainerTypeRegistryObject<NutRoasterMenu> container =
+                NUT_ROASTER_CONTAINERS_REG.register(
+                        "nut_roaster", cn.ism.mekck.machine.roasting.NutRoasterTile.class, NutRoasterMenu::new);
+
+        java.util.concurrent.atomic.AtomicReference<mekanism.common.registration.impl.TileEntityTypeRegistryObject<cn.ism.mekck.machine.roasting.NutRoasterTile>> tileRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        mekanism.common.content.blocktype.BlockTypeTile<cn.ism.mekck.machine.roasting.NutRoasterTile> blockType =
+                NutRoasterBlock.blockTypeFor(() -> container, tileRef::get);
+
+        NUT_ROASTER_HANDLE = NUT_ROASTER_BLOCKS_REG.register("nut_roaster",
+                () -> new NutRoasterBlock(blockType,
+                        p -> p.strength(3.5F).sound(net.minecraft.world.level.block.SoundType.METAL)
+                                .requiresCorrectToolForDrops()),
+                block -> new MekCkBlockItem(block, new Item.Properties(), 1,
+                        cn.ism.mekck.machine.roasting.NutRoasterTile.ENERGY_PER_TICK,
+                        cn.ism.mekck.machine.roasting.NutRoasterTile.ENERGY_CAPACITY));
+
+        // 两个 ticker 都必须显式给：getTicker(boolean) 只是原样返回存进去的那个、没有任何兜底。
+        // 且必须传 Mek 自己的 {@code TileEntityMekanism.tickServer/tickClient}
+        // —— 自己写一个「只做加工」的 ticker 会静默跳过升级组件、红石、音效与 setActive 那几段。
+        NUT_ROASTER_TILE = NUT_ROASTER_TILES_REG.register(NUT_ROASTER_HANDLE,
+                (pos, state) -> new cn.ism.mekck.machine.roasting.NutRoasterTile(NUT_ROASTER_HANDLE, pos, state),
+                (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickClient(level, pos, state, tile),
+                (level, pos, state, tile) -> mekanism.common.tile.base.TileEntityMekanism.tickServer(level, pos, state, tile));
+
+        NUT_ROASTER_CONTAINER = container;
+        tileRef.set(NUT_ROASTER_TILE);
+    }
 
     // ── 四合一基础机器（本轮新增，均无工厂版本）────────────────────────────
 
@@ -312,6 +356,6 @@ public final class MekCkStandaloneMachines {
         event.accept(CENTRAL_KITCHEN_ITEM.get());
         event.accept(SANDWICH_ASSEMBLER_ITEM.get());
         event.accept(CHOCOLATE_CANNON_ITEM.get());
-        event.accept(NUT_ROASTER_ITEM.get());
+        event.accept(NUT_ROASTER_HANDLE.getItemStack());
     }
 }

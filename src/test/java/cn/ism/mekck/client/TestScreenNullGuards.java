@@ -48,12 +48,20 @@ public class TestScreenNullGuards {
             "src/main/java/cn/ism/mekck/client/ChocolateCannonScreen.java";
     private static final String ICE_MAKER_SCREEN =
             "src/main/java/cn/ism/mekck/client/IceMakerScreen.java";
-    private static final String NUT_ROASTER_SCREEN =
-            "src/main/java/cn/ism/mekck/client/NutRoasterScreen.java";
     private static final String COOKING_POT_SCREEN =
             "src/main/java/cn/ism/mekck/client/SmartCookingPotScreen.java";
     private static final String SKEWERING_SCREEN =
             "src/main/java/cn/ism/mekck/client/SkeweringMachineScreen.java";
+
+    // 登记表 5 → 4（2026-10-06）：坚果爆炒机屏幕随整机迁到 Mek 原生体系 ——
+    // NutRoasterScreen 不再 `extends GuiMekanism` 自己读 `menu.getMachine()`，
+    // 而是 `extends MekCkContainerScreenBase`（GuiConfigurableTile 家族），
+    // 机器实例由容器持有、面板数据源直接问 tile。
+    // **这不是放宽**：那条「空菜单」缺陷的成因是自研菜单允许 machine == null
+    // （客户端 BE 缺失时构造空菜单），而 Mek 的容器工厂在取不到 BE 时直接抛
+    // 「Missing tile」，根本不构造容器 —— 判据的对象（可能为 null 的 menu.getMachine()）
+    // 在这台机器上不存在了，与 TestUpgradeSlotHitTest 里研磨机移出清单同型。
+    // 其余 4 个屏仍逐个断言提取形态 + 判空。
 
     /** 提取形态：所有调用点都必须先落到这个局部变量，再判空。 */
     private static final String EXTRACTION = "var machine = menu.getMachine();";
@@ -117,13 +125,6 @@ public class TestScreenNullGuards {
     @Test
     public void iceMakerScreenGuardsEveryGetMachine() throws IOException {
         assertGuarded(ICE_MAKER_SCREEN,
-                "private NetworkOrderPanel.LocalSource localOrderSource()",
-                "private Direction getMachineFacing()");
-    }
-
-    @Test
-    public void nutRoasterScreenGuardsEveryGetMachine() throws IOException {
-        assertGuarded(NUT_ROASTER_SCREEN,
                 "private NetworkOrderPanel.LocalSource localOrderSource()",
                 "private Direction getMachineFacing()");
     }

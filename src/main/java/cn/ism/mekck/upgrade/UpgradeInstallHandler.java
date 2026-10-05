@@ -4,7 +4,6 @@ import cn.ism.mekck.UniversalCuttingMachine;
 import cn.ism.mekck.blockentity.ChocolateCannonBlockEntity;
 import cn.ism.mekck.blockentity.IceFactoryBlockEntity;
 import cn.ism.mekck.blockentity.IceMakerBlockEntity;
-import cn.ism.mekck.blockentity.NutRoasterBlockEntity;
 import cn.ism.mekck.blockentity.PlantingCuttingStationBlockEntity;
 import cn.ism.mekck.blockentity.SkeweringMachineBlockEntity;
 import cn.ism.mekck.blockentity.SmartCookingPotBlockEntity;
@@ -113,8 +112,6 @@ public final class UpgradeInstallHandler {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof ChocolateCannonBlockEntity m) {
             added = m.addUpgradesFromHand(held);
-        } else if (be instanceof NutRoasterBlockEntity m) {
-            added = m.addUpgradesFromHand(held);
         } else if (be instanceof cn.ism.mekck.machine.cutting.UniversalCuttingMachineTile m) {
             // 类型感知：路由进组件升级槽（20 tick 正常安装路径），类型不匹配/已满返回 0 → 不消耗。
             // 旧写法直接 addUpgrades(SPEED, 1)：签名里没有 ItemStack，任意 upgradeLike 物品
@@ -124,6 +121,7 @@ public final class UpgradeInstallHandler {
             added = m.addUpgradesFromHand(held);
         // 电力研磨机分支在阶段 3 样板迁移中删除：新 tile 的升级走 Mek 的
         // TileComponentUpgrade（与切菜/烧烤/各工厂家族同一条路），不再经本分发器。
+        // 坚果爆炒机分支在 2026-10-06 迁移中同理删除（NutRoasterTile 同样是 Mek 原生 tile）。
         } else if (be instanceof SmartCookingPotBlockEntity m) {
             added = m.addUpgradesFromHand(held);
         } else if (be instanceof SkeweringMachineBlockEntity m) {

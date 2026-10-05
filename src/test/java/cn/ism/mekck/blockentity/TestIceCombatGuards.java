@@ -351,16 +351,23 @@ public class TestIceCombatGuards {
     // ================== 6. 热能力随失效/复活收口 ==================
 
     /**
-     * IceMaker / IceFactory / NutRoaster 的 {@code heatCapability} 必须随
+     * IceMaker / IceFactory 的 {@code heatCapability} 必须随
      * {@code invalidateCaps} / {@code reviveCaps} 收口（对齐 {@code CentralKitchenBlockEntity}）。
      *
      * <p>supplier 恒返回同一 handler，功能上仍可用；缺的是 Forge 的失效通知契约 ——
      * 方块实体被移除后，外部仍持有「有效」的 LazyOptional，会继续往一个已失效的
-     * 热处理器写热量。三台同型，一起钉住。</p>
+     * 热处理器写热量。</p>
+     *
+     * <p><b>登记表 3 → 2（2026-10-06）</b>：坚果爆炒机迁到 Mek 原生 tile 后，
+     * 自研的热能力字段（{@code heatCapability} 这个 LazyOptional）整个消失 ——
+     * 热容改由 Mek 的 {@code BasicHeatCapacitor} 承载，失效/复活由
+     * {@code TileEntityMekanism} 的 {@code HeatHandlerManager} 自己收口。
+     * 也就是说判据的对象（自研 LazyOptional）随迁移不存在了，不是放宽：
+     * 同型的两台仍逐个断言。</p>
      */
     @Test
     public void heatCapabilityFollowsInvalidateAndRevive() throws IOException {
-        String[] machines = {"IceMakerBlockEntity", "IceFactoryBlockEntity", "NutRoasterBlockEntity"};
+        String[] machines = {"IceMakerBlockEntity", "IceFactoryBlockEntity"};
         for (String m : machines) {
             String src = be(m);
             String invalidate = body(src, "public void invalidateCaps() {", m);
@@ -413,18 +420,30 @@ public class TestIceCombatGuards {
      */
     @Test
     public void ownRecipeIngredientTablesGoThroughRecipeRequiredInputs() throws IOException {
-        String[] machines = {"ChocolateCannonBlockEntity", "IceMakerBlockEntity", "NutRoasterBlockEntity"};
-        for (String m : machines) {
-            String src = be(m);
+        // 2026-10-06：坚果爆炒机的落点随迁移改为 machine/roasting/NutRoasterTile.java
+        // （旧 blockentity/NutRoasterBlockEntity 已删除）；断言的东西一个字没动。
+        String[][] machines = {
+                {"ChocolateCannonBlockEntity",
+                        "src/main/java/cn/ism/mekck/blockentity/ChocolateCannonBlockEntity.java"},
+                {"IceMakerBlockEntity",
+                        "src/main/java/cn/ism/mekck/blockentity/IceMakerBlockEntity.java"},
+                {"NutRoasterTile",
+                        "src/main/java/cn/ism/mekck/machine/roasting/NutRoasterTile.java"},
+        };
+        for (String[] machine : machines) {
+            String m = machine[0];
+            String src = TestSourceText.read(machine[1]);
+            // 签名可能写成全限定名（两台旧 BE 的写法）或短名（新 tile 的写法，Recipe 已 import）。
+            // 判据只取方法体，两种拼法都要认 —— 断言的内容一个字不变。
             String matches = body(src,
-                    "private boolean matchesInput(net.minecraft.world.item.crafting.Recipe<?> recipe) {", m);
+                    "boolean matchesInput(", m);
             assertFalse(m + ".matchesInput 不得直接遍历 recipe.getIngredients() —— "
                             + "三类自有配方不覆写它、默认返回空表 ⇒ 判据退化成「输入槽非空就算匹配」",
                     matches.contains(": recipe.getIngredients()"));
             assertTrue(m + ".matchesInput 必须走 RecipeRequiredInputs.of(recipe)",
                     matches.contains("RecipeRequiredInputs.of(recipe)"));
             String max = body(src,
-                    "public int getMaxConsumableCountForOrder(net.minecraft.world.item.crafting.Recipe<?> recipe) {", m);
+                    "int getMaxConsumableCountForOrder(", m);
             assertTrue(m + ".getMaxConsumableCountForOrder 必须与匹配走同一份材料表",
                     max.contains("RecipeRequiredInputs.of(recipe)") && !max.contains(": recipe.getIngredients()"));
         }
