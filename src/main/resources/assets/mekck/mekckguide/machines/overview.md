@@ -54,7 +54,7 @@ categories:
 | 生物反应堆 | 2×2×3 多方块，食物发电 |
 | 中央厨房 | 终极机器，装入机器模块即可处理对应配方 |
 | 三明治组装机 | 多层三明治自动化（需 Some Assembly Required） |
-| 联动机器（14 台） | 见 [[machines/linked.md|联动机器]] |
+| 联动机器（17 台） | 见 [[machines/linked.md|联动机器]] |
 
 
 ## 通用功能

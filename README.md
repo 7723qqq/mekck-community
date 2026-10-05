@@ -51,7 +51,7 @@ energy, and **Singularity** needs no stacking upgrades — its base parallel *is
 
 ### 5 standalone machines
 
-- **Bioreactor** — 2×2×3 multiblock; food/organics → organic matter fluid, or piped-in
+- **Bioreactor** — 3×3×3 multiblock; food/organics → organic matter fluid, or piped-in
   meat soup / nutritional paste → FE. Up to 8,000 FE/t generated, 14,000 FE/t pushed out.
 - **Central Kitchen** — install machines as modules and one block handles every recipe family,
   with automatic crafting-chain expansion and per-family filters.
@@ -60,11 +60,15 @@ energy, and **Singularity** needs no stacking upgrades — its base parallel *is
 - **Sandwich Assembler** — clone a hand-made sandwich or build one layer by layer.
   *(requires Some Assembly Required)*
 
-### 14 linked machines
+### 17 linked machines
 
 Single-tier machines for other mods' recipes: sushi maker, average slicer, rice ball maker,
 dehydrator, fermenter, steamer, curd maker, winery, juicer, bakery oven, stove, blender,
-cocktail shaker, tea brewer.
+cocktail shaker, tea brewer, smart extractor, beverage blender, packaging station.
+
+> **Four blocks have no crafting recipe yet** — `cocktail_shaker`, `blender`, `tea_brewer`
+> and `wine_cellar` are reachable through the creative menu only. Their models, lang keys,
+> loot tables and registrations are all in place; only the recipes are missing.
 
 ### Integration
 
