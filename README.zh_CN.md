@@ -7,7 +7,7 @@
 把**农夫乐事**的厨房操作改造成**通用机械风格的工厂流水线**的 Minecraft 1.20.1 / Forge 模组，
 并且能把吃不完的食物拿去发电。
 
-> **个人版** —— 本仓库发布的是 MekCK 的个人版；官方版尚未发布。
+> **社区版** —— 本仓库发布的是 MekCK 的社区版；官方版见 [MC百科](https://www.mcmod.cn/class/24437.html)，尚未发布。
 
 > **English: [README.md](README.md)**
 
