@@ -19,7 +19,7 @@ No third-party source code has been copied.
 ### Mekanism
 
 - 项目 / Project: https://github.com/mekanism/Mekanism
-- 版权 / Copyright: (c) 2017-2024 Aidan C. Brady and contributors
+- 版权 / Copyright: (c) 2017-2023 Aidan C. Brady
 - 许可证 / License: **MIT**
 - 使用的资源 / Assets used:
   - `vendor/mekanism/block/crusher/`
@@ -31,8 +31,8 @@ No third-party source code has been copied.
 
 ### Mekanism Extras
 
-- 项目 / Project: https://github.com/ztk-zhang/mekanism_extras
-- 版权 / Copyright: (c) Mekanism Extras contributors
+- 项目 / Project: https://github.com/lostmyself8/Mekanism-Extras
+- 版权 / Copyright: (c) 2024 lostmyself
 - 许可证 / License: **MIT**
 - 使用的资源 / Assets used:
   - `vendor/mekanism_extras/block/factory/`
