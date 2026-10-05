@@ -28,8 +28,6 @@ import net.minecraft.world.entity.player.Inventory;
  */
 public final class ElectricGrindingMachineMenu extends MekanismTileContainer<GrindingMachineTile> {
 
-    public static final int INV_TOP = 101;
-
     public ElectricGrindingMachineMenu(int containerId, Inventory inventory, GrindingMachineTile tile) {
         super(resolveContainer(), containerId, inventory, tile);
     }
@@ -49,15 +47,17 @@ public final class ElectricGrindingMachineMenu extends MekanismTileContainer<Gri
         return container;
     }
 
-    /**
-     * 玩家背包首行 —— 覆写回迁移前的 {@value #INV_TOP}。
-     *
-     * <p>不覆写时用 Mek 默认的 84，屏幕的进度条与标签会压住背包首行。</p>
-     */
-    @Override
-    protected int getInventoryYOffset() {
-        return INV_TOP;
-    }
+    // ================== 背包几何：刻意不覆写 ==================
+    //
+    // 不覆写 getInventoryYOffset()，玩家背包首行即 Mek 的 BASE_Y_OFFSET = 84；
+    // 屏幕侧的 inventoryLabelY 也不写，即原版 AbstractContainerScreen 的
+    // imageHeight - 94 = 72 —— 这两个值正是 GuiElectricMachine 一个字节都没动过的默认值，
+    // 间距 12px 与原版/Mek 一致。
+    //
+    // 本类此前覆写成 101（照抄迁移前的旧自研布局），同时屏幕没跟着改标签，于是：
+    //   1. 标签留在 72 ⇒ 标签到背包间距 29px，而 Mek 是 12px，标签悬空在槽区与背包之间；
+    //   2. 快捷栏被推到 101 + 58 = 159，槽底 177 —— 而面板只有 166 高，
+    //      最后一行的槽位直接画到面板外面去了。
 
     // ================== 读数：全部问 tile（两侧同一入口） ==================
 

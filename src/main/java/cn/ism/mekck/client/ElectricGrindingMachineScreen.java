@@ -10,6 +10,7 @@ import mekanism.client.gui.element.progress.GuiProgress;
 import mekanism.client.gui.element.progress.IProgressInfoHandler;
 import mekanism.client.gui.element.progress.ProgressType;
 import mekanism.client.gui.element.tab.GuiEnergyTab;
+import mekanism.common.inventory.warning.WarningTracker.WarningType;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -30,10 +31,18 @@ import java.util.List;
  *   GuiElectricMachine.addGuiElements:
  *     super.addGuiElements()
  *     new GuiUpArrow(this, 68, 38)
- *     new GuiVerticalPowerBar(this, tile.getEnergyContainer(), 164, 15)   + NOT_ENOUGH_ENERGY 警告
- *     new GuiEnergyTab(this, tile.getEnergyContainer(), tile::getLastUsage)
+ *     new GuiVerticalPowerBar(this, tile.getEnergyContainer(), 164, 15)
+ *         .warning(NOT_ENOUGH_ENERGY, tile.getWarningCheck(NOT_ENOUGH_ENERGY))
+ *     new GuiEnergyTab(this, tile.getEnergyContainer(), tile::getActive)
  *     new GuiProgress(..., ProgressType.BAR, this, 86, 38)
+ *         .warning(INPUT_DOESNT_PRODUCE_OUTPUT, tile.getWarningCheck(INPUT_DOESNT_PRODUCE_OUTPUT))
  * </pre>
+ *
+ * <p><b>能源 tab 传的是 {@code tile::getActive}</b>（{@code BooleanSupplier}），不是
+ * {@code getLastUsage} —— 这一条是 javap 读 {@code GuiElectricMachine} 的
+ * {@code BootstrapMethods} 定的：那一处 {@code invokedynamic} 的 MethodHandle 实为
+ * {@code TileEntityMekanism.getActive()Z}。{@code GuiEnergyTab} 拿到它才决定画
+ * 「当前消耗」还是「空闲」，传成扣电量会恒显示使用量。</p>
  *
  * <p><b>尺寸刻意不写</b>：{@code GuiElectricMachine} 一个字节都没覆写 {@code imageWidth} /
  * {@code imageHeight}，用的是继承来的默认值（176×166）。写出来反而会与上游漂移。
@@ -82,13 +91,16 @@ public final class ElectricGrindingMachineScreen
         // 上箭头 —— 上游 GuiElectricMachine(68,38)。
         addRenderableWidget(new GuiUpArrow(this, 68, 38));
 
-        // 能源条 —— 上游 GuiElectricMachine(164,15)，直接吃 tile 的能量容器。
-        addRenderableWidget(new GuiVerticalPowerBar(this, tile.getEnergyContainer(), 164, 15));
+        // 能源条 —— 上游 GuiElectricMachine(164,15)，直接吃 tile 的能量容器，
+        // 并挂 NOT_ENOUGH_ENERGY 告警（有活干但电不够时整条闪红）。
+        addRenderableWidget(new GuiVerticalPowerBar(this, tile.getEnergyContainer(), 164, 15)
+                .warning(WarningType.NOT_ENOUGH_ENERGY, tile::isNotEnoughEnergy));
 
-        // 能量信息 tab —— 上游传的是 tile::getLastUsage（上一 tick 的真实扣电量）。
-        addRenderableWidget(new GuiEnergyTab(this, tile.getEnergyContainer(), tile::getLastUsage));
+        // 能量信息 tab —— 上游传的是 tile::getActive（是否正在工作），不是 getLastUsage。
+        addRenderableWidget(new GuiEnergyTab(this, tile.getEnergyContainer(), tile::getActive));
 
-        // 进度条 —— 上游 GuiElectricMachine 用 ProgressType.BAR 且位于 (86,38)。
+        // 进度条 —— 上游 GuiElectricMachine 用 ProgressType.BAR 且位于 (86,38)，
+        // 并挂 INPUT_DOESNT_PRODUCE_OUTPUT 告警（命中了配方却产不出东西）。
         addRenderableWidget(new GuiProgress(new IProgressInfoHandler() {
             @Override
             public double getProgress() {
@@ -99,7 +111,8 @@ public final class ElectricGrindingMachineScreen
             public boolean isActive() {
                 return menu.getProgressPercent() > 0;
             }
-        }, ProgressType.BAR, this, 86, 38));
+        }, ProgressType.BAR, this, 86, 38)
+                .warning(WarningType.INPUT_DOESNT_PRODUCE_OUTPUT, tile::isInputDoesntProduceOutput));
 
         // ME 下单：Mek 无对应物，保留自绘 tab + 虚拟窗口。
         // **最后注册**：Mek 的 mouseClicked 对 children() 倒序遍历、命中即返回，越晚注册命中越优先。

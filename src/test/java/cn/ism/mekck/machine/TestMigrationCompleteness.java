@@ -187,25 +187,42 @@ public class TestMigrationCompleteness {
     // ── 4. 语言键 ────────────────────────────────────────────────────────
 
     /**
-     * <b>方块名语言键两份语言都要有。</b>
+     * <b>方块名与容器名两份语言键都要有。</b>
      *
-     * <p>缺了玩家看到的是 {@code block.mekck.xxx} 这样的 raw key。</p>
+     * <p>缺了玩家看到的是 raw key。⚠️ 这里<b>必须同时覆盖两个前缀</b>，
+     * 因为它们画在不同地方：</p>
+     * <ul>
+     *   <li>{@code block.mekck.<注册名>} —— 物品栏 / 提示里的<b>方块名</b>；</li>
+     *   <li>{@code container.mekck.<注册名>} —— GUI <b>标题</b>画的键
+     *       （由 {@code ContainerTypeDeferredRegister} 按容器注册名派生）。</li>
+     * </ul>
+     *
+     * <p><b>本轮实测的漏洞（用户看界面才发现，不是测试发现的）</b>：第一版只查
+     * {@code block.mekck.*}，于是 4 台单独迁移的机器（电力研磨机 / 电力烧烤架 /
+     * 酒窖 / 通用切菜机）带着 <b>raw key 的 GUI 标题</b>通过了全部断言 ——
+     * 6 大工厂家族的 {@code container.mekck.*} 恰好齐全，把这一类问题盖住了。
+     * 判据必须覆盖「玩家能看到的每一个前缀」，而不是只覆盖最先想到的那个。</p>
      */
     @Test
-    public void everyMigratedBlockHasItsNameInBothLanguages() throws IOException {
+    public void everyMigratedBlockHasItsNameAndContainerKeyInBothLanguages() throws IOException {
         String en = TestSourceText.read("src/main/resources/assets/mekck/lang/en_us.json");
         String zh = TestSourceText.read("src/main/resources/assets/mekck/lang/zh_cn.json");
         List<String> missing = new ArrayList<>();
+        // 两个前缀都要查：block 是物品名，container 是 GUI 标题。
+        List<String> prefixes = List.of("block.mekck.", "container.mekck.");
         for (String id : MIGRATED.values()) {
-            String key = "block.mekck." + id;
-            if (!en.contains("\"" + key + "\"")) {
-                missing.add(key + "（en_us 缺）");
-            }
-            if (!zh.contains("\"" + key + "\"")) {
-                missing.add(key + "（zh_cn 缺）");
+            for (String prefix : prefixes) {
+                String key = prefix + id;
+                if (!en.contains("\"" + key + "\"")) {
+                    missing.add(key + "（en_us 缺）");
+                }
+                if (!zh.contains("\"" + key + "\"")) {
+                    missing.add(key + "（zh_cn 缺）");
+                }
             }
         }
-        assertEquals("这些方块名缺语言键（玩家会看到 raw key）：\n  " + String.join("\n  ", missing),
+        assertEquals("这些名字缺语言键（玩家会看到 raw key；container.* 缺的是 GUI 标题）：\n  "
+                        + String.join("\n  ", missing),
                 List.of(), missing);
     }
 

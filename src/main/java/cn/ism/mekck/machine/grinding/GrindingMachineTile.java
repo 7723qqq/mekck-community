@@ -23,7 +23,9 @@ import mekanism.common.capabilities.holder.energy.EnergyContainerHelper;
 import mekanism.common.capabilities.holder.energy.IEnergyContainerHolder;
 import mekanism.common.capabilities.holder.slot.IInventorySlotHolder;
 import mekanism.common.capabilities.holder.slot.InventorySlotHelper;
+import mekanism.common.inventory.container.sync.SyncableBoolean;
 import mekanism.common.inventory.slot.EnergyInventorySlot;
+import mekanism.common.inventory.warning.WarningTracker.WarningType;
 import mekanism.common.lib.transmitter.TransmissionType;
 import mekanism.common.tile.component.TileComponentConfig;
 import mekanism.common.tile.component.TileComponentEjector;
@@ -93,8 +95,6 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
     private final MekCkOrderState order = new MekCkOrderState();
     private boolean meOrderEnabled = true;
     private int progress;
-    /** 上一 tick 实际扣掉的电量 —— 能源 tab 读数，见 {@link #getLastUsage()}。 */
-    private FloatingLong lastUsage = FloatingLong.ZERO;
     private Component customName;
 
     /** 网络拉料只看输入槽（产物与能源槽不参与）。 */
@@ -116,6 +116,31 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
     private MekCkSlot outputSlot;
     private EnergyInventorySlot energySlot;
     private MachineEnergyContainer<GrindingMachineTile> energyContainer;
+
+    // ── 四个告警位（服务端算、随容器同步，客户端只读） ─────────────────────
+    //
+    // 与 Mek 的 TileEntityElectricMachine 挂在 GUI 上的四个 RecipeError 一一对应，
+    // 连挂载位置都照抄（javap -c 实测 GuiElectricMachine / TileEntityElectricMachine）：
+    //
+    //   槽位/控件                     Mek 的 RecipeError                   本字段
+    //   输入槽 NO_MATCHING_RECIPE     NOT_ENOUGH_INPUT                     noMatchingRecipe
+    //   输出槽 NO_SPACE_IN_OUTPUT     NOT_ENOUGH_OUTPUT_SPACE              noSpaceInOutput
+    //   竖直能源条 NOT_ENOUGH_ENERGY  NOT_ENOUGH_ENERGY                    notEnoughEnergy
+    //   进度条 INPUT_DOESNT_PRODUCE_OUTPUT  INPUT_DOESNT_PRODUCE_OUTPUT     inputDoesntProduceOutput
+    //
+    // 上游那四个供给器都读 tile.getWarningCheck(RecipeError) —— 而 getWarningCheck 读的是
+    // TileEntityRecipeMachine 的 errorTypes 表，本机继承的是 TileEntityConfigurableMachine，
+    // 没有那套配方缓存追踪。所以这里按同样的语义自己算：判据全部来自本机已有的事实，
+    // 且**只在服务端算**（客户端没有权威配方缓存）。
+
+    /** 输入槽有料、却没有任何一类配方认得它。 */
+    private boolean noMatchingRecipe;
+    /** 有配方可做，但产物槽按最坏情况也放不下。 */
+    private boolean noSpaceInOutput;
+    /** 有配方、放得下，但电不够跑一个 tick。 */
+    private boolean notEnoughEnergy;
+    /** 有配方，却产不出任何东西（产出表为空）。 */
+    private boolean inputDoesntProduceOutput;
 
     public GrindingMachineTile(IBlockProvider blockProvider, BlockPos pos, BlockState state) {
         super(blockProvider, pos, state);
@@ -154,12 +179,26 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
         inputSlot = MekCkSlot.inputFiltered(slotLimit(),
                 (stack, type) -> !UpgradeHelper.isUpgrade(stack) && matchesAnyInput(stack),
                 listener, in.x(), in.y());
+        // 红框：有料但没配方 —— 上游 TileEntityElectricMachine 给输入槽挂的
+        // WarningType.NO_MATCHING_RECIPE（RecipeError.NOT_ENOUGH_INPUT）。
+        //
+        // 走的是 BasicInventorySlot.tracksWarnings(Consumer<ISupportsWarning<?>>)：
+        // 它把供给器存进 warningAdder 字段，createContainerSlot() 再把它交给
+        // InventoryContainerSlot，最后由 GuiMekanism.addSlots() 调 addWarnings(GuiSlot)
+        // 转交到槽位控件上。MekCkSlot 的 createContainerSlot() 在不开悬浮窗时正是
+        // 转发给 super —— 这条链已经通了，无需给 MekCkSlot 再加一层。
+        inputSlot.tracksWarnings(w -> w.warning(WarningType.NO_MATCHING_RECIPE, this::isNoMatchingRecipe));
         builder.addSlot(inputSlot);
 
         outputSlot = MekCkSlot.output(slotLimit(), listener, out.x(), out.y());
+        // 蓝框：产物槽放不下 —— 上游给输出槽挂的 WarningType.NO_SPACE_IN_OUTPUT
+        // （RecipeError.NOT_ENOUGH_OUTPUT_SPACE）。
+        outputSlot.tracksWarnings(w -> w.warning(WarningType.NO_SPACE_IN_OUTPUT, this::isNoSpaceInOutput));
         builder.addSlot(outputSlot);
 
-        // 能源槽：坐标 (7,13) 与旧菜单一致，槽型与覆盖图标由 Mek 的 EnergyInventorySlot 承担。
+        // 能源槽：与上游 TileEntityElectricMachine 同在 (64, 53)
+        // （javap -c 实测 EnergyInventorySlot.fillOrConvert(..., 64, 53)），槽型与覆盖图标
+        // 由 Mek 的 EnergyInventorySlot 自己承担，这里不挂告警（上游也没挂）。
         energySlot = EnergyInventorySlot.fillOrConvert(energyContainer, this::getLevel, listener,
                 MekCkSlots.GrindingMachine.POWER.x(), MekCkSlots.GrindingMachine.POWER.y());
         builder.addSlot(energySlot);
@@ -194,13 +233,24 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
 
         long energyPerTick = energyPerTick();
         Optional<Recipe<?>> recipe = findRecipe(level);
+        boolean hasInput = inputSlot != null && !inputSlot.getStack().isEmpty();
+        boolean recipeFound = recipe.isPresent();
+        boolean energyOk = energyContainer.getEnergy().compareTo(FloatingLong.create(energyPerTick)) >= 0;
+        boolean outputFits = recipeFound && canFitWorstCase(recipe.get());
+
+        // 四个告警位与上游四个 RecipeError 同义（见字段声明处的对照表）。
+        // 它们各自独立，不互相短路 —— 上游那四个检测器也是各判各的。
+        noMatchingRecipe = hasInput && !recipeFound;
+        noSpaceInOutput = recipeFound && !outputFits;
+        notEnoughEnergy = recipeFound && !energyOk;
+        inputDoesntProduceOutput = recipeFound && producesNothing(recipe.get());
+
         boolean canRun = MekanismUtils.canFunction(this)
-                && recipe.isPresent()
-                && energyContainer.getEnergy().compareTo(FloatingLong.create(energyPerTick)) >= 0
-                && canFitWorstCase(recipe.get());
+                && recipeFound
+                && energyOk
+                && outputFits;
         if (canRun) {
             energyContainer.extract(FloatingLong.create(energyPerTick), Action.EXECUTE, AutomationType.INTERNAL);
-            lastUsage = FloatingLong.create(energyPerTick);
             progress++;
             if (progress >= PROCESS_TIME) {
                 completeRecipe(level, recipe.get());
@@ -209,24 +259,32 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
             setChanged();
         } else if (progress != 0) {
             progress = 0;
-            lastUsage = FloatingLong.ZERO;
             setChanged();
-        } else {
-            lastUsage = FloatingLong.ZERO;
         }
 
         setActive(progress > 0);
     }
 
-    /**
-     * 上一 tick 实际消耗的能量 —— 能源 tab 的「使用量」读数。
-     *
-     * <p>与 {@code MekCkMachineTile.getLastUsage()} / Mek 的
-     * {@code TileEntityFactory.getLastUsage()} 同款：上游 {@code GuiElectricMachine} 传给
-     * {@code GuiEnergyTab} 的就是这个值（真实的上一 tick 扣电量），而不是声明的耗电速率。</p>
-     */
-    public FloatingLong getLastUsage() {
-        return lastUsage;
+    // ==================== 告警读侧（屏幕的四个供给器读这里） ====================
+
+    /** 输入槽红框：有料但没有任何配方认得它。 */
+    public boolean isNoMatchingRecipe() {
+        return noMatchingRecipe;
+    }
+
+    /** 产物槽蓝框：产物按最坏情况也放不下。 */
+    public boolean isNoSpaceInOutput() {
+        return noSpaceInOutput;
+    }
+
+    /** 竖直能源条告警：有活干但电不够一个 tick。 */
+    public boolean isNotEnoughEnergy() {
+        return notEnoughEnergy;
+    }
+
+    /** 进度条告警：命中了配方，却产不出任何东西。 */
+    public boolean isInputDoesntProduceOutput() {
+        return inputDoesntProduceOutput;
     }
 
     /** 每 tick 耗电 —— 迁移前的 {@code ENERGY_PER_TICK}（速度升级不缩短耗时，故不乘倍率）。 */
@@ -326,6 +384,18 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
      */
     private boolean canFitWorstCase(Recipe<?> recipe) {
         return GrindingRecipes.canFitWorstCase(List.of(outputSlot), recipe, 1);
+    }
+
+    /**
+     * 该配方是否<b>什么都产不出</b> —— 进度条的
+     * {@code WarningType.INPUT_DOESNT_PRODUCE_OUTPUT} 供给器。
+     *
+     * <p>判据与 {@link #canFitWorstCase} / {@link GrindingRecipes#rollOutputs} 取的是
+     * <b>同一份产出表</b>：没有产出表 ⇒ 加工完只会白白吃掉输入。用同一个取值入口是必须的，
+     * 否则「告警说产得出、实际产不出」这种自相矛盾的状态就不会被发现。</p>
+     */
+    private static boolean producesNothing(Recipe<?> recipe) {
+        return KaleidoscopeCompat.getMillstoneOutputs(recipe).isEmpty();
     }
 
     /**
@@ -502,7 +572,7 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
     // ==================== 容器同步 ====================
 
     /**
-     * 把进度与订单状态推给客户端。
+     * 把进度、订单状态与四个告警位推给客户端。
      *
      * <p><b>这里换掉了旧实现的 {@code ContainerData} + {@code WideDataSlot} 拆位传输</b>：
      * 旧路走 {@code ClientboundContainerSetDataPacket}，对每个值只 {@code writeShort}
@@ -511,12 +581,21 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
      * 拆位那套随之作废。</p>
      *
      * <p>能量不在这里同步：它由 Mek 基类自己的能量容器通道路过，屏幕直接问 tile。</p>
+     *
+     * <p>四个告警位必须走同步通道：它们的判据要查配方表，只有服务端有权威值；
+     * 而供给器是<b>每帧在客户端</b>被求值的。上游把这件事交给
+     * {@code TileEntityRecipeMachine.errorTypes}（同样是一条同步通道），此处同理。</p>
      */
     @Override
     public void addContainerTrackers(mekanism.common.inventory.container.MekanismContainer container) {
         super.addContainerTrackers(container);
         container.track(mekanism.common.inventory.container.sync.SyncableInt.create(
                 this::getProgress, v -> clientProgress = v));
+        container.track(SyncableBoolean.create(this::isNoMatchingRecipe, v -> this.noMatchingRecipe = v));
+        container.track(SyncableBoolean.create(this::isNoSpaceInOutput, v -> this.noSpaceInOutput = v));
+        container.track(SyncableBoolean.create(this::isNotEnoughEnergy, v -> this.notEnoughEnergy = v));
+        container.track(SyncableBoolean.create(
+                this::isInputDoesntProduceOutput, v -> this.inputDoesntProduceOutput = v));
     }
 
     private int clientProgress;
