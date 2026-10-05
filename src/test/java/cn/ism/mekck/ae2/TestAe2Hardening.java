@@ -317,4 +317,60 @@ public class TestAe2Hardening {
                     src.contains(m));
         }
     }
+
+    /**
+     * 用了 AE2 的机器，生命周期四件套必须齐全：{@code serverTick} / {@code saveAdditional}
+     * / {@code load} / {@code onRemoved}。
+     *
+     * <h3>守的是哪一类缺陷</h3>
+     * 四件套各缺一个都有<b>静默</b>后果，且互不相同：
+     * <ul>
+     *   <li>缺 {@code serverTick} ⇒ {@code FactoryGridHost} 的节点永远建不起来（节点只在
+     *       serverTick 里初始化），机器<b>永远接不上 ME 网络</b> —— 中央厨房与三明治组装机
+     *       自初始提交起就是这样；</li>
+     *   <li>缺 {@code saveAdditional} / {@code load} ⇒ 节点 NBT（频道占用、已勾选的自动
+     *       处理材料）每次重载都丢，表现为「重启后频道要重新申请」；</li>
+     *   <li>缺 {@code onRemoved} ⇒ 拆机时网格节点不 destroy，在 AE2 网格里留下<b>幽灵节点</b>
+     *       （{@code HOSTS} 只挂在 WeakHashMap 上）。</li>
+     * </ul>
+     * 三者都编译通过、其余测试全绿。
+     *
+     * <p>扫描面是「源码里出现过 {@code AE2Compat.} 的机器类」——只写了 {@code onRemoved}
+     * 的机器同样落入扫描面，而那正是这条要抓的形态。</p>
+     */
+    @Test
+    public void ae2MachinesWireAllFourLifecycleHooks() throws IOException {
+        java.nio.file.Path root = java.nio.file.Path.of("src/main/java/cn/ism/mekck");
+        List<String> offenders = new ArrayList<>();
+        int scanned = 0;
+        try (var files = java.nio.file.Files.walk(root)) {
+            for (java.nio.file.Path file : files
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .toList()) {
+                String path = file.toString().replace('\\', '/');
+                if (!path.contains("/machine/") && !path.contains("/blockentity/")) {
+                    continue;
+                }
+                String src = TestSourceText.read(file.toString());
+                if (!src.contains("AE2Compat.")) {
+                    continue;
+                }
+                scanned++;
+                List<String> missing = new ArrayList<>();
+                for (String hook : new String[]{"serverTick", "saveAdditional", "load", "onRemoved"}) {
+                    if (!src.contains("AE2Compat." + hook)) {
+                        missing.add(hook);
+                    }
+                }
+                if (!missing.isEmpty()) {
+                    offenders.add(file.getFileName() + " 缺 " + String.join(" / ", missing));
+                }
+            }
+        }
+        assertTrue("一台用了 AE2 的机器都没扫到，判据已失效（扫描面变了？）", scanned >= 12);
+        assertEquals("这些机器的 AE2 生命周期四件套不齐 —— 缺 serverTick 就永远接不上 ME 网络、"
+                        + "缺 save/load 就每次重载丢频道、缺 onRemoved 就留幽灵节点：\n  "
+                        + String.join("\n  ", offenders),
+                List.of(), offenders);
+    }
 }

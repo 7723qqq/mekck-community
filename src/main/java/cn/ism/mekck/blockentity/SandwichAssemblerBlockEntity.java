@@ -359,6 +359,11 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
                 && state.getValue(cn.ism.mekck.block.SandwichAssemblerBlock.ACTIVE) != active) {
             level.setBlock(pos, state.setValue(cn.ism.mekck.block.SandwichAssemblerBlock.ACTIVE, active), 3);
         }
+        // AE2 网格节点生命周期 / 联网检测 / 自动补料（未安装 AE2 时为空操作）。
+        // 缺这一步，FactoryGridHost 的节点永远建不起来（节点在 serverTick 里初始化），
+        // 只挂 onRemoved 只能清掉一个从未建立的节点 ⇒ 机器永远接不上 ME 网络，
+        // MekckAe2 里它的 refreshPatterns / startOrder / getItems 分支因此全不可达。
+        cn.ism.mekck.compat.AE2Compat.serverTick(machine, level, pos);
     }
 
     /** 返回本 tick 是否在加工。 */
@@ -758,11 +763,15 @@ public class SandwichAssemblerBlockEntity extends net.minecraft.world.level.bloc
         for (int i = 0; i < 6; i++) side[i] = (byte) itemSideConfig[i].ordinal();
         tag.putByteArray("ItemSideConfig", side);
         tag.putBoolean("MeOrderEnabled", meOrderEnabled);
+        // AE2 网格节点的 NBT 必须与节点一同存活（频道占用 + 已勾选的自动处理材料）。
+        // AE2Compat 未装时整个方法短路为空操作。
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
     }
 
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         if (tag.contains("Items")) items.deserializeNBT(tag.getCompound("Items"));
         if (tag.contains("Energy")) {
             // 单次 receiveEnergy 受 maxReceive（5,000 FE）夹断，读档必须循环灌满，

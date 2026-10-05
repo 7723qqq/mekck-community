@@ -509,6 +509,16 @@ public final class GrindingMachineTile extends MekCkNetworkPullableTile
         if (tag.contains("CustomName")) {
             customName = Component.Serializer.fromJson(tag.getString("CustomName"));
         }
+        // 网格节点的 NBT 与节点同生共死（频道占用 + 已勾选的自动处理材料）。
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
+    }
+
+    @Override
+    public void setRemoved() {
+        super.setRemoved();
+        // 拆机时必须显式移除网格节点：FactoryGridHost 只挂在 WeakHashMap 上，
+        // 不主动 destroy 会在 AE2 网格里留下幽灵节点（见 MekckAe2 的 HOSTS 注释）。
+        cn.ism.mekck.compat.AE2Compat.onRemoved(this);
     }
 
     /** 新格式的槽位总数 —— 供旧存档迁移器换算下标。 */

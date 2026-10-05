@@ -365,6 +365,12 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         // 改动时，把新的一页推给正在看这个界面的玩家。
         // 版本号没变时 pushStorageSync 立即返回，节流再兜住 AutoIO 每 tick 改动的情形。
         kitchen.storageSync.syncOpenStorageBrowsers();
+        // AE2 网格节点生命周期 / 联网检测 / 自动补料（未安装 AE2 时为空操作）。
+        // 这一步不能省：FactoryGridHost 的节点是在 serverTick 里初始化的，只挂
+        // onRemoved 只能清掉一个从未建立的节点 —— 症状是「装了 AE2，机器却永远接不上
+        // ME 网络」，其在 MekckAe2 里的 refreshPatterns / startOrder / getItems
+        // 分支因此全不可达。与其余 12 台同类 BE 对齐。
+        cn.ism.mekck.compat.AE2Compat.serverTick(kitchen, level, pos);
     }
 
     // ================== 订单系统（阶段 4） ==================
@@ -1524,11 +1530,16 @@ public class CentralKitchenBlockEntity extends net.minecraft.world.level.block.e
         tag.put("Threads", threadTag);
         tag.put("HeatSide", heatComponent.save());
         tag.put("ColdSide", coldComponent.save());
+        // AE2 网格节点的 NBT 必须与节点一同存活：节点里存着频道占用与
+        // 「已勾选的自动处理材料」，不写就等于每次重载都换一批频道。
+        // AE2Compat 未装时整个方法短路为空操作。
+        cn.ism.mekck.compat.AE2Compat.saveAdditional(this, tag);
     }
 
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
+        cn.ism.mekck.compat.AE2Compat.load(this, tag);
         if (tag.contains("Items")) {
             items.deserializeNBT(tag.getCompound("Items"));
             moduleVersion++; // 反序列化可能不触发 onContentsChanged：直接让模块列表缓存失效
